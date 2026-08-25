@@ -780,6 +780,7 @@ function CaseCommandCenter({
   const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
+  const deepLinkedProcurementOrder = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
     () => sourcingRequestStorageKey({ storageScope, dashboardId: modelDashboard.id, workspaceId }),
     [modelDashboard.id, storageScope, workspaceId],
@@ -899,6 +900,20 @@ function CaseCommandCenter({
     void refreshCustomerProcurementOrders(controller.signal).catch(() => undefined);
     return () => controller.abort();
   }, [refreshCustomerProcurementOrders]);
+
+  // A deep link opens the request once. Reopening on every close would trap the operator in the request view.
+  useEffect(() => {
+    if (deepLinkedProcurementOrder.current) return;
+    const requested = new URLSearchParams(window.location.search).get("procurementOrder");
+    if (!requested) return;
+    const match = customerProcurementOrders.find((order) => order.id === requested);
+    if (!match) return;
+    deepLinkedProcurementOrder.current = requested;
+    setCustomerProcurementRequest({
+      item: customerProcurementItem(match),
+      order: customerProcurementOrderState(match),
+    });
+  }, [customerProcurementOrders]);
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("procurementOrder");

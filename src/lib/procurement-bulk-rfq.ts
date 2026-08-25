@@ -20,6 +20,19 @@ export const BULK_RFQ_SENDABLE_STATUSES = ["researched", "shortlisted", "approve
 export const BULK_RFQ_MAX_PER_RUN = 120;
 export const BULK_RFQ_MAX_RECONCILE_PER_RUN = 20;
 
+// Bourne-owned order_vendors rows store the supplier address either on the
+// column or inside nested research and identity JSON. Read every shape the
+// procurement detail view reads so the campaign contacts the same pool.
+const BULK_RFQ_VENDOR_EMAIL_SQL = `COALESCE(
+    to_jsonb(order_vendors)->>'contact_email',
+    to_jsonb(order_vendors)->'contact'->>'email',
+    to_jsonb(order_vendors)->'identity'->>'contact_email',
+    to_jsonb(order_vendors)->'identity'->>'email',
+    to_jsonb(order_vendors)->'research'->>'contact_email',
+    to_jsonb(order_vendors)->'research'->'contact'->>'email',
+    to_jsonb(order_vendors)->'research'->'identity'->>'email'
+  )`;
+
 export type BulkRfqOrder = {
   orderId: string;
   officeId: string;
@@ -172,13 +185,13 @@ export async function listBulkRfqTargets(order: BulkRfqOrder, limit: number): Pr
       order_vendors.id AS "vendorId",
       order_vendors.name AS "name",
       order_vendors.website AS "website",
-      order_vendors.contact_email AS "contactEmail",
+      ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail",
       order_vendors.status AS "status",
       order_vendors.last_email_message_id AS "lastEmailMessageId"
     FROM order_vendors
     WHERE order_vendors.order_id = $1::uuid
       AND order_vendors.status IN ('researched', 'shortlisted', 'approved')
-      AND order_vendors.contact_email IS NOT NULL
+      AND ${BULK_RFQ_VENDOR_EMAIL_SQL} IS NOT NULL
       AND order_vendors.last_email_message_id IS NULL
     ORDER BY order_vendors.created_at ASC, order_vendors.id ASC
   `, order.orderId);
@@ -355,7 +368,7 @@ export async function reconcileProcurementBulkRfq(input: {
     });
     if (receipt.state === "SENT") {
       const targets = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{ name: string; contactEmail: string | null }>>(`
-        SELECT order_vendors.name AS "name", order_vendors.contact_email AS "contactEmail"
+        SELECT order_vendors.name AS "name", ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail"
         FROM order_vendors
         WHERE order_vendors.id = $1::uuid AND order_vendors.order_id = $2::uuid
       `, vendorId, order.orderId);

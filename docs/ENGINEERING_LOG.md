@@ -187,3 +187,14 @@ KˆÜ˜ËØ\ÙÛØ˜[Ë˜ÜÜÈ
 - Shortlist retrieval rejects malformed completed output as not found.
 - Shadow operation is the first rollout: Bourne may continue its own discovery
   until it successfully consumes a Derya shortlist.
+
+
+## 2026-08-25: Bulk RFQ review gate and reply visibility
+
+- Bulk RFQ preview gained a draft-only mode so an operator can read every
+  pending subject, recipient, and body before a campaign sends anything.
+- Supplier contact lookup accepts nested JSON email locations, matching the
+  procurement workflow fallback chain.
+- A read-only replies endpoint reports outbound and inbound counts for one
+  sourcing request and classifies inbound mail as reply, automatic reply,
+  bounce, or wrong recipient, using the office-scoped local email ledger.

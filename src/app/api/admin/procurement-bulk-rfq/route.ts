@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   BULK_RFQ_MAX_PER_RUN,
+  buildBulkRfqBody,
+  buildBulkRfqSubject,
   listBulkRfqTargets,
   loadBulkRfqOrder,
   reconcileProcurementBulkRfq,
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return unauthorized();
   const orderId = req.nextUrl.searchParams.get("orderId")?.trim() ?? "";
   if (!orderId) return NextResponse.json({ error: "orderId is required." }, { status: 400 });
+  const withDrafts = req.nextUrl.searchParams.get("drafts") === "1";
   try {
     const order = await loadBulkRfqOrder(orderId);
     if (!order) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
@@ -55,6 +58,16 @@ export async function GET(req: NextRequest) {
       },
       pending: targets.length,
       recipients: targets.map((target) => target.contactEmail),
+      drafts: withDrafts
+        ? targets.map((target) => ({
+          vendorId: target.vendorId,
+          vendorName: target.name,
+          website: target.website,
+          recipient: target.contactEmail,
+          subject: buildBulkRfqSubject(order),
+          body: buildBulkRfqBody(order, target),
+        }))
+        : undefined,
     });
   } catch (error) {
     return NextResponse.json(

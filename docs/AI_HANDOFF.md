@@ -1,5 +1,20 @@
 # AI Handoff
 
+## 2026-08-25: Bulk RFQ draft preview, nested vendor email lookup, reply summary
+
+- `GET /api/admin/procurement-bulk-rfq?orderId=<id>&drafts=1` returns the exact
+  subject, recipient, and body for every pending supplier without contacting the
+  email provider, so a campaign can be reviewed before any send.
+- Supplier lookup in `src/lib/procurement-bulk-rfq.ts` now reads the contact
+  address from the same nested JSON fallbacks the procurement workflow uses, so
+  suppliers whose email lives under `contact`, `identity`, or `research` are no
+  longer skipped.
+- `GET /api/admin/procurement-bulk-rfq/replies?orderId=<id>` summarizes the
+  office-scoped local email ledger for one sourcing request: outbound count,
+  inbound count, and each inbound message classified as a reply, an automatic
+  reply, a bounce, or a wrong recipient. Read-only, operator-secret gated, and
+  scoped to the threads whose subject carries the RFQ reference.
+
 ## 2026-08-25: Research lists
 
 Added office-scoped research lists for operator review. Each list defines up to 40 ordered columns using text, URL, email, number, or date types. Operators can create lists, paste CSV or JSON, review paginated rows, and export CSV. Authenticated agents can post rows through the records endpoint, with bounded inputs, type validation, deduplication, and source-safe URL rendering. Records keep a lowercased, capped `searchText` column so list search, pagination, and counts stay database-backed. Status values are exactly `new`, `reviewed`, and `rejected`.
