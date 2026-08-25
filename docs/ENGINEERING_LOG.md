@@ -241,3 +241,12 @@ KˆÜ˜ËØ\ÙÛØ˜[Ë˜ÜÜÈ
 - Kept office switching on authorized company-row navigation in the Companies index, including the existing cross-office state and office-scoped workspace transition.
 - Preserved the selector props because the Companies index still uses them for row-click switching.
 - Local TypeScript, production build, focused Supply OS and office-switch tests, targeted lint, diff checks, and browser verification passed.
+
+## 2026-08-25: Prefer populated Prospects lists
+
+- Supply OS Prospects preserves valid current and explicit deep-linked list
+  selections, and honors a stored list when it contains records.
+- A stored empty list is skipped when another office-scoped list is populated.
+  If every list is empty, the stored selection remains valid before the
+  first-list fallback.
+- Office scoping and deep-link behavior remain unchanged.

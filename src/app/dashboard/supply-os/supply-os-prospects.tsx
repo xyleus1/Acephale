@@ -66,6 +66,14 @@ export function SupplyOsProspects({
   const [newListBusy, setNewListBusy] = useState(false);
 
   const loadLists = useCallback(async () => {
+    let storedListSlug: string | null = null;
+    if (!initialListSlug) {
+      try {
+        storedListSlug = window.localStorage.getItem(listStorageKey);
+      } catch {
+        // Local storage is optional.
+      }
+    }
     const response = await fetch("/api/research/lists", {
       cache: "no-store",
       headers: { accept: "application/json" },
@@ -77,9 +85,18 @@ export function SupplyOsProspects({
     setSelectedSlug((current) => {
       if (current && nextLists.some((list) => list.slug === current)) return current;
       if (initialListSlug && nextLists.some((list) => list.slug === initialListSlug)) return initialListSlug;
-      return nextLists[0]?.slug ?? "";
+      const storedList = storedListSlug
+        ? nextLists.find((list) => list.slug === storedListSlug)
+        : undefined;
+      const hasRecords = nextLists.some((list) => list.recordCount > 0);
+      if (storedList && (storedList.recordCount > 0 || !hasRecords)) return storedList.slug;
+      const highestCountList = nextLists.reduce<ResearchListResponse | null>(
+        (highest, list) => (!highest || list.recordCount > highest.recordCount ? list : highest),
+        null,
+      );
+      return highestCountList?.slug ?? nextLists[0]?.slug ?? "";
     });
-  }, [initialListSlug]);
+  }, [initialListSlug, listStorageKey]);
 
   const loadRecords = useCallback(async (slug: string, nextPage: number, nextQuery: string, nextStatus: ResearchStatus | "all") => {
     if (!slug) {
@@ -102,17 +119,11 @@ export function SupplyOsProspects({
   }, []);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(listStorageKey);
-      if (!initialListSlug && stored) setSelectedSlug(stored);
-    } catch {
-      // Local storage is optional.
-    }
     void loadLists().catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : "Prospect lists are unavailable.");
       setState("error");
     });
-  }, [initialListSlug, listStorageKey, loadLists]);
+  }, [loadLists]);
 
   const refreshData = useCallback(async () => {
     await loadLists();

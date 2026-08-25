@@ -1,5 +1,15 @@
 # AI Handoff
 
+## 2026-08-25: Prefer populated Prospects lists
+
+- Supply OS Prospects now keeps valid current and deep-linked selections ahead
+  of the default, and honors a stored list when it contains records.
+- A stored empty list is skipped when another office-scoped list is populated,
+  while stored selection remains valid when every list is empty.
+- When none of those selections exists, it opens the list with the highest
+  record count, falling back to the first list only when all lists are empty.
+- Office scoping and deep-link behavior remain unchanged.
+
 ## 2026-08-25: Remove the header Office selector
 
 - Removed the global Office selector from the Supply OS header.
