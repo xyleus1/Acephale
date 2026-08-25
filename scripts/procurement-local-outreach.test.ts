@@ -5,6 +5,7 @@ import {
   overlayVendorOutreach,
   rfqSubjectReference,
   summarizeLocalRfqOutreach,
+  summarizeLocalRfqOutreachByOrder,
   type LocalRfqMessage,
 } from "../src/lib/procurement-local-outreach-model";
 
@@ -98,5 +99,27 @@ assert.equal(
   null,
   "an uncontacted supplier has no conversation",
 );
+
+const otherOrderId = "24cb31bd-d974-4040-939c-cd8e76dd8967";
+const otherReference = rfqSubjectReference(otherOrderId);
+const batched = summarizeLocalRfqOutreachByOrder(
+  [
+    ...messages,
+    message({
+      id: "message-5",
+      subject: `${otherReference} PCBA quote request`,
+      toEmails: ["rfq@boardshop.com"],
+    }),
+    message({ id: "message-6", subject: "Unrelated sales outreach", toEmails: ["lead@example.com"] }),
+  ],
+  [orderId, otherOrderId],
+);
+assert.deepEqual([...batched.keys()], [orderId, otherOrderId]);
+assert.equal(batched.get(orderId)?.contacted, 2, "batch grouping matches the foam order only");
+assert.deepEqual(batched.get(otherOrderId)?.contactedEmails, ["rfq@boardshop.com"]);
+assert.equal(batched.get(otherOrderId)?.responded, 0);
+
+const missingOrder = summarizeLocalRfqOutreachByOrder([], [orderId]);
+assert.equal(missingOrder.get(orderId)?.contacted, 0, "an order with no local mail reports zero");
 
 console.log("procurement-local-outreach: all assertions passed");

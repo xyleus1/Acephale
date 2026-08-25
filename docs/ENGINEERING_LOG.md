@@ -210,3 +210,11 @@ KˆÜ˜ËØ\ÙÛØ˜[Ë˜ÜÜÈ
   RFQ subject reference when the workflow receipt is absent.
 - Verified with `npm run test:procurement-local-outreach`, plus the existing
   bulk RFQ contract test. No supplier message was sent for this change.
+
+## 2026-08-25: RFQ outreach overlay reads the ledger once per list
+
+- The local outreach overlay ran one subject scan per listed request, so the
+  procurement list fired up to 50 concurrent unindexed scans.
+- `localRfqOutreachByOrder` now runs a single scan for every listed order,
+  without message bodies, and groups the rows by RFQ subject reference in
+  memory. The single order helper reuses it.

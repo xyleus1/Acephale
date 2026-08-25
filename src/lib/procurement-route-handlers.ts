@@ -6,8 +6,9 @@ import type { procurementVendorConversation } from "@/lib/procurement-conversati
 import {
   ProcurementReplyDraftError,
 } from "@/lib/procurement-reply-draft";
-import type { localRfqOutreach } from "@/lib/procurement-local-outreach";
+import type { localRfqOutreach, localRfqOutreachByOrder } from "@/lib/procurement-local-outreach";
 import {
+  EMPTY_LOCAL_RFQ_OUTREACH,
   overlayRequestOutreach,
   overlayVendorOutreach,
 } from "@/lib/procurement-local-outreach-model";
@@ -46,7 +47,7 @@ export type ProcurementRouteDependencies = {
   submit: typeof submitProcurementRequest;
   list: typeof listProcurementRequests;
   contextualize?: typeof contextualizeProcurementRequest;
-  outreach?: typeof localRfqOutreach;
+  outreach?: typeof localRfqOutreachByOrder;
 };
 
 export type ProcurementDetailDependencies = {
@@ -88,13 +89,17 @@ const defaultLocalOutreach: typeof localRfqOutreach = async (officeId, orderId) 
   (await import("@/lib/procurement-local-outreach")).localRfqOutreach(officeId, orderId)
 );
 
+const defaultLocalOutreachByOrder: typeof localRfqOutreachByOrder = async (officeId, orderIds) => (
+  (await import("@/lib/procurement-local-outreach")).localRfqOutreachByOrder(officeId, orderIds)
+);
+
 const defaultRouteDependencies: ProcurementRouteDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
   submit: submitProcurementRequest,
   list: listProcurementRequests,
   contextualize: contextualizeProcurementRequest,
-  outreach: defaultLocalOutreach,
+  outreach: defaultLocalOutreachByOrder,
 };
 
 const defaultDetailDependencies: ProcurementDetailDependencies = {
@@ -329,14 +334,14 @@ export async function handleProcurementList(
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, 50);
     const outreach = dependencies.outreach;
-    const projected = outreach
-      ? await Promise.all(requests.map(async (request) => {
-        try {
-          return overlayRequestOutreach(request, await outreach(session.officeId, request.id));
-        } catch {
-          return request;
-        }
-      }))
+    const local = outreach
+      ? await outreach(session.officeId, requests.map((request) => request.id)).catch(() => null)
+      : null;
+    const projected = local
+      ? requests.map((request) => overlayRequestOutreach(
+        request,
+        local.get(request.id) ?? EMPTY_LOCAL_RFQ_OUTREACH,
+      ))
       : requests;
     return Response.json({ requests: projected }, { headers: responseHeaders });
   } catch (error) {

@@ -6,6 +6,8 @@ import {
 } from "@/lib/procurement-conversation-model";
 
 export const LOCAL_RFQ_MESSAGE_LIMIT = 4_000;
+export const LOCAL_RFQ_BATCH_MESSAGE_LIMIT = 8_000;
+export const LOCAL_RFQ_BATCH_ORDER_LIMIT = 50;
 
 export type LocalRfqMessage = {
   id: string;
@@ -63,6 +65,34 @@ export function summarizeLocalRfqOutreach(messages: LocalRfqMessage[]): LocalRfq
     contactedEmails: [...contacted],
     respondedEmails: [...responded],
   };
+}
+
+export const EMPTY_LOCAL_RFQ_OUTREACH: LocalRfqOutreach = {
+  contacted: 0,
+  responded: 0,
+  contactedEmails: [],
+  respondedEmails: [],
+};
+
+export function summarizeLocalRfqOutreachByOrder(
+  messages: LocalRfqMessage[],
+  orderIds: string[],
+): Map<string, LocalRfqOutreach> {
+  const referenceToOrder = new Map(orderIds.map((orderId) => [rfqSubjectReference(orderId), orderId]));
+  const grouped = new Map<string, LocalRfqMessage[]>();
+  for (const message of messages) {
+    const subject = message.subject ?? "";
+    for (const [reference, orderId] of referenceToOrder) {
+      if (!subject.includes(reference)) continue;
+      const bucket = grouped.get(orderId);
+      if (bucket) bucket.push(message);
+      else grouped.set(orderId, [message]);
+    }
+  }
+  return new Map(orderIds.map((orderId) => [
+    orderId,
+    summarizeLocalRfqOutreach(grouped.get(orderId) ?? []),
+  ]));
 }
 
 export function overlayRequestOutreach<T extends { contactedCount: number; responseCount: number }>(
