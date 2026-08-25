@@ -15,6 +15,7 @@ import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, DERYA_RFQ_SOURCE_E
 import { whatsAppProvider, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
 import { isSecretEncryptionConfigured } from "@/lib/security/crypto";
+import { canReadMailLog } from "@/lib/email-account-policy";
 import { SettingsHeader } from "../settings-header";
 import settingsStyles from "../integrations/integrations-settings.module.css";
 
@@ -243,7 +244,11 @@ export default async function EmailSettingsPage({
 
   return (
     <main className={settingsStyles.page}>
-      <SettingsHeader active="channels" isAdmin={session.role === "ADMIN"} />
+      <SettingsHeader
+        active="email"
+        isAdmin={session.role === "ADMIN"}
+        canReadMailLog={canReadMailLog({ role: session.role })}
+      />
       <div style={{ maxWidth: 1180, margin: "34px auto 0" }}>
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 18 }}>

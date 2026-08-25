@@ -1,14 +1,20 @@
 import { ExternalLink } from "lucide-react";
 import styles from "./integrations/integrations-settings.module.css";
 
-export type SettingsSection = "customers" | "integrations" | "connected-emails" | "channels";
+// "email" has no nav entry: the mailbox setup page is only reached from Gmail
+// reconnect links.
+export type SettingsSection = "customers" | "integrations" | "connected-emails" | "log" | "email";
 
 export function SettingsHeader({
   active,
   isAdmin,
+  canReadMailLog,
 }: {
   active: SettingsSection;
   isAdmin: boolean;
+  // Managers read the mail log without seeing the admin only sections, so this
+  // capability is passed separately on every page a manager can reach.
+  canReadMailLog: boolean;
 }) {
   const action = active === "integrations"
     ? { href: "/integrations", label: "Client page" }
@@ -40,14 +46,14 @@ export function SettingsHeader({
           Integrations
         </a>
         {isAdmin ? (
-          <>
-            <a href="/dashboard/settings/connected-emails" aria-current={active === "connected-emails" ? "page" : undefined}>
-              Connected emails
-            </a>
-            <a href="/dashboard/settings/email" aria-current={active === "channels" ? "page" : undefined}>
-              Channels
-            </a>
-          </>
+          <a href="/dashboard/settings/connected-emails" aria-current={active === "connected-emails" ? "page" : undefined}>
+            Connected emails
+          </a>
+        ) : null}
+        {canReadMailLog ? (
+          <a href="/dashboard/settings/log" aria-current={active === "log" ? "page" : undefined}>
+            Log
+          </a>
         ) : null}
       </nav>
     </>

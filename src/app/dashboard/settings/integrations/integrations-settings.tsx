@@ -65,7 +65,13 @@ function dateLabel(value: string | null) {
   }).format(date);
 }
 
-export function IntegrationsSettings({ canConfigure }: { canConfigure: boolean }) {
+export function IntegrationsSettings({
+  canConfigure,
+  canReadMailLog,
+}: {
+  canConfigure: boolean;
+  canReadMailLog: boolean;
+}) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -158,7 +164,7 @@ export function IntegrationsSettings({ canConfigure }: { canConfigure: boolean }
 
   return (
     <main className={styles.page}>
-      <SettingsHeader active="integrations" isAdmin={canConfigure} />
+      <SettingsHeader active="integrations" isAdmin={canConfigure} canReadMailLog={canReadMailLog} />
 
       <section className={styles.settingsPanel}>
         <header className={styles.panelHeader}>

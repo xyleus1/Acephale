@@ -1,5 +1,23 @@
 # AI Handoff
 
+## 2026-08-25: Mail log moved into Settings, Channels tab deleted
+
+- `Settings > Log` (`/dashboard/settings/log`) is the mail log. Each line shows
+  company, outreach type (procurement or sales), line item, email account, and
+  subject, expands to the stored message body, and links into the procurement
+  Messages tab when the subject carries an `[RFQ xxxxxxxx]` reference.
+- The page is office scoped through `loadMailLog(session.officeId, filter)` and
+  gated by `requireEmailAccountAdminSession`. Search plus direction and outreach
+  filters are pushed into the query by `mailLogMessageWhere`, so a search covers
+  the whole office mail history instead of only the newest page. A search on
+  company or line item first resolves matching sourcing requests in the workflow
+  database and widens the query by their `[RFQ xxxxxxxx]` subject references.
+- The Settings "Channels" tab is deleted. The mailbox setup page still exists
+  for Gmail reconnect links but has no navigation entry.
+- The admin page no longer renders the mail log; `/dashboard/admin?tab=mail`
+  redirects to `/dashboard/settings/log`.
+- Contract test: `npm run test:admin-mail-log`.
+
 ## 2026-08-25: Supplier inbound triage and context grounded reply support
 
 - `src/lib/procurement-inbound-triage.ts` classifies an inbound supplier message

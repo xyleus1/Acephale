@@ -5,6 +5,7 @@ import { decryptCustomerPassword } from "@/lib/customer-password-vault";
 import { customerContactEmail, isRemovedCustomerUsername } from "@/lib/customer-portal-account";
 import { resolveCustomerManagementOperator } from "@/lib/customer-portal-admin-auth";
 import { prisma } from "@/lib/prisma";
+import { canReadMailLog } from "@/lib/email-account-policy";
 import { SettingsHeader } from "../settings/settings-header";
 import settingsStyles from "../settings/integrations/integrations-settings.module.css";
 import {
@@ -157,7 +158,11 @@ export default async function CustomerPortalAdminPage({
 
   return (
     <main className={settingsStyles.page}>
-      <SettingsHeader active="customers" isAdmin={isAdmin} />
+      <SettingsHeader
+        active="customers"
+        isAdmin={isAdmin}
+        canReadMailLog={canReadMailLog({ role: session.role })}
+      />
 
       <div className={styles.page}>
         {query.notice && NOTICE_TEXT[query.notice] ? (

@@ -7,6 +7,7 @@ import { requireEmailAccountAdminSession } from "@/lib/email-account-access";
 import { GMAIL_APP_PASSWORD_PROVIDER } from "@/lib/gmail-app-password";
 import { prisma } from "@/lib/prisma";
 import { isSecretEncryptionConfigured } from "@/lib/security/crypto";
+import { canReadMailLog } from "@/lib/email-account-policy";
 import { SettingsHeader } from "../settings-header";
 import settingsStyles from "../integrations/integrations-settings.module.css";
 import styles from "./connected-emails.module.css";
@@ -62,7 +63,11 @@ export default async function ConnectedEmailsPage() {
 
   return (
     <main className={settingsStyles.page}>
-      <SettingsHeader active="connected-emails" isAdmin={session.role === "ADMIN"} />
+      <SettingsHeader
+        active="connected-emails"
+        isAdmin={session.role === "ADMIN"}
+        canReadMailLog={canReadMailLog({ role: session.role })}
+      />
       <div className={styles.workspace}>
         <section className={styles.summary} aria-label="Email account summary">
           <div><span>Connected</span><strong>{connected.length}</strong></div>

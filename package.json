@@ -46,6 +46,7 @@
     "test:leadgen": "tsx scripts/leadgen.test.ts",
     "test:supply-os-context-prospecting": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-context-prospecting.test.ts",
     "test:office-switch": "tsx scripts/office-switch.test.ts",
+    "test:admin-mail-log": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/admin-mail-log.test.ts",
     "test:procurement-bulk-rfq": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-bulk-rfq.test.ts",
     "test:procurement-local-outreach": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-local-outreach.test.ts",
     "test:research-lists": "NODE_OPTIONS='--conditions=react-server' tsx scripts/research-lists.test.ts",
