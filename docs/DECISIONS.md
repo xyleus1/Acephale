@@ -1,5 +1,28 @@
 # Decisions
 
+## Uploaded context files carry deterministic derived facts
+
+Date: 2026-08-25
+
+Storing raw extracted text is not enough for sourcing. A drafting model reading
+a 34 line bill of materials or a binary mesh silently drops the details that
+decide whether a supplier can build the part, and the resulting supplier request
+looks complete while omitting the smallest passive package, the fine pitch
+packages, and the real part footprint. Extraction therefore computes those facts
+deterministically at ingest and writes them into the stored markdown as plain
+sentences, ahead of the raw rows. Derived values are labelled as derived, and
+units that a file does not declare, such as STL units, stay stated as an
+assumption rather than a fact. A derived tool envelope is explicitly a starting
+point for tooling, not a customer requirement.
+
+The extraction version is the migration boundary. Bumping
+`CONTEXT_DOCUMENT_PROCESSING_VERSION` marks earlier markdown as stale, and an
+office-scoped, dry-run-by-default script re-ingests only stale rows from the
+retained source file. Nothing rewrites a procurement order that was already
+submitted, because the workflow database owns those rows and Derya holds a read
+only role on them. Corrections reach suppliers through a new draft built from
+current company context, never by silently editing history.
+
 ## Research output stays in office-scoped flexible lists
 
 Date: 2026-08-25

@@ -18,6 +18,38 @@
   redirects to `/dashboard/settings/log`.
 - Contract test: `npm run test:admin-mail-log`.
 
+## 2026-08-25: Context documents carry derived manufacturability facts
+
+- `src/lib/supply-os/context-document-facts.ts` derives plain sentences from
+  uploaded files before any model sees them. A CSV whose header looks like a
+  bill of materials gets component lines, total placements, distinct part
+  numbers, passive package sizes with the smallest one called out, fine pitch
+  and bottom terminated package families, connector lines, custom or module
+  footprints, lines that may need hand attachment, and test point lines. An STL
+  gets its bounding box, largest face, thickness, and a tool envelope derived
+  with a 10 mm allowance per side, labelled as derived rather than supplied.
+- `ingestContextDocument` prepends that block to the stored markdown for
+  `text/csv` and appends it for `model/stl`, so the raw rows and the mesh
+  summary stay available beside the facts. Extraction version is now 2.
+- Why: the HypnoDreamz PCBA and foam requests stored the raw BOM and mesh only,
+  and the drafting model dropped the 0201 passives, the QFN and WSON parts, and
+  the 280 x 105 mm foam footprint, so no supplier request mentioned the drivers
+  that set price and feasibility.
+- Package tokens are fenced with alphanumeric lookarounds, not word boundaries,
+  because footprint fields glue tokens together as in
+  `Capacitor_SMD:C_0201_0603Metric`. The metric twin in that string is
+  deliberately not counted as a second size.
+- Backfill for documents uploaded before this change:
+  `tsx scripts/reprocess-context-document-facts.ts --office=<id> [--apply]`.
+  It is office scoped, dry run by default, rewrites only rows whose extraction
+  version is older than the current one, and never touches the source file.
+- Contract tests: `npm run test:context-document-facts` and
+  `npm run test:supply-os-context-documents`.
+- Not covered yet: procurement orders created before this change keep their
+  stored request snapshot, and Derya cannot rewrite it because the workflow
+  database role is read only on those rows. Corrected supplier requests must be
+  drafted from current company context.
+
 ## 2026-08-25: Supplier inbound triage and context grounded reply support
 
 - `src/lib/procurement-inbound-triage.ts` classifies an inbound supplier message

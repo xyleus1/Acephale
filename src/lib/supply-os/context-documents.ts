@@ -4,9 +4,14 @@ import { createHash } from "node:crypto";
 import OpenAI from "openai";
 import { mimeFromName } from "@/lib/document-storage";
 import { DERYA_AI_MODEL } from "@/lib/gpt56-client";
+import {
+  billOfMaterialsFactsText,
+  stlPartFactsText,
+} from "@/lib/supply-os/context-document-facts";
 
 export const CONTEXT_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
-export const CONTEXT_DOCUMENT_PROCESSING_VERSION = 1;
+// 2 adds the deterministic derived facts block to CSV and STL markdown.
+export const CONTEXT_DOCUMENT_PROCESSING_VERSION = 2;
 const MAX_EXTRACTED_CHARS = 100_000;
 const MAX_PDF_PAGES = 25;
 const ACCEPTED_CONTEXT_MIME_TYPES = new Set([
@@ -144,6 +149,10 @@ function stlExtraction(bytes: Buffer, name: string) {
   }
 
   const dimensions = bounds.max.map((maximum, axis) => maximum - bounds.min[axis]);
+  const partFacts = stlPartFactsText({
+    dimensions: [dimensions[0], dimensions[1], dimensions[2]],
+    triangles: triangleCount,
+  });
   const text = [
     `STL model: ${name}`,
     `Format: ${format}`,
@@ -151,7 +160,8 @@ function stlExtraction(bytes: Buffer, name: string) {
     `Bounds in model units: X ${formatStlNumber(bounds.min[0])} to ${formatStlNumber(bounds.max[0])}; Y ${formatStlNumber(bounds.min[1])} to ${formatStlNumber(bounds.max[1])}; Z ${formatStlNumber(bounds.min[2])} to ${formatStlNumber(bounds.max[2])}`,
     `Overall dimensions in model units: ${dimensions.map(formatStlNumber).join(" x ")}`,
     "Units: STL does not declare a measurement unit.",
-  ].join("\n");
+    partFacts,
+  ].filter(Boolean).join("\n");
   return { state: "EXTRACTED" as const, text, error: null };
 }
 
@@ -242,7 +252,10 @@ export async function extractContextDocumentText(bytes: Buffer, mimeType: string
 function extractedMarkdown(name: string, mimeType: string, text: string) {
   if (mimeType === "text/markdown") return text;
   const title = name.replace(/[\r\n#]+/g, " ").trim() || "Document";
-  if (mimeType === "text/csv") return `# ${title}\n\n\`\`\`csv\n${text}\n\`\`\``;
+  if (mimeType === "text/csv") {
+    const facts = billOfMaterialsFactsText(text);
+    return [`# ${title}`, facts, `\`\`\`csv\n${text}\n\`\`\``].filter(Boolean).join("\n\n");
+  }
   return `# ${title}\n\n${text}`;
 }
 
