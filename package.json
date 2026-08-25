@@ -33,6 +33,7 @@
     "test:supply-os-panel-map-focus": "tsx scripts/supply-os-panel-map-focus.test.ts",
     "test:supply-os-context": "node --import tsx scripts/supply-os-context.test.ts && node --import tsx scripts/supply-os-context-light.regression-1.test.ts && NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-context-procurement.test.ts && NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-procurement-context.regression-1.test.ts",
     "test:supply-os-context-documents": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-context-documents.test.ts",
+    "test:procurement-inbound-triage": "tsx scripts/procurement-inbound-triage.test.ts",
     "test:supply-os-context-db": "NODE_OPTIONS='--conditions=react-server' tsx scripts/company-context-database.test.ts",
     "test:supply-os-supplier-email-provider": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-email-provider.test.ts",
     "test:supply-os-operations-ui": "tsx scripts/supply-os-operations-ui.test.ts",

@@ -1,5 +1,25 @@
 # AI Handoff
 
+## 2026-08-25: Supplier inbound triage and context grounded reply support
+
+- `src/lib/procurement-inbound-triage.ts` classifies an inbound supplier message
+  as a bounce, an automatic reply, a wrong recipient notice, a question, or a
+  statement, then decides between `AUTO_ANSWER`, `NEEDS_HUMAN`, and
+  `NO_REPLY_NEEDED` using only facts stored on the sourcing request.
+- Every question topic inside a sentence is evaluated, not just the first one.
+  Price, terms, and legal topics are never answered automatically, and a missing
+  quantity, date, material, specification, destination, or document record forces
+  `NEEDS_HUMAN` instead of a guess.
+- The vendor conversation route returns `triage` next to the conversation when
+  the newest message is inbound. Messages then shows either "Needs your reply"
+  with the reason per unanswered question, or "Answerable from context" with a
+  "Use context answer" action that fills the existing editable draft.
+- The action only populates the draft. The existing recipient, subject, body,
+  sender account, idempotency, and explicit confirm send gates are unchanged, so
+  nothing reaches a supplier without an operator confirming it.
+- Verified with `npm run test:procurement-inbound-triage`, `npx tsc --noEmit`,
+  `npm run lint`, and the production build. No supplier message was sent.
+
 ## 2026-08-25: Prefer populated Prospects lists
 
 - Supply OS Prospects now keeps valid current and deep-linked selections ahead

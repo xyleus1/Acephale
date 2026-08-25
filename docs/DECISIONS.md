@@ -4237,3 +4237,21 @@ Use this log for durable product and engineering decisions. Do not put every imp
   shortlist.
 - Consequence: Bourne may consume the Derya shortlist before falling back to
   its existing research without changing its operational ownership.
+
+## 2026-08-25: Automatic supplier replies stay deterministic and confirmed
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: An inbound supplier message may be answered from context only when
+  every topic it raises maps to a fact recorded on the sourcing request. The
+  answer text is generated from those facts by template, not by a model.
+- Safety boundary: Price, payment terms, contracts, and legal or compliance
+  topics are never answered automatically, regardless of stored context.
+- Escalation boundary: A missing fact, an unknown topic, a wrong recipient
+  notice, or a statement without an answerable question marks the thread as
+  needing a human reply in Messages.
+- Send boundary: Triage only prepares an editable draft. Supplier delivery still
+  requires the existing explicit confirm send gate, sender account selection, and
+  idempotency controls.
+- Consequence: The feature cannot invent quantities, dates, or specifications,
+  and it cannot send on its own.

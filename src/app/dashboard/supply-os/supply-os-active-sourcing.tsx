@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowRight,
   Check,
   CheckCircle2,
@@ -16,6 +17,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
+import {
+  procurementContextReplyBody,
+  type ProcurementInboundTriage,
+} from "@/lib/procurement-inbound-triage";
 import { PROCUREMENT_REPLY_SENDER_UNAVAILABLE } from "@/lib/procurement-reply-errors";
 import {
   type CustomerProcurementListItem,
@@ -82,6 +87,16 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function contextAnswerSubject(subject: string | null) {
+  const threadSubject = (subject ?? "")
+    .replace(/\u0000/g, "")
+    .replace(/\s*\u2014\s*/g, " - ")
+    .replace(/^\[[^\]\r\n]{1,80}\]\s*(?=(?:(?:re|fw|fwd)\s*:))/i, "")
+    .replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, "")
+    .trim() || "Supplier sourcing request";
+  return `Re: ${threadSubject}`.slice(0, 240);
 }
 
 function responseCountLabel(responses: number) {
@@ -218,6 +233,7 @@ export function ActiveSourcingWorkspace({
   const [conversationState, setConversationState] = useState<ConversationState>("idle");
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [conversationRevision, setConversationRevision] = useState(0);
+  const [triage, setTriage] = useState<ProcurementInboundTriage | null>(null);
   const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
   const [replyDraftState, setReplyDraftState] = useState<ReplyDraftState>("idle");
   const [replyDraftError, setReplyDraftError] = useState<string | null>(null);
@@ -303,9 +319,11 @@ export function ActiveSourcingWorkspace({
     setConversation(null);
     setConversationState("loading");
     setConversationError(null);
-    void fetchJson<{ conversation: ProcurementConversation }>(url, controller.signal)
+    setTriage(null);
+    void fetchJson<{ conversation: ProcurementConversation; triage?: ProcurementInboundTriage | null }>(url, controller.signal)
       .then((payload) => {
         setConversation(payload.conversation);
+        setTriage(payload.triage ?? null);
         setConversationState("ready");
       })
       .catch((error: unknown) => {
@@ -379,6 +397,26 @@ export function ActiveSourcingWorkspace({
       setReplyDraftError(error instanceof Error ? error.message : "The reply draft could not be generated.");
       setReplyDraftErrorReason(error instanceof SupplierActivityRequestError ? error.reason : null);
     }
+  };
+
+  const useContextAnswer = () => {
+    const displayedInbound = conversation?.messages.at(-1);
+    if (!triage || triage.decision !== "AUTO_ANSWER" || displayedInbound?.direction !== "INBOUND") return;
+    setReplyDraft({
+      recipient: displayedInbound.fromEmail,
+      subject: contextAnswerSubject(displayedInbound.subject),
+      body: procurementContextReplyBody({
+        supplierName: displayedInbound.fromName,
+        answered: triage.answered,
+      }),
+      sourceMessageId: displayedInbound.id,
+    });
+    setReplyDraftState("ready");
+    setReplyDraftError(null);
+    setReplyDraftErrorReason(null);
+    setReplyCopied(false);
+    setReplySendState("idle");
+    setReplyDelivery(null);
   };
 
   const copyReplyDraft = async () => {
@@ -534,6 +572,38 @@ export function ActiveSourcingWorkspace({
                   </div>
                 </header>
                 <ConversationMessages conversation={conversation} state={conversationState} error={conversationError} fallbackCase={null} />
+                {conversationState === "ready" && triage && triage.decision !== "NO_REPLY_NEEDED" ? (
+                  <section
+                    className={styles.activeReplyTriage}
+                    data-needs-human={triage.decision === "NEEDS_HUMAN"}
+                    aria-label="Supplier reply triage"
+                  >
+                    <header>
+                      <span>
+                        {triage.decision === "NEEDS_HUMAN" ? <AlertTriangle size={14} /> : <Check size={14} />}
+                        <strong>{triage.decision === "NEEDS_HUMAN" ? "Needs your reply" : "Answerable from context"}</strong>
+                      </span>
+                      {triage.decision === "AUTO_ANSWER" && !replyDraft ? (
+                        <button type="button" onClick={useContextAnswer}><PenLine size={13} /> Use context answer</button>
+                      ) : null}
+                    </header>
+                    <p>{triage.headline}</p>
+                    {triage.unanswered.length ? (
+                      <ul>
+                        {triage.unanswered.map((entry) => (
+                          <li key={`${entry.topic}:${entry.question}`}><strong>{entry.question}</strong><span>{entry.reason}</span></li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {triage.answered.length ? (
+                      <ul data-answered="true">
+                        {triage.answered.map((entry) => (
+                          <li key={`${entry.topic}:${entry.question}`}><strong>{entry.question}</strong><span>{entry.answer}</span></li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </section>
+                ) : null}
                 {replyDraftError ? (
                   <div className={styles.activeReplyDraftError} role="alert">
                     <span>{replyDraftError}</span>

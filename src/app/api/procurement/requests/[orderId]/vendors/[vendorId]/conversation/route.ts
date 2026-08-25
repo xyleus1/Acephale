@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
 import {
+  procurementReplyFacts,
+  triageSupplierInbound,
+} from "@/lib/procurement-inbound-triage";
+import {
   customerCanAccessProcurementOrder,
   handleProcurementReplyDraft,
 } from "@/lib/procurement-route-handlers";
@@ -41,7 +45,15 @@ export async function GET(
       orderId,
       vendorId,
     });
-    return NextResponse.json({ conversation }, { headers: responseHeaders });
+    const latest = conversation.messages.at(-1);
+    const triage = order && latest?.direction === "INBOUND"
+      ? triageSupplierInbound({
+          subject: latest.subject,
+          body: latest.body,
+          facts: procurementReplyFacts(order),
+        })
+      : null;
+    return NextResponse.json({ conversation, triage }, { headers: responseHeaders });
   } catch (error) {
     if (error instanceof ProcurementWorkflowError) {
       const status = error.code === "forbidden"

@@ -2158,6 +2158,88 @@
   white-space: nowrap;
 }
 
+.activeReplyTriage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.activeReplyTriage[data-needs-human="true"] {
+  border-color: color-mix(in srgb, var(--decision) 34%, var(--line));
+  background: var(--decision-soft);
+}
+
+.activeReplyTriage header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activeReplyTriage header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.activeReplyTriage[data-needs-human="true"] header span {
+  color: var(--decision);
+}
+
+.activeReplyTriage header button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--navy);
+  background: var(--panel);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.activeReplyTriage p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.activeReplyTriage ul {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activeReplyTriage li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.activeReplyTriage li strong {
+  color: var(--navy);
+  font-weight: 620;
+}
+
+.activeReplyTriage li span {
+  color: var(--ink-muted);
+}
+
 .activeConversationEmpty,
 .activeSourcingNoManufacturer {
   min-height: 100px;
