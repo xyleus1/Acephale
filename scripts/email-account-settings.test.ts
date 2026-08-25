@@ -64,6 +64,7 @@ assert.match(roundTripTest, /"Check reply"/);
 assert.match(actions, /addGmailAppPasswordAccountsBulk/);
 assert.match(actions, /enableBulkEmailAccounts/);
 assert.match(actions, /BULK_CONNECT_CONCURRENCY = \d+/);
+assert.match(actions, /\.slice\(0, MAX_BULK_GMAIL_ACCOUNTS\)/);
 assert.match(actions, /encryptedRows\.slice\(index, index \+ BULK_CONNECT_CONCURRENCY\)/);
 assert.match(actions, /sendEnabled: false/);
 const bulkUpdate = actions.match(/const account = current([\s\S]*?): await prisma\.emailAccount\.create/)?.[1] ?? "";

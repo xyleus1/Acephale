@@ -11,7 +11,7 @@ import {
   verifyGmailAppPasswordConnection,
 } from "@/lib/gmail-app-password";
 import { encryptSecret } from "@/lib/security/crypto";
-import { parseGmailAppPasswordBulkInput } from "@/lib/gmail-app-password-bulk";
+import { MAX_BULK_GMAIL_ACCOUNTS, parseGmailAppPasswordBulkInput } from "@/lib/gmail-app-password-bulk";
 import { updateEmailSenderPoolAccountsForOffice } from "@/lib/email-sender-pool-settings";
 
 const BULK_CONNECT_CONCURRENCY = 6;
@@ -251,7 +251,7 @@ export async function addGmailAppPasswordAccountsBulk(formData: FormData) {
 
 export async function enableBulkEmailAccounts(accountIds: string[]) {
   const session = await requireEmailAccountAdminSession();
-  const ids = [...new Set(accountIds.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 220))].slice(0, 10);
+  const ids = [...new Set(accountIds.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 220))].slice(0, MAX_BULK_GMAIL_ACCOUNTS);
   if (ids.length === 0) return { ok: false as const, error: "No verified accounts selected." };
 
   const enabled = await prisma.$transaction(async (tx) => {
