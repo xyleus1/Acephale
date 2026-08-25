@@ -1,4 +1,5 @@
 import { CategoryType, UserRole } from "@prisma/client";
+import type { Route } from "next";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +16,7 @@ import {
 import { loadJobStrategyInput } from "@/lib/commercial-strategy-persistence";
 import { simulatePricingScenario, type PricingScenarioResult } from "@/lib/pricing-scenario";
 import { operatorPhaseLabel } from "@/lib/operator-action-labels";
+import { loadMailLog, type MailLogEntry } from "@/lib/admin-mail-log";
 
 export const metadata = { title: "Admin" };
 
@@ -129,6 +131,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const { tab = "team" } = sp;
   const isAdmin = session.role === UserRole.ADMIN;
   const canSeeAgentAudit = session.role === UserRole.ADMIN || session.role === UserRole.MANAGER;
+
+  const mailLog: MailLogEntry[] = tab === "mail" && canSeeAgentAudit
+    ? await loadMailLog(session.officeId)
+    : [];
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -442,8 +448,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const queuedJobs = backgroundCount("QUEUED");
   const runningJobs = backgroundCount("RUNNING");
   const failedJobs = backgroundCount("FAILED");
-  const pageTitle = tab === "brain" ? "Commercial Brain" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : "Team";
-  const pageSubtitle = tab === "audit"
+  const pageTitle = tab === "brain" ? "Commercial Brain" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : tab === "mail" ? "Mail Log" : "Team";
+  const mailLogSent = mailLog.filter((entry) => entry.direction === "OUTBOUND").length;
+  const pageSubtitle = tab === "mail"
+    ? `${mailLogSent} sent, ${mailLog.length - mailLogSent} received, newest first`
+    : tab === "audit"
     ? `${auditLogs.length} recent changes · who did what on which load`
     : tab === "agent"
     ? `${agentRunEvents.length} recent agent events · runs, reviews, tools, and errors`
@@ -470,6 +479,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             {canSeeAgentAudit && (
               <Link href="/dashboard/admin?tab=audit">
                 <button type="button" className={tab === "audit" ? "btn-sm" : "secondary btn-sm"}>Activity log</button>
+              </Link>
+            )}
+            {canSeeAgentAudit && (
+              <Link href="/dashboard/admin?tab=mail">
+                <button type="button" className={tab === "mail" ? "btn-sm" : "secondary btn-sm"}>Mail log</button>
               </Link>
             )}
             {canSeeAgentAudit && (
@@ -768,6 +782,62 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {/* ── AGENT AUDIT TAB ───────────────────────────────────────── */}
       {/* ── ACTIVITY LOG TAB ─────────────────────────────────────── */}
+      {tab === "mail" && canSeeAgentAudit && (
+        <div className="card agent-audit-card">
+          <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="section-title">Mail log</div>
+            <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+              Every sent and received email with the company, outreach type, line item, and sending account. Expand a row to read the message.
+            </p>
+          </div>
+          {mailLog.length === 0 ? (
+            <div className="card-body" style={{ color: "var(--text-3)", fontSize: 13 }}>
+              No mail recorded yet. Entries appear as soon as an outreach is sent or a reply is synced.
+            </div>
+          ) : (
+            <div className="table-shell" style={{ maxHeight: "72vh" }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ cursor: "default" }}>When</th>
+                    <th style={{ cursor: "default" }}>Direction</th>
+                    <th style={{ cursor: "default" }}>Company</th>
+                    <th style={{ cursor: "default" }}>Outreach</th>
+                    <th style={{ cursor: "default" }}>Line item</th>
+                    <th style={{ cursor: "default" }}>Email account</th>
+                    <th style={{ cursor: "default" }}>Subject</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mailLog.map((entry) => (
+                    <tr key={entry.messageId}>
+                      <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(entry.sentAt)}</td>
+                      <td><span className="data-status-badge">{entry.direction === "OUTBOUND" ? "Sent" : "Received"}</span></td>
+                      <td>{entry.companyName}</td>
+                      <td>{entry.outreachType}</td>
+                      <td>{entry.lineItem}</td>
+                      <td className="data-cell-mono">{entry.accountEmail}</td>
+                      <td>
+                        <details>
+                          <summary style={{ cursor: "pointer" }}>{entry.subject}</summary>
+                          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
+                            {entry.direction === "OUTBOUND" ? "To" : "From"}: {entry.counterpartyEmail}
+                          </div>
+                          <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, marginTop: 6 }}>{entry.body || "No body captured."}</pre>
+                          {entry.procurementLink && (
+                            <Link href={entry.procurementLink as Route} className="data-link">Open in procurement messages</Link>
+                          )}
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "audit" && canSeeAgentAudit && (
         <div className="card agent-audit-card">
           <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>

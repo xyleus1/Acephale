@@ -202,6 +202,10 @@ function externalDatabase(): ProcurementDatabase {
   return client as unknown as ProcurementDatabase;
 }
 
+export function procurementWorkflowDatabase(): ProcurementDatabase {
+  return externalDatabase();
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -378,6 +382,29 @@ export function procurementCustomerIdFromServerMetadata(
     throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
   }
   return customerId as string;
+}
+
+export function procurementOfficeIdFromServerMetadata(
+  customerId: string,
+  rawMapping = process.env.PROCUREMENT_CUSTOMER_MAP_JSON,
+) {
+  if (!rawMapping?.trim()) {
+    throw new ProcurementWorkflowError("No procurement customers are configured.", "configuration");
+  }
+  let mapping: unknown;
+  try {
+    mapping = JSON.parse(rawMapping);
+  } catch {
+    throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
+  }
+  if (!isObject(mapping)) {
+    throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
+  }
+  const match = Object.entries(mapping).find(([, value]) => value === customerId);
+  if (!match) {
+    throw new ProcurementWorkflowError("This procurement customer is not mapped to an office.", "configuration");
+  }
+  return match[0];
 }
 
 export function procurementCustomerIdsFromServerMetadata(

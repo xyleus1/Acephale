@@ -10548,6 +10548,43 @@ Verification caveat:
 - The supply-os sidebar has a `Leads` utility link for non-customer accounts.
 - This surface is read-only. It does not queue or send outreach.
 
+## 2026-08-25: Bulk supplier RFQ outreach for a sourcing request
+
+- The procurement surfaces could draft and send one supplier email at a time
+  through `supplier-communication-persistence`. There was no path to contact a
+  freshly researched supplier pool of 100 vendors on one sourcing request, so
+  campaign-scale outreach had no home in the product.
+- Added `src/lib/procurement-bulk-rfq.ts`:
+  - `loadBulkRfqOrder` reads the request, the buying company, and the item
+    material, specification, quantity, unit, needed-by date and notes, and
+    returns the owning `officeId` for every downstream write.
+  - `listBulkRfqTargets` selects only order suppliers in `researched`,
+    `shortlisted` or `approved` state that have a contact email and no recorded
+    outbound message, bounded by `BULK_RFQ_MAX_PER_RUN`.
+  - `buildBulkRfqSubject` and `buildBulkRfqBody` are deterministic, contain no
+    LLM call, carry the stored specification and notes verbatim, and ask for
+    price breaks, tooling cost, lead time, clarifications and terms.
+  - `runProcurementBulkRfq` reserves a sender per vendor from the office email
+    sender pool with a stable idempotency key and request hash, sends through
+    `gmailSupplierEmailProvider`, and only then writes the local email thread,
+    the outbound message, the reservation receipt and the supplier row. A
+    rejected send releases the reservation. An unknown send keeps the
+    reservation so nothing is retried blindly. Pool exhaustion stops the run.
+  - `reconcileProcurementBulkRfq` resolves reservations left in `RESERVED` by
+    asking the provider for the sent message, then finalizes or releases.
+- Added `POST /api/admin/procurement-bulk-rfq` (send and reconcile modes) and a
+  `GET` preview of pending recipients. Both require an operator secret in
+  `PROCUREMENT_BULK_RFQ_SECRET` or `CRON_SECRET`.
+- Added `scripts/procurement-bulk-rfq.test.ts` and the
+  `test:procurement-bulk-rfq` script for the copy and fallback assertions.
+- Note for future agents: the live `OrderSupplier` table uses
+  `last_email_message_id` and `email_thread_id`. It has no `gmail_message_id`
+  column, and `ProcurementOrder` has no `gmail_thread_id` column, so the Prisma
+  models for those Bourne-owned tables are drifted. This library reads and
+  writes those tables with raw SQL against the real columns.
+- `docs/ENGINEERING_LOG.md` is unreadable in git as of commit `a0ea1dd`; its
+  bytes are not text. It was left untouched.
+
 ## 2026-08-25: Procurement research bridge
 
 - The procurement research bridge is implemented on a dedicated branch. It
@@ -10568,3 +10605,19 @@ Verification caveat:
 - The implementation is locally verified before handoff. No live provider,
   supplier contact, email, workflow write, or production database operation
   was used for verification.
+
+## 2026-08-25: Admin mail log
+
+- Added `src/lib/admin-mail-log.ts` and a `Mail log` tab on `/dashboard/admin`.
+  Each row is one office-scoped local email message, inbound or outbound, with
+  the buying company, the outreach type (Procurement or Sales), the procurement
+  line item, the mailbox that sent or received it, and the subject.
+- Outreach type is derived from the `[RFQ xxxxxxxx]` subject reference written
+  by the bulk RFQ library. Rows with that reference resolve the workflow order
+  through the permitted workflow views, so the company name and the line item
+  come from the sourcing request, not from the mail body.
+- Expanding a row shows the counterparty address and the stored body, plus a
+  link to the sourcing request in the procurement workspace.
+  `/dashboard/supply-os?panel=materials&procurementOrder=<id>` opens that
+  request directly.
+- The tab is read-only and reuses the existing agent-audit visibility rule.

@@ -901,6 +901,17 @@ function CaseCommandCenter({
   }, [refreshCustomerProcurementOrders]);
 
   useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("procurementOrder");
+    if (!requested || customerProcurementRequest) return;
+    const match = customerProcurementOrders.find((order) => order.id === requested);
+    if (!match) return;
+    setCustomerProcurementRequest({
+      item: customerProcurementItem(match),
+      order: customerProcurementOrderState(match),
+    });
+  }, [customerProcurementOrders, customerProcurementRequest]);
+
+  useEffect(() => {
     if (!visibleCustomerProcurementOrders.some((order) => ["new", "researching", "sourcing"].includes(order.status))) return;
     const timer = window.setTimeout(() => {
       void refreshCustomerProcurementOrders().catch(() => undefined);
