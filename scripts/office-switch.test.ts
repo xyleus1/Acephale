@@ -232,6 +232,14 @@ async function main() {
     companyIndexSource,
     /workspace\.isCurrent !== false && allowedWorkspaceSet\.has\(workspace\.id\)/,
   );
+  assert.match(
+    companyIndexSource,
+    /workspace\.isCurrent !== false && workspace\.id === preferredWorkspaceId/,
+  );
+  assert.match(
+    companyIndexSource,
+    /const firstCurrentWorkspace = nextWorkspaces\.find\(\(workspace\) => workspace\.isCurrent !== false\)[\s\S]*autoOpenFirstWorkspace && firstCurrentWorkspace/,
+  );
   const workspacesRouteSource = readFileSync(
     "src/app/api/supply-os/offices/workspaces/route.ts",
     "utf8",

@@ -124,15 +124,16 @@ export function SupplyOsCompanyIndex({
       setWorkspaces(nextWorkspaces);
       setState("ready");
       const preferredWorkspace = preferredWorkspaceId
-        ? nextWorkspaces.find((workspace) => workspace.id === preferredWorkspaceId) ?? null
+        ? nextWorkspaces.find((workspace) => workspace.isCurrent !== false && workspace.id === preferredWorkspaceId) ?? null
         : null;
       if (preferredWorkspace) {
         onOpenWorkspace(selectionFor(preferredWorkspace));
         return;
       }
       if (preferredWorkspaceId) onPreferredWorkspaceUnavailable?.();
-      if (autoOpenFirstWorkspace && nextWorkspaces[0]) {
-        onOpenWorkspace(selectionFor(nextWorkspaces[0]));
+      const firstCurrentWorkspace = nextWorkspaces.find((workspace) => workspace.isCurrent !== false);
+      if (autoOpenFirstWorkspace && firstCurrentWorkspace) {
+        onOpenWorkspace(selectionFor(firstCurrentWorkspace));
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Companies could not be loaded.");
