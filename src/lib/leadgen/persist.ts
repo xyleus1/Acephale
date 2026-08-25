@@ -1,7 +1,4 @@
-import "server-only";
-
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { prisma as defaultPrisma } from "@/lib/prisma";
 import { isRoleEmail } from "./extract";
 import type { LeadCandidate } from "./harvest";
 import type { EmailVerification } from "./verify";
@@ -22,7 +19,7 @@ export type PersistLeadsResult = {
 export type PersistLeadsOptions = {
   officeId: string;
   campaignTag: string;
-  client?: PrismaClient;
+  client: PrismaClient;
   /** Only persist candidates at or above this fit score. */
   minScore?: number;
   /** Only persist addresses at or above this verification confidence. */
@@ -44,7 +41,7 @@ export async function persistLeads(
   records: readonly LeadRecord[],
   options: PersistLeadsOptions,
 ): Promise<PersistLeadsResult> {
-  const client = options.client ?? defaultPrisma;
+  const client = options.client;
   const minScore = options.minScore ?? 50;
   const minEmailConfidence = options.minEmailConfidence ?? 55;
   const now = options.now ?? new Date();

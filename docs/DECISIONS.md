@@ -4143,3 +4143,47 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequences: Customers can submit sourcing context for synthetic or
   private companies while the interface and stored provenance prevent the
   context from being mistaken for verified public research.
+
+### 2026-08-24 - Customer offices sign in by username, harvest egress is guarded
+
+- Status: accepted
+- Owner: engineering
+- Context: Each customer gets its own office tenant (Maneks first). Reusing an
+  operator email across two offices made password login ambiguous and email
+  code login resolve to the wrong tenant, and the lead generation harvest
+  fetched arbitrary URLs taken from third-party search result pages.
+- Login decision: A customer office admin is identified by a username, stored
+  as `<username>@office.derya.invalid`. `resolveLoginIdentifier` maps a typed
+  username onto that address, `isLoginEmailAllowed` accepts the reserved domain
+  without adding the account to the operator allowlist, and both the code
+  request and code verification paths reject the reserved domain. Only the
+  password path can authenticate a customer office, so no sign-in code is ever
+  addressed to an undeliverable mailbox.
+- Provisioning boundary: `scripts/create-production-office.ts` accepts
+  `PRODUCTION_ADMIN_USERNAME` instead of `PRODUCTION_ADMIN_EMAIL`. The same
+  script stays the single entry point for creating an office, its admin, its
+  company, and its primary workspace.
+- Egress decision: `src/lib/leadgen/fetch-guard.ts` is the only way harvest
+  requests leave the process. It permits http and https, rejects embedded
+  credentials and non-web ports, rejects `localhost` and internal hostname
+  suffixes, and rejects any host whose resolved addresses fall in loopback,
+  link-local, carrier-grade NAT, multicast, or private ranges. Redirects are
+  followed manually so every hop is validated, which also closes DNS rebinding
+  through a redirect chain.
+- Consequences: Lead sourcing can keep reading the open web without an explicit
+  per-domain allowlist while internal network space stays unreachable, and each
+  customer tenant has a login that cannot collide with operator accounts.
+
+## 2026-08-24: Egress addresses are validated at connect time
+
+- Decision: Harvest requests do not use global `fetch`. They go through
+  `guardedRequest`, which drives `node:http`/`node:https` with a custom DNS
+  `lookup` that rejects private, loopback, link local, CGNAT, and reserved
+  addresses.
+- Rationale: Validating a hostname and then letting `fetch` resolve it again
+  leaves a rebinding window where a short TTL record can answer publicly for the
+  check and privately for the connection. Resolving inside the connect path
+  means the validated address is the dialed address.
+- Consequences: Any new outbound crawling in the leadgen pipeline must use
+  `guardedRequest`, not `fetch`. Response bodies are size capped and oversize
+  responses reject rather than hanging.

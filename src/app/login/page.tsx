@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession, loginWithCredentials, loginWithVerifiedEmail } from "@/lib/auth";
-import { requestLoginCode, verifyLoginCode } from "@/lib/login-code";
+import { requestLoginCode, resolveLoginIdentifier, verifyLoginCode } from "@/lib/login-code";
 import { LogoMark } from "@/components/logo-mark";
 
 type Params = {
@@ -8,7 +8,7 @@ type Params = {
 };
 
 const ERROR_TEXT: Record<string, string> = {
-  "1": "Invalid email or password. Please try again.",
+  "1": "Invalid username, email, or password. Please try again.",
   not_allowed: "This is an internal Derya deployment. That email is not on the sign-in list.",
   no_user: "No active account exists for that email.",
   rate_limited: "Too many codes requested. Wait 15 minutes and try again.",
@@ -54,10 +54,10 @@ export default async function LoginPage({ searchParams }: Params) {
 
   async function passwordLoginAction(formData: FormData) {
     "use server";
-    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const identifier = resolveLoginIdentifier(String(formData.get("email") ?? ""));
     const password = String(formData.get("password") ?? "");
 
-    const result = await loginWithCredentials(email, password);
+    const result = await loginWithCredentials(identifier, password);
     if (!result) {
       redirect("/login?error=1");
     }
@@ -127,8 +127,8 @@ export default async function LoginPage({ searchParams }: Params) {
             <summary style={{ fontSize: 12, cursor: "pointer", opacity: 0.7 }}>Use password instead</summary>
             <form action={passwordLoginAction} className="field" style={{ gap: 14, marginTop: 10 }}>
               <label className="field">
-                <span>Email address</span>
-                <input name="email" type="email" required autoComplete="email" defaultValue={query.email ?? ""} />
+                <span>Email or username</span>
+                <input name="email" type="text" required autoComplete="username" defaultValue={query.email ?? ""} />
               </label>
               <label className="field">
                 <span>Password</span>

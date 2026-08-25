@@ -36,12 +36,43 @@ export function allowedLoginEmails(): string[] {
   return parsed.length ? parsed : DEFAULT_ALLOWED_LOGIN_EMAILS;
 }
 
+// Customer offices (Maneks and later tenants) sign in with a username and a
+// shared password instead of a personal mailbox, so their user rows carry a
+// synthetic address in this reserved domain. Nothing is ever delivered to it:
+// the email-code path refuses these identifiers, only the password path works.
+export const USERNAME_LOGIN_DOMAIN = "office.derya.invalid";
+
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{1,30}$/;
+
+export function isUsernameIdentifier(identifier: string) {
+  const value = identifier.trim().toLowerCase();
+  return !value.includes("@") && USERNAME_PATTERN.test(value);
+}
+
+export function usernameLoginEmail(username: string) {
+  return `${username.trim().toLowerCase()}@${USERNAME_LOGIN_DOMAIN}`;
+}
+
+export function isUsernameLoginEmail(email: string) {
+  return normalizeLoginEmail(email).endsWith(`@${USERNAME_LOGIN_DOMAIN}`);
+}
+
+// Turns whatever was typed into the sign-in box into the stored user email.
+export function resolveLoginIdentifier(identifier: string) {
+  const value = identifier.trim().toLowerCase();
+  return isUsernameIdentifier(value) ? usernameLoginEmail(value) : value;
+}
+
 export function normalizeLoginEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
 export function isLoginEmailAllowed(email: string) {
-  return allowedLoginEmails().includes(normalizeLoginEmail(email));
+  const value = normalizeLoginEmail(email);
+  if (isUsernameLoginEmail(value)) {
+    return USERNAME_PATTERN.test(value.slice(0, value.lastIndexOf("@")));
+  }
+  return allowedLoginEmails().includes(value);
 }
 
 function hashLoginCode(email: string, code: string) {
@@ -130,6 +161,7 @@ async function sendCodeEmailWithSmtp(to: string, code: string) {
 
 export async function requestLoginCode(rawEmail: string): Promise<RequestCodeResult> {
   const email = normalizeLoginEmail(rawEmail);
+  if (isUsernameLoginEmail(email)) return { ok: false, error: "not_allowed" };
   if (!isLoginEmailAllowed(email)) return { ok: false, error: "not_allowed" };
 
   const user = await prisma.user.findFirst({
@@ -198,6 +230,7 @@ export type VerifyCodeResult = { ok: true; email: string } | { ok: false; error:
 export async function verifyLoginCode(rawEmail: string, rawCode: string): Promise<VerifyCodeResult> {
   const email = normalizeLoginEmail(rawEmail);
   const code = rawCode.trim();
+  if (isUsernameLoginEmail(email)) return { ok: false, error: "invalid" };
   if (!isLoginEmailAllowed(email) || !/^\d{6}$/.test(code)) return { ok: false, error: "invalid" };
 
   const record = await prisma.loginCode.findFirst({

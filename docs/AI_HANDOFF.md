@@ -8,6 +8,22 @@ Research lists are a review surface only. They do not create Company or Contact 
 
 ## Latest Update
 
+### Customer office username sign-in and harvest egress guard
+
+- Customer offices (Maneks first) sign in with a username plus a shared office
+  password instead of a personal mailbox. The user row stores a synthetic
+  address in the reserved `office.derya.invalid` domain, the password form
+  accepts either a username or an email, and the email-code path refuses those
+  identifiers so no code is ever mailed to the reserved domain.
+- `scripts/create-production-office.ts` accepts `PRODUCTION_ADMIN_USERNAME` as
+  an alternative to `PRODUCTION_ADMIN_EMAIL`, so provisioning a new customer
+  office and its login is one command.
+- `src/lib/leadgen/fetch-guard.ts` gates every harvest request: http and https
+  only, no credentials in the URL, standard web ports, and no host that resolves
+  into loopback, link-local, or private address space. Redirects are followed
+  one hop at a time so each target is re-checked, and PDF parsing is bounded by
+  a size ceiling and a timeout.
+
 ### Maneks non-bulk lead generation pipeline
 
 - `src/lib/leadgen` adds a deterministic customer-profile driven prospecting
@@ -10487,6 +10503,27 @@ Verification caveat:
   low-confidence headquarters location with no coordinates.
 - No production database write or external supplier communication was run in
   this handoff.
+## 2026-08-24: Maneks office, lead pipeline run, guarded egress
+
+- Maneks is its own production office (`cmt7r9u7g0000qhis751x6khz`) with its own
+  company and workspace. Its admin signs in with the username `maneks` mapped to
+  the reserved `maneks@office.derya.invalid` identity; the earlier
+  `mert@usederya.com` member of that office was deactivated so email-code login
+  can no longer resolve into the wrong tenant.
+- The first harvest loaded 616 companies and 1049 contacts, each carrying its
+  discovery query, evidence URLs, matched signals, fit score, and email
+  verification verdict. Nothing was enqueued or sent: outreach plan items, email
+  threads, messages, and accounts are all zero for the office.
+- Harvest no longer uses global `fetch`. `guardedRequest` in
+  `src/lib/leadgen/fetch-guard.ts` issues requests through `node:http`/`node:https`
+  with a `lookup` that drops private addresses, so the address validated is the
+  address dialed, closing the DNS rebinding window. Redirects are still resolved
+  one hop at a time through `checkPublicUrl`, PDFs are capped at 25 MB with a 25
+  second parse timeout, and oversized responses reject instead of hanging.
+- `persistLeads` now takes an explicit Prisma client instead of importing the
+  server-only app client, so the CLI `load` stage runs outside Next.
+- `docs/NEW_CUSTOMER_OFFICE.md` documents the repeatable path for the next
+  customer: profile, office seed, harvest, verify, load, human review.
 
 ## 2026-08-25: Leads directory surface for CRM companies and contacts
 

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient, UserRole } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
+import { isUsernameIdentifier, usernameLoginEmail } from "../src/lib/login-code";
 
 const prisma = new PrismaClient();
 
@@ -23,9 +24,15 @@ async function main() {
   }
 
   const officeName = requiredEnv("PRODUCTION_OFFICE_NAME");
-  const adminEmail = normalizeEmail(requiredEnv("PRODUCTION_ADMIN_EMAIL"));
+  const adminUsername = process.env.PRODUCTION_ADMIN_USERNAME?.trim().toLowerCase();
+  if (adminUsername && !isUsernameIdentifier(adminUsername)) {
+    throw new Error("PRODUCTION_ADMIN_USERNAME must be 2-31 characters of a-z, 0-9, dot, dash or underscore.");
+  }
+  const adminEmail = adminUsername
+    ? usernameLoginEmail(adminUsername)
+    : normalizeEmail(requiredEnv("PRODUCTION_ADMIN_EMAIL"));
   const adminPassword = requiredEnv("PRODUCTION_ADMIN_PASSWORD");
-  const adminName = process.env.PRODUCTION_ADMIN_NAME?.trim() || adminEmail;
+  const adminName = process.env.PRODUCTION_ADMIN_NAME?.trim() || adminUsername || adminEmail;
   const companyName = process.env.PRODUCTION_COMPANY_NAME?.trim() || officeName;
   const workspaceName = process.env.PRODUCTION_WORKSPACE_NAME?.trim() || companyName;
   const workspaceExternalKey = process.env.PRODUCTION_WORKSPACE_EXTERNAL_KEY?.trim() || "production:primary";

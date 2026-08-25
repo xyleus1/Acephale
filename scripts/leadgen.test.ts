@@ -15,6 +15,8 @@ import {
 import { scoreLead } from "../src/lib/leadgen/score";
 import { verifyEmail } from "../src/lib/leadgen/verify";
 import { extractDirectoryTargets, harvestSite, scoreEmailUsefulness, type FetchedPage } from "../src/lib/leadgen/harvest";
+import { checkPublicUrl, guardedRequest, isPrivateAddress } from "../src/lib/leadgen/fetch-guard";
+import { createServer } from "node:http";
 
 // Query plan
 
@@ -185,6 +187,52 @@ assert.deepEqual(
   ["https://uyefirma1.com.tr", "https://uyefirma2.com"],
   "member lists must yield outbound company domains only",
 );
+
+// Egress guard
+
+const publicResolver = async () => ["93.184.216.34"];
+
+assert.ok(isPrivateAddress("127.0.0.1"));
+assert.ok(isPrivateAddress("10.4.4.4"));
+assert.ok(isPrivateAddress("169.254.169.254"));
+assert.ok(isPrivateAddress("::1"));
+assert.ok(!isPrivateAddress("93.184.216.34"));
+
+assert.equal(
+  (await checkPublicUrl("https://ornekcelik.com.tr/iletisim", publicResolver)).ok,
+  true,
+  "public company sites must stay fetchable",
+);
+for (const [target, reason] of [
+  ["file:///etc/passwd", "scheme"],
+  ["http://user:pass@ornekcelik.com.tr", "credentials"],
+  ["http://ornekcelik.com.tr:22/", "port"],
+  ["http://localhost:8080/admin", "private_host"],
+  ["http://169.254.169.254/latest/meta-data", "private_host"],
+  ["http://10.0.0.5/", "private_host"],
+  ["http://intranet.internal/", "private_host"],
+] as const) {
+  const result = await checkPublicUrl(target, publicResolver);
+  assert.equal(result.ok, false, `${target} must be blocked`);
+  assert.equal(result.ok === false && result.reason, reason);
+}
+const rebound = await checkPublicUrl("https://evil.example/", async () => ["127.0.0.1"]);
+assert.equal(rebound.ok, false, "hosts resolving into loopback space must be blocked");
+
+// The connect-time lookup is the real gate: a host that passes the pre-check
+// but points at loopback when dialed must still fail to connect.
+const server = createServer((_request, response) => {
+  response.writeHead(200, { "content-type": "text/html" });
+  response.end("<html>internal</html>");
+});
+await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+const address = server.address();
+const port = typeof address === "object" && address ? address.port : 0;
+await assert.rejects(
+  guardedRequest(new URL(`http://localhost:${port}/`)),
+  "connecting to a hostname that resolves to loopback must be refused",
+);
+server.close();
 
 console.log("leadgen: all assertions passed");
 }

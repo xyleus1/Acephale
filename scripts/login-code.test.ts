@@ -6,6 +6,10 @@ import {
   loginCodeSmtpConfig,
   loginCodeSmtpConfigured,
   normalizeLoginEmail,
+  isUsernameIdentifier,
+  isUsernameLoginEmail,
+  resolveLoginIdentifier,
+  usernameLoginEmail,
 } from "../src/lib/login-code";
 
 process.env.AUTH_SECRET = process.env.AUTH_SECRET || "test-secret";
@@ -75,5 +79,18 @@ for (let i = 0; i < 200; i++) {
   codes.add(code);
 }
 assert.ok(codes.size > 50, "codes should not repeat constantly");
+
+// Customer offices sign in with a username, which maps onto a reserved
+// non-deliverable address so only the password path can use it.
+assert.ok(isUsernameIdentifier("maneks"));
+assert.ok(!isUsernameIdentifier("mert@usederya.com"));
+assert.ok(!isUsernameIdentifier("a"));
+assert.ok(!isUsernameIdentifier("bad name"));
+assert.strictEqual(usernameLoginEmail(" Maneks "), "maneks@office.derya.invalid");
+assert.strictEqual(resolveLoginIdentifier("Maneks"), "maneks@office.derya.invalid");
+assert.strictEqual(resolveLoginIdentifier(" Mert@usederya.com "), "mert@usederya.com");
+assert.ok(isUsernameLoginEmail("maneks@office.derya.invalid"));
+assert.ok(isLoginEmailAllowed("maneks@office.derya.invalid"));
+assert.ok(!isLoginEmailAllowed("someone@other.invalid"));
 
 console.log("login-code unit test passed");

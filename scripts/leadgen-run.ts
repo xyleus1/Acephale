@@ -184,12 +184,16 @@ async function commandLoad(args: Args) {
   const officeId = stringArg(args, "office-id");
   const campaignTag = stringArg(args, "campaign", `leadgen_${MANEKS_PROFILE.slug}`);
   const records = (await readLines(input)).map((line) => JSON.parse(line));
+  const { PrismaClient } = await import("@prisma/client");
+  const client = new PrismaClient();
   const result = await persistLeads(records, {
     officeId,
     campaignTag,
+    client,
     minScore: numberArg(args, "min-score", 50),
     minEmailConfidence: numberArg(args, "min-confidence", 55),
   });
+  await client.$disconnect();
   console.log(JSON.stringify(result, null, 2));
 }
 
