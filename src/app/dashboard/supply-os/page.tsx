@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default async function SupplyOsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ panel?: string; previewWorkspace?: string }>;
+  searchParams: Promise<{ panel?: string; previewWorkspace?: string; workspace?: string }>;
 }) {
   const session = await requireSession();
   const currentUser = await prisma.user.findFirst({
@@ -30,6 +30,14 @@ export default async function SupplyOsPage({
     && (session.role === "ADMIN" || session.role === "MANAGER")
     ? await prisma.supplyWorkspace.findFirst({
         where: { id: params.previewWorkspace, officeId: session.officeId, status: "ACTIVE" },
+        select: { id: true },
+      })
+    : null;
+  const initialWorkspace = !isCustomer
+    && !previewWorkspace
+    && params.workspace
+    ? await prisma.supplyWorkspace.findFirst({
+        where: { id: params.workspace, officeId: session.officeId, status: "ACTIVE" },
         select: { id: true },
       })
     : null;
@@ -63,6 +71,7 @@ export default async function SupplyOsPage({
         canAuthorizePurchase={!previewMode && (customerCanEdit || (!isCustomer && currentUser.role === "ADMIN"))}
         contextEnabled={contextEnabled}
         allowedWorkspaceIds={allowedWorkspaceIds}
+        initialWorkspaceId={initialWorkspace?.id}
         previewMode={previewMode}
         switchableOffices={switchableOffices.length > 1 ? switchableOffices : undefined}
         switchOfficeAction={switchableOffices.length > 1 ? switchOfficeAction : undefined}

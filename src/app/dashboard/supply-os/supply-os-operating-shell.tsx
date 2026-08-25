@@ -2,7 +2,6 @@
 
 import {
   ArrowLeft,
-  Building2,
   FlaskConical,
   PanelLeftClose,
   PanelLeftOpen,
@@ -49,6 +48,7 @@ export function SupplyOsOperatingShell({
   canAuthorizePurchase,
   contextEnabled,
   allowedWorkspaceIds,
+  initialWorkspaceId,
   previewMode = false,
   switchableOffices,
   switchOfficeAction,
@@ -62,6 +62,7 @@ export function SupplyOsOperatingShell({
   canAuthorizePurchase: boolean;
   contextEnabled: boolean;
   allowedWorkspaceIds?: string[];
+  initialWorkspaceId?: string;
   previewMode?: boolean;
   switchableOffices?: SwitchableOffice[];
   switchOfficeAction?: OfficeSwitchAction;
@@ -215,26 +216,6 @@ export function SupplyOsOperatingShell({
                   <FlaskConical size={18} aria-hidden="true" />
                   <span>Research</span>
                 </a>
-                {switchableOffices && switchableOffices.length > 1 && switchOfficeAction ? (
-                  <form action={switchOfficeAction} className={styles.officeSwitcher}>
-                    <label className={styles.sidebarUtility}>
-                      <Building2 size={18} aria-hidden="true" />
-                      <span>Office</span>
-                      <select
-                        name="officeId"
-                        defaultValue={switchableOffices.find((office) => office.isCurrent)?.officeId}
-                        aria-label="Office"
-                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
-                      >
-                        {switchableOffices.map((office) => (
-                          <option key={office.officeId} value={office.officeId}>
-                            {office.officeName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </form>
-                ) : null}
               </>
             )}
             <a
@@ -287,6 +268,25 @@ export function SupplyOsOperatingShell({
                   </dd>
                 </div>
               </dl>
+              {switchableOffices && switchableOffices.length > 1 && switchOfficeAction ? (
+                <form action={switchOfficeAction} className={styles.workspaceOfficeSwitcher}>
+                  <label>
+                    <span>Office</span>
+                    <select
+                      name="officeId"
+                      defaultValue={switchableOffices.find((office) => office.isCurrent)?.officeId}
+                      aria-label="Office"
+                      onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                    >
+                      {switchableOffices.map((office) => (
+                        <option key={office.officeId} value={office.officeId}>
+                          {office.officeName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </form>
+              ) : null}
               <motion.button
                 type="button"
                 onClick={() => setCompanyIndexOpen(true)}
@@ -303,7 +303,9 @@ export function SupplyOsOperatingShell({
               <SupplyOsCompanyIndex
                 canCreateCompany={canCreateCompany}
                 allowedWorkspaceIds={allowedWorkspaceIds}
-                preferredWorkspaceId={workspaceToRestore}
+                crossOffice={Boolean(!previewMode && switchableOffices && switchableOffices.length > 1)}
+                switchOfficeAction={switchOfficeAction}
+                preferredWorkspaceId={initialWorkspaceId ?? workspaceToRestore}
                 onPreferredWorkspaceUnavailable={clearStoredWorkspace}
                 autoOpenFirstWorkspace={
                   (activePanel === "context" || allowedWorkspaceIds !== undefined)

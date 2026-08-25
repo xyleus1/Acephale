@@ -10,6 +10,8 @@ export type SwitchableOffice = {
   officeId: string;
   officeName: string;
   userId: string;
+  role: string;
+  canViewWholeOffice: boolean;
   isCurrent: boolean;
 };
 
@@ -53,6 +55,8 @@ export async function listSwitchableOffices(
     select: {
       id: true,
       officeId: true,
+      role: true,
+      canViewWholeOffice: true,
       createdAt: true,
       office: { select: { name: true, createdAt: true } },
     },
@@ -67,6 +71,8 @@ export async function listSwitchableOffices(
       officeId: user.officeId,
       officeName: user.office.name,
       userId: user.id,
+      role: user.role,
+      canViewWholeOffice: user.canViewWholeOffice,
       isCurrent: user.officeId === session.officeId,
     }));
 }

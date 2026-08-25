@@ -15,12 +15,17 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import styles from "./supply-os-company-index.module.css";
 
+type OfficeSwitchAction = (formData: FormData) => void | Promise<void>;
+
 type Workspace = {
   id: string;
   name: string;
   updatedAt: string;
   company: { name: string; website: string | null } | null;
   mediaAssets: Array<{ url: string }>;
+  officeId?: string;
+  officeName?: string;
+  isCurrent?: boolean;
   snapshots: Array<{
     id: string;
     version: number;
@@ -50,6 +55,8 @@ export function SupplyOsCompanyIndex({
   canCreateCompany,
   allowedWorkspaceIds,
   autoOpenFirstWorkspace = false,
+  crossOffice = false,
+  switchOfficeAction,
   preferredWorkspaceId,
   onPreferredWorkspaceUnavailable,
   onOpenWorkspace,
@@ -57,6 +64,8 @@ export function SupplyOsCompanyIndex({
   canCreateCompany: boolean;
   allowedWorkspaceIds?: string[];
   autoOpenFirstWorkspace?: boolean;
+  crossOffice?: boolean;
+  switchOfficeAction?: OfficeSwitchAction;
   preferredWorkspaceId?: string | null;
   onPreferredWorkspaceUnavailable?: () => void;
   onOpenWorkspace: (selection: SupplyOsWorkspaceSelection) => void;
@@ -78,14 +87,33 @@ export function SupplyOsCompanyIndex({
   );
 
   const requestWorkspaces = useCallback(async () => {
-    const response = await fetch("/api/supply-os/workspaces", { cache: "no-store", headers: { accept: "application/json" } });
-    const body = await response.json().catch(() => ({})) as { workspaces?: Workspace[]; error?: string };
+    const response = await fetch(
+      crossOffice ? "/api/supply-os/offices/workspaces" : "/api/supply-os/workspaces",
+      { cache: "no-store", headers: { accept: "application/json" } },
+    );
+    const body = await response.json().catch(() => ({})) as {
+      workspaces?: Workspace[];
+      offices?: Array<{
+        officeId: string;
+        officeName: string;
+        isCurrent: boolean;
+        workspaces: Workspace[];
+      }>;
+      error?: string;
+    };
     if (!response.ok) throw new Error(body.error || "Companies could not be loaded.");
-    const rows = body.workspaces ?? [];
+    const rows = crossOffice
+      ? (body.offices ?? []).flatMap((office) => office.workspaces.map((workspace) => ({
+          ...workspace,
+          officeId: office.officeId,
+          officeName: office.officeName,
+          isCurrent: office.isCurrent,
+        })))
+      : (body.workspaces ?? []).map((workspace) => ({ ...workspace, isCurrent: true }));
     return allowedWorkspaceSet
-      ? rows.filter((workspace) => allowedWorkspaceSet.has(workspace.id))
+      ? rows.filter((workspace) => workspace.isCurrent !== false && allowedWorkspaceSet.has(workspace.id))
       : rows;
-  }, [allowedWorkspaceSet]);
+  }, [allowedWorkspaceSet, crossOffice]);
 
   const load = useCallback(async () => {
     if (preferredWorkspaceId === undefined) return;
@@ -245,20 +273,44 @@ export function SupplyOsCompanyIndex({
         {workspaces.map((workspace) => {
           const snapshot = workspace.snapshots[0] ?? null;
           const initials = workspace.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+          const rowContent = (
+            <>
+              <span className={styles.companyMark}>{initials || <Building2 size={16} />}</span>
+              <span className={styles.companyIdentity}>
+                <strong>{workspace.name}</strong>
+                {crossOffice && workspace.officeName ? <span className={styles.officeBadge}>{workspace.officeName}</span> : null}
+                <small>{workspace.company?.website || workspace.company?.name || "No website"}</small>
+              </span>
+              <span className={styles.companyFacts}><b>{snapshot?._count.items ?? 0} items</b><small>{snapshot ? `Snapshot v${snapshot.version}` : "No snapshot"}</small></span>
+              <span className={styles.companyFacts}><b>{snapshot?._count.locations ?? 0} locations</b><small>{updatedLabel(workspace.updatedAt)}</small></span>
+              <ArrowRight size={16} />
+            </>
+          );
           return (
             <div className={styles.companyEntry} key={workspace.id}>
               <div className={styles.companyRow}>
-                <button type="button" className={styles.companyOpen} onClick={() => onOpenWorkspace(selectionFor(workspace))}>
-                  <span className={styles.companyMark}>{initials || <Building2 size={16} />}</span>
-                  <span className={styles.companyIdentity}>
-                    <strong>{workspace.name}</strong>
-                    <small>{workspace.company?.website || workspace.company?.name || "No website"}</small>
-                  </span>
-                  <span className={styles.companyFacts}><b>{snapshot?._count.items ?? 0} items</b><small>{snapshot ? `Snapshot v${snapshot.version}` : "No snapshot"}</small></span>
-                  <span className={styles.companyFacts}><b>{snapshot?._count.locations ?? 0} locations</b><small>{updatedLabel(workspace.updatedAt)}</small></span>
-                  <ArrowRight size={16} />
-                </button>
-                {canCreateCompany ? (
+                {crossOffice && !workspace.isCurrent && switchOfficeAction ? (
+                  <form action={switchOfficeAction} className={styles.companyOpenForm}>
+                    <input type="hidden" name="officeId" value={workspace.officeId} />
+                    <input type="hidden" name="workspaceId" value={workspace.id} />
+                    <button
+                      type="submit"
+                      className={styles.companyOpen}
+                      aria-label={`Open ${workspace.name} in ${workspace.officeName}`}
+                    >
+                      {rowContent}
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.companyOpen}
+                    onClick={() => onOpenWorkspace(selectionFor(workspace))}
+                  >
+                    {rowContent}
+                  </button>
+                )}
+                {canCreateCompany && (!crossOffice || workspace.isCurrent) ? (
                   <details className={styles.actionMenu}>
                     <summary aria-label={`Actions for ${workspace.name}`}><MoreHorizontal size={18} /></summary>
                     <div>

@@ -213,26 +213,6 @@
   white-space: nowrap;
 }
 
-.officeSwitcher {
-  margin: 0;
-}
-
-.officeSwitcher .sidebarUtility {
-  cursor: default;
-}
-
-.officeSwitcher select {
-  min-width: 0;
-  flex: 1 1 auto;
-  border: 1px solid var(--os-line);
-  border-radius: 8px;
-  padding: 7px 8px;
-  color: var(--os-ink);
-  background: var(--os-panel);
-  font: inherit;
-  font-size: 12px;
-}
-
 @media (min-width: 901px) {
   .shell[data-sidebar-collapsed="true"] {
     grid-template-columns: 84px minmax(0, 1fr);
@@ -305,14 +285,6 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
-  }
-
-  .shell[data-sidebar-collapsed="true"] .officeSwitcher select {
-    width: 1px;
-    height: 1px;
-    position: absolute;
-    overflow: hidden;
-    clip-path: inset(50%);
   }
 
 }
@@ -440,6 +412,37 @@
   color: var(--os-ink);
   font-size: 13px;
   font-weight: 620;
+}
+
+.workspaceOfficeSwitcher {
+  display: flex;
+  align-items: center;
+}
+
+.workspaceOfficeSwitcher label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--os-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workspaceOfficeSwitcher select {
+  min-width: 116px;
+  max-width: 150px;
+  min-height: 42px;
+  padding: 0 9px;
+  border: 1px solid var(--os-line);
+  border-radius: 9px;
+  color: var(--os-ink);
+  background: var(--os-panel);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .workspaceControls > button {
