@@ -43,6 +43,7 @@
     "test:supply-os-sourcing-projection": "node --import tsx scripts/supply-os-sourcing-projection.test.ts",
     "test:supply-os-atlas-sourcing": "node --import tsx scripts/supply-os-atlas-sourcing.test.ts",
     "test:leadgen": "tsx scripts/leadgen.test.ts",
+    "test:research-lists": "NODE_OPTIONS='--conditions=react-server' tsx scripts/research-lists.test.ts",
     "leadgen": "tsx scripts/leadgen-run.ts",
     "test:supply-os-active-sourcing": "node --import tsx scripts/supply-os-active-sourcing.test.ts",
     "test:supply-os-materials-layout": "node --import tsx scripts/supply-os-materials-layout.test.ts",

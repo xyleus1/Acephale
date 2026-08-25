@@ -1,5 +1,13 @@
 # Decisions
 
+## Research output stays in office-scoped flexible lists
+
+Date: 2026-08-25
+
+Harvested research varies by customer office and by investigation, so it should not be forced into the canonical Company and Contact models. Research lists provide an office-scoped, user-defined table with ordered fields, bounded typed values, provenance-ready source references, deduplication, CSV import, and agent ingestion. The office boundary is enforced from the authenticated session on every query and write. Records include an intentionally unindexed, lowercased `searchText` column capped at 4,000 characters. Search is a scan narrowed to one list by the existing office and list indexes. If list search becomes slow, a `pg_trgm` GIN index is the upgrade path, but enabling the extension is intentionally deferred because it may require production database privileges. Record statuses are limited to `new`, `reviewed`, and `rejected`.
+
+This surface is intentionally read-only with respect to outreach. Rows are for review and export only. They do not create canonical CRM identities, approval records, queue items, email drafts, or outbound messages. Promotion into operational CRM and outreach remains a separate, explicit workflow.
+
 Use this log for durable product and engineering decisions. Do not put every implementation detail here. If future agents should treat something as settled context, it belongs here.
 
 ## Decision Template

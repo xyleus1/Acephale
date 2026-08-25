@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
+import { csvCell } from "@/lib/csv";
 import { loadLeadExportRows } from "@/lib/leads-directory";
 
 const HEADERS = [
@@ -17,14 +18,6 @@ const HEADERS = [
   "email_confidence",
   "evidence",
 ] as const;
-
-function csvCell(value: string) {
-  // Harvested text reaches this export unchanged, so a cell that a spreadsheet
-  // would evaluate as a formula gets a literal apostrophe prefix.
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  const escaped = safe.replace(/"/g, '""');
-  return /[",\n\r]/.test(safe) ? `"${escaped}"` : escaped;
-}
 
 export async function GET(request: Request) {
   const session = await requireSession();

@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  FlaskConical,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -196,10 +197,17 @@ export function SupplyOsOperatingShell({
           </nav>
           <div className={styles.sidebarUtilityArea}>
             {previewMode || accountRole === "CUSTOMER" ? null : (
-              <a className={styles.sidebarUtility} href="/dashboard/leads" aria-label="Leads" title="Leads">
-                <Users size={18} aria-hidden="true" />
-                <span>Leads</span>
-              </a>
+              <>
+                <a className={styles.sidebarUtility} href="/dashboard/leads" aria-label="Leads" title="Leads">
+                  <Users size={18} aria-hidden="true" />
+                  <span>Leads</span>
+                </a>
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+                <a className={styles.sidebarUtility} href="/dashboard/research" aria-label="Research" title="Research">
+                  <FlaskConical size={18} aria-hidden="true" />
+                  <span>Research</span>
+                </a>
+              </>
             )}
             <a
               className={styles.sidebarUtility}

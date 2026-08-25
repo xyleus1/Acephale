@@ -46,6 +46,7 @@ DECLARE
     'LoadSecurityCheck', 'Carrier', 'CarrierChecklistItem', 'CarrierBid',
     'TruckloadQuote', 'ShipmentRecord', 'Job', 'AgentProposal',
     'StrategyAssessment', 'RouteOption', 'PriceRecommendation', 'RiskAssessment',
+    'ResearchList', 'ResearchRecord',
     'StrategyAction', 'JobDocument', 'JobMilestone', 'EmailAccount',
     'EmailThread', 'EmailMessage', 'EmailSenderReservation', 'LoginCode', 'CustomerPortalUser',
     'CustomerPortalLoginThrottle',

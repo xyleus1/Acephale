@@ -1,5 +1,11 @@
 # AI Handoff
 
+## 2026-08-25: Research lists
+
+Added office-scoped research lists for operator review. Each list defines up to 40 ordered columns using text, URL, email, number, or date types. Operators can create lists, paste CSV or JSON, review paginated rows, and export CSV. Authenticated agents can post rows through the records endpoint, with bounded inputs, type validation, deduplication, and source-safe URL rendering. Records keep a lowercased, capped `searchText` column so list search, pagination, and counts stay database-backed. Status values are exactly `new`, `reviewed`, and `rejected`.
+
+Research lists are a review surface only. They do not create Company or Contact records, and they do not queue or send outreach. Customer sessions are redirected away from the surface. The implementation is on the `devin/1787625232-research-lists` branch. Prisma validation, TypeScript, focused tests, the leadgen regression test, local migration deployment, and the production build pass; repository lint remains nonzero only for pre-existing findings outside this change.
+
 ## Latest Update
 
 ### Maneks non-bulk lead generation pipeline

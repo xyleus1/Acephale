@@ -143,6 +143,7 @@ model Office {
   auditLogs            AuditLog[]
   outreachPlanItems    OutreachPlanItem[]
   customerPortalUsers       CustomerPortalUser[]
+  researchLists        ResearchList[]
   customerPortalMemberships CustomerPortalMembership[]
   customerPortalLoginCodes  CustomerPortalLoginCode[]
   customerPortalActions     CustomerPortalAction[]
@@ -3200,4 +3201,41 @@ model SupplyExecutionEvent {
   @@unique([executionTaskId, idempotencyKey])
   @@index([officeId, workspaceId, occurredAt])
   @@index([capabilityRunId])
+}
+
+model ResearchList {
+  id          String   @id @default(cuid())
+  officeId    String
+  slug        String
+  name        String
+  description String?
+  fields      Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  office  Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  records ResearchRecord[]
+
+  @@unique([officeId, slug])
+  @@unique([id, officeId])
+  @@index([officeId])
+}
+
+model ResearchRecord {
+  id         String   @id @default(cuid())
+  officeId   String
+  listId     String
+  dedupeKey  String?
+  status     String   @default("new")
+  data       Json
+  searchText String   @default("")
+  sourceRefs Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  list ResearchList @relation(fields: [listId, officeId], references: [id, officeId], onDelete: Cascade)
+
+  @@unique([listId, dedupeKey])
+  @@index([officeId, listId])
+  @@index([listId, status])
 }
