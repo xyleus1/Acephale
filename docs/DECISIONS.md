@@ -8,6 +8,12 @@ Harvested research varies by customer office and by investigation, so it should 
 
 This surface is intentionally read-only with respect to outreach. Rows are for review and export only. They do not create canonical CRM identities, approval records, queue items, email drafts, or outbound messages. Promotion into operational CRM and outreach remains a separate, explicit workflow.
 
+## Tenant-owned tables require explicit application-role grants
+
+Date: 2026-08-25
+
+Production's `derya_app` role does not inherit privileges on new tables. Every new tenant-owned table must therefore ship a conditional `derya_app` grant and a paired production verification script. Apply those migrations only through the protected production migration workflow.
+
 Use this log for durable product and engineering decisions. Do not put every implementation detail here. If future agents should treat something as settled context, it belongs here.
 
 ## Decision Template

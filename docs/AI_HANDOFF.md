@@ -6,6 +6,8 @@ Added office-scoped research lists for operator review. Each list defines up to 
 
 Research lists are a review surface only. They do not create Company or Contact records, and they do not queue or send outreach. Customer sessions are redirected away from the surface. The implementation is on the `devin/1787625232-research-lists` branch. Prisma validation, TypeScript, focused tests, the leadgen regression test, local migration deployment, and the production build pass; repository lint remains nonzero only for pre-existing findings outside this change.
 
+Production rollout also requires an explicit `derya_app` grant on the research tables. Apply that migration only through the protected production migration workflow with its paired verification script.
+
 ## Latest Update
 
 ### Customer office username sign-in and harvest egress guard
