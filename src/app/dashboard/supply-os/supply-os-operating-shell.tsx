@@ -5,6 +5,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  Users,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -194,6 +195,12 @@ export function SupplyOsOperatingShell({
             })}
           </nav>
           <div className={styles.sidebarUtilityArea}>
+            {previewMode || accountRole === "CUSTOMER" ? null : (
+              <a className={styles.sidebarUtility} href="/dashboard/leads" aria-label="Leads" title="Leads">
+                <Users size={18} aria-hidden="true" />
+                <span>Leads</span>
+              </a>
+            )}
             <a
               className={styles.sidebarUtility}
               href={settingsHref}

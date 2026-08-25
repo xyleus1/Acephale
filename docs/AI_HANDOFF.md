@@ -10481,3 +10481,23 @@ Verification caveat:
   low-confidence headquarters location with no coordinates.
 - No production database write or external supplier communication was run in
   this handoff.
+
+## 2026-08-25: Leads directory surface for CRM companies and contacts
+
+- The supply-os company index lists supply workspaces, not `Company` rows, and
+  the legacy `/dashboard/crm`, `/dashboard/outreach` and `/dashboard/search`
+  routes redirect into the supply-os materials panel. Leads written by the
+  leadgen pipeline into `Company` and `Contact` had no readable surface.
+- Added `src/lib/leads-directory.ts` with `loadLeadDirectory` and
+  `loadLeadExportRows`. Both scope every read by `officeId` and read fit score,
+  fit tier, matched segments, discovery URL, evidence URLs, email verdict, MX
+  host and verification confidence back out of the `sourceRefs` JSON written by
+  the leadgen persist step.
+- Added `/dashboard/leads`: search over name, domain, city and contact email,
+  filters for source campaign and priority, 50 rows per page, and per-company
+  contacts with their verification verdict. Customer-access sessions are
+  redirected out.
+- Added `GET /api/leads/export` returning the same filtered set as CSV. Cells
+  starting with a formula character are quoted. Customer sessions get 403.
+- The supply-os sidebar has a `Leads` utility link for non-customer accounts.
+- This surface is read-only. It does not queue or send outreach.
