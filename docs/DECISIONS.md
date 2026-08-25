@@ -4194,6 +4194,15 @@ Use this log for durable product and engineering decisions. Do not put every imp
   `guardedRequest`, not `fetch`. Response bodies are size capped and oversize
   responses reject rather than hanging.
 
+### 2026-08-25 - Research and prospect data lives in Supply OS
+
+- Status: accepted
+- Decision: Surface office-scoped research and prospect records inside Supply
+  OS panel 01, Sourcing & prospecting, rather than standalone Research and
+  Leads pages.
+- Consequence: Legacy routes redirect into the panel, while the canonical
+  Leads directory remains available through an explicit panel affordance.
+
 ### 2026-08-25 - Derya publishes supplier research shortlists to Bourne
 
 - Status: accepted

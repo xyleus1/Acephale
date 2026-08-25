@@ -21,10 +21,10 @@ assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\
 assert.match(shell, /derya:supply-os:last-workspace:\$\{storageScope\}/, "last-company storage must be scoped to the signed-in office and user");
 assert.match(shell, /window\.localStorage\.getItem\(workspaceStorageKey\)/, "refresh must read the last selected company");
 assert.match(shell, /window\.localStorage\.setItem\(workspaceStorageKey, selection\.workspaceId\)/, "company selection must persist its opaque workspace ID");
-assert.match(shell, /preferredWorkspaceId=\{workspaceToRestore\}/, "the company directory must receive the pending restore target");
+assert.match(shell, /preferredWorkspaceId=\{initialWorkspaceId \?\? workspaceToRestore\}/, "the company directory must receive the preferred restore target");
 assert.match(shell, /onPreferredWorkspaceUnavailable=\{clearStoredWorkspace\}/, "an archived or inaccessible saved company must be cleared");
 assert.match(index, /preferredWorkspaceId\?: string \| null/, "the company directory must accept a pending workspace restore");
-assert.match(index, /nextWorkspaces\.find\(\(workspace\) => workspace\.id === preferredWorkspaceId\)/, "saved workspace IDs must be revalidated against the authenticated company list");
+assert.match(index, /nextWorkspaces\.find\(\(workspace\) => workspace\.isCurrent !== false && workspace\.id === preferredWorkspaceId\)/, "saved workspace IDs must be revalidated against the current office company list");
 assert.match(index, /if \(preferredWorkspaceId\) onPreferredWorkspaceUnavailable\?\.\(\)/, "stale company IDs must not survive indefinitely");
 assert.doesNotMatch(shell, /autoOpenContextWorkspace/, "Context navigation must not add release-sensitive hook state");
 assert.match(shell, /autoOpenFirstWorkspace=\{[\s\S]*activePanel === "context"[\s\S]*!workspaceSelection/, "Context must derive real-workspace resolution without another hook");
@@ -33,7 +33,7 @@ assert.doesNotMatch(liveEventToast, /\bgetLatestEvent\b|useRouter|router\.refres
 assert.match(liveEventToast, /fetch\("\/api\/dashboard\/events\/latest"/, "event polling must use the authenticated GET endpoint");
 assert.match(latestEventRoute, /getSession[\s\S]*getLatestEvent/, "the GET endpoint must authenticate before reading office-scoped events");
 assert.match(latestEventRoute, /Cache-Control": "private, no-store"/, "dashboard events must not be shared or cached");
-assert.match(index, /const nextWorkspaces = await requestWorkspaces\(\)[\s\S]*if \(autoOpenFirstWorkspace && nextWorkspaces\[0\]\)[\s\S]*onOpenWorkspace\(selectionFor\(nextWorkspaces\[0\]\)\)/, "the existing load path must open the first office-scoped real workspace");
+assert.match(index, /const nextWorkspaces = await requestWorkspaces\(\)[\s\S]*const firstCurrentWorkspace = nextWorkspaces\.find\(\(workspace\) => workspace\.isCurrent !== false\)[\s\S]*if \(autoOpenFirstWorkspace && firstCurrentWorkspace\)[\s\S]*onOpenWorkspace\(selectionFor\(firstCurrentWorkspace\)\)/, "the existing load path must open the first current-office real workspace");
 assert.match(shell, /<ArrowLeft size=\{15\} \/> Companies/, "selected workspaces need a back-to-companies control");
 assert.match(shell, /className=\{styles\.commandHeader\}/, "company identity ribbon must remain above every domain view");
 assert.match(shell, /companyLogoUrl/, "company identity ribbon must resolve a company image");

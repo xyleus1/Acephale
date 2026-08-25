@@ -9,10 +9,12 @@ export function ResearchStatusControl({
   slug,
   recordId,
   status,
+  onChanged,
 }: {
   slug: string;
   recordId: string;
   status: ResearchStatus;
+  onChanged?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -32,9 +34,10 @@ export function ResearchStatusControl({
         const result = await response.json().catch(() => null);
         throw new Error(result?.error || "Status could not be updated.");
       }
-      router.refresh();
+      if (onChanged) await onChanged();
+      else router.refresh();
     } catch {
-      router.refresh();
+      if (!onChanged) router.refresh();
     } finally {
       setBusy(false);
     }

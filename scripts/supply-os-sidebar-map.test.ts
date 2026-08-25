@@ -40,7 +40,7 @@ assert.doesNotMatch(shellStyles, /\.navCopy,[\s\S]*display: none/, "responsive l
 assert.match(shellStyles, /\.panelNav button \{[\s\S]*min-height: 58px/, "desktop navigation targets must stay comfortably sized");
 assert.match(shell, /String\(index \+ 1\)\.padStart\(2, "0"\)/, "desktop navigation must retain numbered section indices");
 assert.match(shell, /const settingsLabel = `[\s\S]*accountRole/, "the lower rail must label the current account role");
-assert.match(shell, /href="\/dashboard\/settings"/, "Settings must use the role-aware settings entry point");
+assert.match(shell, /href=\{settingsHref\}/, "Settings must use the role-aware settings entry point");
 assert.match(dashboard, /const currentCase = workspaceId \? workspaceCase : null/);
 assert.doesNotMatch(dashboard, /SAMPLE_SUPPLY_CASE_PROMPT|ILLUSTRATIVE_NETWORK_DATE|presentationMode/);
 assert.doesNotMatch(dashboard, />Demo</, "the map workspace must not repeat fixture status in a second ribbon");

@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronUp,
-  LoaderCircle,
   MapPin,
   MessageSquare,
   PackageSearch,
@@ -15,7 +14,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useState, type FormEvent, type ReactNode } from "react";
 import {
   customerProcurementProgress,
   customerProcurementStatusLabel,
@@ -46,6 +45,7 @@ import type {
   SupplyIntelligenceProfile,
 } from "./supply-os-sourcing-research-types";
 import { ActiveSourcingWorkspace } from "./supply-os-active-sourcing";
+import { SupplyOsProspects } from "./supply-os-prospects";
 import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 
 export type PendingSourcingQueueItem = {
@@ -58,7 +58,7 @@ export type PendingSourcingQueueItem = {
   status: "Clarification needed" | "Researching" | "Research unavailable";
 };
 
-export type SupplyInventoryWorkspaceView = "inventory" | "messages";
+export type SupplyInventoryWorkspaceView = "inventory" | "messages" | "prospects";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -112,6 +112,9 @@ export function SupplyInventoryWorkspace({
   sourceLocation,
   onHideSourceMap,
   companyName,
+  canShowProspects = false,
+  storageScope,
+  initialResearchListSlug,
 }: {
   activeView: SupplyInventoryWorkspaceView;
   onViewChange: (view: SupplyInventoryWorkspaceView) => void;
@@ -146,6 +149,9 @@ export function SupplyInventoryWorkspace({
   sourceLocation?: string;
   onHideSourceMap?: () => void;
   companyName: string;
+  canShowProspects?: boolean;
+  storageScope: string;
+  initialResearchListSlug?: string;
 }) {
   const [query, setQuery] = useState("");
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
@@ -380,11 +386,12 @@ export function SupplyInventoryWorkspace({
       <Tabs.Root
         className={styles.inventoryTabs}
         value={activeView}
-        onValueChange={(value) => onViewChange(value === "messages" ? "messages" : "inventory")}
+        onValueChange={(value) => onViewChange(value === "messages" ? "messages" : value === "prospects" ? "prospects" : "inventory")}
       >
-        <Tabs.List className={styles.inventoryTabList} aria-label="Inventory and supplier activity views">
+        <Tabs.List className={styles.inventoryTabList} aria-label="Inventory, messages, and prospects views">
           <Tabs.Trigger value="inventory">Inventory</Tabs.Trigger>
           <Tabs.Trigger value="messages"><MessageSquare size={14} /> Messages</Tabs.Trigger>
+          {canShowProspects ? <Tabs.Trigger value="prospects">Prospects</Tabs.Trigger> : null}
         </Tabs.List>
         <Tabs.Content value="inventory" className={styles.inventoryTabPanel}>
       {workspaceId && canImportSupplyData ? (
@@ -703,6 +710,14 @@ export function SupplyInventoryWorkspace({
             onLoadOlderHistorical={onLoadMore}
           />
         </Tabs.Content>
+        {canShowProspects ? (
+          <Tabs.Content value="prospects" className={styles.inventoryTabPanel}>
+            <SupplyOsProspects
+              storageScope={storageScope}
+              initialListSlug={initialResearchListSlug}
+            />
+          </Tabs.Content>
+        ) : null}
       </Tabs.Root>
     </motion.section>
   );

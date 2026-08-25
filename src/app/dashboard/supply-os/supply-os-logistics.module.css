@@ -1195,6 +1195,216 @@
   grid-template-rows: repeat(4, auto) minmax(0, 1fr);
 }
 
+.prospectsWorkspace {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 18px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.prospectsHeader,
+.prospectsControls,
+.prospectsPager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prospectsHeader {
+  justify-content: space-between;
+}
+
+.prospectsHeader h2,
+.prospectsHeader span,
+.prospectsHeader a,
+.prospectsControls label span,
+.prospectsPager {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.prospectsHeader h2 {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.prospectsHeader a,
+.prospectsExport {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.newListPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.newListPanel > button,
+.newListForm > button {
+  align-self: flex-start;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.newListForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.newListForm label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.newListForm input,
+.newListForm textarea {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.newListFields {
+  grid-column: 1 / -1;
+}
+
+.newListForm .prospectsError {
+  grid-column: 1 / -1;
+}
+
+.prospectsControls {
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.prospectsControls form {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.prospectsControls label {
+  display: grid;
+  gap: 4px;
+}
+
+.prospectsControls input,
+.prospectsControls select,
+.prospectsControls button,
+.prospectsPager button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.prospectsControls button,
+.prospectsPager button {
+  cursor: pointer;
+}
+
+.prospectsControls button:hover,
+.prospectsPager button:hover {
+  border-color: var(--line-strong);
+}
+
+.prospectsTableRegion {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.prospectsTable {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.prospectsTable th,
+.prospectsTable td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.prospectsTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-muted);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.prospectsTable a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prospectsState,
+.prospectsError {
+  margin: 4px 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.prospectsError {
+  color: var(--danger);
+}
+
+.prospectsPager {
+  justify-content: space-between;
+}
+
+.prospectsPager span:last-child {
+  display: flex;
+  gap: 6px;
+}
+
+.prospectsImport {
+  max-height: 190px;
+  overflow: auto;
+}
+
 .activeSourcingWorkspace {
   min-width: 0;
   min-height: 0;

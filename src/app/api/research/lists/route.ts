@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { createResearchList } from "@/lib/research-lists";
+import { createResearchList, listResearchLists } from "@/lib/research-lists";
+
+export async function GET() {
+  const session = await requireSession();
+  if (session.accessKind === "customer") {
+    return NextResponse.json({ error: "Not available for customer accounts." }, { status: 403 });
+  }
+  return NextResponse.json(
+    { lists: await listResearchLists(session.officeId) },
+    { headers: { "cache-control": "no-store" } },
+  );
+}
 
 export async function POST(request: Request) {
   const session = await requireSession();

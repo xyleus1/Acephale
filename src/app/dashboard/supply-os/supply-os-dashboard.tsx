@@ -246,7 +246,7 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   defaultInspector: "object" | "optimization";
 }> = {
   materials: {
-    railTitle: "Inventory & sourcing",
+    railTitle: "Sourcing & prospecting",
     railSummary: "Stock, demand, and supply options",
     objectKinds: ["supplier", "factory", "distribution"],
     defaultInspector: "object",
@@ -309,6 +309,9 @@ export function SupplyOsDashboardWorkspace({
   canApproveProcurement = false,
   canAuthorizePurchase = false,
   previewMode = false,
+  canShowProspects = false,
+  initialMaterialsView,
+  initialResearchListSlug,
   onWorkspaceProfile,
   onOpenContext,
 }: {
@@ -320,6 +323,9 @@ export function SupplyOsDashboardWorkspace({
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
   previewMode?: boolean;
+  canShowProspects?: boolean;
+  initialMaterialsView?: SupplyInventoryWorkspaceView;
+  initialResearchListSlug?: string;
   onOpenContext: () => void;
   onWorkspaceProfile?: (profile: {
     companyName: string;
@@ -600,6 +606,9 @@ export function SupplyOsDashboardWorkspace({
             canImportSupplyData={canImportSupplyData}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
+            canShowProspects={canShowProspects}
+            initialMaterialsView={initialMaterialsView}
+            initialResearchListSlug={initialResearchListSlug}
             onOpenContext={onOpenContext}
           />
       ) : null}
@@ -720,6 +729,9 @@ function CaseCommandCenter({
   canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
+  canShowProspects,
+  initialMaterialsView,
+  initialResearchListSlug,
   onOpenContext,
 }: {
   dashboard: SupplyCaseDashboard;
@@ -729,6 +741,9 @@ function CaseCommandCenter({
   canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
+  canShowProspects?: boolean;
+  initialMaterialsView?: SupplyInventoryWorkspaceView;
+  initialResearchListSlug?: string;
   onOpenContext: () => void;
 }) {
   const companyName = dashboardName(dashboard);
@@ -747,6 +762,7 @@ function CaseCommandCenter({
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const [selectedInventorySku, setSelectedInventorySku] = useState("");
   const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<SupplyInventoryWorkspaceView>("inventory");
+  const materialsViewStorageKey = `derya:supply-os:materials-view:${storageScope}`;
   const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<SupplyInventoryItem[]>([]);
   const [workspaceSnapshotRevision, setWorkspaceSnapshotRevision] = useState(0);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
@@ -785,6 +801,28 @@ function CaseCommandCenter({
     () => sourcingRequestStorageKey({ storageScope, dashboardId: modelDashboard.id, workspaceId }),
     [modelDashboard.id, storageScope, workspaceId],
   );
+  const changeInventoryWorkspaceView = useCallback((view: SupplyInventoryWorkspaceView) => {
+    setInventoryWorkspaceView(view);
+    try {
+      window.localStorage.setItem(materialsViewStorageKey, view);
+    } catch {
+      // Local storage is optional.
+    }
+  }, [materialsViewStorageKey]);
+  useEffect(() => {
+    if (initialMaterialsView) {
+      setInventoryWorkspaceView(initialMaterialsView);
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem(materialsViewStorageKey);
+      if (stored === "inventory" || stored === "messages" || (stored === "prospects" && canShowProspects)) {
+        setInventoryWorkspaceView(stored);
+      }
+    } catch {
+      // Local storage is optional.
+    }
+  }, [canShowProspects, initialMaterialsView, materialsViewStorageKey]);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -1345,7 +1383,10 @@ function CaseCommandCenter({
           <SupplyInventoryWorkspace
             key={`sourcing-queue:${sourcingWorkspaceId ?? modelDashboard.id}`}
             activeView={inventoryWorkspaceView}
-            onViewChange={setInventoryWorkspaceView}
+            onViewChange={changeInventoryWorkspaceView}
+            canShowProspects={canShowProspects}
+            storageScope={storageScope}
+            initialResearchListSlug={initialResearchListSlug}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             items={inventoryItems}
             companyName={companyName}

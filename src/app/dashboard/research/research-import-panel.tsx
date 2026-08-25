@@ -5,7 +5,15 @@ import { useState } from "react";
 import type { ResearchField } from "@/lib/research-lists";
 import styles from "./research.module.css";
 
-export function ResearchImportPanel({ slug, fields }: { slug: string; fields: ResearchField[] }) {
+export function ResearchImportPanel({
+  slug,
+  fields,
+  onChanged,
+}: {
+  slug: string;
+  fields: ResearchField[];
+  onChanged?: () => void | Promise<void>;
+}) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [dedupeField, setDedupeField] = useState("");
@@ -28,7 +36,8 @@ export function ResearchImportPanel({ slug, fields }: { slug: string; fields: Re
       setMessage(`Created ${result.created}, updated ${result.updated}, skipped ${result.skipped}.`);
       setErrors(result.errors ?? []);
       setText("");
-      router.refresh();
+      if (onChanged) await onChanged();
+      else router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import failed.");
     } finally {

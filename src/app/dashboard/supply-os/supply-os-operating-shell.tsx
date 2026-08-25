@@ -2,11 +2,9 @@
 
 import {
   ArrowLeft,
-  FlaskConical,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  Users,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,7 +25,7 @@ type PanelDefinition = {
 type OfficeSwitchAction = (formData: FormData) => void | Promise<void>;
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Inventory & sourcing" },
+  { id: "materials", shortLabel: "Sourcing & prospecting" },
   { id: "logistics", shortLabel: "Logistics" },
   { id: "scenarios", shortLabel: "Opportunities", inactive: true },
   { id: "context", shortLabel: "Context" },
@@ -49,6 +47,8 @@ export function SupplyOsOperatingShell({
   contextEnabled,
   allowedWorkspaceIds,
   initialWorkspaceId,
+  initialMaterialsView,
+  initialResearchListSlug,
   previewMode = false,
   switchableOffices,
   switchOfficeAction,
@@ -63,6 +63,8 @@ export function SupplyOsOperatingShell({
   contextEnabled: boolean;
   allowedWorkspaceIds?: string[];
   initialWorkspaceId?: string;
+  initialMaterialsView?: "inventory" | "messages" | "prospects";
+  initialResearchListSlug?: string;
   previewMode?: boolean;
   switchableOffices?: SwitchableOffice[];
   switchOfficeAction?: OfficeSwitchAction;
@@ -205,19 +207,6 @@ export function SupplyOsOperatingShell({
             })}
           </nav>
           <div className={styles.sidebarUtilityArea}>
-            {previewMode || accountRole === "CUSTOMER" ? null : (
-              <>
-                <a className={styles.sidebarUtility} href="/dashboard/leads" aria-label="Leads" title="Leads">
-                  <Users size={18} aria-hidden="true" />
-                  <span>Leads</span>
-                </a>
-                {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-                <a className={styles.sidebarUtility} href="/dashboard/research" aria-label="Research" title="Research">
-                  <FlaskConical size={18} aria-hidden="true" />
-                  <span>Research</span>
-                </a>
-              </>
-            )}
             <a
               className={styles.sidebarUtility}
               href={settingsHref}
@@ -323,6 +312,9 @@ export function SupplyOsOperatingShell({
                 canApproveProcurement={canApproveProcurement}
                 canAuthorizePurchase={canAuthorizePurchase}
                 previewMode={previewMode}
+                canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
+                initialMaterialsView={initialMaterialsView}
+                initialResearchListSlug={initialResearchListSlug}
                 onOpenContext={() => selectPanel("context")}
                 onWorkspaceProfile={setWorkspaceProfile}
               />

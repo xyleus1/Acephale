@@ -20,4 +20,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR_URL"
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          allow_auto_merge="$(gh api "repos/${REPOSITORY}" --jq '.allow_auto_merge')"
+          if [ "$allow_auto_merge" != "true" ]; then
+            echo "Native auto-merge is disabled for ${REPOSITORY}; skipping PR merge."
+            exit 0
+          fi
+          gh pr merge --auto --squash "$PR_URL"

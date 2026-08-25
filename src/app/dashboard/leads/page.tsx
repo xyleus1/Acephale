@@ -22,6 +22,7 @@ function pageHref(params: {
   page: number;
 }) {
   const search = new URLSearchParams();
+  search.set("directory", "1");
   if (params.q) search.set("q", params.q);
   if (params.source) search.set("source", params.source);
   if (params.priority && params.priority !== "all") search.set("priority", params.priority);
@@ -33,12 +34,15 @@ function pageHref(params: {
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; source?: string; priority?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; source?: string; priority?: string; page?: string; directory?: string }>;
 }) {
   const session = await requireSession();
   if (session.accessKind === "customer") redirect("/dashboard/supply-os");
 
   const params = await searchParams;
+  if (params.directory !== "1") {
+    redirect("/dashboard/supply-os?panel=materials&materialsView=prospects");
+  }
   const q = params.q?.trim() ?? "";
   const source = params.source?.trim() ?? "";
   const priority = params.priority?.trim().toLowerCase() ?? "all";
@@ -71,6 +75,7 @@ export default async function LeadsPage({
       </header>
 
       <form className={styles.filters} method="get" action="/dashboard/leads">
+        <input type="hidden" name="directory" value="1" />
         <label>
           <span>Search</span>
           <input name="q" defaultValue={q} placeholder="Company, domain, city or email" />

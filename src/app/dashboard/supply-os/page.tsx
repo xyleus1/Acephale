@@ -15,7 +15,16 @@ export const metadata: Metadata = {
 export default async function SupplyOsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ panel?: string; previewWorkspace?: string; workspace?: string }>;
+  searchParams: Promise<{
+    panel?: string;
+    previewWorkspace?: string;
+    workspace?: string;
+    materialsView?: string;
+    researchList?: string;
+    q?: string;
+    status?: string;
+    page?: string;
+  }>;
 }) {
   const session = await requireSession();
   const currentUser = await prisma.user.findFirst({
@@ -72,6 +81,12 @@ export default async function SupplyOsPage({
         contextEnabled={contextEnabled}
         allowedWorkspaceIds={allowedWorkspaceIds}
         initialWorkspaceId={initialWorkspace?.id}
+        initialMaterialsView={
+          !isCustomer && !previewMode && (params.materialsView === "prospects" || params.materialsView === "messages")
+            ? params.materialsView
+            : undefined
+        }
+        initialResearchListSlug={!isCustomer && !previewMode ? params.researchList : undefined}
         previewMode={previewMode}
         switchableOffices={switchableOffices.length > 1 ? switchableOffices : undefined}
         switchOfficeAction={switchableOffices.length > 1 ? switchOfficeAction : undefined}

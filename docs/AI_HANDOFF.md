@@ -10621,6 +10621,13 @@ Verification caveat:
   supplier contact, email, workflow write, or production database operation
   was used for verification.
 
+## 2026-08-25: Prospects in Supply OS
+
+- Research and prospect data is surfaced inside Supply OS panel 01, labeled
+  "Sourcing & prospecting", instead of standalone Research and Leads navigation.
+- The panel reuses office-scoped research APIs and keeps import, export, search,
+  pagination, evidence, and review status controls available to operators.
+
 ## 2026-08-25: Admin mail log
 
 - Added `src/lib/admin-mail-log.ts` and a `Mail log` tab on `/dashboard/admin`.
