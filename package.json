@@ -36,6 +36,7 @@
     "test:context-document-facts": "tsx scripts/context-document-facts.test.ts",
     "test:procurement-inbound-triage": "tsx scripts/procurement-inbound-triage.test.ts",
     "test:procurement-file-draft-batch": "tsx scripts/procurement-file-draft-batch.test.ts",
+    "test:procurement-request-document-merge": "tsx scripts/procurement-request-document-merge.test.ts",
     "test:supply-os-context-db": "NODE_OPTIONS='--conditions=react-server' tsx scripts/company-context-database.test.ts",
     "test:supply-os-supplier-email-provider": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-email-provider.test.ts",
     "test:supply-os-operations-ui": "tsx scripts/supply-os-operations-ui.test.ts",

@@ -1,6 +1,5 @@
 import "server-only";
 
-import { prisma } from "@/lib/prisma";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
 import {
@@ -13,8 +12,8 @@ import {
   type FileDraftTarget,
 } from "@/lib/procurement-file-draft-selection";
 import { supplierInboundKind } from "@/lib/procurement-inbound-triage";
+import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { getProcurementRequest, type ProcurementOrderDetail } from "@/lib/procurement-workflow";
-import { SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-os/persistence";
 
 // Suppliers that replied to the RFQ campaign asked for the technical package.
 // This module walks those conversations from an operator command instead of the
@@ -42,31 +41,6 @@ export type FileDraftRunResult = {
   remaining: number;
   outcomes: FileDraftOutcome[];
 };
-
-// Drafting writes an execution task and a supply event, both of which record an
-// acting user, so the batch runs as the office operator who owns the request.
-async function operatorAccessContext(officeId: string): Promise<SupplyAccessContext> {
-  const user = await prisma.user.findFirst({
-    where: {
-      officeId,
-      isActive: true,
-      customerPortalIdentity: null,
-      OR: [{ role: "ADMIN" }, { role: "MANAGER" }, { canViewWholeOffice: true }],
-    },
-    orderBy: [{ createdAt: "asc" }],
-    select: { id: true, role: true, canViewWholeOffice: true },
-  });
-  if (!user) {
-    throw new SupplyPersistenceError("This office has no active operator who can draft supplier replies.", "forbidden");
-  }
-  return {
-    officeId,
-    userId: user.id,
-    role: user.role,
-    canViewWholeOffice: user.canViewWholeOffice,
-    accessKind: "operator",
-  };
-}
 
 async function loadContext(orderId: string) {
   const summary = await loadBulkRfqOrder(orderId);
@@ -138,7 +112,7 @@ export async function runProcurementFileDraftBatch(args: {
   const context = await loadContext(args.orderId);
   if (!context) return null;
   const targets = await draftTargets(context);
-  const access = await operatorAccessContext(context.summary.officeId);
+  const access = await procurementOperatorAccess(context.summary.officeId);
   const limit = Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? FILE_DRAFT_MAX_PER_RUN)));
   const eligible = eligibleFileDraftTargets(targets, { redraft: args.redraft });
   const batch = eligible.slice(0, limit);

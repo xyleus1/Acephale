@@ -775,6 +775,42 @@ export async function getProcurementRequest(customerId: string, orderId: string)
   return getProcurementRequestFromDatabase(externalDatabase(), customerId, orderId);
 }
 
+// Only the request context is rewritten, and only for the customer that owns the
+// request, so a stored request keeps its material, quantity, and vendor history.
+export async function replaceProcurementRequestContextInDatabase(
+  database: RawDatabase,
+  customerId: string,
+  orderId: string,
+  requestContext: Record<string, unknown>,
+) {
+  if (!uuidSchema.safeParse(customerId).success || !uuidSchema.safeParse(orderId).success) {
+    throw new ProcurementWorkflowError("Procurement request not found.", "not_found");
+  }
+  try {
+    const updated = await database.$executeRawUnsafe(`
+      UPDATE orders
+      SET request_context = $3::jsonb,
+          updated_at = now()
+      WHERE id = $1::uuid
+        AND customer_id = $2::uuid
+    `, orderId, customerId, JSON.stringify(requestContext));
+    if (updated !== 1) {
+      throw new ProcurementWorkflowError("Procurement request not found.", "not_found");
+    }
+  } catch (error) {
+    if (error instanceof ProcurementWorkflowError) throw error;
+    throw new ProcurementWorkflowError("The procurement workflow database is unavailable.", "unavailable");
+  }
+}
+
+export async function replaceProcurementRequestContext(
+  customerId: string,
+  orderId: string,
+  requestContext: Record<string, unknown>,
+) {
+  return replaceProcurementRequestContextInDatabase(externalDatabase(), customerId, orderId, requestContext);
+}
+
 export async function getProcurementVendorConversationRefFromDatabase(
   database: RawDatabase,
   customerId: string,

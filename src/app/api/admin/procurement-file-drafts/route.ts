@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { operatorSecretAuthorized } from "@/lib/admin-operator-secret";
+import { procurementOrderIdError } from "@/lib/procurement-order-id";
 import {
   FILE_DRAFT_MAX_PER_RUN,
   listProcurementFileDraftTargets,
@@ -24,20 +25,10 @@ function serverError(message: string) {
   return NextResponse.json({ error: message }, { status: 500 });
 }
 
-// Sourcing request ids are stored as uuid columns, so a malformed id would
-// otherwise surface as a database error instead of a request error.
-const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function orderIdError(orderId: string) {
-  if (!orderId) return "orderId is required.";
-  if (!ORDER_ID_PATTERN.test(orderId)) return "orderId must be a sourcing request id.";
-  return null;
-}
-
 export async function GET(req: NextRequest) {
   if (!operatorSecretAuthorized(req)) return unauthorized();
   const orderId = req.nextUrl.searchParams.get("orderId")?.trim() ?? "";
-  const invalid = orderIdError(orderId);
+  const invalid = procurementOrderIdError(orderId);
   if (invalid) return badRequest(invalid);
   try {
     const listed = await listProcurementFileDraftTargets(orderId);
@@ -65,7 +56,7 @@ export async function POST(req: NextRequest) {
     redraft?: unknown;
   };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
-  const invalid = orderIdError(orderId);
+  const invalid = procurementOrderIdError(orderId);
   if (invalid) return badRequest(invalid);
   const limit = typeof payload.limit === "number" && Number.isFinite(payload.limit)
     ? Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(payload.limit)))

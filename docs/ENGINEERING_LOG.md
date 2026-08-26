@@ -7743,3 +7743,12 @@ Use this file for chronological implementation notes that future agents should s
   recognized, so a CSV or TSV that starts with data keeps its first company.
 - The directory-density denominator follows the same decision, so headerless
   documents are no longer measured against a phantom header line.
+
+### 2026-08-25 - Relink sourcing requests to their Context files
+
+- Requests raised before Context snapshots were stored carry no
+  "document:<id>" citations, so supplier replies could not attach anything and
+  the file draft command failed with "no stored source files to send".
+- An operator command previews and rebuilds that link from the Context
+  workspace recorded on the request, scoped to the office and company that own
+  it. Existing citations are never rewritten and reruns add nothing.
