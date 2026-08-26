@@ -473,6 +473,7 @@ jobs:
           npm run test:procurement-conversation
           npm run test:procurement-workflow
           npm run test:supply-os-active-sourcing
+          npm run test:procurement-file-draft-batch
           npm run test:workflow-guild2
           npm run prebuild
           npm run test:procurement-workflow-db

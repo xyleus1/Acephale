@@ -35,6 +35,7 @@ const BULK_RFQ_VENDOR_EMAIL_SQL = `COALESCE(
 
 export type BulkRfqOrder = {
   orderId: string;
+  customerId: string;
   officeId: string;
   companyName: string;
   material: string;
@@ -167,6 +168,7 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
   if (!row) return null;
   return {
     orderId: row.orderId,
+    customerId: row.customerId,
     officeId: procurementOfficeIdFromServerMetadata(row.customerId),
     companyName: clean(row.companyName ?? "our customer"),
     material: row.material,
