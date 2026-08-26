@@ -381,6 +381,84 @@ export async function saveProcurementFileDeliveryDraft(args: {
   return draftFromTask(task);
 }
 
+// A draft that was delivered stops being a draft, so the saved task records the
+// approval that sent it instead of staying PLANNED and being offered again.
+export async function markProcurementFileDeliveryDraftSent(args: {
+  context: SupplyAccessContext;
+  order: ProcurementOrderDetail;
+  vendorId: string;
+  sourceMessageId: string;
+  providerMessageId: string;
+}): Promise<boolean> {
+  const access = await currentAccessContext(args.context);
+  const workspaceId = requestWorkspaceId(args.order);
+  const task = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      officeId: access.officeId,
+      workspaceId,
+      taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
+      taskKey: { startsWith: `${draftTaskScopeKey({ orderId: args.order.id, vendorId: args.vendorId })}:` },
+      status: "PLANNED",
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true, inputHash: true },
+  });
+  if (!task) return false;
+  await prisma.$transaction(async (tx) => {
+    // The draft was written with requiresApproval, so the database guard only
+    // lets it complete once a matching approval exists. The operator send is
+    // that approval, recorded against the exact draft input it delivered.
+    const now = new Date();
+    const approval = await tx.supplyApproval.create({
+      data: {
+        officeId: access.officeId,
+        workspaceId,
+        executionTaskId: task.id,
+        requestedByUserId: access.userId,
+        requiredRole: access.role,
+        scopeHash: task.inputHash,
+        requestReason: "An operator confirmed delivery of the saved supplier file reply.",
+        idempotencyKey: `procurement-file-reply-send:${task.id}`,
+      },
+      select: { id: true },
+    });
+    await tx.supplyApproval.update({
+      where: { id: approval.id },
+      data: {
+        status: "APPROVED",
+        decidedByUserId: access.userId,
+        decidedAt: now,
+        decisionNote: "Approved by the operator send command.",
+      },
+    });
+    // The guard only allows PLANNED to READY to RUNNING to SUCCEEDED, so the
+    // delivered draft walks the same lifecycle every other executed task does.
+    await tx.supplyExecutionTask.update({ where: { id: task.id }, data: { status: "READY" } });
+    await tx.supplyExecutionTask.update({ where: { id: task.id }, data: { status: "RUNNING", startedAt: now } });
+    await tx.supplyExecutionTask.update({
+      where: { id: task.id },
+      data: { status: "SUCCEEDED", completedAt: now },
+    });
+    await appendSupplierCommunicationEvent({
+      tx,
+      taskId: task.id,
+      officeId: access.officeId,
+      workspaceId,
+      actorUserId: access.userId,
+      eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_SENT",
+      status: "SUCCEEDED",
+      message: "The saved supplier reply carrying the request files was approved and delivered.",
+      payload: inputJson({
+        orderId: args.order.id,
+        vendorId: args.vendorId,
+        sourceMessageId: args.sourceMessageId,
+        providerMessageId: args.providerMessageId,
+      }),
+    });
+  });
+  return true;
+}
+
 export async function getProcurementFileDeliveryDraft(args: {
   officeId: string;
   order: ProcurementOrderDetail;

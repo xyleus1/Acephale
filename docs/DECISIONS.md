@@ -4383,3 +4383,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
   per mailbox, so sharing cannot multiply a mailbox limit by the office count.
 - Consequence: One mailbox pool serves every customer without cross office mail
   leakage, and unmatched inbound mail surfaces only to the administrator.
+
+## 2026-08-26: The sourcing loop plans deterministically and sends only on confirmation
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: A sourcing request advances through repeated autopilot passes whose
+  per supplier action is decided by a pure function over thread state, triage
+  and draft state. No supplier facing action may happen for a reason that is not
+  encoded in that plan.
+- Context boundary: Every automated reply and follow up is built from the
+  request's own linked and screened documents, so context and attachments never
+  depend on an operator restating them.
+- Send boundary: Sending is off unless the caller supplies the explicit send
+  confirmation phrase. The scheduled pass drafts and reports only.
+- Escalation boundary: Bounces, wrong contact notices, and anything touching
+  price, quantity, dates, terms or legal wording reach an operator instead of a
+  supplier, even while sending is on.
+- Completion boundary: A request is PO ready only when enough recorded supplier
+  quotes exist. Replies, interest and drafts never count as quotes.

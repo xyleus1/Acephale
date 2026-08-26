@@ -7761,6 +7761,21 @@ Use this file for chronological implementation notes that future agents should s
   that set, and reports what it removed. Omitting names keeps the additive
   behavior.
 
+### 2026-08-26 - Sourcing autopilot pass over supplier threads
+
+- `runProcurementAutopilot` walks a request's supplier threads, drafts the file
+  bearing replies the stored request documents answer, optionally delivers the
+  saved drafts, and reports what a human still has to decide.
+- `planAutopilotVendorAction` in `src/lib/procurement-autopilot-plan.ts` is a
+  pure decision: bounces and wrong contacts escalate, price, terms, date and
+  legal questions escalate, saved drafts wait for approval unless sending was
+  explicitly confirmed, and a quoted supplier is left alone.
+- Sending is off by default. `POST /api/admin/procurement-autopilot` only sends
+  when the body carries the exact send confirmation phrase, and the scheduled
+  pass (`/api/cron/procurement-autopilot`, every 15 minutes) never sends.
+- PO readiness is a quote count, not interest: `autopilotRequestStage` reports
+  `QUOTES_READY_FOR_PO` only once enough recorded supplier quotes exist.
+
 ### 2026-08-26 - Corridor batch runner
 
 - Added `corridor-plan` to write the deterministic Maneks corridor query text

@@ -21,6 +21,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/procurement-autopilot",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/procurement-research",
       "schedule": "*/5 * * * *"
     },

@@ -5,6 +5,7 @@ import { prisma } from "../src/lib/prisma";
 import {
   PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
   getProcurementFileDeliveryDraft,
+  markProcurementFileDeliveryDraftSent,
   saveProcurementFileDeliveryDraft,
 } from "../src/lib/procurement-file-delivery-draft";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
@@ -206,6 +207,44 @@ async function main() {
       vendorId: vendor.id,
     });
     assert.equal(foreignOfficeRead, null, "Drafts must not cross office scope.");
+
+    // A delivered draft stops being offered again, and the send is recorded on
+    // the same task so the trail shows who approved it.
+    const marked = await markProcurementFileDeliveryDraftSent({
+      context,
+      order,
+      vendorId: vendor.id,
+      sourceMessageId: `inbound-later-${suffix}`,
+      providerMessageId: `provider-${suffix}`,
+    });
+    assert.equal(marked, true);
+    assert.equal(
+      await getProcurementFileDeliveryDraft({ officeId: office.id, order, vendorId: vendor.id }),
+      null,
+      "A sent draft must not be offered for sending again.",
+    );
+    const afterSend = await prisma.supplyExecutionTask.findMany({
+      where: { officeId: office.id, taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE },
+      include: { events: true },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(afterSend[1]?.status, "SUCCEEDED");
+    assert.ok(afterSend[1]?.completedAt, "A delivered draft records when it completed.");
+    assert.deepEqual(afterSend[1]?.events.map((event) => event.eventType), [
+      "PROCUREMENT_SUPPLIER_FILE_REPLY_DRAFTED",
+      "PROCUREMENT_SUPPLIER_FILE_REPLY_SENT",
+    ]);
+    assert.equal(
+      await markProcurementFileDeliveryDraftSent({
+        context,
+        order,
+        vendorId: vendor.id,
+        sourceMessageId: `inbound-later-${suffix}`,
+        providerMessageId: `provider-${suffix}`,
+      }),
+      false,
+      "Marking a sent draft again must not create a second delivery record.",
+    );
 
     console.log("Procurement file bearing draft database contract passed.");
   } finally {
