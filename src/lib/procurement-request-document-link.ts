@@ -7,6 +7,8 @@ import {
   mergeRequestContextDocuments,
   requestContextDocumentEntries,
   requestContextWorkspaceId,
+  selectRequestDocumentsByName,
+  setRequestContextDocuments,
   type RequestDocumentEntry,
 } from "@/lib/procurement-request-document-merge";
 import {
@@ -32,6 +34,13 @@ export type RequestDocumentLinkPreview = {
 
 export type RequestDocumentLinkResult = RequestDocumentLinkPreview & {
   added: string[];
+  removed: string[];
+};
+
+// Naming files restates the set a request may send, so anything unnamed stops
+// reaching suppliers. Omitting names keeps the additive behavior.
+export type RequestDocumentLinkOptions = {
+  names?: readonly string[];
 };
 
 async function loadRequest(orderId: string) {
@@ -61,6 +70,20 @@ function missingNames(
   return linked.filter((entry) => !known.has(entry.citation_id)).map((entry) => entry.name);
 }
 
+function selectedDocuments(
+  available: readonly RequestDocumentEntry[],
+  wanted: readonly string[],
+) {
+  const { selected, unknown } = selectRequestDocumentsByName(available, wanted);
+  if (unknown.length) {
+    throw new SupplyPersistenceError(
+      "This sourcing request has no Context document with one of those names.",
+      "conflict",
+    );
+  }
+  return selected;
+}
+
 export async function previewProcurementRequestDocumentLink(
   orderId: string,
 ): Promise<RequestDocumentLinkPreview | null> {
@@ -83,6 +106,7 @@ export async function previewProcurementRequestDocumentLink(
 
 export async function linkProcurementRequestDocuments(
   orderId: string,
+  options: RequestDocumentLinkOptions = {},
 ): Promise<RequestDocumentLinkResult | null> {
   const request = await loadRequest(orderId);
   if (!request) return null;
@@ -100,8 +124,20 @@ export async function linkProcurementRequestDocuments(
       "conflict",
     );
   }
-  const merged = mergeRequestContextDocuments(request.order.requestContext, available);
-  if (merged.added.length) {
+  const merged = options.names
+    ? setRequestContextDocuments(
+      request.order.requestContext,
+      selectedDocuments(available, options.names),
+    )
+    : mergeRequestContextDocuments(request.order.requestContext, available);
+  // Restating the set re-merges from empty, so net-new files are measured
+  // against the request as it stood before the command.
+  const before = requestContextDocumentEntries(request.order.requestContext);
+  const known = new Set(before.map((entry) => entry.citation_id));
+  const kept = new Set(merged.documents.map((entry) => entry.citation_id));
+  const added = merged.documents.filter((entry) => !known.has(entry.citation_id));
+  const removed = before.filter((entry) => !kept.has(entry.citation_id));
+  if (added.length || removed.length) {
     await replaceProcurementRequestContext(
       request.summary.customerId,
       request.summary.orderId,
@@ -113,7 +149,8 @@ export async function linkProcurementRequestDocuments(
     orderId: request.summary.orderId,
     material: request.summary.material,
     workspaceId,
-    added: names(merged.added),
+    added: names(added),
+    removed: names(removed),
     linked: names(linked),
     available: names(available),
     missing: missingNames(linked, available),

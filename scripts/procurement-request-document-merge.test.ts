@@ -4,6 +4,8 @@ import {
   requestContextDocumentEntries,
   requestContextWorkspaceId,
   REQUEST_DOCUMENT_LINK_LIMIT,
+  selectRequestDocumentsByName,
+  setRequestContextDocuments,
   type RequestDocumentEntry,
 } from "../src/lib/procurement-request-document-merge";
 import { procurementOrderIdError } from "../src/lib/procurement-order-id";
@@ -78,6 +80,32 @@ const fromBrokenContext = mergeRequestContextDocuments(
   [document({ citation_id: "document:ctx-4" })],
 );
 assert.equal(fromBrokenContext.documents.length, 1);
+
+// An operator names the files a request may send, so unrelated geometry stops
+// reaching suppliers of the other request in the same workspace.
+const pick = selectRequestDocumentsByName(
+  [
+    document({ citation_id: "document:ctx-1", name: "hypnodreamz order 1 doc 2.csv" }),
+    document({ citation_id: "document:ctx-2", name: "hypnodreamz order 1 doc 1.png" }),
+    document({ citation_id: "document:ctx-3", name: "hypnodreamz order 1 doc 2.stl" }),
+  ],
+  [" HYPNODREAMZ ORDER 1 DOC 2.CSV ", "hypnodreamz order 1 doc 1.png", "hypnodreamz order 1 doc 2.csv"],
+);
+assert.deepEqual(pick.selected.map((entry) => entry.citation_id), ["document:ctx-1", "document:ctx-2"]);
+assert.deepEqual(pick.unknown, []);
+assert.deepEqual(selectRequestDocumentsByName([], ["missing.stl"]).unknown, ["missing.stl"]);
+
+const restated = setRequestContextDocuments(linked.requestContext, pick.selected);
+assert.deepEqual(
+  requestContextDocumentEntries(restated.requestContext).map((entry) => entry.citation_id),
+  ["document:ctx-1", "document:ctx-2"],
+);
+const narrowed = setRequestContextDocuments(linked.requestContext, [pick.selected[0]]);
+assert.deepEqual(
+  requestContextDocumentEntries(narrowed.requestContext).map((entry) => entry.citation_id),
+  ["document:ctx-1"],
+);
+assert.deepEqual(narrowed.requestContext.logistics, legacyContext.logistics);
 
 assert.equal(procurementOrderIdError(""), "orderId is required.");
 assert.equal(procurementOrderIdError("not-a-uuid"), "orderId must be a sourcing request id.");

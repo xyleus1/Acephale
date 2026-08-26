@@ -29,6 +29,17 @@ function failure(error: unknown, message: string) {
   return NextResponse.json({ error: message }, { status: 500 });
 }
 
+// Naming files restates which documents a request may send, so a PCB assembly
+// request stops carrying unrelated geometry to its suppliers.
+function documentNames(value: unknown): string[] | null | "invalid" {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) return "invalid";
+  const names = value
+    .flatMap((entry) => (typeof entry === "string" && entry.trim() ? [entry.trim()] : []));
+  if (!names.length || names.length !== value.length) return "invalid";
+  return names;
+}
+
 export async function GET(req: NextRequest) {
   if (!operatorSecretAuthorized(req)) return unauthorized();
   const orderId = req.nextUrl.searchParams.get("orderId")?.trim() ?? "";
@@ -45,12 +56,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (!operatorSecretAuthorized(req)) return unauthorized();
-  const payload = await req.json().catch(() => ({})) as { orderId?: unknown };
+  const payload = await req.json().catch(() => ({})) as { orderId?: unknown; names?: unknown };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
   const invalid = procurementOrderIdError(orderId);
   if (invalid) return badRequest(invalid);
+  const names = documentNames(payload.names);
+  if (names === "invalid") return badRequest("names must be a list of document names.");
   try {
-    const result = await linkProcurementRequestDocuments(orderId);
+    const result = await linkProcurementRequestDocuments(orderId, names ? { names } : {});
     if (!result) return notFound();
     return NextResponse.json(result);
   } catch (error) {

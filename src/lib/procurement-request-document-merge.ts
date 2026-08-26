@@ -47,6 +47,55 @@ export function requestContextDocumentEntries(requestContext: Record<string, unk
   });
 }
 
+function normalizedName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+// A workspace holds every file the company uploaded, and a request usually needs
+// only some of them: a PCB assembly quote should not carry foam geometry to the
+// supplier. An operator names the files a request may send.
+export function selectRequestDocumentsByName(
+  available: readonly RequestDocumentEntry[],
+  wanted: readonly string[],
+) {
+  const requested = wanted.map(normalizedName).filter((name) => name.length > 0);
+  const byName = new Map<string, RequestDocumentEntry>();
+  for (const entry of available) {
+    const parsed = documentEntry(entry);
+    if (parsed) byName.set(normalizedName(parsed.name), parsed);
+  }
+  const selected: RequestDocumentEntry[] = [];
+  const unknown: string[] = [];
+  const seen = new Set<string>();
+  for (const name of requested) {
+    const entry = byName.get(name);
+    if (!entry) {
+      unknown.push(name);
+      continue;
+    }
+    if (seen.has(entry.citation_id)) continue;
+    seen.add(entry.citation_id);
+    selected.push(entry);
+  }
+  return { selected, unknown };
+}
+
+// Used when an operator restates the file set of a request, so files that are no
+// longer wanted stop reaching suppliers.
+export function setRequestContextDocuments(
+  requestContext: Record<string, unknown>,
+  entries: readonly RequestDocumentEntry[],
+) {
+  const cleared = {
+    ...requestContext,
+    procurement_context: {
+      ...record(requestContext.procurement_context),
+      documents: [],
+    },
+  } satisfies Record<string, unknown>;
+  return mergeRequestContextDocuments(cleared, entries);
+}
+
 // Existing citations win over freshly assembled ones: the request states what it
 // was quoted from, and a later Context edit must not silently rewrite it.
 export function mergeRequestContextDocuments(

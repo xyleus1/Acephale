@@ -7752,3 +7752,11 @@ Use this file for chronological implementation notes that future agents should s
 - An operator command previews and rebuilds that link from the Context
   workspace recorded on the request, scoped to the office and company that own
   it. Existing citations are never rewritten and reruns add nothing.
+
+### 2026-08-26 - Scope a sourcing request to the files it should send
+
+- Two requests share one Context workspace, so relinking every document sent the
+  foam geometry to PCB assembly suppliers and the board spec to foam molders.
+- The relink command now accepts the document names a request may send, restates
+  that set, and reports what it removed. Omitting names keeps the additive
+  behavior.
