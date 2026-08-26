@@ -7760,3 +7760,24 @@ Use this file for chronological implementation notes that future agents should s
 - The relink command now accepts the document names a request may send, restates
   that set, and reports what it removed. Omitting names keeps the additive
   behavior.
+
+### 2026-08-26 - Corridor batch runner
+
+- Added `corridor-plan` to write the deterministic Maneks corridor query text
+  and reusable query JSONL, with locale and shape counts.
+- Added `corridor-harvest` to consume browser-collected DuckDuckGo SERP JSONL,
+  run bounded document-first batches without search page budget usage, and
+  append raw candidate rows with evidence, verification, and resume offsets.
+
+### 2026-08-26 - International phone extraction and first corridor batch
+
+- Phone extraction now preserves explicit international country codes, supports
+  Turkish local numbers only with an explicitly supplied Turkish default, and
+  never guesses a country code for other local numbers. Invalid-length digit
+  runs are rejected.
+- The first corridor batch used 124 browser-collected DuckDuckGo queries,
+  produced 1,902 SERP rows, consumed 874 full-plan offsets, and produced
+  204,913 raw candidate rows across 580 source documents. After gating on a
+  valid public suffix, plausible company name, and non-reject fit tier, 437
+  rows were loaded to the Maneks prospects list. Phones were withheld from
+  that load because the previous extractor stamped every number as Turkish.

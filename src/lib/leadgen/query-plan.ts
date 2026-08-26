@@ -60,6 +60,12 @@ const COUNTRY_LOCALES: Readonly<Record<string, readonly QueryLocale[]>> = {
   germany: ["de", "en"], austria: ["de", "en"], italy: ["it", "en"], poland: ["pl", "en"],
   romania: ["ro", "en"], bulgaria: ["ru", "en"], georgia: ["ru", "en"], egypt: ["ar", "en"],
   "saudi arabia": ["ar", "en"], iran: ["fa", "en"], china: ["zh", "en"],
+  peru: ["es", "en"], chile: ["es", "en"], mexico: ["es", "en"], panama: ["es", "en"],
+  ecuador: ["es", "en"], argentina: ["es", "en"], "dominican republic": ["es", "en"],
+  portugal: ["pt", "en"], morocco: ["ar", "en"], algeria: ["ar", "en"], tunisia: ["ar", "en"],
+  "united arab emirates": ["ar", "en"], jordan: ["ar", "en"], iraq: ["ar", "en"],
+  kazakhstan: ["ru", "en"], uzbekistan: ["ru", "en"], azerbaijan: ["ru", "en"],
+  armenia: ["ru", "en"], belarus: ["ru", "en"], moldova: ["ro", "en"],
 };
 
 const TURKISH_REGIONS = new Set([
@@ -101,11 +107,20 @@ function addSitePatterns(parts: string[], profile: LeadGenProfile) {
   return profile.sitePatterns?.length ? [...parts, ...profile.sitePatterns.map((pattern) => `site:${pattern}`)] : parts;
 }
 
+// One URL token per locale. Stacking several inurl operators next to a filetype
+// operator narrows a query to almost nothing, so document shapes lean on the
+// filetype operator alone and page shapes on a single localized URL token.
+const LOCALIZED_URL_TOKENS: Readonly<Record<QueryLocale, string>> = {
+  tr: "rehber", es: "directorio", pt: "diretorio", ru: "katalog", en: "directory",
+  de: "verzeichnis", it: "elenco", pl: "katalog", ro: "director", ar: "members",
+  fa: "members", zh: "members",
+};
+
 function buildShape(shape: LeadGenQueryShape, keyword: string, region: string | null, locale: QueryLocale, profile: LeadGenProfile) {
   const base = [keyword, region].filter(Boolean) as string[];
   switch (shape) {
     case "company_site": return [...base, phrase(locale, "contactEmail")].join(" ");
-    case "member_list": return [...base, phrase(locale, "chamberIndustry"), phrase(locale, "memberList")].join(" ");
+    case "member_list": return [...base, phrase(locale, "chamberIndustry"), phrase(locale, "memberList"), `inurl:${LOCALIZED_URL_TOKENS[locale]}`].join(" ");
     case "cluster": return [region, phrase(locale, "industrialZone"), keyword].filter(Boolean).join(" ");
     case "pdf_directory":
       return locale === "tr"
@@ -115,11 +130,11 @@ function buildShape(shape: LeadGenQueryShape, keyword: string, region: string | 
       return locale === "tr"
         ? [...base, phrase(locale, "contactEmail"), "contact page"].join(" ")
         : [...base, "buyers distributors"].join(" ");
-    case "doc_pdf_directory": return addSitePatterns([...base, phrase(locale, "companyDirectory"), phrase(locale, "memberList"), "filetype:pdf", "inurl:directory", "inurl:rehber"], profile).join(" ");
-    case "doc_spreadsheet_directory": return addSitePatterns([...base, phrase(locale, "companyDirectory"), phrase(locale, "supplierList"), "(filetype:xls OR filetype:xlsx)", "inurl:uyeler"], profile).join(" ");
-    case "doc_office_directory": return addSitePatterns([...base, phrase(locale, "companyDirectory"), phrase(locale, "memberList"), "(filetype:doc OR filetype:docx)", "inurl:members"], profile).join(" ");
-    case "exhibitor_list": return addSitePatterns([...base, phrase(locale, "exhibitorList"), "filetype:pdf", "inurl:catalog"], profile).join(" ");
-    case "association_members": return addSitePatterns([...base, phrase(locale, "associationMembers"), "filetype:pdf", "inurl:members"], profile).join(" ");
+    case "doc_pdf_directory": return addSitePatterns([...base, phrase(locale, "companyDirectory"), phrase(locale, "memberList"), "filetype:pdf"], profile).join(" ");
+    case "doc_spreadsheet_directory": return addSitePatterns([...base, phrase(locale, "companyDirectory"), phrase(locale, "supplierList"), "(filetype:xls OR filetype:xlsx)"], profile).join(" ");
+    case "doc_office_directory": return addSitePatterns([...base, phrase(locale, "companyDirectory"), phrase(locale, "memberList"), "(filetype:doc OR filetype:docx)"], profile).join(" ");
+    case "exhibitor_list": return addSitePatterns([...base, phrase(locale, "exhibitorList"), "filetype:pdf"], profile).join(" ");
+    case "association_members": return addSitePatterns([...base, phrase(locale, "associationMembers"), "filetype:pdf"], profile).join(" ");
   }
 }
 
@@ -140,7 +155,8 @@ export function buildQueryPlan(profile: LeadGenProfile, options: BuildQueryPlanO
     for (const region of [null, ...profile.regions.slice(0, regionCap)] as (string | null)[]) {
       for (const locale of queryLocalesForRegion(region, profile.queryLocales)) {
         const shapes = ALL_SHAPES.filter((shape) => !requestedShapes || requestedShapes.has(shape));
-        for (const keyword of segment.keywords) {
+        const keywords = segment.keywordsByLocale?.[locale] ?? segment.keywords;
+        for (const keyword of keywords) {
           for (const shape of shapes) {
             const query = buildShape(shape, keyword, region, locale, profile).replace(/\s+/g, " ").trim();
             const key = `${shape}:${locale}:${query.toLowerCase()}`;

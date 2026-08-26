@@ -26,6 +26,8 @@ export type LeadGenSegment = {
   label: string;
   /** Native-language keywords used to build search queries. */
   keywords: readonly string[];
+  /** Keywords per query locale, so a Spanish query is not built from Turkish terms. */
+  keywordsByLocale?: Partial<Record<import("./query-plan").QueryLocale, readonly string[]>>;
   /** Relative value of the segment for prioritizing outreach. */
   weight: number;
 };
@@ -172,4 +174,143 @@ export const MANEKS_PROFILE: LeadGenProfile = {
   ],
   positiveSignals: GENERIC_STEEL_ORE_POSITIVE_SIGNALS,
   negativeSignals: GENERIC_STEEL_ORE_NEGATIVE_SIGNALS,
+};
+
+// Same demand profile as MANEKS_PROFILE, swept along the Venezuela to Russia
+// trade corridor instead of Turkish provinces. Regions are countries, so
+// queries are generated in each country's own language.
+export const MANEKS_CORRIDOR_REGIONS = [
+  "Venezuela",
+  "Colombia",
+  "Panama",
+  "Peru",
+  "Chile",
+  "Brazil",
+  "Mexico",
+  "Dominican Republic",
+  "Morocco",
+  "Portugal",
+  "Spain",
+  "Italy",
+  "Greece",
+  "Egypt",
+  "Turkey",
+  "Bulgaria",
+  "Romania",
+  "Poland",
+  "Germany",
+  "Ukraine",
+  "Georgia",
+  "Azerbaijan",
+  "Armenia",
+  "Kazakhstan",
+  "Uzbekistan",
+  "Iran",
+  "Iraq",
+  "Jordan",
+  "United Arab Emirates",
+  "Saudi Arabia",
+  "Russia",
+] as const;
+
+export const MANEKS_CORRIDOR_SEGMENTS: readonly LeadGenSegment[] = [
+  {
+    key: "steel_service_center",
+    label: "Steel service centers and stockholders",
+    weight: 1,
+    keywords: ["steel service center", "steel stockholder"],
+    keywordsByLocale: {
+      en: ["steel service center", "steel stockholder"],
+      es: ["centro de servicio de acero", "distribuidor de acero"],
+      pt: ["centro de servico de aco", "distribuidora de aco"],
+      ru: ["металлосервисный центр", "металлотрейдер"],
+      tr: ["celik servis merkezi", "demir celik toptan"],
+      ar: ["مركز خدمات الصلب", "موزع الحديد والصلب"],
+      it: ["centro servizi acciaio", "commercio acciaio"],
+      de: ["Stahl Service Center", "Stahlhandel"],
+      pl: ["centrum serwisowe stali", "hurtownia stali"],
+      ro: ["centru de servicii oteluri", "depozit de oteluri"],
+    },
+  },
+  {
+    key: "fabricator",
+    label: "Steel fabricators and machine shops",
+    weight: 0.95,
+    keywords: ["steel fabrication", "sheet metal fabrication"],
+    keywordsByLocale: {
+      en: ["steel fabrication", "sheet metal fabrication"],
+      es: ["fabricacion metalica", "estructuras metalicas"],
+      pt: ["estruturas metalicas", "fabricacao de metal"],
+      ru: ["металлообработка", "металлоконструкции"],
+      tr: ["celik konstruksiyon imalat", "sac metal imalat"],
+      ar: ["تصنيع المعادن", "الهياكل المعدنية"],
+      it: ["carpenteria metallica", "lavorazione lamiera"],
+      de: ["Stahlbau", "Blechbearbeitung"],
+      pl: ["konstrukcje stalowe", "obrobka blachy"],
+      ro: ["confectii metalice", "structuri metalice"],
+    },
+  },
+  {
+    key: "pipe_profile",
+    label: "Pipe and profile producers",
+    weight: 0.9,
+    keywords: ["steel pipe manufacturer", "steel profile producer"],
+    keywordsByLocale: {
+      en: ["steel pipe manufacturer", "steel profile producer"],
+      es: ["fabricante de tuberia de acero", "fabricante de perfiles de acero"],
+      pt: ["fabricante de tubos de aco", "fabricante de perfis de aco"],
+      ru: ["производитель стальных труб", "производитель профилей"],
+      tr: ["celik boru imalat", "kutu profil uretici"],
+      ar: ["مصنع انابيب الصلب", "مصنع مقاطع الصلب"],
+      it: ["produttore tubi acciaio", "produttore profilati"],
+      de: ["Stahlrohr Hersteller", "Profilhersteller"],
+      pl: ["producent rur stalowych", "producent profili stalowych"],
+      ro: ["producator tevi oteluri", "producator profile metalice"],
+    },
+  },
+  {
+    key: "machinery",
+    label: "Machinery and equipment manufacturers",
+    weight: 0.85,
+    keywords: ["machinery manufacturer", "agricultural machinery manufacturer"],
+    keywordsByLocale: {
+      en: ["machinery manufacturer", "agricultural machinery manufacturer"],
+      es: ["fabricante de maquinaria", "fabricante de maquinaria agricola"],
+      pt: ["fabricante de maquinas", "fabricante de maquinas agricolas"],
+      ru: ["производитель машин", "производитель сельхозтехники"],
+      tr: ["makine imalat sanayi", "tarim makineleri uretici"],
+      ar: ["مصنع الالات", "مصنع الالات الزراعية"],
+      it: ["costruttore di macchinari", "produttore macchine agricole"],
+      de: ["Maschinenbau Hersteller", "Landmaschinen Hersteller"],
+      pl: ["producent maszyn", "producent maszyn rolniczych"],
+      ro: ["producator de masini", "producator de utilaje agricole"],
+    },
+  },
+  {
+    key: "foundry",
+    label: "Foundries and smelters buying ore and scrap",
+    weight: 0.8,
+    keywords: ["foundry", "ferroalloy producer"],
+    keywordsByLocale: {
+      en: ["foundry", "ferroalloy producer"],
+      es: ["fundicion de hierro", "productor de ferroaleaciones"],
+      pt: ["fundicao de ferro", "produtor de ferroligas"],
+      ru: ["литейный завод", "производитель ферросплавов"],
+      tr: ["dokumhane", "ferroalyaj uretici"],
+      ar: ["مسبك حديد", "منتج الحديد السبائكي"],
+      it: ["fonderia di ghisa", "produttore ferroleghe"],
+      de: ["Eisengiesserei", "Ferrolegierungen Hersteller"],
+      pl: ["odlewnia zeliwa", "producent zelazostopow"],
+      ro: ["turnatorie de fonta", "producator feroaliaje"],
+    },
+  },
+];
+
+export const MANEKS_CORRIDOR_PROFILE: LeadGenProfile = {
+  ...MANEKS_PROFILE,
+  slug: "maneks-corridor",
+  segments: MANEKS_CORRIDOR_SEGMENTS,
+  regions: MANEKS_CORRIDOR_REGIONS,
+  directorySeeds: [],
+  queryLocales: ["en"],
 };

@@ -10879,6 +10879,22 @@ Verification caveat:
   Cyrillic, Arabic, and CJK data is not discarded as an empty key.
 - HTML directory provenance uses one page-level row counter across all tables,
   so persisted row references remain unique and ordered.
+- Added corridor-plan and corridor-harvest CLI commands for deterministic
+  profile planning and browser-collected JSONL SERP harvesting without live
+  search calls.
+
+## 2026-08-26: International phone extraction and corridor batch result
+
+- Phone extraction preserves explicit international country codes, supports
+  Turkish local numbers only when the caller supplies the Turkish default, and
+  leaves other local numbers without a guessed country code. Invalid-length
+  digit runs are rejected.
+- The first corridor batch processed 124 browser-collected DuckDuckGo queries,
+  1,902 SERP rows, and 874 full-plan offsets, producing 204,913 raw candidate
+  rows across 580 source documents. Gating on a valid public suffix, plausible
+  company name, and non-reject fit tier loaded 437 rows to the Maneks
+  prospects list. Phones were withheld because the previous extractor stamped
+  every number as Turkish.
 
 ## 2026-08-25: Admin mail log
 

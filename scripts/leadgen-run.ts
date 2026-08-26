@@ -1,12 +1,13 @@
 import "dotenv/config";
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MANEKS_PROFILE } from "../src/lib/leadgen/profile";
-import { buildQueryPlan } from "../src/lib/leadgen/query-plan";
-import { dedupeByDomain, parseSearchResults, searchUrl, type SearchEngine, type SearchHit } from "../src/lib/leadgen/search";
+import { MANEKS_CORRIDOR_PROFILE, MANEKS_PROFILE } from "../src/lib/leadgen/profile";
+import { buildQueryPlan, type LeadGenQueryShape } from "../src/lib/leadgen/query-plan";
+import { dedupeByDomain, parseSearchResults, searchUrl, selectSearchProvider, type SearchEngine, type SearchHit } from "../src/lib/leadgen/search";
 import { defaultFetcher, extractDirectoryTargets, harvestSite, type LeadCandidate } from "../src/lib/leadgen/harvest";
 import { verifyEmails, type EmailVerification } from "../src/lib/leadgen/verify";
+import { runProspectingBatch, type ProspectingBatchCandidate } from "../src/lib/leadgen/run";
 
 // Lead generation pipeline runner.
 //
@@ -19,6 +20,8 @@ import { verifyEmails, type EmailVerification } from "../src/lib/leadgen/verify"
 //
 // Example:
 //   npx tsx scripts/leadgen-run.ts plan --limit 400 --out .leadgen/queries.txt
+//   npx tsx scripts/leadgen-run.ts corridor-plan --out .leadgen/corridor-queries.txt
+//   npx tsx scripts/leadgen-run.ts corridor-harvest --jsonl .leadgen/serps.jsonl
 //   npx tsx scripts/leadgen-run.ts harvest --urls .leadgen/urls.txt --out .leadgen/candidates.jsonl
 //   npx tsx scripts/leadgen-run.ts verify --in .leadgen/candidates.jsonl --out .leadgen/verified.jsonl
 //   npx tsx scripts/leadgen-run.ts load --in .leadgen/verified.jsonl --office-id <id>
@@ -77,6 +80,95 @@ async function commandPlan(args: Args) {
   await ensureDir(out);
   await writeFile(out, plan.map((entry) => entry.query).join("\n"), "utf8");
   console.log(`queries=${plan.length} out=${out}`);
+}
+
+function shapeArgs(args: Args): LeadGenQueryShape[] | undefined {
+  const value = args.shapes;
+  if (typeof value !== "string") return undefined;
+  return value.split(",").map((shape) => shape.trim()).filter(Boolean) as LeadGenQueryShape[];
+}
+
+async function commandCorridorPlan(args: Args) {
+  const out = stringArg(args, "out", ".leadgen/corridor-queries.txt");
+  const plan = buildQueryPlan(MANEKS_CORRIDOR_PROFILE, {
+    limit: numberArg(args, "limit", 0),
+    maxRegionsPerSegment: numberArg(args, "regions", MANEKS_CORRIDOR_PROFILE.regions.length),
+    shapes: shapeArgs(args),
+  });
+  await ensureDir(out);
+  await writeFile(out, plan.map((entry) => entry.query).join("\n"), "utf8");
+  await writeFile(`${out}.jsonl`, plan.map((entry) => JSON.stringify(entry)).join("\n"), "utf8");
+  const byLocale = Object.fromEntries(
+    [...new Set(plan.map((entry) => entry.locale))].map((locale) => [locale, plan.filter((entry) => entry.locale === locale).length]),
+  );
+  const byShape = Object.fromEntries(
+    [...new Set(plan.map((entry) => entry.shape))].map((shape) => [shape, plan.filter((entry) => entry.shape === shape).length]),
+  );
+  console.log(JSON.stringify({ queries: plan.length, byLocale, byShape, out, jsonl: `${out}.jsonl` }, null, 2));
+}
+
+function corridorCandidateRecord(record: ProspectingBatchCandidate) {
+  const { candidate, directoryRow } = record;
+  return {
+    companyName: candidate.companyName,
+    domain: candidate.domain || null,
+    emails: candidate.emails,
+    phones: candidate.phones,
+    city: candidate.city,
+    region: record.region,
+    segmentKey: candidate.segmentKey,
+    fitScore: candidate.fit.score,
+    fitTier: candidate.fit.tier,
+    evidenceUrls: candidate.evidence.map((item) => item.url),
+    discoveredVia: candidate.discoveredVia,
+    ...(directoryRow ? {
+      directoryRow: {
+        sourceUrl: directoryRow.sourceUrl,
+        rowIndex: directoryRow.rowIndex,
+        rawLine: directoryRow.rawLine,
+        needsResolution: directoryRow.needsResolution,
+      },
+    } : {}),
+    verifications: record.verifications,
+  };
+}
+
+async function commandCorridorHarvest(args: Args) {
+  const jsonlPath = stringArg(args, "jsonl");
+  const out = stringArg(args, "out", ".leadgen/corridor-rows.jsonl");
+  await ensureDir(out);
+  const provider = selectSearchProvider({ providerName: "jsonl", jsonlPath });
+  const result = await runProspectingBatch({
+    profile: MANEKS_CORRIDOR_PROFILE,
+    queryOffset: numberArg(args, "query-offset", 0),
+    maxQueries: numberArg(args, "max-queries", 24),
+    maxPages: numberArg(args, "max-pages", 60),
+    budgetMs: numberArg(args, "budget-ms", 240_000),
+    maxDirectoryRowsPerDocument: numberArg(args, "max-rows-per-doc", 500),
+    search: async (query) => ({
+      hits: await provider.search(query.query),
+      pagesFetched: 0,
+    }),
+    fetchPage: defaultFetcher,
+  });
+  const lines = result.candidates.map((record) => `${JSON.stringify(corridorCandidateRecord(record))}\n`).join("");
+  await appendFile(out, lines, "utf8");
+  const domains = new Set(result.candidates.map(({ candidate }) => candidate.domain).filter(Boolean));
+  const sourceDocuments = new Set(
+    result.candidates.flatMap(({ directoryRow }) => directoryRow ? [directoryRow.sourceUrl] : []),
+  );
+  const documentRows = result.candidates.filter((record) => record.directoryRow).length;
+  console.log(JSON.stringify({
+    stats: result.stats,
+    rowCount: result.candidates.length,
+    distinctDomains: domains.size,
+    distinctSourceDocuments: sourceDocuments.size,
+    documentRows,
+    singleCompanyRows: result.candidates.length - documentRows,
+    nextQueryOffset: result.nextQueryOffset,
+    exhausted: result.exhausted,
+    out,
+  }, null, 2));
 }
 
 async function commandSearch(args: Args) {
@@ -200,12 +292,14 @@ async function commandLoad(args: Args) {
 async function main() {
   const { command, args } = parseArgs(process.argv.slice(2));
   if (command === "plan") return commandPlan(args);
+  if (command === "corridor-plan") return commandCorridorPlan(args);
+  if (command === "corridor-harvest") return commandCorridorHarvest(args);
   if (command === "search") return commandSearch(args);
   if (command === "directory") return commandDirectory(args);
   if (command === "harvest") return commandHarvest(args);
   if (command === "verify") return commandVerify(args);
   if (command === "load") return commandLoad(args);
-  console.log("commands: plan | search | directory | harvest | verify | load");
+  console.log("commands: plan | corridor-plan | corridor-harvest | search | directory | harvest | verify | load");
 }
 
 main().catch((error) => {

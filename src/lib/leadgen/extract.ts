@@ -4,7 +4,8 @@
 export const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}/g;
 const OBFUSCATED_EMAIL_PATTERN =
   /([A-Za-z0-9._%+-]+)\s*(?:\(at\)|\[at\]|\s+at\s+|@)\s*([A-Za-z0-9.-]+?)\s*(?:\(dot\)|\[dot\]|\s+dot\s+|\.)\s*([A-Za-z]{2,24}(?:\.[A-Za-z]{2,24})?)/gi;
-export const PHONE_PATTERN = /(?:\+90|0090|0)?[\s(.-]*([2-5]\d{2})[\s).-]*(\d{3})[\s.-]*(\d{2})[\s.-]*(\d{2})/g;
+export const PHONE_PATTERN =
+  /(?<!\d)(?:(?:\+\d{1,3}|00\d{1,3})(?=[\s().-])[\s().-]*(?:\d[\s().-]*){7,14}|0?[2-5]\d{2}(?:[\s().-]*\d){7})(?!\d|[\s().-]*\d)/g;
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|ico|css|js|woff2?)$/i;
 const ROLE_LOCAL_PARTS = new Set([
@@ -106,10 +107,41 @@ export function extractEmails(text: string) {
   return [...found];
 }
 
-export function extractPhones(text: string) {
+function normalizePhoneMatch(raw: string, defaultCountryCode?: string) {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) return null;
+
+  const internationalPrefix = /^(?:\+|00)(\d{1,3})(?=[\s().-])/.exec(raw);
+  const groups = (internationalPrefix ? raw.slice(internationalPrefix[0].length) : raw)
+    .split(/[\s().-]+/)
+    .map((group) => group.replace(/\D/g, ""))
+    .filter(Boolean);
+  if (!groups.length) return null;
+
+  if (internationalPrefix) {
+    const countryCode = internationalPrefix[1]!;
+    const restDigits = groups.join("");
+    if (restDigits.length < 7 || countryCode.length + restDigits.length > 15) return null;
+    return `+${countryCode} ${groups.join(" ")}`;
+  }
+
+  if (raw.startsWith("0") && defaultCountryCode) {
+    const countryCode = defaultCountryCode.replace(/\D/g, "");
+    if (!countryCode) return null;
+    groups[0] = groups[0]!.replace(/^0/, "");
+    const restDigits = groups.join("");
+    if (restDigits.length < 7 || countryCode.length + restDigits.length > 15) return null;
+    return `+${countryCode} ${groups.join(" ")}`;
+  }
+
+  return groups.join(" ");
+}
+
+export function extractPhones(text: string, defaultCountryCode?: string) {
   const found = new Set<string>();
   for (const match of text.matchAll(PHONE_PATTERN)) {
-    found.add(`+90 ${match[1]} ${match[2]} ${match[3]} ${match[4]}`);
+    const normalized = normalizePhoneMatch(match[0], defaultCountryCode);
+    if (normalized) found.add(normalized);
   }
   return [...found];
 }

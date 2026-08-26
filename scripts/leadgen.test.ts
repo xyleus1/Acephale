@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { buildQueryPlan } from "../src/lib/leadgen/query-plan";
-import { MANEKS_PROFILE } from "../src/lib/leadgen/profile";
+import { MANEKS_CORRIDOR_PROFILE, MANEKS_PROFILE } from "../src/lib/leadgen/profile";
 import {
   createSerperSearchProvider,
   dedupeByDomain,
@@ -51,6 +51,34 @@ assert.ok(
   scoped.every((entry) => entry.region === null || ["Istanbul", "Kocaeli"].includes(entry.region)),
   "region cap must hold",
 );
+const corridorPlan = buildQueryPlan(MANEKS_CORRIDOR_PROFILE, {
+  segmentKeys: ["steel_service_center"],
+  shapes: ["member_list"],
+});
+assert.ok(
+  corridorPlan.some((entry) =>
+    entry.region === "Venezuela"
+      && entry.locale === "es"
+      && entry.query.includes("centro de servicio de acero")
+      && entry.query.includes("lista de miembros"),
+  ),
+  "Venezuela corridor queries must use Spanish segment and directory keywords",
+);
+assert.ok(
+  corridorPlan.some((entry) =>
+    entry.region === "Russia"
+      && entry.locale === "ru"
+      && entry.query.includes("металлосервисный центр")
+      && entry.query.includes("список участников"),
+  ),
+  "Russia corridor queries must use Cyrillic segment and directory keywords",
+);
+const legacyKeywordPlan = buildQueryPlan({
+  ...MANEKS_CORRIDOR_PROFILE,
+  regions: ["Venezuela"],
+  segments: [{ key: "legacy", label: "Legacy", keywords: ["legacy buyer"], weight: 1 }],
+}, { shapes: ["member_list"] });
+assert.ok(legacyKeywordPlan.some((entry) => entry.query.includes("legacy buyer")), "segments without localized keywords must use keywords");
 
 // Search result parsing
 
@@ -229,7 +257,13 @@ assert.deepEqual(
   ["info@ornekcelik.com.tr", "satis@ornekcelik.com.tr"],
   "plain and obfuscated addresses must both be recovered",
 );
-assert.deepEqual(extractPhones(companyText), ["+90 224 456 78 90"]);
+assert.deepEqual(extractPhones(companyText, "90"), ["+90 224 456 78 90"]);
+assert.deepEqual(extractPhones("Tel: +58 212 555 1234"), ["+58 212 555 1234"]);
+assert.equal(extractPhones("Tel: +58 212 555 1234").some((phone) => phone.includes("+90")), false);
+assert.deepEqual(extractPhones("Tel: 0212 555 12 34", "90"), ["+90 212 555 12 34"]);
+assert.deepEqual(extractPhones("Tel: 0212 555 12 34"), ["0212 555 12 34"]);
+assert.deepEqual(extractPhones("Tax ID: 12345678901234567890"), []);
+assert.deepEqual(extractPhones("Short code: 12345"), []);
 assert.equal(extractCity(companyText), "Bursa");
 assert.deepEqual(
   pickContactLinks(["https://www.ornekcelik.com.tr/iletisim", "https://www.ornekcelik.com.tr/urunler", "https://x.com/a"], "https://www.ornekcelik.com.tr"),
