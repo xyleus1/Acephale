@@ -96,6 +96,16 @@ export function setRequestContextDocuments(
   return mergeRequestContextDocuments(cleared, entries);
 }
 
+// Restating a set re-merges from empty, so a file that stays linked has to carry
+// its stored content forward rather than the current Context text.
+export function storedRequestDocumentsFirst(
+  stored: readonly RequestDocumentEntry[],
+  selected: readonly RequestDocumentEntry[],
+) {
+  const byCitation = new Map(stored.map((entry) => [entry.citation_id, entry]));
+  return selected.map((entry) => byCitation.get(entry.citation_id) ?? entry);
+}
+
 // Existing citations win over freshly assembled ones: the request states what it
 // was quoted from, and a later Context edit must not silently rewrite it.
 export function mergeRequestContextDocuments(

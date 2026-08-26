@@ -6,6 +6,7 @@ import {
   REQUEST_DOCUMENT_LINK_LIMIT,
   selectRequestDocumentsByName,
   setRequestContextDocuments,
+  storedRequestDocumentsFirst,
   type RequestDocumentEntry,
 } from "../src/lib/procurement-request-document-merge";
 import { procurementOrderIdError } from "../src/lib/procurement-order-id";
@@ -106,6 +107,20 @@ assert.deepEqual(
   ["document:ctx-1"],
 );
 assert.deepEqual(narrowed.requestContext.logistics, legacyContext.logistics);
+
+// A kept file keeps the content the request was quoted from, even when the
+// Context document was edited after the request was raised.
+const stored = requestContextDocumentEntries(linked.requestContext);
+const edited = pick.selected.map((entry) => ({ ...entry, markdown: "Component lines: 99" }));
+const preserved = storedRequestDocumentsFirst(stored, edited);
+assert.deepEqual(
+  preserved.map((entry) => entry.markdown),
+  stored.map((entry) => entry.markdown),
+);
+assert.deepEqual(
+  storedRequestDocumentsFirst([], edited).map((entry) => entry.markdown),
+  edited.map((entry) => entry.markdown),
+);
 
 assert.equal(procurementOrderIdError(""), "orderId is required.");
 assert.equal(procurementOrderIdError("not-a-uuid"), "orderId must be a sourcing request id.");

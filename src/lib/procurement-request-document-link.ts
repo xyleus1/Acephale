@@ -9,6 +9,7 @@ import {
   requestContextWorkspaceId,
   selectRequestDocumentsByName,
   setRequestContextDocuments,
+  storedRequestDocumentsFirst,
   type RequestDocumentEntry,
 } from "@/lib/procurement-request-document-merge";
 import {
@@ -124,16 +125,16 @@ export async function linkProcurementRequestDocuments(
       "conflict",
     );
   }
+  const before = requestContextDocumentEntries(request.order.requestContext);
+  const known = new Set(before.map((entry) => entry.citation_id));
   const merged = options.names
     ? setRequestContextDocuments(
       request.order.requestContext,
-      selectedDocuments(available, options.names),
+      storedRequestDocumentsFirst(before, selectedDocuments(available, options.names)),
     )
     : mergeRequestContextDocuments(request.order.requestContext, available);
   // Restating the set re-merges from empty, so net-new files are measured
   // against the request as it stood before the command.
-  const before = requestContextDocumentEntries(request.order.requestContext);
-  const known = new Set(before.map((entry) => entry.citation_id));
   const kept = new Set(merged.documents.map((entry) => entry.citation_id));
   const added = merged.documents.filter((entry) => !known.has(entry.citation_id));
   const removed = before.filter((entry) => !kept.has(entry.citation_id));
