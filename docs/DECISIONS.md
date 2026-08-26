@@ -4348,6 +4348,19 @@ Use this log for durable product and engineering decisions. Do not put every imp
   idempotency controls.
 - Consequence: The feature cannot invent quantities, dates, or specifications,
   and it cannot send on its own.
+## 2026-08-25: Leadgen search providers and directory evidence
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Lead generation keeps deterministic query planning and normalizes
+  all search providers through one host and domain filter. HTML search remains
+  the offline-safe default, Serper is opt-in through its environment key, and
+  JSONL supplies deterministic externally collected results.
+- Evidence boundary: Directory mode expands one fetched document into many rows,
+  each carrying the exact source URL and row index. It is explicit and does not
+  change existing single-company harvesting.
+- Safety boundary: Search requests use the existing egress guard, tests use
+  hand-written fixtures, and no provider key or production data is stored.
 
 ## 2026-08-25: Mailboxes are shared, mail ownership is routed
 

@@ -106,7 +106,9 @@ export type GuardedResponse = {
 };
 
 export type GuardedRequestOptions = {
+  method?: "GET" | "POST";
   headers?: Record<string, string>;
+  body?: string;
   timeoutMs?: number;
   maxBytes?: number;
   signal?: AbortSignal;
@@ -175,8 +177,12 @@ export function guardedRequest(
     const request = transport.request(
       url,
       {
-        method: "GET",
-        headers: { "accept-encoding": "gzip, deflate, br", ...options.headers },
+        method: options.method ?? "GET",
+        headers: {
+          "accept-encoding": "gzip, deflate, br",
+          ...(options.body ? { "content-length": String(Buffer.byteLength(options.body)) } : {}),
+          ...options.headers,
+        },
         lookup: guardedLookup,
         timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
         signal: options.signal,
@@ -212,6 +218,6 @@ export function guardedRequest(
     );
     request.on("timeout", () => request.destroy(new Error("Request timed out.")));
     request.on("error", reject);
-    request.end();
+    request.end(options.body);
   });
 }

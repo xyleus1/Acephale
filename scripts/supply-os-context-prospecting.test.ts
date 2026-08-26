@@ -13,6 +13,7 @@ import type { FetchedPage } from "../src/lib/leadgen/harvest";
 import {
   createCompanyContextProspectingActions,
   dismissCompanyContextProspectingAction,
+  groupProspectingResearchRows,
   listCompanyContextProspectingActions,
   runCompanyContextProspectingAction,
 } from "../src/lib/supply-os/context-prospecting";
@@ -33,6 +34,13 @@ assert.deepEqual(profile.regions, draft.regions);
 assert.equal(profile.offering, draft.productFocus);
 assert.ok(profile.positiveSignals.includes("steel"));
 assert.equal(profile.customerName, "Prospecting");
+const sharedDedupeRows = groupProspectingResearchRows([
+  { row: { company_name: "Alpha Steel", domain: "alpha.example" }, dedupeField: "domain" },
+  { row: { company_name: "Beta Steel", domain: "beta.example" }, dedupeField: "domain" },
+  { row: { company_name: "Gamma Steel", domain: "gamma.example" }, dedupeField: "domain" },
+]);
+assert.equal(sharedDedupeRows.size, 1, "directory rows sharing a dedupe field use one upsert group");
+assert.equal(sharedDedupeRows.get("domain")?.length, 3);
 assert.equal(profile.segments[0]?.label, "steel fabricators");
 const regionPlan = buildQueryPlan(profile, { segmentKeys: [profile.segments[0]!.key] });
 assert.ok(regionPlan.some((query) => query.region === "Venezuela" && query.query.includes("company contact email")));
@@ -251,6 +259,60 @@ async function main() {
     });
     assert.equal(list?.records.length, 1);
     assert.equal(list?.records[0]?.data && (list.records[0].data as Record<string, unknown>).country, "Venezuela");
+    const directoryAction = (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: { ...lifecycleDraft, listSlug: `${lifecycleDraft.listSlug}-directory` }, citations: [] }],
+      requestMessageId: "message:directory",
+      requestBody: "Find chamber members.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const directoryCandidate = {
+      candidate: {
+        ...candidate.candidate,
+        companyName: "Names Only Steel",
+        domain: "",
+        website: "https://chamber.example/members.pdf",
+        city: "Ankara",
+        emails: [],
+        phones: [],
+      },
+      directoryRow: {
+        companyName: "Names Only Steel",
+        domain: null,
+        emails: [],
+        phones: [],
+        city: "Ankara",
+        rawLine: "12 12 Names Only Steel Ankara",
+        sourceUrl: "https://chamber.example/members.pdf",
+        rowIndex: 12,
+        needsResolution: true,
+      },
+      verifications: [],
+      region: "Turkey",
+    } satisfies ProspectingBatchCandidate;
+    const directoryCompleted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: directoryAction.id,
+      runBatch: async () => ({
+        candidates: [directoryCandidate],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
+        nextQueryOffset: 1,
+        exhausted: true,
+      }),
+    });
+    assert.equal(directoryCompleted.stats.rowsCreated, 1);
+    const directoryList = await prisma.researchList.findFirst({
+      where: { officeId: office.id, slug: `${lifecycleDraft.listSlug}-directory` },
+      include: { records: true },
+    });
+    const directoryData = directoryList?.records[0]?.data as Record<string, unknown> | undefined;
+    assert.equal(directoryList?.records.length, 1);
+    assert.equal(directoryData?.email, null);
+    assert.equal(directoryData?.email_verdict, "unknown");
+    assert.match(String(directoryData?.buys), /row 12/);
+    assert.match(String(directoryData?.buys), /needsResolution=true/);
     await prisma.researchRecord.update({
       where: { id: list!.records[0]!.id },
       data: { status: "rejected" },

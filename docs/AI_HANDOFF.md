@@ -197,6 +197,22 @@
   record count, falling back to the first list only when all lists are empty.
 - Office scoping and deep-link behavior remain unchanged.
 
+## 2026-08-25: Locale-aware document lead generation
+
+- Lead generation query plans now carry an explicit locale, use deterministic
+  country-to-locale tables, and include document-hunting shapes for PDF,
+  spreadsheet, office, exhibitor, and association directories.
+- Search normalization is shared by guarded HTML, Serper, and offline JSONL
+  providers. Serper is inert unless `SERPER_API_KEY` is present.
+- Directory mode parses one fetched PDF, HTML table, or delimited document into
+  many deduplicated, provenance-preserving rows, including names-only entries
+  marked `needsResolution`. Sparse PDF marketing material is classified out.
+  Existing harvest callers keep the single-company behavior unless they opt
+  into `directoryMode`.
+- Fixture-only leadgen coverage covers Turkish compatibility, Venezuela
+  Spanish and English queries, Serper filtering, and PDF, HTML, and semicolon
+  directory parsing. No live network or production data was used.
+
 ## 2026-08-25: Remove the header Office selector
 
 - Removed the global Office selector from the Supply OS header.
@@ -10844,6 +10860,25 @@ Verification caveat:
 - Runs are bounded and resumable. Their cumulative query, page, candidate, and
   row counters remain on the Context action, and no canonical CRM or outreach
   record is created.
+
+## 2026-08-25: Leadgen document expansion
+
+- Document search hits retain their full URLs, deduplicate independently from
+  company-domain hits, and are fetched in explicit directory mode.
+- Directory documents expand into bounded, provenance-preserving research rows.
+  Names-only rows are retained for later resolution, while email verification
+  runs only for rows that contain an email.
+- Directory rows use the existing office-scoped research list fields and carry
+  the source query, document URL, row number, and resolution status in the row
+  data. Non-directory pages containing layout tables still use normal harvest.
+- Persistence groups rows by dedupe field and chunks each group at the research
+  import limit, avoiding one database call per distinct email or domain.
+- PDF contact cleanup removes the original email and phone spans, while
+  directory expansion stops at its deadline after retaining completed rows.
+- Directory dedupe and header normalization use Unicode property classes so
+  Cyrillic, Arabic, and CJK data is not discarded as an empty key.
+- HTML directory provenance uses one page-level row counter across all tables,
+  so persisted row references remain unique and ordered.
 
 ## 2026-08-25: Admin mail log
 

@@ -11,6 +11,7 @@ import {
 import {
   createResearchList,
   listResearchLists,
+  RESEARCH_MAX_ROWS,
   slugify,
   upsertResearchRecords,
   type ResearchInputRow,
@@ -249,7 +250,7 @@ async function ensureResearchList(officeId: string, draft: ProspectingDraft) {
 }
 
 function candidateRows(records: readonly ProspectingBatchCandidate[]) {
-  return records.map(({ candidate, verifications, region }) => {
+  return records.filter((record) => !record.directoryRow).map(({ candidate, verifications, region }) => {
     const verification = verifications[0] ?? null;
     const email = candidate.emails[0] ?? null;
     const evidenceUrls = candidate.evidence.map((item) => item.url).slice(0, 8).join("\n");
@@ -274,23 +275,65 @@ function candidateRows(records: readonly ProspectingBatchCandidate[]) {
   });
 }
 
+export type ProspectingResearchRow = {
+  row: ResearchInputRow;
+  dedupeField: string;
+};
+
+function directoryInputRows(records: readonly ProspectingBatchCandidate[]): ProspectingResearchRow[] {
+  return records.flatMap(({ candidate, directoryRow, verifications, region }) => {
+    if (!directoryRow) return [];
+    const email = directoryRow.emails[0] ?? null;
+    const domain = directoryRow.domain;
+    const rawLine = directoryRow.rawLine.slice(0, 300);
+    const row: ResearchInputRow = {
+      company_name: directoryRow.companyName,
+      website: domain ? `https://${domain}` : null,
+      domain,
+      country: region,
+      city: directoryRow.city,
+      segment: candidate.segmentKey,
+      buys: `Directory row ${directoryRow.rowIndex}; needsResolution=${directoryRow.needsResolution}; ${rawLine}`,
+      contact_name: null,
+      contact_title: null,
+      email,
+      phone: directoryRow.phones[0] ?? null,
+      fit_score: candidate.fit.score,
+      email_verdict: verifications[0]?.verdict ?? "unknown",
+      evidence_urls: directoryRow.sourceUrl,
+      source_query: candidate.discoveredVia,
+    };
+    return [{
+      row,
+      dedupeField: email ? "email" : domain ? "domain" : "company_name",
+    }];
+  });
+}
+
+export function groupProspectingResearchRows(items: readonly ProspectingResearchRow[]) {
+  const groups = new Map<string, ResearchInputRow[]>();
+  for (const item of items) {
+    const rows = groups.get(item.dedupeField) ?? [];
+    rows.push(item.row);
+    groups.set(item.dedupeField, rows);
+  }
+  return groups;
+}
+
 async function persistCandidates(officeId: string, draft: ProspectingDraft, records: readonly ProspectingBatchCandidate[]) {
   await ensureResearchList(officeId, draft);
-  const groups = new Map<string, ResearchInputRow[]>();
-  for (const { row, dedupeField } of candidateRows(records)) {
-    const rows = groups.get(dedupeField) ?? [];
-    rows.push(row);
-    groups.set(dedupeField, rows);
-  }
+  const groups = groupProspectingResearchRows([...candidateRows(records), ...directoryInputRows(records)]);
   let created = 0;
   let updated = 0;
-  for (const [dedupeField, rows] of groups) {
-    const result = await upsertResearchRecords(officeId, draft.listSlug, rows, {
-      dedupeField,
-      resetStatus: false,
-    });
-    created += result.created;
-    updated += result.updated;
+  for (const [field, rows] of groups) {
+    for (let index = 0; index < rows.length; index += RESEARCH_MAX_ROWS) {
+      const result = await upsertResearchRecords(officeId, draft.listSlug, rows.slice(index, index + RESEARCH_MAX_ROWS), {
+        dedupeField: field,
+        resetStatus: false,
+      });
+      created += result.created;
+      updated += result.updated;
+    }
   }
   return { created, updated };
 }

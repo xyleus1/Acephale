@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { buildQueryPlan } from "../src/lib/leadgen/query-plan";
 import { MANEKS_PROFILE } from "../src/lib/leadgen/profile";
-import { dedupeByDomain, parseSearchResults } from "../src/lib/leadgen/search";
+import {
+  createSerperSearchProvider,
+  dedupeByDomain,
+  parseJsonlResults,
+  parseSearchResults,
+  parseSerperResults,
+} from "../src/lib/leadgen/search";
+import { parseDirectoryDocument } from "../src/lib/leadgen/directory";
 import {
   extractCity,
   extractCompanyName,
@@ -15,6 +22,7 @@ import {
 import { scoreLead } from "../src/lib/leadgen/score";
 import { verifyEmail } from "../src/lib/leadgen/verify";
 import { extractDirectoryTargets, harvestSite, scoreEmailUsefulness, type FetchedPage } from "../src/lib/leadgen/harvest";
+import { runProspectingBatch } from "../src/lib/leadgen/run";
 import { checkPublicUrl, guardedRequest, isPrivateAddress } from "../src/lib/leadgen/fetch-guard";
 import { createServer } from "node:http";
 
@@ -24,6 +32,18 @@ const plan = buildQueryPlan(MANEKS_PROFILE, { limit: 50 });
 assert.equal(plan.length, 50, "the plan must respect the limit");
 assert.equal(new Set(plan.map((entry) => entry.query)).size, 50, "queries must be unique");
 assert.ok(plan.some((entry) => entry.shape === "pdf_directory"), "pdf directories must be part of the sweep");
+assert.ok(plan.some((entry) => entry.shape === "doc_pdf_directory"), "document PDF directories must be part of the sweep");
+assert.ok(plan.some((entry) => entry.locale === "tr"), "the Maneks smoke plan keeps Turkish locale queries");
+const internationalPlan = buildQueryPlan(
+  { ...MANEKS_PROFILE, regions: ["Venezuela"], sitePatterns: ["org", "com.ve"] },
+  { limit: 200 },
+);
+assert.ok(internationalPlan.some((entry) => entry.region === "Venezuela" && entry.locale === "es"), "Venezuela must use Spanish queries");
+assert.ok(internationalPlan.some((entry) => entry.region === "Venezuela" && entry.locale === "en"), "international fallback must accompany Spanish queries");
+const brazilPlan = buildQueryPlan({ ...MANEKS_PROFILE, regions: ["Brazil"] }, { segmentKeys: [MANEKS_PROFILE.segments[0]!.key] });
+assert.ok(brazilPlan.some((entry) => entry.locale === "pt" && entry.query.includes("lista de membros")), "Brazil must use Portuguese directory queries");
+assert.ok(internationalPlan.some((entry) => entry.shape === "exhibitor_list" && entry.query.includes("filetype:pdf")), "exhibitor searches must hunt documents");
+assert.equal(buildQueryPlan(MANEKS_PROFILE, { limit: 30 }).map((entry) => entry.id).join("|"), buildQueryPlan(MANEKS_PROFILE, { limit: 30 }).map((entry) => entry.id).join("|"), "query ids must be stable");
 
 const scoped = buildQueryPlan(MANEKS_PROFILE, { segmentKeys: ["fabricator"], maxRegionsPerSegment: 2 });
 assert.ok(scoped.every((entry) => entry.segmentKey === "fabricator"), "segment filter must hold");
@@ -52,6 +72,25 @@ assert.equal(dedupeByDomain(braveHits).length, 2, "hits collapse to one entry pe
 const ddgHtml = `<a href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.dokumsan.com.tr%2Firtibat&rut=x">Dokumsan</a>`;
 assert.equal(parseSearchResults(ddgHtml, "duckduckgo")[0]?.domain, "dokumsan.com.tr", "redirects must be unwrapped");
 
+const serperFixture = {
+  organic: [
+    { link: "https://www.linkedin.com/company/noise", title: "noise", position: 1 },
+    { link: "https://www.buyer-two.com/contact", title: "Buyer Two", position: 4 },
+    { link: "https://www.buyer-one.com", title: "Buyer One", position: 2 },
+  ],
+};
+const serperHits = parseSerperResults(serperFixture);
+assert.deepEqual(serperHits.map((hit) => [hit.domain, hit.rank]), [["buyer-one.com", 2], ["buyer-two.com", 4]], "Serper parsing must filter non-lead hosts and retain rank order");
+const serperWithoutKey = createSerperSearchProvider("");
+assert.deepEqual(
+  parseJsonlResults(
+    '{"query":"steel buyers","url":"https://buyer-b.example","rank":3}\n{"query":"steel buyers","url":"https://www.linkedin.com/company/noise","rank":1}\n',
+    "steel buyers",
+  ).map((hit) => [hit.domain, hit.rank]),
+  [["buyer-b.example", 3]],
+  "JSONL results must use the shared lead-host filter",
+);
+
 const boundaryHtml = `
   <a href="https://www.teknomax.com/iletisim">Teknomax</a>
   <a href="https://x.com/teknomax">X profile</a>
@@ -62,6 +101,105 @@ assert.deepEqual(
   ["teknomax.com"],
   "blocked hosts must match on label boundaries, not raw substrings",
 );
+
+const directoryPdf: FetchedPage = {
+  url: "https://chamber.example/members.pdf",
+  status: 200,
+  contentType: "application/pdf",
+  body: [
+    "Chamber Member Directory",
+    "Chamber Member Directory",
+    "Chamber Member Directory",
+    "ALPHA STEEL GmbH | info@alpha-steel.de | https://alpha-steel.de | Berlin",
+    "BETA METAL INDUSTRIES | sales@beta-metal.ru | https://beta-metal.ru | Moscow",
+    "Footer 2026",
+    "Footer 2026",
+    "Footer 2026",
+  ].join("\n"),
+  isPdf: true,
+};
+const parsedPdf = parseDirectoryDocument(directoryPdf, { regions: ["Berlin", "Moscow"] });
+assert.equal(parsedPdf.kind, "pdf");
+assert.equal(parsedPdf.rows.length, 2, "PDF-like member lists must emit one row per company");
+assert.equal(parsedPdf.rows[0]?.domain, "alpha-steel.de");
+assert.equal(parsedPdf.rows[1]?.sourceUrl, directoryPdf.url);
+assert.equal(parsedPdf.rows[0]?.rowIndex, 4);
+assert.equal(parsedPdf.skipped, 6, "repeating headers, footer, and non-record lines must count as skipped");
+
+const namesOnlyPdf: FetchedPage = {
+  ...directoryPdf,
+  url: "https://chamber.example/names.pdf",
+  body: "1 1 Altra Steel Ankara\n2 2 Canam Group Inc. Moscow\n3 3 12345\n",
+};
+const parsedNamesOnly = parseDirectoryDocument(namesOnlyPdf, { regions: ["Ankara", "Moscow"] });
+assert.equal(parsedNamesOnly.rows.length, 2, "names-only directory rows need no contact datum");
+assert.equal(parsedNamesOnly.rows[0]?.needsResolution, true);
+assert.equal(parsedNamesOnly.rows[0]?.companyName, "Altra Steel");
+const cyrillicNames = parseDirectoryDocument({
+  ...namesOnlyPdf,
+  url: "https://chamber.example/russian-members.pdf",
+  body: "ООО Северный Металл\nЗАО РусСталь\nУрал стали\n",
+});
+assert.equal(cyrillicNames.looksLikeDirectory, true);
+assert.equal(cyrillicNames.rows.length, 3, "distinct domainless Cyrillic names must survive deduplication");
+const multipleEmails = parseDirectoryDocument({
+  ...namesOnlyPdf,
+  url: "https://chamber.example/multiple-emails.pdf",
+  body: "4 4 Baltic Steel GmbH First@Baltic-Steel.de second@baltic-steel.de +90 (224) 456-7890 Berlin\n5 5 Delta Steel GmbH info@delta-steel.de Madrid\n",
+}, { regions: ["Berlin"] });
+assert.equal(multipleEmails.rows[0]?.companyName, "Baltic Steel GmbH");
+assert.equal(multipleEmails.rows[0]?.emails.length, 2, "each inline email must be removed from the company name");
+assert.doesNotMatch(multipleEmails.rows[0]?.companyName ?? "", /@/);
+assert.doesNotMatch(multipleEmails.rows[0]?.companyName ?? "", /224|456|7890/);
+assert.equal(extractCity("Buyer Buenos Aires (CABA)", ["Buenos Aires (CABA)"]), "Buenos Aires (CABA)");
+
+const brochure = parseDirectoryDocument({
+  ...directoryPdf,
+  url: "https://publisher.example/catalog.pdf",
+  body: Array.from({ length: 98 }, (_, index) => `Global Iron Steel market overview ${index + 1}`).join("\n"),
+});
+assert.equal(brochure.looksLikeDirectory, false, "sparse marketing brochures must be classified as non-directories");
+assert.equal(brochure.rows.length, 0);
+
+const directoryHtml: FetchedPage = {
+  url: "https://association.example/members",
+  status: 200,
+  contentType: "text/html",
+  body: `<table><tr><th>Компания</th><th>Почта</th><th>Телефон</th><th>Город</th><th>Сайт</th></tr><tr><td>Baltic Metal GmbH</td><td>info@baltic-metal.de</td><td>+90 212 555 12 12</td><td>Berlin</td><td>https://baltic-metal.de</td></tr><tr><td>Volga Steel OOO</td><td>sales@volga-steel.ru</td><td>+90 212 555 12 13</td><td>Moscow</td><td>https://volga-steel.ru</td></tr></table>`,
+  isPdf: false,
+};
+const parsedHtml = parseDirectoryDocument(directoryHtml, { regions: ["Berlin"] });
+assert.equal(parsedHtml.kind, "html_table");
+assert.equal(parsedHtml.rows[0]?.companyName, "Baltic Metal GmbH");
+assert.equal(parsedHtml.rows[0]?.emails[0], "info@baltic-metal.de");
+const multipleTables = parseDirectoryDocument({
+  ...directoryHtml,
+  url: "https://association.example/multiple-tables",
+  body: "<table><tr><th>Компания</th></tr><tr><td>Северный Металл</td></tr></table><table><tr><th>Компания</th></tr><tr><td>Урал стали</td></tr></table>",
+});
+assert.equal(multipleTables.looksLikeDirectory, true);
+assert.deepEqual(multipleTables.rows.map((row) => row.rowIndex), [1, 2], "HTML row provenance must be monotonic across tables");
+
+const directoryCsv: FetchedPage = {
+  url: "https://association.example/members.csv",
+  status: 200,
+  contentType: "text/csv",
+  body: "Empresa;Correo;Ciudad;Website\nDelta Steel Ltd;hello@delta-steel.es;Madrid;https://delta-steel.es\nAcero Norte SRL;ventas@acero-norte.es;Bilbao;https://acero-norte.es\n",
+  isPdf: false,
+};
+const parsedCsv = parseDirectoryDocument(directoryCsv);
+assert.equal(parsedCsv.kind, "delimited");
+assert.equal(parsedCsv.rows.length, 2);
+assert.equal(parsedCsv.rows[0]?.domain, "delta-steel.es");
+const plainDirectory = parseDirectoryDocument({
+  url: "https://association.example/plain.txt",
+  status: 200,
+  contentType: "text/plain",
+  body: "Altra Steel Ankara\nCanam Group Inc. Moscow\n",
+  isPdf: false,
+}, { regions: ["Ankara", "Moscow"] });
+assert.equal(plainDirectory.kind, "delimited");
+assert.equal(plainDirectory.rows.length, 2, "plain-text directory documents must expand into rows");
 
 // Extraction
 
@@ -125,6 +263,8 @@ assert.equal(badFit.tier, "reject", "off-profile pages must be rejected");
 async function main() {
 // Verification
 
+assert.deepEqual(await serperWithoutKey.search("offline fixture"), [], "Serper without a key must be a no-op");
+
 const withMx = await verifyEmail("satis@ornekcelik.com.tr", {
   companyDomain: "ornekcelik.com.tr",
   resolveMx: async () => [{ exchange: "mail.ornekcelik.com.tr", priority: 10 }],
@@ -172,6 +312,83 @@ assert.equal(harvested?.city, "Bursa");
 assert.ok(harvested?.emails.includes("ihracat@ornekcelik.com.tr"), "contact pages must be crawled");
 assert.equal(harvested?.evidence.length, 2, "every fetched page must stay in the evidence trail");
 assert.equal(harvested?.fit.tier, "A");
+
+const tableHomepage = await harvestSite(MANEKS_PROFILE, "https://table-homepage.example", {
+  directoryMode: true,
+  fetcher: async () => ({
+    url: "https://table-homepage.example",
+    status: 200,
+    contentType: "text/html",
+    body: "<title>Table Steel</title><table><tr><td>Menu</td><td>Value</td></tr><tr><td>Home</td><td>Welcome</td></tr></table><p>steel manufacturing</p>",
+    isPdf: false,
+  }),
+});
+assert.ok(tableHomepage && !Array.isArray(tableHomepage), "layout tables must fall through to single-company harvest");
+if (!tableHomepage || Array.isArray(tableHomepage)) throw new Error("layout table was treated as a directory");
+assert.equal(tableHomepage.companyName, "Table Steel");
+
+const directoryHarvested = await harvestSite(MANEKS_PROFILE, directoryPdf.url, {
+  directoryMode: true,
+  fetcher: async () => directoryPdf,
+});
+assert.equal(directoryHarvested?.length, 2, "directory mode must return many rows without changing default harvest");
+
+const documentUrls: string[] = [];
+let directoryMxCalls = 0;
+const documentBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 3,
+  budgetMs: 10_000,
+  search: async () => [
+    { url: "https://chamber.example/one.pdf", domain: "chamber.example", engine: "brave", rank: 1 },
+    { url: "https://chamber.example/two.pdf", domain: "chamber.example", engine: "brave", rank: 2 },
+  ],
+  fetchPage: async (url) => {
+    documentUrls.push(url);
+    return {
+      url,
+      status: 200,
+      contentType: "application/pdf",
+      body: "Alpha Steel GmbH Berlin\nBeta Steel GmbH Berlin\n",
+      isPdf: true,
+    };
+  },
+  resolveMx: async () => {
+    directoryMxCalls += 1;
+    return [];
+  },
+});
+assert.deepEqual(documentUrls, ["https://chamber.example/one.pdf", "https://chamber.example/two.pdf"]);
+assert.equal(documentBatch.stats.pagesFetched, 2);
+assert.equal(documentBatch.stats.candidatesFound, 4, "both documents on one host must expand independently");
+assert.equal(directoryMxCalls, 0, "names-only directory rows must not trigger email verification");
+
+let deadlineMxCalls = 0;
+const deadlineBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 2,
+  budgetMs: 1_000,
+  search: async () => [
+    { url: "https://chamber.example/deadline.pdf", domain: "chamber.example", engine: "brave", rank: 1 },
+  ],
+  fetchPage: async (url) => ({
+    url,
+    status: 200,
+    contentType: "application/pdf",
+    body: "Alpha Steel GmbH alpha@alpha-steel.example\nBeta Steel GmbH beta@beta-steel.example\nGamma Steel GmbH gamma@gamma-steel.example\n",
+    isPdf: true,
+  }),
+  resolveMx: async () => {
+    deadlineMxCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    return [];
+  },
+});
+assert.equal(deadlineBatch.candidates.length, 1, "directory expansion must stop after the deadline");
+assert.equal(deadlineBatch.stats.candidatesFound, 1);
+assert.equal(deadlineMxCalls, 1);
 
 assert.equal(
   await harvestSite(MANEKS_PROFILE, "https://missing.example", { fetcher: async () => null }),

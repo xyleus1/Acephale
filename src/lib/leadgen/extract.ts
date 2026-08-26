@@ -1,10 +1,10 @@
 // Pure extraction helpers. Everything here works on already fetched text so
 // the parsing rules stay unit testable without live internet.
 
-const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}/g;
+export const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}/g;
 const OBFUSCATED_EMAIL_PATTERN =
   /([A-Za-z0-9._%+-]+)\s*(?:\(at\)|\[at\]|\s+at\s+|@)\s*([A-Za-z0-9.-]+?)\s*(?:\(dot\)|\[dot\]|\s+dot\s+|\.)\s*([A-Za-z]{2,24}(?:\.[A-Za-z]{2,24})?)/gi;
-const PHONE_PATTERN = /(?:\+90|0090|0)?[\s(.-]*([2-5]\d{2})[\s).-]*(\d{3})[\s.-]*(\d{2})[\s.-]*(\d{2})/g;
+export const PHONE_PATTERN = /(?:\+90|0090|0)?[\s(.-]*([2-5]\d{2})[\s).-]*(\d{3})[\s.-]*(\d{2})[\s.-]*(\d{2})/g;
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|ico|css|js|woff2?)$/i;
 const ROLE_LOCAL_PARTS = new Set([
@@ -50,8 +50,8 @@ const TURKISH_CITIES = [
   "usak", "van", "yalova", "yozgat", "zonguldak",
 ];
 
-const COMPANY_SUFFIX_PATTERN =
-  /\b(a\.?\s?s\.?|ltd\.?\s?sti\.?|limited|sanayi|san\.?|ticaret|tic\.?|holding|group|grup|makina|makine|metal|celik|demir|dokum|insaat|muhendislik|otomotiv|industries|industry|gmbh|inc\.?|corp\.?)\b/i;
+export const COMPANY_SUFFIX_PATTERN =
+  /\b(a\.?\s?s\.?|s\.?\s*r\.?\s*l\.?|srl|spa|s\.?\s*l\.?|ltda|pvt\.?\s+ltd|jsc|pjsc|llc|ltd\.?\s?sti\.?|limited|sanayi|san\.?|ticaret|tic\.?|holding|group|grup|makina|makine|metal|celik|çelik|demir|dokum|insaat|muhendislik|otomotiv|steel|acero|aciers|стали|stahl|acciaio|industries|industry|gmbh|ooo|ооо|зао|sp\.\s*z\.\s*o\.o\.|inc\.?|corp\.?)\b/i;
 
 export function normalizeTurkish(value: string) {
   return value
@@ -114,11 +114,13 @@ export function extractPhones(text: string) {
   return [...found];
 }
 
-export function extractCity(text: string) {
+export function extractCity(text: string, regions: readonly string[] = TURKISH_CITIES) {
   const normalized = normalizeTurkish(text);
   let best: { city: string; index: number } | null = null;
-  for (const city of TURKISH_CITIES) {
-    const index = normalized.search(new RegExp(`\\b${city}\\b`));
+  for (const city of regions) {
+    const normalizedCity = normalizeTurkish(city);
+    const escapedCity = normalizedCity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const index = normalized.search(new RegExp(`(?<![\\p{L}\\p{N}_])${escapedCity}(?![\\p{L}\\p{N}_])`, "u"));
     if (index >= 0 && (best === null || index < best.index)) {
       best = { city, index };
     }

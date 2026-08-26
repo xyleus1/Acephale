@@ -17,6 +17,8 @@ export type LeadGenProfile = {
   positiveSignals: readonly string[];
   /** Terms that mark a page as the wrong side of the trade or pure noise. */
   negativeSignals: readonly string[];
+  queryLocales?: readonly import("./query-plan").QueryLocale[];
+  sitePatterns?: readonly string[];
 };
 
 export type LeadGenSegment = {

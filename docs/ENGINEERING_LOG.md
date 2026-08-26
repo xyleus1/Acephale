@@ -7680,3 +7680,59 @@ Use this file for chronological implementation notes that future agents should s
   If every list is empty, the stored selection remains valid before the
   first-list fallback.
 - Office scoping and deep-link behavior remain unchanged.
+
+### 2026-08-25 - Locale-aware document lead generation
+
+- Added deterministic locale tables and document-hunting query shapes to the
+  leadgen query planner while preserving existing shape names and plan caps.
+- Added shared-normalized HTML, Serper, and offline JSONL search providers.
+  Serper is selected only when `SERPER_API_KEY` exists and remains inert without
+  that key.
+- Added opt-in directory harvesting for PDF text, multilingual HTML tables,
+  and comma, tab, or semicolon data. Rows retain source URL and row index and
+  deduplicate by domain or normalized company name. Names-only rows are kept
+  with `needsResolution`, while sparse PDF marketing material is discarded.
+- Added offline fixtures for query locales, Serper filtering, repeated PDF
+  headers and footers, non-English table headers, and semicolon data.
+
+### 2026-08-25 - Expand document hits into research rows
+
+- Preserved full document URLs through prospecting so PDF, spreadsheet,
+  office-document, and document-shaped search results are not collapsed by
+  host-level deduplication.
+- Added bounded directory-row expansion and persisted those rows through the
+  existing office-scoped research list path, including names-only rows marked
+  for resolution and document provenance in the existing `buys` field.
+- Directory classification now applies row-count and density checks to every
+  supported document kind. Layout tables fall back to single-company harvest,
+  and caller-provided regions are escaped before city matching.
+- Added offline coverage for same-host documents, layout-table fallback,
+  metacharacter regions, multiple inline emails, and directory persistence.
+
+### 2026-08-25 - Batch directory research persistence
+
+- Grouped prospecting rows by dedupe field so a document with many distinct
+  domains or names uses one upsert group rather than one list query per row.
+- Chunked each group at the existing research import limit and removed
+  redundant per-row dedupe plumbing.
+
+### 2026-08-25 - Bound directory verification work
+
+- PDF row parsing now removes the original contact spans, preserving clean
+  company names when source formatting differs from normalized contact output.
+- Directory email verification checks the batch deadline before each row, so
+  completed rows remain available without allowing a large document to overrun
+  its bounded run.
+
+### 2026-08-25 - Preserve non-Latin directory names
+
+- Directory fallback keys now use Unicode letters and numbers, preventing
+  distinct domainless Cyrillic, Arabic, or CJK names from collapsing together.
+- Audited leadgen character classes: ASCII-only patterns remain in email,
+  hostname, URL, and network parsing; company-name and header normalization
+  now use Unicode-aware classes.
+
+### 2026-08-25 - Keep HTML directory row provenance monotonic
+
+- HTML table parsing now assigns row indexes from one page-level data-row
+  counter, preventing duplicate provenance numbers across multiple tables.

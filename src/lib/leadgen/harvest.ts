@@ -15,6 +15,7 @@ import {
   registrableDomain,
 } from "./extract";
 import { checkPublicUrl, guardedRequest } from "./fetch-guard";
+import { parseDirectoryDocument, type DirectoryRow } from "./directory";
 import type { LeadGenProfile } from "./profile";
 import { scoreLead, type LeadFitResult } from "./score";
 
@@ -124,16 +125,50 @@ export type HarvestOptions = {
   discoveredVia?: string;
   maxContactPages?: number;
   now?: () => Date;
+  directoryMode?: boolean;
+  directoryRegions?: readonly string[];
 };
+
+export function harvestSite(
+  profile: LeadGenProfile,
+  siteUrl: string,
+  options: HarvestOptions & { directoryMode: true },
+): Promise<DirectoryRow[] | LeadCandidate | null>;
+
+export function harvestSite(
+  profile: LeadGenProfile,
+  siteUrl: string,
+  options?: HarvestOptions & { directoryMode?: false },
+): Promise<LeadCandidate | null>;
+
+export function harvestSite(
+  profile: LeadGenProfile,
+  siteUrl: string,
+  options: HarvestOptions,
+): Promise<DirectoryRow[] | LeadCandidate | null>;
 
 export async function harvestSite(
   profile: LeadGenProfile,
   siteUrl: string,
   options: HarvestOptions = {},
-): Promise<LeadCandidate | null> {
+): Promise<LeadCandidate | DirectoryRow[] | null> {
   const fetcher = options.fetcher ?? defaultFetcher;
   const home = await fetcher(siteUrl);
   if (!home || home.status >= 400 || !home.body) return null;
+
+  if (
+    options.directoryMode
+    && (
+      home.isPdf
+      || /<table\b/i.test(home.body)
+      || home.contentType.includes("csv")
+      || home.contentType.includes("tab-separated")
+      || home.contentType.includes("text/plain")
+    )
+  ) {
+    const parsed = parseDirectoryDocument(home, { regions: options.directoryRegions });
+    if (parsed.looksLikeDirectory && parsed.rows.length > 0) return parsed.rows;
+  }
 
   const domain = registrableDomain(home.url);
   const homeText = home.isPdf ? home.body : htmlToText(home.body);

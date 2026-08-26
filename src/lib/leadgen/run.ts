@@ -1,6 +1,15 @@
-import { dedupeByDomain, parseSearchResults, searchUrl, type SearchEngine, type SearchHit } from "./search";
+import {
+  dedupeByDomain,
+  parseSearchResults,
+  searchUrl,
+  selectSearchProvider,
+  type SearchEngine,
+  type SearchHit,
+} from "./search";
 import { buildQueryPlan, type LeadGenQuery } from "./query-plan";
 import { defaultFetcher, harvestSite, type LeadCandidate, type PageFetcher } from "./harvest";
+import type { DirectoryRow } from "./directory";
+import { scoreLead } from "./score";
 import { verifyEmails, type EmailVerification, type VerifyOptions } from "./verify";
 import {
   GENERIC_STEEL_ORE_NEGATIVE_SIGNALS,
@@ -35,6 +44,7 @@ export type ProspectingBatchCandidate = {
   candidate: LeadCandidate;
   verifications: EmailVerification[];
   region: string | null;
+  directoryRow?: DirectoryRow;
 };
 
 export type ProspectingBatchStats = {
@@ -72,7 +82,72 @@ export function profileFromProspectingDraft(draft: ProspectingDraft): LeadGenPro
   };
 }
 
-const SEARCH_ENGINES: readonly SearchEngine[] = ["duckduckgo", "brave"];
+const SEARCH_ENGINES: readonly Extract<SearchEngine, "duckduckgo" | "brave">[] = ["duckduckgo", "brave"];
+const DOCUMENT_SHAPES = new Set<LeadGenQuery["shape"]>([
+  "doc_pdf_directory",
+  "doc_spreadsheet_directory",
+  "doc_office_directory",
+  "exhibitor_list",
+  "association_members",
+]);
+
+function isDocumentHit(hit: SearchHit, query: LeadGenQuery) {
+  let pathname = "";
+  try {
+    pathname = new URL(hit.url).pathname.toLowerCase();
+  } catch {
+    return DOCUMENT_SHAPES.has(query.shape);
+  }
+  return DOCUMENT_SHAPES.has(query.shape)
+    || /\.(pdf|xls|xlsx|doc|docx|csv|tsv)$/.test(pathname);
+}
+
+function selectSearchHits(searchHits: readonly SearchHit[], query: LeadGenQuery) {
+  const documentUrls = new Set<string>();
+  const documentHits: SearchHit[] = [];
+  for (const hit of searchHits) {
+    if (!isDocumentHit(hit, query) || documentUrls.has(hit.url)) continue;
+    documentUrls.add(hit.url);
+    documentHits.push(hit);
+  }
+  const nonDocumentHits = dedupeByDomain(searchHits.filter((hit) => !isDocumentHit(hit, query)));
+  return [...documentHits, ...nonDocumentHits].sort((a, b) => a.rank - b.rank);
+}
+
+function candidateFromDirectoryRow(
+  profile: LeadGenProfile,
+  row: DirectoryRow,
+  query: LeadGenQuery,
+): ProspectingBatchCandidate {
+  const domain = row.domain ?? "";
+  const fit = scoreLead(profile, {
+    companyName: row.companyName,
+    domain,
+    pageText: row.rawLine,
+    segmentKey: query.segmentKey,
+    emailCount: row.emails.length,
+    hasPhone: row.phones.length > 0,
+  });
+  const candidate: LeadCandidate = {
+    domain,
+    website: row.domain ? `https://${row.domain}` : row.sourceUrl,
+    companyName: row.companyName,
+    city: row.city,
+    emails: row.emails,
+    phones: row.phones,
+    segmentKey: query.segmentKey,
+    fit,
+    evidence: [{
+      url: row.sourceUrl,
+      kind: "directory",
+      emails: row.emails,
+      phones: row.phones,
+    }],
+    discoveredVia: query.query,
+    harvestedAt: new Date().toISOString(),
+  };
+  return { candidate, directoryRow: row, verifications: [], region: query.region };
+}
 
 export async function searchProspectingQuery(
   query: LeadGenQuery,
@@ -92,13 +167,21 @@ export async function searchProspectingQuery(
 }
 
 export const defaultProspectingSearch: ProspectingSearch = async (query, options) =>
-  searchProspectingQuery(query, defaultFetcher, options?.maxPagesRemaining ?? SEARCH_ENGINES.length);
+  {
+    if (!process.env.SERPER_API_KEY) {
+      return searchProspectingQuery(query, defaultFetcher, options?.maxPagesRemaining ?? SEARCH_ENGINES.length);
+    }
+    const provider = selectSearchProvider({ providerName: "serper" });
+    const hits = await provider.search(query.query);
+    return { hits, pagesFetched: options?.maxPagesRemaining === 0 ? 0 : 1 };
+  };
 
 export async function runProspectingBatch(args: {
   profile: LeadGenProfile;
   queryOffset?: number;
   maxQueries?: number;
   maxPages?: number;
+  maxDirectoryRowsPerDocument?: number;
   budgetMs?: number;
   search: ProspectingSearch;
   fetchPage: PageFetcher;
@@ -106,12 +189,14 @@ export async function runProspectingBatch(args: {
 }): Promise<ProspectingBatchResult> {
   const maxQueries = Math.min(DEFAULT_MAX_QUERIES, Math.max(1, Math.floor(args.maxQueries ?? DEFAULT_MAX_QUERIES)));
   const maxPages = Math.min(DEFAULT_MAX_PAGES, Math.max(1, Math.floor(args.maxPages ?? DEFAULT_MAX_PAGES)));
+  const maxDirectoryRowsPerDocument = Math.max(0, Math.floor(args.maxDirectoryRowsPerDocument ?? 500));
   const budgetMs = Math.max(1_000, Math.min(DEFAULT_BUDGET_MS, Math.floor(args.budgetMs ?? DEFAULT_BUDGET_MS)));
   const plan = buildQueryPlan(args.profile);
   const start = Math.max(0, Math.min(plan.length, Math.floor(args.queryOffset ?? 0)));
   const deadline = Date.now() + budgetMs;
   const candidates: ProspectingBatchCandidate[] = [];
   const seenDomains = new Set<string>();
+  const seenDocumentUrls = new Set<string>();
   const stats = { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 };
 
   for (let queryIndex = start; queryIndex < plan.length && stats.queriesUsed < maxQueries; queryIndex += 1) {
@@ -126,13 +211,19 @@ export async function runProspectingBatch(args: {
       searchHits = structuredResult.hits;
       stats.pagesFetched += structuredResult.pagesFetched;
     }
-    const hits = dedupeByDomain(searchHits);
+    const hits = selectSearchHits(searchHits, query);
     stats.queriesUsed += 1;
     for (const hit of hits) {
       if (Date.now() >= deadline || stats.pagesFetched >= maxPages) break;
-      if (seenDomains.has(hit.domain)) continue;
-      seenDomains.add(hit.domain);
-      const candidate = await harvestSite(args.profile, `https://${hit.domain}`, {
+      const documentHit = isDocumentHit(hit, query);
+      if (documentHit) {
+        if (seenDocumentUrls.has(hit.url)) continue;
+        seenDocumentUrls.add(hit.url);
+      } else {
+        if (seenDomains.has(hit.domain)) continue;
+        seenDomains.add(hit.domain);
+      }
+      const harvested = await harvestSite(args.profile, documentHit ? hit.url : `https://${hit.domain}`, {
         fetcher: async (url) => {
           if (Date.now() >= deadline || stats.pagesFetched >= maxPages) return null;
           stats.pagesFetched += 1;
@@ -140,13 +231,29 @@ export async function runProspectingBatch(args: {
         },
         segmentKey: query.segmentKey,
         discoveredVia: query.query,
+        directoryMode: documentHit,
+        directoryRegions: args.profile.regions,
       });
-      if (!candidate || candidate.fit.tier === "reject") continue;
-      const verifications = await verifyEmails(candidate.emails, {
-        companyDomain: candidate.domain,
+      if (!harvested) continue;
+      if (Array.isArray(harvested)) {
+        for (const row of harvested.slice(0, maxDirectoryRowsPerDocument)) {
+          if (Date.now() >= deadline) break;
+          const directoryCandidate = candidateFromDirectoryRow(args.profile, row, query);
+          directoryCandidate.verifications = await verifyEmails(row.emails, {
+            companyDomain: row.domain ?? undefined,
+            resolveMx: args.resolveMx,
+          });
+          candidates.push(directoryCandidate);
+          stats.candidatesFound += 1;
+        }
+        continue;
+      }
+      if (harvested.fit.tier === "reject") continue;
+      const verifications = await verifyEmails(harvested.emails, {
+        companyDomain: harvested.domain,
         resolveMx: args.resolveMx,
       });
-      candidates.push({ candidate, verifications, region: query.region });
+      candidates.push({ candidate: harvested, verifications, region: query.region });
       stats.candidatesFound += 1;
     }
     if (Date.now() >= deadline || stats.pagesFetched >= maxPages) break;
