@@ -14,12 +14,16 @@ export type FileDraftTarget = {
   skipReason: string | null;
 };
 
-const SKIPPED_KINDS: SupplierInboundKind[] = ["BOUNCE", "AUTO_REPLY", "WRONG_RECIPIENT"];
+const SKIPPED_KIND_LABELS: Partial<Record<SupplierInboundKind, string>> = {
+  BOUNCE: "a delivery bounce",
+  AUTO_REPLY: "an automatic reply",
+  WRONG_RECIPIENT: "a wrong recipient notice",
+};
 
 export function fileDraftSkipReason(inboundKind: SupplierInboundKind) {
-  if (!SKIPPED_KINDS.includes(inboundKind)) return null;
-  const label = inboundKind.toLowerCase().replace(/_/g, " ");
-  return `The latest supplier message is a ${label}, so no file reply is prepared.`;
+  const label = SKIPPED_KIND_LABELS[inboundKind];
+  if (!label) return null;
+  return `The latest supplier message is ${label}, so no file reply is prepared.`;
 }
 
 export function eligibleFileDraftTargets(

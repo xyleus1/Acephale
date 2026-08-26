@@ -16,10 +16,29 @@ function notFound() {
   return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
 }
 
+function badRequest(message: string) {
+  return NextResponse.json({ error: message }, { status: 400 });
+}
+
+function serverError(message: string) {
+  return NextResponse.json({ error: message }, { status: 500 });
+}
+
+// Sourcing request ids are stored as uuid columns, so a malformed id would
+// otherwise surface as a database error instead of a request error.
+const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function orderIdError(orderId: string) {
+  if (!orderId) return "orderId is required.";
+  if (!ORDER_ID_PATTERN.test(orderId)) return "orderId must be a sourcing request id.";
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   if (!operatorSecretAuthorized(req)) return unauthorized();
   const orderId = req.nextUrl.searchParams.get("orderId")?.trim() ?? "";
-  if (!orderId) return NextResponse.json({ error: "orderId is required." }, { status: 400 });
+  const invalid = orderIdError(orderId);
+  if (invalid) return badRequest(invalid);
   try {
     const listed = await listProcurementFileDraftTargets(orderId);
     if (!listed) return notFound();
@@ -33,10 +52,8 @@ export async function GET(req: NextRequest) {
       targets: listed.targets,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "The supplier draft preview failed." },
-      { status: 500 },
-    );
+    console.error("procurement file draft preview failed", error);
+    return serverError("The supplier draft preview failed.");
   }
 }
 
@@ -48,7 +65,8 @@ export async function POST(req: NextRequest) {
     redraft?: unknown;
   };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
-  if (!orderId) return NextResponse.json({ error: "orderId is required." }, { status: 400 });
+  const invalid = orderIdError(orderId);
+  if (invalid) return badRequest(invalid);
   const limit = typeof payload.limit === "number" && Number.isFinite(payload.limit)
     ? Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(payload.limit)))
     : FILE_DRAFT_MAX_PER_RUN;
@@ -61,9 +79,7 @@ export async function POST(req: NextRequest) {
     if (!result) return notFound();
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "The supplier draft run failed." },
-      { status: 500 },
-    );
+    console.error("procurement file draft run failed", error);
+    return serverError("The supplier draft run failed.");
   }
 }

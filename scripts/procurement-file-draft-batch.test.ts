@@ -34,7 +34,9 @@ const targets: FileDraftTarget[] = [
 
 assert.equal(fileDraftSkipReason("QUESTION"), null);
 assert.equal(fileDraftSkipReason("STATEMENT"), null);
-assert.match(fileDraftSkipReason("AUTO_REPLY") ?? "", /auto reply/);
+assert.match(fileDraftSkipReason("AUTO_REPLY") ?? "", /is an automatic reply/);
+assert.match(fileDraftSkipReason("WRONG_RECIPIENT") ?? "", /is a wrong recipient notice/);
+assert.match(fileDraftSkipReason("BOUNCE") ?? "", /is a delivery bounce/);
 
 assert.deepEqual(
   eligibleFileDraftTargets(targets).map((entry) => entry.vendorId),
