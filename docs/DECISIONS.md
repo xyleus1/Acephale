@@ -53,6 +53,23 @@ Drafting and delivery stay separate by construction. The draft module persists a
 path can turn a draft into a send; delivery still requires `confirmed: true` from
 a human.
 
+## API clients authenticate through the existing session cookie
+
+Date: 2026-08-25
+
+- Decision: Expose `POST /api/auth/session` as the machine-usable credential
+  entry point. It resolves usernames with the existing login-code helper and
+  delegates credential validation and cookie issuance to `loginWithCredentials`.
+- Security boundary: Validate a strict bounded JSON body, never echo
+  credentials, send no-store and nosniff headers, and apply a bounded
+  per-instance failed-login throttle keyed by both identifier plus client IP
+  and identifier alone. The identifier-only key bounds account brute force when
+  clients rotate `x-forwarded-for`. This throttle is best effort on serverless
+  runtimes, not a replacement for distributed abuse protection.
+- Session boundary: The API returns only office, role, whole-office access,
+  and the existing cookie max-age. `DELETE` delegates to the existing logout
+  behavior so both operator and customer session cookies are cleared.
+
 ## Uploaded context files carry deterministic derived facts
 
 Date: 2026-08-25
@@ -2622,7 +2639,7 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Decision: Sign-in sends a 6-digit single-use code (10 min TTL, 5 verify
   attempts, 3 requests/15 min) to the entered email via the office's
   connected Gmail, and every sign-in path (code, password fallback, signup
-  helper) rejects emails outside the allowlist — default
+  helper) rejects emails outside the allowlist - default
   mert@usederya.com + oguzhan@usederya.com, overridable via
   LOGIN_ALLOWED_EMAILS. A password fallback stays behind a collapsed
   disclosure as break-glass for Gmail-send outages, allowlist-gated the same
@@ -2635,7 +2652,7 @@ Use this log for durable product and engineering decisions. Do not put every imp
   account can no longer sign in anywhere. Google SSO remains unimplemented;
   Gmail OAuth stays mailbox-connection-only.
 - Revisit when: the team grows past the allowlist, real SSO is wanted, or
-  the pentest sandbox needs login again (add it via LOGIN_ALLOWED_EMAILS —
+  the pentest sandbox needs login again (add it via LOGIN_ALLOWED_EMAILS -
   note its .invalid domain cannot receive codes, so it would need the
   password fallback).
 
@@ -2646,7 +2663,7 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Context: The CA tech-freight niche (high-value, security-sensitive loads
   for hardware companies) is the US wedge, and its core moat asset is a
   hand-vetted carrier bench. Carriers were previously only representable as
-  `Forwarder` rows (intl supplier email directory) or CRM Companies —
+  `Forwarder` rows (intl supplier email directory) or CRM Companies -
   neither carries MC/DOT, insurance limits, equipment capability, or fraud
   checks.
 - Decision: New `Carrier` + `CarrierChecklistItem` models
@@ -2685,14 +2702,14 @@ Use this log for durable product and engineering decisions. Do not put every imp
   cross-contaminates. `CarrierQuote` stays ocean-shaped for the intl stack;
   the dormant `Quote` model stays untouched. This partially supersedes the
   two decisions above: persistence exists now, but live rate providers,
-  booking/tender, and customer sends remain out — those still require the
+  booking/tender, and customer sends remain out - those still require the
   env-gated provider adapter + `DomesticRateAudit` slice.
-- Rationale: A niche this narrow makes small data dense — 6-12 months of
+- Rationale: A niche this narrow makes small data dense - 6-12 months of
   outcomes on CA tech corridors out-prices anyone without the book.
 - Consequences: Quote rows are versions (one per Record press); outcome
   reasons are operator-set on lost quotes. Reports/lane-index aggregation is
   a later slice.
-- Revisit when: DAT RateView (or equivalent) credentials land — add the
+- Revisit when: DAT RateView (or equivalent) credentials land - add the
   provider adapter behind `DomesticRateProvider` with audit persistence.
 
 ### 2026-07-16 - Security tiers + SOP checklists gate high-value tech loads
@@ -2707,12 +2724,12 @@ Use this log for durable product and engineering decisions. Do not put every imp
   trackingType, equipmentType, teamDriversRequired (migration
   `20260716000200_high_value_security_fields`). `deriveSecurityTier()`
   (value ladder x category floor, deterministic) writes a visible,
-  overridable suggestion — operator choice always wins. Tiered loads seed
+  overridable suggestion - operator choice always wins. Tiered loads seed
   `LoadSecurityCheck` rows from `securityChecklistTemplate(tier)`
   (anti-deceptive-pickup playbook; standard tier seeds nothing). The
   domestic pricing engine prefers first-class equipment over
   containerType/parsedData guesses and returns `needs_human_review` for
-  high_value/critical tiers — they never auto-rate. Prior-load carry
+  high_value/critical tiers - they never auto-rate. Prior-load carry
   includes equipment/tier but never declaredValue (same principle as target
   price).
 - Rationale: SOP-as-checklist makes small-team execution consistent and is

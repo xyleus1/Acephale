@@ -82,6 +82,23 @@
   workflow CI job against a disposable `derya_supply_reply_verify_ci` database.
 - No supplier mail was sent for this work.
 
+## 2026-08-25: Machine-usable session authentication
+
+- Added `POST /api/auth/session` for Guild and other API clients. It accepts a
+  strict JSON credential payload, maps bare usernames through
+  `resolveLoginIdentifier`, and reuses `loginWithCredentials` so the existing
+  httpOnly `crm_session` cookie is issued without duplicate cookie logic.
+- Added `DELETE /api/auth/session` to reuse `logout()` and return a safe 204.
+  Both methods use no-store and nosniff response headers.
+- Added a bounded, per-instance best-effort failed-login throttle keyed by the
+  resolved identifier and first `x-forwarded-for` hop. It also tracks the
+  resolved identifier alone, so rotating `x-forwarded-for` cannot bypass the
+  five-failure account bound. Both counters clear after a successful login.
+- Exported `SESSION_MAX_AGE_SECONDS` from `src/lib/auth.ts` and included it in
+  the successful API response.
+- Added `scripts/auth-session-route.test.ts` with dependency-injected tests for
+  invalid input, invalid credentials, throttling, and successful response shape.
+
 ## 2026-08-25: Mailbox exports can be pasted straight into the sender pool
 
 - `parseGmailAppPasswordBulkInput` now detects a header row and maps columns by
@@ -5149,7 +5166,7 @@ Loadboard employee accounts + load assignment + admin activity log.
   header: admins/managers get an assign dropdown (`assignJobAction`,
   role-gated), everyone else gets **Take this load** (`claimJobAction`,
   atomic claim of unassigned loads only). Creation paths no longer
-  auto-assign the creator (jobs/new, queue convert, RFQ load review) — loads
+  auto-assign the creator (jobs/new, queue convert, RFQ load review) - loads
   start unassigned so the personal-board/claim flow works.
 - **Activity log**: new `AuditLog` model (officeId, actorUserId/actorEmail,
   action, entityRef, summary, changes JSON) + `src/lib/audit.ts`
@@ -5175,9 +5192,9 @@ Loadboard employee accounts + load assignment + admin activity log.
 
 ## Verification passed
 
-- `npm run build` (dummy DATABASE_URL) — types + build clean.
-- `npx tsx scripts/login-code.test.ts` — updated for the new default allowlist.
-- `next lint` on changed files — only pre-existing `<a>`-vs-`Link` errors and
+- `npm run build` (dummy DATABASE_URL) - types + build clean.
+- `npx tsx scripts/login-code.test.ts` - updated for the new default allowlist.
+- `next lint` on changed files - only pre-existing `<a>`-vs-`Link` errors and
   unused-var warnings that predate this change.
 
 ## Caveats
@@ -5187,7 +5204,7 @@ Loadboard employee accounts + load assignment + admin activity log.
   crafts requests (internal-trust deployment; assign action is role-gated).
 - Employees see full load details incl. revenue/cost and the customer-portal
   button; restrict later if needed.
-- Migration must run on prod before deploy (`prisma migrate deploy`) — the
+- Migration must run on prod before deploy (`prisma migrate deploy`) - the
   new FK cleans orphan `assignedToUserId` pointers first, and the enum value
   is additive.
 
@@ -5214,10 +5231,10 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
 - **Shared lead-sheet config**: new `src/lib/meta-leads.ts` declares both Meta
   Lead Ads sources (TR + US; same Meta export column layout) with env
   overrides `DERYA_META_LEADS_US_SHEET_ID/_TAB/_GID` (defaults: the sheet
-  above, tab `ca leads`, gid 86480056 — the spreadsheet's gid-0 tab "Sayfa1"
+  above, tab `ca leads`, gid 86480056 - the spreadsheet's gid-0 tab "Sayfa1"
   is header-only, and the sync now warns when a lead sheet reads zero data
   rows so a wrong tab/gid is never silent). Exports `US_LEAD_PARSED_MARKER`
-  (`"market":"US"`) and `metaLeadMarketOf()` — nothing else writes a `market`
+  (`"market":"US"`) and `metaLeadMarketOf()` - nothing else writes a `market`
   key into inquiry parsedData.
 - **Sync**: `syncMetaLeadRows` is parameterized by source and now loops over
   both sheets independently (one failing must not block the other; warnings
@@ -5229,7 +5246,7 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
   `whatsappSentAt` stamp (pre-existing bug: it preserved only
   deskForwardedAt/confirmationSentAt, so the hourly sync wiped the WA sent
   indicator).
-- **/dashboard/rfq US view** (iterated same day per Mert's feedback — a
+- **/dashboard/rfq US view** (iterated same day per Mert's feedback - a
   chosen tab, not a default on-screen panel): the default view is the
   original single sheet minus US leads; a right-aligned `view-switcher`
   flag toggle ("🇹🇷 Türkiye" | "🇺🇸 US (n)") swaps to `?view=us`, which shows
@@ -5248,7 +5265,7 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
   view defaults to Good only, with Good/Review/All chips (`?quality=`)
   showing counts; each lead row carries a colored quality pill (tooltip =
   score + reasons) and the expanded row lists "Lead quality" among the lead
-  answers. Thresholds: GOOD ≥ 8, REVIEW ≥ 4 — plus the desk rules (Mert,
+  answers. Thresholds: GOOD ≥ 8, REVIEW ≥ 4 - plus the desk rules (Mert,
   2026-07-18): GOOD means business-significant. An explicitly commercial
   shipment ("yes, commercial…" / "evet, ticari…") is ALWAYS GOOD (only the
   contact/lane gates outrank it); a declared-individual shipment ("no,
@@ -5256,18 +5273,18 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
   goods / belongings commodity) caps at REVIEW no matter the container
   size; "not sure"/blank answers rank on points so unlabelled importers can
   still reach GOOD. Dry-run over the real prod leads after both rules:
-  71 leads → 16 GOOD / 52 REVIEW / 3 WEAK — the GOOD list is pure business
+  71 leads → 16 GOOD / 52 REVIEW / 3 WEAK - the GOOD list is pure business
   freight; junk ("Isk → Idk", "national and international") gates to WEAK.
 - **Smart lead email** (`src/lib/lead-emails.ts`, pure/testable; rfq-mail
   wraps it with SMTP config as `buildLeadCustomerEmail`, replacing
   `buildLeadConfirmationEmail`): when the lead's details are complete the
   email is the received-confirmation; when not, it asks for exactly the
-  missing details — the question list comes from the same
+  missing details - the question list comes from the same
   `leadMissingQuestions()` the WhatsApp draft uses (extracted from
   `buildWhatsAppInquiry`), EN for US leads / TR for TR leads. Each kind has
   its own send stamp (`confirmationSentAt` / new `infoRequestSentAt`, both
   resync-preserved), so sending the info-request doesn't mark the later
-  confirmation as sent — once the lead's data is filled in, the card and
+  confirmation as sent - once the lead's data is filled in, the card and
   button flip to the confirmation automatically. The sheet's Send column
   gained a per-row "Confirm" / "Ask info" button for lead rows (send column
   default width 120 → 176); the expanded card's title/hint follow the kind.
@@ -5305,7 +5322,7 @@ scratch local Postgres and the REAL sheets (`.context/e2e-us-leads.ts`):
 bounds correct, spot-checked contact row incl. jobTitle and `+1` phone; the
 page's two partition queries split 98 rows with no leakage and keep a
 NULL-parsedData manual RFQ visible (confirmed naive NOT-contains DOES drop
-NULL rows on Prisma 6 — the OR-null guard is load-bearing); resync created
+NULL rows on Prisma 6 - the OR-null guard is load-bearing); resync created
 no duplicates and preserved operator status + whatsappSentAt. The e2e is
 also what caught the header-only gid-0 tab (hence the `ca leads`/86480056
 default). Quality scorer dry-run against the live prod leads (read-only,
@@ -5316,7 +5333,7 @@ default). Quality scorer dry-run against the live prod leads (read-only,
 US leads only appear in the panel after the next sync stamps `market` into
 parsedData (button or hourly cron; sourceKey dedupe means no duplicates if
 rows were ever imported before). TR rows adopt the market tag on their next
-resync — until then they are simply not in the US panel (correct either way).
+resync - until then they are simply not in the US panel (correct either way).
 Send-all-to-desk intentionally covers both markets (desk forward is internal
 English). The lead sheet must stay link-viewable (or a service account /
 `GOOGLE_SHEETS_API_KEY` configured) for the sync to read it.
@@ -5346,7 +5363,7 @@ search bar.
   CLOSED_INQUIRY_STATUSES gained TRASH/Trash/trash, so trashed rows leave the
   Open tab, the topbar pending count, Send-all-to-desk (which previously still
   emailed trashed meta-leads), agent tools, decision queue, merge/dedup and
-  stale-RFQ nags — while keeping their own Trash tab. The incoming ?status=
+  stale-RFQ nags - while keeping their own Trash tab. The incoming ?status=
   param is canonicalized on /dashboard/rfq so pre-promotion ?status=Trash links
   still land on the Trash tab. Pricing page STATUS_META + status select gained
   TRASH.
@@ -5383,7 +5400,7 @@ search bar.
 
 tsc clean; next build clean; test:rfq-whatsapp, test:strategy,
 test:email-labels, test:rfq-load-draft pass; adversarial multi-agent review
-over the diff — 11 confirmed findings all fixed (stale ?status=Trash links,
+over the diff - 11 confirmed findings all fixed (stale ?status=Trash links,
 pricing TRASH label/option, CRM same-route pick no-op, palette reopen flash,
 search-bar URL desync incl. back button and stale-status race, duplicate ?q=
 crash, stale workbench ⌘K hint, dead job-search endpoints). DB-backed tests
@@ -5394,7 +5411,7 @@ skipped (no local DATABASE_URL).
 Company/contact ⌘K picks deep-link into the CRM sheet's filter (no detail
 routes exist). Email-thread picks land on inbox search by subject. The
 /dashboard/search page itself was not touched (still companies/contacts/
-activities only, case-sensitive) — the palette supersedes it. Trash rows on
+activities only, case-sensitive) - the palette supersedes it. Trash rows on
 the kanban: previously auto-created PROPOSED shell loads are not retracted
 when an RFQ is trashed (pre-existing behavior, same as Ignored).
 
@@ -5426,14 +5443,14 @@ Column layout (second change in this set):
   picker restores defaults. The select-checkbox and row-actions columns are
   fixed chrome.
 - Layout persists to localStorage keyed per account:
-  `derya.rfqSheet.layout.<userId>` — per user per browser, no schema change.
+  `derya.rfqSheet.layout.<userId>` - per user per browser, no schema change.
   Stored layouts are sanitized on load (unknown keys dropped, new columns
   appended, all-hidden falls back to all-visible, widths clamped).
 - `.rfq-sheet` switched to `table-layout: fixed` so user widths are exact;
   cell content truncates with ellipsis instead of stretching columns (cell
   dropdown menus are position:fixed, so clipping cannot hide them);
   `min-width: 0` added to sheet inputs so they shrink in narrowed columns.
-- Rows render cells by column key and are memoized (`MemoRowPair`) — header
+- Rows render cells by column key and are memoized (`MemoRowPair`) - header
   drag/resize only re-renders colgroup/thead, not the 200 rows.
 
 Multi-select + bulk status change (first change in this set):
@@ -5455,7 +5472,7 @@ Multi-select + bulk status change (first change in this set):
 - Structural: the table markup (colgroup/thead) moved from
   `rfq/page.tsx` into the client component; `RfqExpandableRows` (tbody-only)
   became `RfqSheet` (full table + bulk bar). Selection is plain React state
-  local to the sheet — deliberately NOT the shared `bulk-select-store`
+  local to the sheet - deliberately NOT the shared `bulk-select-store`
   singleton, which would leak selections across inbox ⇄ RFQ pages. Stale ids
   (row left the filter after refresh) are pruned against visible rows before
   any action.
@@ -5472,20 +5489,20 @@ affordances, picker reset row).
 
 ## Verification passed
 
-tsc clean; next build clean; eslint — no new findings in touched files (the
+tsc clean; next build clean; eslint - no new findings in touched files (the
 two `<a href="/dashboard/rfq/new">` errors in rfq/page.tsx pre-exist on the
 base commit, verified via stash). DB-backed tests skipped (no local
 DATABASE_URL in this workspace).
 
 ## Caveats
 
-Column layout is per user per browser (localStorage) — it does not roam
+Column layout is per user per browser (localStorage) - it does not roam
 across devices; a DB-backed preference store would need a schema migration
-(deliberately avoided). Header drag uses HTML5 DnD — mouse only, no touch or
+(deliberately avoided). Header drag uses HTML5 DnD - mouse only, no touch or
 keyboard reorder (hide/show via picker works everywhere). First paint uses
 the default layout until the stored one loads (same flash the Loads table
 has). Select-all covers the visible page only (query takes 200 newest). No
-shift-click range selection. Bulk bar only changes status — bulk delete/send
+shift-click range selection. Bulk bar only changes status - bulk delete/send
 deliberately out of scope.
 
 ## Previous Update
@@ -5517,13 +5534,13 @@ RFQ page rebuilt as an inline-editable sheet + new status vocabulary + focused-l
   status Ignored is the archive path). The chevron button expands load
   details as before.
 - New RFQ status set (control-sheet lingo): BOOKED / PRICING / MISSED ($) /
-  RECEIVED / IGNORED — `src/lib/inquiry-status.ts`. Legacy values alias onto
+  RECEIVED / IGNORED - `src/lib/inquiry-status.ts`. Legacy values alias onto
   it (INGESTED,PARSED→RECEIVED; PRICED,QUOTED→PRICING; WON→BOOKED;
   LOST→MISSED) so NO data backfill was needed; automations that still write
   legacy values keep working. "Open" = notIn {BOOKED,MISSED,IGNORED,WON,LOST};
   every open-inquiry predicate in the app now shares
   `openInquiryStatusFilter()`.
-- Status and mode dropdowns support "Add option…" — a brand-new value typed
+- Status and mode dropdowns support "Add option…" - a brand-new value typed
   in the cell becomes an option and a filter tab for the office (options and
   tabs are derived from values in use; Inquiry.status/mode are free strings,
   no migration).
@@ -5532,7 +5549,7 @@ RFQ page rebuilt as an inline-editable sheet + new status vocabulary + focused-l
 
 ## Files changed
 
-`src/lib/inquiry-status.ts` (new), `src/components/sheet-cells.tsx` (new —
+`src/lib/inquiry-status.ts` (new), `src/components/sheet-cells.tsx` (new -
 CellInput/CellSelect extracted from contact-sheet, plus allowCreate),
 `src/components/contact-sheet.tsx`, `src/components/rfq-expandable-rows.tsx`,
 `src/app/dashboard/rfq/{page,actions}.tsx`,
@@ -5548,7 +5565,7 @@ morning-brief/market-tools/link-market-signals libs, plus
 
 tsc clean; next build clean; eslint no new errors; test:strategy,
 test:rfq-load-draft, test:email-labels pass; adversarial multi-agent diff
-review, confirmed findings fixed. No schema changes — safe to deploy without
+review, confirmed findings fixed. No schema changes - safe to deploy without
 migrations.
 
 ## Caveats
@@ -5625,7 +5642,7 @@ Sidebar IA rework + Company Brain page:
 - `npm run test:intelligence-map` not run locally (needs DATABASE_URL); its
   static source assertions were verified by grep after the merge.
 - Company Brain chat is session-only (no persistence), like the dock.
-- Internal company map is an explicit placeholder — configured later.
+- Internal company map is an explicit placeholder - configured later.
 
 ## Previous Update
 
@@ -5689,7 +5706,7 @@ committed on crm-v1-review-and-push, stacked on 6dcd65c (see git log)
 
 ## Task implemented
 
-CRM V1.1 — post-review hardening plus founder direction decisions:
+CRM V1.1 - post-review hardening plus founder direction decisions:
 
 - Fix pack: rank-correct priority/leverage sorting everywhere (string enums
   sort alphabetically in Postgres), contact + opportunity edit forms, working
@@ -5730,7 +5747,7 @@ CRM V1.1 — post-review hardening plus founder direction decisions:
 - `npx prisma validate`, `npm run db:generate`
 - `npx tsc --noEmit` clean
 - `npm run test:crm` (both suites)
-- `npm run audit:tenant-scope` — only the pre-existing medium finding at
+- `npm run audit:tenant-scope` - only the pre-existing medium finding at
   `src/lib/rfq-load-review.ts:265`
 - Full migration chain replayed on a scratch Postgres;
   `prisma migrate diff` reported no drift

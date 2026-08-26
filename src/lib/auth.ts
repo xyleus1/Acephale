@@ -10,7 +10,7 @@ const ONE_DAY = 60 * 60 * 24;
 // Persistent session: stays signed in until explicit logout. 400 days is the
 // longest lifetime browsers honor for a cookie (per the cookie spec cap), so
 // this is effectively "until you log out" without a server-side expiry check.
-const SESSION_MAX_AGE = ONE_DAY * 400;
+export const SESSION_MAX_AGE_SECONDS = ONE_DAY * 400;
 
 export type SessionPayload = {
   userId: string;
@@ -84,7 +84,7 @@ async function issueSessionCookie(user: {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_MAX_AGE,
+    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }
 
@@ -241,7 +241,7 @@ export async function signupWithCredentials(args: {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_MAX_AGE,
+    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 
   return { ok: true, userId: result.user.id, officeId: result.office.id };
