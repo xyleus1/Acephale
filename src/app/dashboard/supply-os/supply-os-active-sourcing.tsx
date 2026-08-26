@@ -11,6 +11,7 @@ import {
   Mail,
   MessageSquare,
   PackageCheck,
+  Paperclip,
   PenLine,
   RefreshCw,
   Send,
@@ -57,11 +58,20 @@ type Selection = { kind: "workflow" | "historical"; id: string };
 type ConversationState = "idle" | "loading" | "ready" | "error";
 type ReplyDraftState = "idle" | "loading" | "ready" | "error";
 type ReplySendState = "idle" | "confirming" | "sending" | "sent" | "error";
+type ReplyDraftAttachment = {
+  documentId: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
 type ReplyDraft = {
   recipient: string;
   subject: string;
   body: string;
   sourceMessageId: string;
+  attachments?: ReplyDraftAttachment[];
+  withheld?: Array<{ name: string; reason: string }>;
+  saved?: boolean;
 };
 type ReplyDelivery = {
   state: "SENT";
@@ -320,10 +330,19 @@ export function ActiveSourcingWorkspace({
     setConversationState("loading");
     setConversationError(null);
     setTriage(null);
-    void fetchJson<{ conversation: ProcurementConversation; triage?: ProcurementInboundTriage | null }>(url, controller.signal)
+    void fetchJson<{
+      conversation: ProcurementConversation;
+      triage?: ProcurementInboundTriage | null;
+      fileDraft?: (ReplyDraft & { state: "DRAFT" }) | null;
+    }>(url, controller.signal)
       .then((payload) => {
         setConversation(payload.conversation);
         setTriage(payload.triage ?? null);
+        const saved = payload.fileDraft;
+        if (saved && saved.sourceMessageId === payload.conversation.messages.at(-1)?.id) {
+          setReplyDraft({ ...saved, saved: true });
+          setReplyDraftState("ready");
+        }
         setConversationState("ready");
       })
       .catch((error: unknown) => {
@@ -399,6 +418,36 @@ export function ActiveSourcingWorkspace({
     }
   };
 
+  // Saving the request files as a draft never sends. Delivery stays behind the
+  // send confirmation below.
+  const draftReplyWithRequestFiles = async () => {
+    if (!workflowRequestId || !workflowVendorId) return;
+    const displayedInbound = conversation?.messages.at(-1);
+    if (displayedInbound?.direction !== "INBOUND") return;
+    const selectionKey = replySelectionRef.current;
+    setReplyDraft(null);
+    setReplyDraftState("loading");
+    setReplyDraftError(null);
+    setReplyDraftErrorReason(null);
+    setReplyCopied(false);
+    try {
+      const payload = await postJson<{ draft: ReplyDraft }>(
+        `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}/vendors/${encodeURIComponent(workflowVendorId)}/conversation`,
+        { sourceMessageId: displayedInbound.id, withRequestFiles: true },
+      );
+      if (replySelectionRef.current !== selectionKey) return;
+      setReplyDraft({ ...payload.draft, saved: true });
+      setReplyDraftState("ready");
+      setReplySendState("idle");
+      setReplyDelivery(null);
+    } catch (error) {
+      if (replySelectionRef.current !== selectionKey) return;
+      setReplyDraftState("error");
+      setReplyDraftError(error instanceof Error ? error.message : "The request files could not be prepared.");
+      setReplyDraftErrorReason(error instanceof SupplierActivityRequestError ? error.reason : null);
+    }
+  };
+
   const useContextAnswer = () => {
     const displayedInbound = conversation?.messages.at(-1);
     if (!triage || triage.decision !== "AUTO_ANSWER" || displayedInbound?.direction !== "INBOUND") return;
@@ -454,6 +503,9 @@ export function ActiveSourcingWorkspace({
           recipient: replyDraft.recipient,
           subject: replyDraft.subject,
           body: replyDraft.body,
+          ...(replyDraft.attachments?.length
+            ? { attachmentDocumentIds: replyDraft.attachments.map((attachment) => attachment.documentId) }
+            : {}),
         },
       );
       if (replySelectionRef.current !== selectionKey) return;
@@ -568,6 +620,11 @@ export function ActiveSourcingWorkspace({
                         {replyDraftState === "loading" ? "Drafting" : replyDraft ? "Redraft reply" : "Draft reply"}
                       </button>
                     ) : null}
+                    {conversationState === "ready" && conversation?.messages.at(-1)?.direction === "INBOUND" ? (
+                      <button type="button" onClick={draftReplyWithRequestFiles} disabled={replyDraftState === "loading"}>
+                        <Paperclip size={12} /> Draft with request files
+                      </button>
+                    ) : null}
                     {conversation?.sourceUrl ? <a href={conversation.sourceUrl} target="_blank" rel="noreferrer">Open Gmail <ExternalLink size={12} /></a> : null}
                   </div>
                 </header>
@@ -615,7 +672,7 @@ export function ActiveSourcingWorkspace({
                 {replyDraft ? (
                   <section className={styles.activeReplyDraft} aria-label="Supplier reply draft">
                     <header>
-                      <span><small>Draft reply</small><strong>To {replyDraft.recipient}</strong></span>
+                      <span><small>{replyDraft.saved ? "Saved draft, not sent" : "Draft reply"}</small><strong>To {replyDraft.recipient}</strong></span>
                       <div className={styles.activeReplyDraftHeaderActions}>
                         <button type="button" onClick={copyReplyDraft}>{replyCopied ? <Check size={13} /> : <Copy size={13} />}{replyCopied ? "Copied" : "Copy reply"}</button>
                         {replySendState !== "sent" ? (
@@ -626,6 +683,20 @@ export function ActiveSourcingWorkspace({
                       </div>
                     </header>
                     <label>Subject<input value={replyDraft.subject} disabled={replySendState === "sent"} onChange={(event) => updateReplyDraft("subject", event.target.value)} /></label>
+                    {replyDraft.attachments?.length ? (
+                      <ul className={styles.activeReplyAttachments} aria-label="Attached request files">
+                        {replyDraft.attachments.map((attachment) => (
+                          <li key={attachment.documentId}><Paperclip size={12} /> {attachment.name} <small>{Math.max(1, Math.round(attachment.size / 1024))} KB</small></li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {replyDraft.withheld?.length ? (
+                      <ul className={styles.activeReplyAttachments} data-withheld="true" aria-label="Files held back">
+                        {replyDraft.withheld.map((entry) => (
+                          <li key={entry.name}>{entry.name} held back because {entry.reason}</li>
+                        ))}
+                      </ul>
+                    ) : null}
                     <label>Reply<textarea rows={7} value={replyDraft.body} disabled={replySendState === "sent"} onChange={(event) => updateReplyDraft("body", event.target.value)} /></label>
                     {replySendState === "confirming" ? (
                       <div className={styles.activeReplyConfirmation} role="group" aria-label="Confirm supplier reply">

@@ -71,10 +71,11 @@ function request(body: unknown, headers: HeadersInit = {}) {
 
 function dependencies(overrides: Partial<ProcurementReplyDraftDependencies> = {}): ProcurementReplyDraftDependencies {
   return {
-    session: async () => ({ userId: "user-a", officeId: "office-a" }),
+    session: async () => ({ userId: "user-a", officeId: "office-a", role: "ADMIN", canViewWholeOffice: true }),
     resolveCustomerId: async () => customerId,
     getRequest: async () => order,
     conversation: async () => conversation,
+    saveFileDraft: async () => { throw new Error("saveFileDraft must not run unless request files were asked for."); },
     draft: async (input) => ({
       recipient: input.vendor.contact?.email ?? "",
       subject: "Re: RFQ",
@@ -154,6 +155,48 @@ async function main() {
   }));
   assert.equal(missing.status, 404);
 
+  let fileDraftInput: Parameters<ProcurementReplyDraftDependencies["saveFileDraft"]>[0] | null = null;
+  const fileDraft = await handleProcurementReplyDraft(
+    request({ sourceMessageId, withRequestFiles: true }),
+    orderId,
+    vendorId,
+    dependencies({
+      draft: async () => { throw new Error("The generated draft path must not run for a file delivery draft."); },
+      saveFileDraft: async (input) => {
+        fileDraftInput = input;
+        return {
+          state: "DRAFT",
+          orderId,
+          vendorId,
+          sourceMessageId,
+          recipient: "sfielding@bacircuits.com",
+          subject: "Re: RFQ",
+          body: "The technical package is attached.",
+          attachments: [{ documentId: "doc-1", name: "spec.png", mimeType: "image/png", size: 2048 }],
+          withheld: [],
+          savedAt: "2026-08-25T00:00:00.000Z",
+        };
+      },
+    }),
+  );
+  assert.equal(fileDraft.status, 200);
+  const savedDraft = (await responseJson(fileDraft)).draft as { state: string; attachments: unknown[] };
+  assert.equal(savedDraft.state, "DRAFT", "A file delivery draft must be reported as a draft, never as sent.");
+  assert.equal(savedDraft.attachments.length, 1);
+  assert.equal(fileDraftInput?.sourceMessageId, sourceMessageId);
+  assert.equal(fileDraftInput?.recipient, "sfielding@bacircuits.com");
+  assert.equal(fileDraftInput?.context.officeId, "office-a");
+
+  const draftScopeFailure = await handleProcurementReplyDraft(
+    request({ sourceMessageId, withRequestFiles: true }),
+    orderId,
+    vendorId,
+    dependencies({
+      saveFileDraft: async () => { throw new SupplyPersistenceError("No safe files.", "conflict"); },
+    }),
+  );
+  assert.equal(draftScopeFailure.status, 409);
+
   for (const [error, status] of [
     [new ProcurementReplyDraftError("Stale message.", "conflict"), 409],
     [new ProcurementReplyDraftError("Draft provider unavailable.", "unavailable"), 503],
@@ -220,6 +263,33 @@ async function main() {
   assert.equal(sendInput?.context.officeId, "office-a");
   assert.equal(sendInput?.context.role, "ADMIN");
   assert.equal(sendInput?.input.sourceMessageId, sourceMessageId);
+  assert.equal(sendInput?.input.attachmentDocumentIds, undefined);
+
+  let attachedSendInput: Parameters<ProcurementReplySendDependencies["send"]>[0] | null = null;
+  const sentWithFiles = await handleProcurementReplySend(request({
+    confirmed: true,
+    sourceMessageId,
+    recipient: "sfielding@bacircuits.com",
+    subject: "Re: RFQ",
+    body: "The package is attached.",
+    attachmentDocumentIds: ["doc-1", "doc-2"],
+  }), orderId, vendorId, sendDependencies({
+    send: async (input) => {
+      attachedSendInput = input;
+      return {
+        state: "SENT",
+        accountEmail: "mert@example.com",
+        recipient: input.input.recipient,
+        providerMessageId: "gmail-message-2",
+        providerThreadId: "gmail-thread-1",
+        sourceUrl: "https://mail.google.com/mail/u/mert@example.com/#sent/gmail-thread-1",
+        sentAt: "2026-08-22T12:05:00.000Z",
+        alreadySent: false,
+      };
+    },
+  }));
+  assert.equal(sentWithFiles.status, 200);
+  assert.deepEqual(attachedSendInput?.input.attachmentDocumentIds, ["doc-1", "doc-2"]);
 
   const conflictedSend = await handleProcurementReplySend(request({
     confirmed: true,

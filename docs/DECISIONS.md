@@ -1,5 +1,58 @@
 # Decisions
 
+## An unsent supplier draft is a PLANNED execution task
+
+Date: 2026-08-25
+
+The Supply OS execution trigger requires every task to be inserted as `PLANNED`
+and refuses `READY`, `RUNNING`, or `SUCCEEDED` on an approval requiring task
+without a matching approved `SupplyApproval` row. A saved supplier draft is
+neither approved nor executing, so it stays `PLANNED` with `requiresApproval`
+set, and the explicit confirmed send path owns the approval and the delivery.
+Redrafting cancels the previous live draft and writes a new versioned task key,
+because task input and its hash are immutable provenance.
+
+## Reconciliation never depends on reading attachment bytes
+
+Date: 2026-08-25
+
+A supplier reply send claims a delivery task before calling Gmail, and a claim
+that is still `RUNNING` must be reconciled against the provider before anything
+else. Attachment identity for the message hash comes from the request documents
+alone, so the claim and reconciliation need no storage read, and file bytes are
+loaded and screened only once the claim proves this is a fresh send. Otherwise a
+transient storage failure could leave a message that Gmail may already have
+delivered permanently unresolved.
+
+The claim marks the attempt `RUNNING`, so a load or screening failure on the
+fresh send path is recorded as a non delivery before the error surfaces. `RUNNING`
+therefore keeps its meaning of "handed to Gmail", and a file problem stays
+retryable.
+
+## Supplier bound attachments come only from trusted request documents
+
+Date: 2026-08-25
+
+Supplier replies asked for the technical package, so outbound mail needed
+attachments. Letting an operator or an agent name a file path or a URL would turn
+supplier mail into an exfiltration channel for anything the server can read, so
+the only admissible source is a `CompanyContext` document row that the sourcing
+request already cites as `document:<id>`, loaded with both `officeId` and
+`companyId` in the query. Selected ids are revalidated against those citations on
+the send path as well, because a stored draft is not a permission.
+
+Every candidate file is screened before it can be attached: allow listed type,
+extension and stored type agreement, magic byte or STL structure check, size
+limits, sensitive file names, and content that looks like a private key, an AWS
+key id, an API token, a mailbox app password, or SMTP settings. A refused file is
+withheld with a reason instead of failing the whole draft, so the operator can
+see what was held back and why.
+
+Drafting and delivery stay separate by construction. The draft module persists a
+`SupplyExecutionTask` with `requiresApproval` and imports no provider, so no code
+path can turn a draft into a send; delivery still requires `confirmed: true` from
+a human.
+
 ## Uploaded context files carry deterministic derived facts
 
 Date: 2026-08-25

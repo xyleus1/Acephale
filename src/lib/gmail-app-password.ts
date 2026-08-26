@@ -2,6 +2,10 @@ import "server-only";
 
 import nodemailer from "nodemailer";
 import { ImapFlow } from "imapflow";
+import {
+  validateOutboundAttachments,
+  type OutboundEmailAttachment,
+} from "@/lib/outbound-email-attachments";
 import { decryptSecret, isEncryptedSecret } from "@/lib/security/crypto";
 
 export const GMAIL_APP_PASSWORD_PROVIDER = "GMAIL_APP_PASSWORD";
@@ -127,8 +131,10 @@ export async function sendGmailAppPasswordMail(input: {
   messageId?: string | null;
   inReplyTo?: string | null;
   references?: string[];
+  attachments?: readonly OutboundEmailAttachment[];
 }) {
   const credentials = readGmailAppPasswordAccount(input.account);
+  const attachments = input.attachments?.length ? validateOutboundAttachments(input.attachments) : [];
   const transporter = smtpTransport(credentials);
   try {
     const info = await transporter.sendMail({
@@ -141,6 +147,13 @@ export async function sendGmailAppPasswordMail(input: {
       messageId: input.messageId ?? undefined,
       inReplyTo: input.inReplyTo ?? undefined,
       references: input.references?.length ? input.references : undefined,
+      attachments: attachments.length
+        ? attachments.map((attachment) => ({
+            filename: attachment.filename,
+            contentType: attachment.contentType,
+            content: attachment.bytes,
+          }))
+        : undefined,
     });
     return { ok: true as const, messageId: String(info.messageId || "") };
   } catch (caught) {

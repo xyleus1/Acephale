@@ -1,5 +1,52 @@
 # AI Handoff
 
+## 2026-08-25: Supplier mail carries attachments, request files land in saved drafts
+
+- Every send path built a text only MIME body, so supplier requests for the
+  Gerber, BOM, and STL files could not be answered from the app. Attachment
+  construction now lives in `src/lib/outbound-email-attachments.ts`: allow listed
+  types, per file and total size limits, a sanitized file name for the
+  `Content-Disposition` line, flattened caller headers, `multipart/mixed` when
+  attachments exist, and Gmail base64url encoding. Both delivery paths use it,
+  the Gmail API path and the app password SMTP path through Nodemailer, and
+  `EmailMessage.attachments` stores `{name, mimeType, size}` for the ledger.
+- `src/lib/supply-os/request-document-attachments.ts` is the only source of
+  supplier bound files. It loads `CompanyContext` document rows by id scoped to
+  the office and company, refuses operator supplied paths or remote URLs, and
+  rejects an empty file, an oversized file, a type and extension mismatch, a
+  failed PNG, JPEG, PDF, ZIP, or STL signature check, a sensitive file name, and
+  content that looks like a private key, an AWS key id, an API token, an app
+  password, or SMTP settings. Each refusal keeps a reason for the operator.
+- `src/lib/procurement-file-delivery-draft.ts` saves a durable draft: it selects
+  the request linked `document:<id>` citations, prepares the safe files, restates
+  the stored request and file derived facts (board size, layers, finishes,
+  packages, modules, mesh envelope, minimum 100 units, needed by date), and
+  persists a `SupplyExecutionTask` with `requiresApproval`. It imports no
+  provider, so drafting cannot send.
+- API: `POST .../conversation` accepts `withRequestFiles: true` and returns the
+  saved draft, `GET` returns it as `fileDraft`, and the send route accepts
+  `attachmentDocumentIds` which are revalidated against the request citations
+  before delivery, still behind `confirmed: true`.
+- Messages shows "Draft with request files", labels the result "Saved draft, not
+  sent", and lists attached files with sizes plus any withheld file and reason.
+- Contract tests: `npm run test:supplier-attachment-drafts` and
+  `npm run test:procurement-reply-route`.
+- The draft task is inserted as `PLANNED` and stays there. The Supply OS
+  execution trigger rejects any insert that does not begin in `PLANNED` and
+  rejects a `READY` task without a matching approval row, and an unsent draft has
+  no approval, so a redraft cancels the previous live draft and writes a new
+  versioned task key instead of editing immutable task input.
+- Attachment bytes are resolved after the delivery claim. Planning only needs the
+  document ids and names from the request, so a storage failure can no longer
+  block reconciliation of a send whose Gmail outcome is unknown.
+- A file that cannot be read or screened after the claim fails that attempt
+  through `recordNonDelivery`, so the task lands in `FAILED` and the operator can
+  retry instead of reconciling a message Gmail never received.
+- Database contracts: `npm run test:procurement-file-draft-db` and
+  `npm run test:procurement-reply-send-db`, both wired into the procurement
+  workflow CI job against a disposable `derya_supply_reply_verify_ci` database.
+- No supplier mail was sent for this work.
+
 ## 2026-08-25: Mailbox exports can be pasted straight into the sender pool
 
 - `parseGmailAppPasswordBulkInput` now detects a header row and maps columns by

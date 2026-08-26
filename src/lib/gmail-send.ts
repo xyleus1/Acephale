@@ -11,14 +11,12 @@ import {
   sendGmailAppPasswordMail,
 } from "./gmail-app-password";
 import { imapMessageExternalId, imapThreadExternalId } from "./imap-identifiers";
-
-function encodeGmailRaw(raw: string) {
-  return Buffer.from(raw, "utf-8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
+import {
+  buildMimeMessage,
+  encodeGmailRawMessage,
+  outboundAttachmentMetadataJson,
+  type OutboundEmailAttachment,
+} from "./outbound-email-attachments";
 
 function cleanHeader(value: string) {
   return value.replace(/[\r\n]+/g, " ").trim();
@@ -30,6 +28,7 @@ export async function sendNewEmailFromAccount(args: {
   to: string;
   subject: string;
   body: string;
+  attachments?: readonly OutboundEmailAttachment[];
   inquiryId?: string | null;
   jobId?: string | null;
 }): Promise<{ ok: true; messageId: string; threadId: string; localThreadId: string } | { error: string; needsReauth?: boolean }> {
@@ -44,12 +43,21 @@ export async function sendNewEmailFromAccount(args: {
   if (!toAddress) return { error: "Recipient is required." };
   if (!body.trim()) return { error: "Email body is required." };
 
+  const attachments = args.attachments ?? [];
+  let attachmentsJson: string | null;
+  try {
+    attachmentsJson = outboundAttachmentMetadataJson(attachments);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The attachments could not be prepared." };
+  }
+
   if (account.provider === GMAIL_APP_PASSWORD_PROVIDER) {
     const sent = await sendGmailAppPasswordMail({
       account,
       to: toAddress,
       subject,
       text: body,
+      attachments,
     });
     if (!sent.ok) return { error: sent.error };
 
@@ -83,6 +91,7 @@ export async function sendNewEmailFromAccount(args: {
         toEmails: JSON.stringify([toAddress]),
         subject,
         bodyText: body,
+        attachments: attachmentsJson,
         sentAt: now,
       },
     });
@@ -122,10 +131,13 @@ export async function sendNewEmailFromAccount(args: {
     `From: ${cleanHeader(account.email)}`,
     `To: ${toAddress}`,
     `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset="UTF-8"`,
   ];
-  const encoded = encodeGmailRaw(headers.join("\r\n") + "\r\n\r\n" + body);
+  let encoded: string;
+  try {
+    encoded = encodeGmailRawMessage(buildMimeMessage({ headers, text: body, attachments }));
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The attachments could not be prepared." };
+  }
 
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
@@ -173,6 +185,7 @@ export async function sendNewEmailFromAccount(args: {
       toEmails: JSON.stringify([toAddress]),
       subject,
       bodyText: body,
+      attachments: attachmentsJson,
       sentAt: now,
     },
   });
@@ -205,6 +218,7 @@ export async function sendNewEmailFromAccount(args: {
 export async function sendReplyToThread(args: {
   threadDbId: string;
   body: string;
+  attachments?: readonly OutboundEmailAttachment[];
   replyTo?: string;        // optional override; defaults to the most recent inbound message's fromEmail
   subject?: string;        // optional override; defaults to "Re: <thread.subject>"
 }): Promise<{ ok: true; messageId: string } | { error: string; needsReauth?: boolean }> {
@@ -236,6 +250,14 @@ export async function sendReplyToThread(args: {
   const body = stripEmDashes(args.body);
   if (!body.trim()) return { error: "Email body is required" };
 
+  const attachments = args.attachments ?? [];
+  let attachmentsJson: string | null;
+  try {
+    attachmentsJson = outboundAttachmentMetadataJson(attachments);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The attachments could not be prepared." };
+  }
+
   // Build References / In-Reply-To from the most recent message that has a Message-ID.
   const refs = thread.messages
     .map((message) => message.rfcMessageId || (message.externalId?.startsWith("<") ? message.externalId : null))
@@ -255,6 +277,7 @@ export async function sendReplyToThread(args: {
       text: body,
       inReplyTo,
       references: refs,
+      attachments,
     });
     if (!sent.ok) return { error: sent.error };
     sentMessageId = sent.messageId;
@@ -273,14 +296,16 @@ export async function sendReplyToThread(args: {
       `From: ${account.email}`,
       `To: ${toAddress}`,
       `Subject: ${subject}`,
-      `MIME-Version: 1.0`,
-      `Content-Type: text/plain; charset="UTF-8"`,
     ];
     if (inReplyTo) headers.push(`In-Reply-To: ${inReplyTo}`);
     if (refs.length) headers.push(`References: ${refs.join(" ")}`);
 
-    const raw = headers.join("\r\n") + "\r\n\r\n" + body;
-    const encoded = encodeGmailRaw(raw);
+    let encoded: string;
+    try {
+      encoded = encodeGmailRawMessage(buildMimeMessage({ headers, text: body, attachments }));
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "The attachments could not be prepared." };
+    }
     const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST",
       headers: {
@@ -322,6 +347,7 @@ export async function sendReplyToThread(args: {
       toEmails: JSON.stringify([toAddress]),
       subject,
       bodyText: body,
+      attachments: attachmentsJson,
       sentAt: new Date(),
     },
   });

@@ -1978,6 +1978,31 @@
   background: #fafbfa;
 }
 
+.activeReplyAttachments {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activeReplyAttachments li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font: 500 12px/1.4 "Inter", sans-serif;
+}
+
+.activeReplyAttachments li small {
+  color: var(--ink-muted);
+  font: 500 11px/1.4 "IBM Plex Mono", monospace;
+}
+
+.activeReplyAttachments[data-withheld="true"] li {
+  color: var(--ink-muted);
+}
+
 .activeReplyDraft > header {
   display: flex;
   align-items: center;

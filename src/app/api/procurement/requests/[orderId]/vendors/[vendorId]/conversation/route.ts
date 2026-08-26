@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
+import { getProcurementFileDeliveryDraft } from "@/lib/procurement-file-delivery-draft";
 import {
   procurementReplyFacts,
   triageSupplierInbound,
@@ -45,6 +46,9 @@ export async function GET(
       orderId,
       vendorId,
     });
+    const fileDraft = order
+      ? await getProcurementFileDeliveryDraft({ officeId: session.officeId, order, vendorId })
+      : null;
     const latest = conversation.messages.at(-1);
     const triage = order && latest?.direction === "INBOUND"
       ? triageSupplierInbound({
@@ -53,7 +57,7 @@ export async function GET(
           facts: procurementReplyFacts(order),
         })
       : null;
-    return NextResponse.json({ conversation, triage }, { headers: responseHeaders });
+    return NextResponse.json({ conversation, triage, fileDraft }, { headers: responseHeaders });
   } catch (error) {
     if (error instanceof ProcurementWorkflowError) {
       const status = error.code === "forbidden"

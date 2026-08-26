@@ -478,3 +478,15 @@ jobs:
           npm run test:procurement-workflow-db
           npm run test:customer-portal-password-db
           npm run test:customer-portal-account-admin-db
+      - name: Run supplier reply delivery contracts
+        env:
+          SUPPLY_REPLY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_supply_reply_verify_ci
+        run: |
+          createdb -h 127.0.0.1 -U postgres derya_supply_reply_verify_ci
+          DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
+            npx prisma migrate deploy
+          DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
+            npm run test:procurement-reply-send-db
+          DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
+            DOCUMENT_STORAGE_LOCAL_ROOT=.local-uploads/ci-supplier-reply-documents \
+            npm run test:procurement-file-draft-db

@@ -1,6 +1,11 @@
 import "server-only";
 
 import { stripEmDashes } from "@/lib/no-em-dash";
+import {
+  buildMimeMessage,
+  encodeGmailRawMessage,
+  type OutboundEmailAttachment,
+} from "@/lib/outbound-email-attachments";
 import { prisma } from "@/lib/prisma";
 import {
   GMAIL_APP_PASSWORD_PROVIDER,
@@ -20,6 +25,7 @@ export type SupplierEmailSendInput = {
   rfcMessageId: string;
   providerThreadId?: string | null;
   inReplyToRfcMessageId?: string | null;
+  attachments?: readonly OutboundEmailAttachment[];
 };
 
 export type SupplierEmailSent = {
@@ -54,14 +60,6 @@ type GmailSupplierEmailProviderDependencies = {
   token: (accountId: string) => Promise<string>;
   request: typeof fetch;
 };
-
-function encodeGmailRaw(raw: string) {
-  return Buffer.from(raw, "utf-8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
 
 function cleanHeader(value: string) {
   return stripEmDashes(value).replace(/[\r\n]+/g, " ").trim();
@@ -141,10 +139,20 @@ export function createGmailSupplierEmailProvider(
         `In-Reply-To: ${cleanHeader(input.inReplyToRfcMessageId)}`,
         `References: ${cleanHeader(input.inReplyToRfcMessageId)}`,
       ] : []),
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=\"UTF-8\"",
     ];
-    const raw = encodeGmailRaw(`${headers.join("\r\n")}\r\n\r\n${stripEmDashes(input.body)}`);
+    let raw: string;
+    try {
+      raw = encodeGmailRawMessage(buildMimeMessage({
+        headers,
+        text: stripEmDashes(input.body),
+        attachments: input.attachments,
+      }));
+    } catch (error) {
+      return {
+        state: "REJECTED",
+        error: error instanceof Error ? error.message : "The message attachments could not be prepared.",
+      };
+    }
     let response: Response;
     try {
       response = await request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
@@ -274,15 +282,24 @@ const gmailAppPasswordSupplierEmailProvider: SupplierEmailProvider = {
     }
 
     const references = input.inReplyToRfcMessageId ? [input.inReplyToRfcMessageId] : [];
-    const sent = await sendGmailAppPasswordMail({
-      account,
-      to: cleanHeader(input.recipient),
-      subject: cleanHeader(input.subject),
-      text: stripEmDashes(input.body),
-      messageId: cleanHeader(input.rfcMessageId),
-      inReplyTo: input.inReplyToRfcMessageId ? cleanHeader(input.inReplyToRfcMessageId) : null,
-      references,
-    });
+    let sent: Awaited<ReturnType<typeof sendGmailAppPasswordMail>>;
+    try {
+      sent = await sendGmailAppPasswordMail({
+        account,
+        to: cleanHeader(input.recipient),
+        subject: cleanHeader(input.subject),
+        text: stripEmDashes(input.body),
+        messageId: cleanHeader(input.rfcMessageId),
+        inReplyTo: input.inReplyToRfcMessageId ? cleanHeader(input.inReplyToRfcMessageId) : null,
+        references,
+        attachments: input.attachments,
+      });
+    } catch (error) {
+      return {
+        state: "REJECTED",
+        error: error instanceof Error ? error.message : "The message attachments could not be prepared.",
+      };
+    }
     if (!sent.ok) {
       const authFailure = /authentication|app password/i.test(sent.error);
       return {

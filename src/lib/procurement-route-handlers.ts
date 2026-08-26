@@ -15,6 +15,7 @@ import {
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import type { draftProcurementSupplierReply } from "@/lib/procurement-reply-draft";
 import type { sendProcurementSupplierReply } from "@/lib/procurement-reply-send";
+import type { saveProcurementFileDeliveryDraft } from "@/lib/procurement-file-delivery-draft";
 import {
   getProcurementRequest,
   listProcurementRequests,
@@ -65,11 +66,17 @@ export type ProcurementWakeDependencies = {
 };
 
 export type ProcurementReplyDraftDependencies = {
-  session: () => Promise<ProcurementRouteSession | null>;
+  session: () => Promise<ProcurementReplyDraftSession | null>;
   resolveCustomerId: typeof resolveProcurementCustomerId;
   getRequest: typeof getProcurementRequest;
   conversation: typeof procurementVendorConversation;
   draft: typeof draftProcurementSupplierReply;
+  saveFileDraft: typeof saveProcurementFileDeliveryDraft;
+};
+
+type ProcurementReplyDraftSession = ProcurementRouteSession & {
+  role: string;
+  canViewWholeOffice: boolean;
 };
 
 type ProcurementReplySendSession = ProcurementRouteSession & {
@@ -122,6 +129,9 @@ const defaultReplyDraftDependencies: ProcurementReplyDraftDependencies = {
   getRequest: getProcurementRequest,
   conversation: async (args) => (await import("@/lib/procurement-conversation")).procurementVendorConversation(args),
   draft: async (args) => (await import("@/lib/procurement-reply-draft")).draftProcurementSupplierReply(args),
+  saveFileDraft: async (args) => (
+    (await import("@/lib/procurement-file-delivery-draft")).saveProcurementFileDeliveryDraft(args)
+  ),
 };
 
 const defaultReplySendDependencies: ProcurementReplySendDependencies = {
@@ -134,6 +144,7 @@ const defaultReplySendDependencies: ProcurementReplySendDependencies = {
 
 const procurementReplyDraftRequestSchema = z.object({
   sourceMessageId: z.string().trim().min(1).max(512),
+  withRequestFiles: z.literal(true).optional(),
 }).strict();
 
 function requestWorkspaceId(value: unknown) {
@@ -164,6 +175,7 @@ const procurementReplySendRequestSchema = z.object({
   recipient: z.string().trim().email().max(320),
   subject: z.string().trim().min(1).max(180),
   body: z.string().trim().min(1).max(8_000),
+  attachmentDocumentIds: z.array(z.string().trim().min(1).max(64)).max(10).optional(),
 }).strict();
 
 function errorResponse(error: unknown) {
@@ -181,6 +193,16 @@ function errorResponse(error: unknown) {
 }
 
 function replyDraftErrorResponse(error: unknown) {
+  if (error instanceof SupplyPersistenceError) {
+    const status = error.code === "forbidden"
+      ? 403
+      : error.code === "not_found"
+        ? 404
+        : error.code === "invalid_input"
+          ? 400
+          : 409;
+    return Response.json({ error: error.message }, { status, headers: responseHeaders });
+  }
   if (error instanceof ProcurementReplyDraftError) {
     const status = error.code === "conflict" || error.code === "configuration" ? 409 : 503;
     return Response.json({ error: error.message }, { status, headers: responseHeaders });
@@ -445,6 +467,23 @@ export async function handleProcurementReplyDraft(
     if (!order || !vendor) {
       return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });
     }
+    if (parsedInput.data.withRequestFiles) {
+      const saved = await dependencies.saveFileDraft({
+        context: {
+          officeId: session.officeId,
+          userId: session.userId,
+          role: session.role,
+          canViewWholeOffice: session.canViewWholeOffice,
+        },
+        customerId,
+        order,
+        vendor,
+        sourceMessageId: parsedInput.data.sourceMessageId,
+        recipient: conversation.messages.at(-1)?.fromEmail ?? vendor.contact?.email ?? "",
+        conversationSubject: conversation.messages.at(-1)?.subject ?? null,
+      });
+      return Response.json({ draft: saved }, { headers: responseHeaders });
+    }
     const draft = await dependencies.draft({
       order,
       vendor,
@@ -506,6 +545,7 @@ export async function handleProcurementReplySend(
         recipient: parsedInput.data.recipient,
         subject: parsedInput.data.subject,
         body: parsedInput.data.body,
+        attachmentDocumentIds: parsedInput.data.attachmentDocumentIds,
       },
     });
     return Response.json({ delivery }, { headers: responseHeaders });

@@ -1,4 +1,44 @@
 # Engineering Log
+
+## 2026-08-25: Draft tasks stay PLANNED, attachment bytes load after the claim
+
+- `src/lib/procurement-file-delivery-draft.ts` inserted the draft task as
+  `READY`, which the execution trigger rejects, so the "Draft with request files"
+  action returned a server error in the browser. The task is now created as
+  `PLANNED`, a redraft cancels any prior live draft and writes a new versioned
+  task key, and the draft read looks for the latest `PLANNED` task.
+- `src/lib/procurement-reply-send.ts` split attachment handling: identity and the
+  message hash come from the request itself without touching storage, and bytes
+  are loaded and screened only on the fresh send path, after the claim. The
+  loader is injectable so the ordering is testable.
+- Added `scripts/procurement-file-draft-database.test.ts` (trigger lifecycle,
+  withheld sensitive file, reload, redraft supersession, office scope) and an
+  unresolved send scenario in `scripts/procurement-reply-send-database.test.ts`
+  that reconciles while document storage fails. Both run in CI now.
+- Verification: `npx tsc --noEmit`, `next lint` on the changed files,
+  `npm run test:supplier-attachment-drafts`, `npm run test:procurement-reply-route`,
+  `npm run test:procurement-reply-draft`, and both database contracts against a
+  migrated disposable database. No supplier mail was sent.
+
+## 2026-08-25: Outbound attachments and file bearing supplier draft
+
+- Added `src/lib/outbound-email-attachments.ts` (validation, sanitized names,
+  `multipart/mixed`, Gmail base64url) and wired it into the Gmail API path, the
+  app password SMTP path, `gmail-send`, and the supplier email provider, plus
+  `{name, mimeType, size}` metadata on stored messages.
+- Added `src/lib/supply-os/request-document-attachments.ts` for office and
+  company scoped loading of request cited documents with signature, type, size,
+  name, and sensitive content screening.
+- Added `src/lib/procurement-file-delivery-draft.ts` which saves a durable
+  supplier reply draft with the safe files and the stored request facts and never
+  imports a provider.
+- Route and UI: `withRequestFiles: true` on the conversation POST, `fileDraft` on
+  the GET, `attachmentDocumentIds` revalidated on the confirmed send route, and a
+  "Draft with request files" action that renders "Saved draft, not sent" with
+  attached and withheld files.
+- Verification: `npx tsc --noEmit`, production build, `next lint` on the changed
+  files, `npm run test:supplier-attachment-drafts`, and the procurement, context,
+  and email contract suites. No supplier mail was sent.
 Y��x-���jם��i��+��j[h��ܢ���=�t赩h��n�X�z�H�[��[�Y\�[����\�H\��[H�܈��ۛ���X�[[\[Y[�][ۈ��\�]�]\�HY�[����[�YK��Y\[��Y\��ۘܙ]H[�]Y]X�K�\[��]�[��Y\�]H���K�����[��H[\]B�����VVVKSSKQH�ܝ\���[[X\�B��H��[����H��[Z]��H\�΂�H�[\��[��Y��H�\�Y�X�][ێ��H�Z[Y���\Y�X��΂�H�]�X]΂�H����]\�������������LL��H[ݙH�\��Y\��[��H��\[�K\���Y�[\��H��[����\��Y\�Y�[X\XX��\��X�X[�L������\�Yۈ�\��[�XZ[���H\�Έ�\X�HH�\\�]H�\��Y\��[[X\�H\�H�[X\�H^\�Y[��H�]�H�X[�\H���[H�\�\��[����X���\[�H���H[��[[ݚ[��YZ[���][������H�\��Y\��\��[ۜ˂�H]H[�[�YY[�\]YH�\��Y\�\�\��[Y\�[�ܞ\YYZ[�\��]܋\�XYX�B�\���ܙ�[��Y\Y[�]Y\�[��\H�ܚ��X�HY[X�\��\˂�H�X�\�]N��\��Y\��\��[ۜ�\�H�]�[Y]YY�Z[��X�]�Hܝ[[���ܚ��X�HY[X�\��\ˈ�\��Y\�THX��\��\��\��X�Y�\��YۙY��ܚ��X�\�YZ[�]]][ۜ��^H����Y[��ۛ�X�܈X[�Y�[Y[�\�[�YY��HZYܘ][ێ�^\�[��X���[��\�H�X�ٚ[Y���H��\[�H�[Y\ˈH�[]Y�\���X[^��^\�HZYܘ]Y�\�\��[YH\���X[^�H[��Y�\��X�Y�\Y[�]K[�X�]�HY]܈�ܚ��X�HX��\�˂�H�\�Y�X�][ێ����\�Y]][����\�[Y[��۝�X��]X�\�H\��[�\��H�\��X�Y\��K�[ZYܘ][ۈ�Z[�[��\X]\�K�[]Y��X�ٚ[�\�XH�[Y][ۋ\T�ܚ\��X���K[���X�[ۈ�Z[��H�]�X]�[�YZ[�]\��]H\���ܙY�\�ZYܘ][ۈ�Y�ܙH[�^\�[�X���[��[��Yۈ[����][��UU��PԑUXZ�\��]�Y�XYX�H\���ܙ[�]�Z[X�H[��\]Z\�\�[�YZ[��\�]���������LL�H�\Z\�[�Y�YY�[ۈ��[XH[��[[ݙH[\X�]]\��[�X��H��[����^ܙ[[ݙKZ[\X�]X]\�Y�[�X���\�Yۈ��X�[ۈXZ[���H\�Έ�Y\��X�[ۈۈH�\��[��[ۈ]X�\�K�\�ܙHHZ\��[��\���[XK[���[��\���Y�ܚ��X�H�]H���H�[�\�[��]\��؛�X�˂�H����]\�N�H��X�[ۈZYܘ][ۈY�\�X\��Y[��ZYܘ][ۜ�\\YY]�[��Y��][�Y�\�XHX�\��\�HX��[��H]�B��\K��\K[����ܚ��X�\���]H�Z[YۈHZ\��[���\U�ܚ��X�X��[][ۋ�]\��\�H�Y[�[[��[�X����H�X�ۙ]X�\�K��H]X�\�H�ܚΈ�\\�YH��[�\��KY�ܛX]�X��\�ZX\��YHY]]�B���[XH�\Z\�[��YHH���X���[��X�[ۋ[�ܙX]YۛHZ\��[���\�XB�X�\�[�^\��ܙZYۈ�^\��XZ[��X���[�[�[�\���H�Y��\�ˈB���\��\�H�ܚٛ��X�\��\�H�]Z[�Y��\�ܙY\�XW�\ܘ[��[��ܙX]YHX�]�H\���X[^��ܚ��X�H[��ӑT�Y[X�\��\��H\X�][ۈ�ܚΈ�[[ݙYH]]�X]X�]\�Y[�]H[�[��[�ܞH�[�X����H�ܛX[�Y[�ˈ�\�[�][ۈ[�H�\]Y\��]\�^X�]K��H�\�Y�X�][ێ��\�XHZYܘ][ۈ�]\����X���ZX\��[�\��X�Y\��B�ܘ[��X���\���X[^��ܚ��X�H]Y\�K��\[�H�]�Y�][ۈ�۝�X��\T�ܚ\��X�[ۈ�Z[Y��Y�Y[�K[��ܘ�Y[�X�\�X�\���[���H�]�X]�H�X��\\���[�H�۝��Y�ܚ��][ۈ[���[���B��X]Y\�Hۙ�]\�H�[ۈ�X��\�X�K���������LL�H��\�H�۝^���\[�Q��[Y[�[��\Z\�\�Y�H��[����^�Z[�[X[X��\[�KX�۝^]���\�Yۈ��X�[ۈXZ[���H\�Έ�[[ݙHH�^]X�H�۝^�X��[�[��^H��X�[ۈ\�Y]��]�]�[��[��H\�ݙY�[��KX�]��X��\��X�K��H����]\�N��ܙP�۝^��[Y[��[X�[X�Y��[�ܘY�H[���X�[ۋ�[��\��[�Z�X�YHܚ]H�Y�ܙH^�X�[ۈ܈\��\�[��K�]�\�H�[B�\H\�Y�ܙH�]\��YH�[YH�[�\�X�
 L�\�ۜ�K��H�[\�X�ݙH�P�\�H\�YY[���[�Y�[�����HLP���X�[Z]��\���]�\��[	��
 �HP��[��[ۈ�\]Y\�[Z]��[���\�HH^\�[���\[�Q��[Y[�X�H[�\�H[]YY�\�\��[X�H܈^\�K��HܚY�[�[Y�[H�ۛ�Y�\�HH

@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/prisma";
 import type { ProcurementConversation } from "../src/lib/procurement-conversation-model";
 import { sendProcurementSupplierReply } from "../src/lib/procurement-reply-send";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
+import type { loadRequestDocumentAttachments } from "../src/lib/supply-os/request-document-attachments";
 import type { SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import type { SupplierEmailProvider, SupplierEmailSendInput, SupplierEmailSent } from "../src/lib/supply-os/supplier-email-provider";
 
@@ -24,6 +25,7 @@ type Fixture = {
     recipient: string;
     subject: string;
     body: string;
+    attachmentDocumentIds?: readonly string[];
   };
 };
 
@@ -129,6 +131,7 @@ async function deliver(args: {
   context: SupplyAccessContext;
   fixture: Fixture;
   provider: SupplierEmailProvider;
+  requestDocumentAttachments?: typeof loadRequestDocumentAttachments;
 }) {
   return sendProcurementSupplierReply({
     context: args.context,
@@ -140,6 +143,7 @@ async function deliver(args: {
     dependencies: {
       communicationMessages: args.fixture.communicationMessages,
       provider: args.provider,
+      ...(args.requestDocumentAttachments ? { requestDocumentAttachments: args.requestDocumentAttachments } : {}),
     },
   });
 }
@@ -191,6 +195,7 @@ async function main() {
         email: "operator@derya.ai",
         provider: "GMAIL",
         accessToken: "fixture-token",
+        refreshToken: "fixture-refresh-token",
         isActive: true,
         sendEnabled: true,
       },
@@ -201,6 +206,7 @@ async function main() {
         email: "foreign-only@derya.ai",
         provider: "GMAIL",
         accessToken: "fixture-token",
+        refreshToken: "fixture-refresh-token",
         isActive: true,
         sendEnabled: true,
       },
@@ -277,6 +283,14 @@ async function main() {
       "PROCUREMENT_SUPPLIER_REPLY_SENT",
     ]);
     assert.equal(await prisma.emailMessage.count({ where: { gmailMessageId: delivered.providerMessageId } }), 1);
+    // An attachment free reply must hash exactly as it did before attachments
+    // existed, or a delivery left unresolved across a deploy could never be
+    // reconciled.
+    const successInput = successTasks[0]?.input as { message?: Record<string, unknown> } | null;
+    assert.ok(
+      successInput?.message && !("attachments" in successInput.message),
+      "An attachment free reply must not add an attachments key to the hashed message.",
+    );
 
     const unknown = fixture(workspace.id, `unknown-${suffix}`);
     let unknownSendCount = 0;
@@ -313,6 +327,123 @@ async function main() {
     assert.equal(reconciledReplay.alreadySent, true);
     assert.equal(unknownSendCount, 1);
     assert.equal(unknownReconcileCount, 1);
+
+    // Attachment bytes are only needed by a fresh send, so a storage failure
+    // must never block reconciliation of a delivery that is still unresolved.
+    const attachmentCompany = await prisma.company.create({
+      data: { officeId: office.id, name: `Reply customer ${suffix}` },
+    });
+    const attachmentWorkspace = await prisma.supplyWorkspace.create({
+      data: {
+        officeId: office.id,
+        companyId: attachmentCompany.id,
+        createdByUserId: user.id,
+        name: `Reply attachment workspace ${suffix}`,
+      },
+    });
+    const withFiles = fixture(attachmentWorkspace.id, `files-${suffix}`);
+    const documentId = `context-document-${suffix}`;
+    withFiles.order.requestContext = {
+      source: { workspace_id: attachmentWorkspace.id },
+      procurement_context: {
+        documents: [{
+          citation_id: `document:${documentId}`,
+          name: "assembly-bom.csv",
+          summary: null,
+          markdown: "Stored BOM facts.",
+        }],
+      },
+    };
+    withFiles.input = { ...withFiles.input, attachmentDocumentIds: [documentId] };
+    let attachmentLoads = 0;
+    let attachmentStorageBroken = false;
+    const loadAttachments: typeof loadRequestDocumentAttachments = async (loadArgs) => {
+      attachmentLoads += 1;
+      if (attachmentStorageBroken) throw new Error("Document storage is unavailable.");
+      return {
+        attachments: loadArgs.documentIds.map(() => ({
+          filename: "assembly-bom.csv",
+          contentType: "text/csv",
+          bytes: Buffer.from("Designator,Manufacturer_Part_Number\nR1,RC0402FR-0710KL\n", "utf-8"),
+        })),
+        skipped: [],
+      };
+    };
+    let fileSendCount = 0;
+    let fileReconcileCount = 0;
+    let sentWithAttachments = 0;
+    const fileProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        fileSendCount += 1;
+        sentWithAttachments = input.attachments?.length ?? 0;
+        return { state: "UNKNOWN", error: "The test transport timed out." };
+      },
+      reconcile: async (input) => {
+        fileReconcileCount += 1;
+        return sentReceipt({
+          ...successfulSends[0]!,
+          accountId: input.accountId,
+          officeId: input.officeId,
+          senderEmail: input.senderEmail,
+          rfcMessageId: input.rfcMessageId,
+          providerThreadId: `thread-files-${suffix}`,
+        });
+      },
+    };
+    await assert.rejects(deliver({
+      context,
+      fixture: withFiles,
+      provider: fileProvider,
+      requestDocumentAttachments: loadAttachments,
+    }), /timed out/);
+    assert.equal(attachmentLoads, 1, "A fresh send must load the selected request files.");
+    assert.equal(sentWithAttachments, 1);
+    attachmentStorageBroken = true;
+    const fileReconciled = await deliver({
+      context,
+      fixture: withFiles,
+      provider: fileProvider,
+      requestDocumentAttachments: loadAttachments,
+    });
+    assert.equal(fileReconciled.alreadySent, false);
+    assert.equal(fileSendCount, 1);
+    assert.equal(fileReconcileCount, 1, "An unresolved send must reconcile even when storage is failing.");
+    assert.equal(attachmentLoads, 1, "Reconciliation must not read attachment bytes again.");
+    const reconciledMessage = await prisma.emailMessage.findFirst({
+      where: { gmailMessageId: fileReconciled.providerMessageId },
+      select: { attachments: true },
+    });
+    assert.deepEqual(JSON.parse(reconciledMessage?.attachments ?? "null"), [{ name: "assembly-bom.csv" }]);
+
+    // A file that cannot be read after the claim has to fail the attempt, or the
+    // operator would be stuck reconciling a message Gmail never received.
+    const unreadableFiles = fixture(attachmentWorkspace.id, `files-unreadable-${suffix}`);
+    unreadableFiles.order.requestContext = withFiles.order.requestContext;
+    unreadableFiles.input = { ...unreadableFiles.input, attachmentDocumentIds: [documentId] };
+    let unreadableSendCount = 0;
+    const unreadableProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        unreadableSendCount += 1;
+        return sentReceipt(input);
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    await assert.rejects(deliver({
+      context,
+      fixture: unreadableFiles,
+      provider: unreadableProvider,
+      requestDocumentAttachments: loadAttachments,
+    }), /Document storage is unavailable/);
+    assert.equal(unreadableSendCount, 0, "A failed file load must not reach the provider.");
+    attachmentStorageBroken = false;
+    const recovered = await deliver({
+      context,
+      fixture: unreadableFiles,
+      provider: unreadableProvider,
+      requestDocumentAttachments: loadAttachments,
+    });
+    assert.equal(recovered.alreadySent, false);
+    assert.equal(unreadableSendCount, 1, "A file load failure must stay retryable instead of reconciling forever.");
 
     const rejected = fixture(workspace.id, `rejected-${suffix}`);
     const rejectedIds: string[] = [];
@@ -382,7 +513,7 @@ async function main() {
       provider: successProvider,
     }), /disconnected or disabled/);
 
-    console.log("Supplier reply send task, persistence, reconciliation, concurrency, and tenant checks passed.");
+    console.log("Supplier reply send task, persistence, attachment ordering, reconciliation, concurrency, and tenant checks passed.");
   } finally {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
