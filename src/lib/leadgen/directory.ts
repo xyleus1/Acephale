@@ -119,17 +119,22 @@ function rowFromCells(
   return { companyName, domain, emails, phones, city: city || null, rawLine, sourceUrl: page.url, rowIndex, needsResolution: !domain };
 }
 
-function parseDelimitedRows(page: FetchedPage, regions: readonly string[]): DirectoryRow[] {
+function parseDelimitedRows(page: FetchedPage, regions: readonly string[]) {
   const lines = page.body.split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { rows: [], hasHeader: false };
   const delimiter = lines[0]!.includes("\t") ? "\t" : lines[0]!.includes(";") ? ";" : ",";
   const cells = lines.map((line) => line.split(delimiter).map(cleanCell));
   const headers = cells[0]!;
   const mapped = headers.map(headerField);
   const fieldIndexes: Partial<Record<keyof typeof HEADER_SYNONYMS, number>> = {};
   mapped.forEach((field, index) => { if (field && fieldIndexes[field] === undefined) fieldIndexes[field] = index; });
-  const indexes = Object.keys(fieldIndexes).length ? fieldIndexes : { companyName: 0, emails: 1, phones: 2, city: 3, domain: 4 };
-  return cells.slice(1).map((row, index) => rowFromCells(row, indexes, page, index + 1, regions)).filter((row): row is DirectoryRow => Boolean(row));
+  const hasHeader = Object.keys(fieldIndexes).length > 0;
+  const indexes = hasHeader ? fieldIndexes : { companyName: 0, emails: 1, phones: 2, city: 3, domain: 4 };
+  const data = hasHeader ? cells.slice(1) : cells;
+  return {
+    rows: data.map((row, index) => rowFromCells(row, indexes, page, index + 1, regions)).filter((row): row is DirectoryRow => Boolean(row)),
+    hasHeader,
+  };
 }
 
 function parseHtmlTableRows(page: FetchedPage, regions: readonly string[]) {
@@ -215,16 +220,17 @@ export function parseDirectoryDocument(page: FetchedPage, options: DirectoryPars
   const isDelimited = !page.isPdf && !hasTable && (hasDelimitedSyntax || isPlainText);
   const kind = page.isPdf ? "pdf" : hasTable ? "html_table" : "delimited";
   const htmlRows = hasTable ? parseHtmlTableRows(page, regions) : null;
+  const delimitedRows = isDelimited && !page.isPdf && !isPlainText ? parseDelimitedRows(page, regions) : null;
   const rows = page.isPdf || isPlainText
     ? parsePdfRows(page, regions, threshold)
-    : htmlRows ? htmlRows.rows : isDelimited ? parseDelimitedRows(page, regions) : [];
+    : htmlRows ? htmlRows.rows : delimitedRows?.rows ?? [];
   const deduped = dedupeRows(rows).slice(0, options.maxRows ?? 5000);
   const minRows = options.minRows ?? 2;
   const densityThreshold = options.densityThreshold ?? 0.02;
   const lineCount = page.body.split(/\r?\n/).filter((line) => line.trim()).length;
   const denominator = kind === "html_table"
     ? Math.max(1, htmlRows?.rowCount ?? 0)
-    : Math.max(1, kind === "delimited" ? lineCount - 1 : lineCount);
+    : Math.max(1, kind === "delimited" && delimitedRows?.hasHeader !== false ? lineCount - 1 : lineCount);
   const looksLikeDirectory = deduped.length >= minRows && deduped.length / denominator >= densityThreshold;
   return {
     rows: looksLikeDirectory ? deduped : [],

@@ -191,6 +191,13 @@ const parsedCsv = parseDirectoryDocument(directoryCsv);
 assert.equal(parsedCsv.kind, "delimited");
 assert.equal(parsedCsv.rows.length, 2);
 assert.equal(parsedCsv.rows[0]?.domain, "delta-steel.es");
+const headerlessCsv = parseDirectoryDocument({
+  ...directoryCsv,
+  url: "https://association.example/headerless.csv",
+  body: "First Steel,info@first-steel.example,+90 212 000 00 00,Istanbul,first-steel.example\nSecond Steel,info@second-steel.example,+90 212 000 00 01,Ankara,second-steel.example",
+});
+assert.equal(headerlessCsv.rows.length, 2, "headerless delimited directories must keep the first row");
+assert.equal(headerlessCsv.rows[0]?.companyName, "First Steel");
 const plainDirectory = parseDirectoryDocument({
   url: "https://association.example/plain.txt",
   status: 200,

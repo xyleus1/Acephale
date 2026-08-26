@@ -7736,3 +7736,10 @@ Use this file for chronological implementation notes that future agents should s
 
 - HTML table parsing now assigns row indexes from one page-level data-row
   counter, preventing duplicate provenance numbers across multiple tables.
+
+### 2026-08-26 - Keep the first row of headerless delimited directories
+
+- Delimited parsing skips the first line only when a header field is
+  recognized, so a CSV or TSV that starts with data keeps its first company.
+- The directory-density denominator follows the same decision, so headerless
+  documents are no longer measured against a phantom header line.
