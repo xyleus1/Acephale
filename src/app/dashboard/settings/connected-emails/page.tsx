@@ -31,7 +31,7 @@ function isManagedGmail(provider: string) {
 export default async function ConnectedEmailsPage() {
   const session = await requireEmailAccountAdminSession();
   const accounts = await prisma.emailAccount.findMany({
-    where: { officeId: session.officeId, provider: { in: EMAIL_PROVIDERS } },
+    where: { provider: { in: EMAIL_PROVIDERS } },
     orderBy: [{ isActive: "desc" }, { isDefaultSender: "desc" }, { createdAt: "desc" }],
   });
   const now = new Date();

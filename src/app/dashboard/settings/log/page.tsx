@@ -1,6 +1,13 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { loadMailLog, type MailLogEntry, type MailLogFilter } from "@/lib/admin-mail-log";
+import {
+  listMailLogCompanies,
+  loadMailLog,
+  UNROUTED_COMPANY_FILTER,
+  type MailLogEntry,
+  type MailLogFilter,
+  type MailLogScope,
+} from "@/lib/admin-mail-log";
 import { requireMailLogSession } from "@/lib/email-account-access";
 import { SettingsHeader } from "../settings-header";
 import settingsStyles from "../integrations/integrations-settings.module.css";
@@ -12,6 +19,7 @@ type LogSearchParams = {
   q?: string;
   direction?: string;
   outreach?: string;
+  company?: string;
 };
 
 function parseDirection(value: string | undefined): MailLogFilter["direction"] {
@@ -31,13 +39,25 @@ function whenLabel(value: Date) {
 export default async function MailLogSettingsPage({ searchParams }: { searchParams: Promise<LogSearchParams> }) {
   const session = await requireMailLogSession();
   const params = await searchParams;
+  const isAdmin = session.role === "ADMIN";
+  // Administrators run one unified backend view across every company.
+  const scope: MailLogScope = isAdmin
+    ? { kind: "ALL_OFFICES" }
+    : { kind: "OFFICE", officeId: session.officeId };
   const filter: MailLogFilter = {
     search: (params.q ?? "").trim(),
     direction: parseDirection(params.direction),
     outreach: parseOutreach(params.outreach),
+    company: (params.company ?? "").trim(),
   };
-  const entries = await loadMailLog(session.officeId, filter);
-  const filtered = filter.search !== "" || filter.direction !== "ALL" || filter.outreach !== "ALL";
+  const [entries, companies] = await Promise.all([
+    loadMailLog(scope, filter),
+    listMailLogCompanies(scope),
+  ]);
+  const filtered = filter.search !== ""
+    || filter.direction !== "ALL"
+    || filter.outreach !== "ALL"
+    || filter.company !== "";
   const sent = entries.filter((entry) => entry.direction === "OUTBOUND").length;
   const procurement = entries.filter((entry) => entry.outreachType === "Procurement").length;
 
@@ -62,6 +82,13 @@ export default async function MailLogSettingsPage({ searchParams }: { searchPara
               <option value="Procurement">Procurement</option>
               <option value="Sales">Sales</option>
             </select>
+            <select name="company" defaultValue={filter.company} aria-label="Company">
+              <option value="">All companies</option>
+              {companies.map((company) => (
+                <option value={company} key={company}>{company}</option>
+              ))}
+              {isAdmin ? <option value={UNROUTED_COMPANY_FILTER}>Unrouted mail</option> : null}
+            </select>
             <button type="submit">Filter</button>
           </form>
         </section>
@@ -70,7 +97,11 @@ export default async function MailLogSettingsPage({ searchParams }: { searchPara
           <header className={styles.panelHeader}>
             <div>
               <h2>Mail log</h2>
-              <p>Every sent and received message on this office, newest first. Expand a line to read the message and open its procurement thread.</p>
+              <p>
+                {isAdmin
+                  ? "Every sent and received message across all companies, newest first. Mail that answers no customer thread is listed as unrouted and stays admin only."
+                  : "Every sent and received message on this office, newest first. Expand a line to read the message and open its procurement thread."}
+              </p>
             </div>
           </header>
           <div className={styles.headerRow} aria-hidden="true">

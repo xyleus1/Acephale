@@ -188,7 +188,16 @@ assert.match(workflow, /communication\.customer_id = \$1::uuid/);
 assert.match(workflow, /communication\.order_id = \$2::uuid/);
 assert.match(workflow, /communication\.vendor_id = \$3::uuid/);
 assert.match(conversation, /thread: \{ officeId \}/);
-assert.match(conversation, /officeId: args\.officeId/);
+assert.match(
+  conversation,
+  /localProviderThreadMessages\(args\.officeId, providerThreadId\)/,
+  "stored mail stays office scoped even though mailboxes are shared",
+);
+assert.doesNotMatch(
+  conversation,
+  /emailAccount\.findMany\(\{\s*where: \{\s*officeId/,
+  "the sending mailbox comes from the shared pool, so account lookups are global",
+);
 assert.match(conversationModel, /source: "BOURNE_LEDGER"/);
 assert.match(conversationModel, /if \(ledgerMessages\?\.length\) return procurementConversationFromLedgerMessages\(ledgerMessages\)/);
 assert.match(conversation, /const resolved = await resolveProcurementVendorConversation\(args/);

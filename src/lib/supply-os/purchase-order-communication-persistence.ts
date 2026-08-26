@@ -176,7 +176,7 @@ export async function savePurchaseOrderEmailDraft(args: {
   const sender = await prisma.emailAccount.findFirst({
     where: {
       id: draftInput.senderAccountId,
-      officeId: accessContext.officeId,
+      // Mailboxes are one shared pool, so any office may send from any of them.
       provider: "GMAIL",
       isActive: true,
       sendEnabled: true,

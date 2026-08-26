@@ -14,6 +14,7 @@ import {
 import { emailWorkflowLabelKeys } from "@/lib/email-workflow-labels";
 import { gmailImapClient, GMAIL_APP_PASSWORD_PROVIDER, readGmailAppPasswordAccount } from "@/lib/gmail-app-password";
 import { imapMessageExternalId, imapThreadExternalId } from "@/lib/imap-identifiers";
+import { routeInboundMail, UNROUTED_MAIL_THREAD_MARKER } from "@/lib/inbound-mail-routing";
 import { ingestKnowledgeObject } from "@/lib/memory/ingest-object";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
@@ -26,6 +27,7 @@ export type ImapSyncResult = {
   processed: number;
   created: number;
   threadsTouched: number;
+  unrouted: number;
   autoInquiries: number;
   autoLinked: number;
   targetedMailboxesSearched?: Array<"INBOX" | "ALL" | "JUNK">;
@@ -112,7 +114,6 @@ export async function syncGmailAppPasswordAccountInternal(input: {
   const account = await dependencies.db.emailAccount.findFirst({
     where: {
       id: input.accountId,
-      officeId: input.officeId,
       provider: GMAIL_APP_PASSWORD_PROVIDER,
       isActive: true,
     },
@@ -215,8 +216,10 @@ export async function syncGmailAppPasswordAccountInternal(input: {
 
   let processed = 0;
   let created = 0;
+  let unrouted = 0;
   let operationalMessages = 0;
   const touchedThreadIds = new Set<string>();
+  const routedOfficeIds = new Set<string>();
 
   for (const message of messages.sort((a, b) => a.uid - b.uid)) {
     if (!message.source) continue;
@@ -268,7 +271,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     if (existing) {
       if (demoMessage) {
         await dependencies.db.emailMessage.updateMany({
-          where: { id: existing.id, thread: { officeId: account.officeId } },
+          where: { id: existing.id },
           data: {
             classification: DEMO_EMAIL_CLASSIFICATION,
             classificationReason: "Protected test-only connected email capability message.",
@@ -276,7 +279,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
           },
         });
         await dependencies.db.emailThread.updateMany({
-          where: { id: existing.threadId, officeId: account.officeId },
+          where: { id: existing.threadId },
           data: {
             hiddenAt: dependencies.now(),
             autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER,
@@ -298,19 +301,40 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       subject,
     });
 
+    const routing = demoMessage
+      ? null
+      : await routeInboundMail(dependencies.db, {
+        accountId: account.id,
+        externalThreadId: threadExternalId,
+        rfcMessageId: parsedMessageId,
+        inReplyTo: parsed.inReplyTo?.trim() || null,
+        references: Array.isArray(parsed.references)
+          ? parsed.references
+          : typeof parsed.references === "string"
+            ? parsed.references.split(/\s+/)
+            : [],
+        subject,
+        fromEmail,
+      });
+    const unroutedMessage = Boolean(routing && !routing.routed);
+    if (unroutedMessage) unrouted++;
+    // A shared mailbox has no owning customer, so mail that answers no known
+    // thread is parked on the connecting office as hidden, admin-only mail.
+    const targetOfficeId = routing?.routed ? routing.officeId : account.officeId;
+
     let classification: string | null = demoMessage ? DEMO_EMAIL_CLASSIFICATION : null;
     let classificationReason: string | null = demoMessage
       ? "Protected test-only connected email capability message."
       : null;
     let jobId: string | null = null;
     let inquiryId: string | null = null;
-    if (direction === "INBOUND" && !input.skipClassification && !demoMessage) {
+    if (direction === "INBOUND" && !input.skipClassification && !demoMessage && !unroutedMessage) {
       try {
         const result = await dependencies.classifyInbound({
           subject,
           fromEmail,
           bodyText: body,
-          officeId: account.officeId,
+          officeId: targetOfficeId,
         });
         classification = result.kind;
         classificationReason = result.reason;
@@ -322,25 +346,29 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     }
 
     let thread = await dependencies.db.emailThread.findFirst({
-      where: { officeId: account.officeId, externalThreadId: threadExternalId },
+      where: { officeId: targetOfficeId, externalThreadId: threadExternalId },
     });
     if (!thread) {
       thread = await dependencies.db.emailThread.create({
         data: {
-          officeId: account.officeId,
+          officeId: targetOfficeId,
           subject,
           participants: JSON.stringify(Array.from(new Set([fromEmail, ...to, ...cc]))),
           externalThreadId: threadExternalId,
           jobId,
           inquiryId,
           lastMessageAt: sentAt,
-          hiddenAt: demoMessage ? dependencies.now() : null,
-          autoLinkSkipReason: demoMessage ? DEMO_EMAIL_THREAD_MARKER : null,
+          hiddenAt: demoMessage || unroutedMessage ? dependencies.now() : null,
+          autoLinkSkipReason: demoMessage
+            ? DEMO_EMAIL_THREAD_MARKER
+            : unroutedMessage
+              ? UNROUTED_MAIL_THREAD_MARKER
+              : null,
         },
       });
     } else if (demoMessage) {
       await dependencies.db.emailThread.updateMany({
-        where: { id: thread.id, officeId: account.officeId },
+        where: { id: thread.id, officeId: targetOfficeId },
         data: {
           hiddenAt: dependencies.now(),
           autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER,
@@ -348,7 +376,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       });
     } else if (!thread.jobId && !thread.inquiryId && (jobId || inquiryId)) {
       await dependencies.db.emailThread.updateMany({
-        where: { id: thread.id, officeId: account.officeId },
+        where: { id: thread.id, officeId: targetOfficeId },
         data: { jobId, inquiryId },
       });
       thread.jobId = jobId;
@@ -364,6 +392,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       data: {
         threadId: thread.id,
         accountId: account.id,
+        officeId: targetOfficeId,
         externalId,
         rfcMessageId: parsedMessageId,
         direction,
@@ -382,10 +411,11 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     });
 
     await dependencies.db.emailThread.updateMany({
-      where: { id: thread.id, officeId: account.officeId },
+      where: { id: thread.id, officeId: targetOfficeId },
       data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
     });
     touchedThreadIds.add(thread.id);
+    if (!unroutedMessage && !demoMessage) routedOfficeIds.add(targetOfficeId);
     created++;
 
     const workflowLabels = emailWorkflowLabelKeys({
@@ -408,9 +438,10 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       workflowLabels,
       attachments,
     };
-    if (!demoMessage) {
+    // Unrouted mail belongs to no customer, so it never enters office memory.
+    if (!demoMessage && !unroutedMessage) {
       const memoryObject = await dependencies.ingestMemory({
-        officeId: account.officeId,
+        officeId: targetOfficeId,
         sourceType: "GMAIL",
         sourceExternalId,
         sourceLabel: account.email,
@@ -436,7 +467,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         },
       }).catch(() => null);
       await dependencies.recordMemory({
-        officeId: account.officeId,
+        officeId: targetOfficeId,
         sourceType: "GMAIL",
         sourceExternalId,
         sourceLabel: account.email,
@@ -459,7 +490,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         idempotencyKey: `gmail-imap:message:${createdMessage.id}:ingested`,
       }).catch(() => null);
       await dependencies.logTouch({
-        officeId: account.officeId,
+        officeId: targetOfficeId,
         threadId: thread.id,
         messageId: createdMessage.id,
         direction,
@@ -474,15 +505,18 @@ export async function syncGmailAppPasswordAccountInternal(input: {
 
   if (!input.demoObservation && (messages.length === 0 || operationalMessages > 0)) {
     await dependencies.db.emailAccount.updateMany({
-      where: { id: account.id, officeId: account.officeId },
+      where: { id: account.id },
       data: { lastSyncAt: dependencies.now() },
     });
-    await dependencies.enqueueJob({
-      officeId: account.officeId,
-      type: "PREWARM_OPEN_SOURCING",
-      payload: { officeId: account.officeId },
-      dedupeKey: `prewarm-open-sourcing:${account.officeId}`,
-    }).catch(() => null);
+    // Sourcing prewarm belongs to the offices the synced mail was routed to.
+    for (const officeId of routedOfficeIds.size > 0 ? routedOfficeIds : new Set([account.officeId])) {
+      await dependencies.enqueueJob({
+        officeId,
+        type: "PREWARM_OPEN_SOURCING",
+        payload: { officeId },
+        dedupeKey: `prewarm-open-sourcing:${officeId}`,
+      }).catch(() => null);
+    }
   }
 
   dependencies.revalidate("/dashboard");
@@ -495,6 +529,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     processed,
     created,
     threadsTouched: touchedThreadIds.size,
+    unrouted,
     autoInquiries: 0,
     autoLinked: 0,
     ...(input.relatedToMessageId ? {

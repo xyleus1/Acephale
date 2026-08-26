@@ -211,6 +211,17 @@ async function main() {
         sendEnabled: true,
       },
     });
+    await prisma.emailAccount.create({
+      data: {
+        officeId: foreignOffice.id,
+        email: "send-disabled@derya.ai",
+        provider: "GMAIL",
+        accessToken: "fixture-token",
+        refreshToken: "fixture-refresh-token",
+        isActive: true,
+        sendEnabled: false,
+      },
+    });
 
     const context: SupplyAccessContext = {
       officeId: office.id,
@@ -507,9 +518,17 @@ async function main() {
       fixture: fixture(workspace.id, `foreign-workspace-${suffix}`),
       provider: successProvider,
     }), /not found/);
+    // Mailboxes are one shared pool, so a mailbox connected by another office
+    // still sends, while a mailbox with sending switched off never does.
+    const pooled = await deliver({
+      context,
+      fixture: fixture(workspace.id, `pooled-sender-${suffix}`, "foreign-only@derya.ai"),
+      provider: successProvider,
+    });
+    assert.equal(pooled.alreadySent, false);
     await assert.rejects(deliver({
       context,
-      fixture: fixture(workspace.id, `foreign-sender-${suffix}`, "foreign-only@derya.ai"),
+      fixture: fixture(workspace.id, `send-disabled-${suffix}`, "send-disabled@derya.ai"),
       provider: successProvider,
     }), /disconnected or disabled/);
 

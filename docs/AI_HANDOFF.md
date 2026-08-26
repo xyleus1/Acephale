@@ -1,5 +1,40 @@
 # AI Handoff
 
+## 2026-08-25: Connected mailboxes are one shared pool with a unified admin Log
+
+- `EmailAccount` is no longer a per office mailbox. Every office selects senders
+  from the same pool: `SHARED_MAILBOX_POOL_FILTER` and
+  `SHARED_SENDER_POOL_FILTER` in `src/lib/email-account-pool.ts` are the only
+  account filters used by sending, settings, and sync paths. `officeId` stays on
+  the row as connection provenance and must not scope mailbox lookups.
+- Daily limits count globally per account (`groupBy: ["accountId"]`), and
+  reservations serialize on one shared advisory lock
+  (`email-sender-pool:shared`), so two offices cannot exceed a mailbox limit.
+  `EmailSenderReservation` keeps its own `officeId` so per office idempotency
+  keys and release calls behave as before.
+- Inbound mail is filed into the office that owns the thread, not the office that
+  connected the mailbox. `routeInboundMail` (`src/lib/inbound-mail-routing.ts`)
+  resolves, in order: local external thread, RFC `Message-ID` / `In-Reply-To` /
+  `References`, the `[RFQ xxxxxxxx]` subject reference, then outbound participant
+  history. Participant history routes only when every match belongs to one
+  office; ambiguous matches stay unrouted on purpose.
+- Unrouted mail (nothing about any customer) is admin only. Both `gmail-sync` and
+  `imap-sync` store it hidden with `autoLinkSkipReason = UNROUTED_MAIL_THREAD_MARKER`,
+  skip classification, memory ingestion, CRM touches, and sourcing prewarm for it.
+- `Settings > Log` is unified for admins: `loadMailLog` takes a `MailLogScope`
+  (`ALL_OFFICES` for admins, `OFFICE` otherwise) plus a `company` filter, listed
+  by `listMailLogCompanies`. Office scope still excludes unrouted mail; admin
+  scope includes it and labels the company `Unrouted`.
+- Migration `20260825000300_shared_mailbox_pool` drops the composite account plus
+  office foreign keys and adds a global lowercase email identity index. It fails
+  loudly if duplicate mailbox addresses exist, since a mailbox must exist once.
+- Contract tests: `npm run test:shared-mailbox-pool`, `npm run test:admin-mail-log`,
+  `npm run test:email-sender-pool`, `npm run test:email-account-settings`,
+  `npm run test:gmail-app-password-accounts`.
+- Known state: `docs/ENGINEERING_LOG.md` on main is byte corrupted (last intact
+  revision is `810384b`), so this change is not appended there. Repair belongs in
+  its own follow up.
+
 ## 2026-08-25: Supplier mail carries attachments, request files land in saved drafts
 
 - Every send path built a text only MIME body, so supplier requests for the

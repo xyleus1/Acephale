@@ -1,7 +1,7 @@
 import "server-only";
 
 import { EmailSenderReservationStatus, Prisma } from "@prisma/client";
-import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
+import { SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
 import { prisma } from "@/lib/prisma";
 import {
   rankEmailSenderPoolCandidates,
@@ -11,17 +11,18 @@ import {
 
 type SenderPoolDatabase = Pick<Prisma.TransactionClient, "emailMessage" | "emailSenderReservation">;
 
+/**
+ * The pool is shared across offices, so reservations serialize on one lock:
+ * a per-office lock would let two offices hand out the same mailbox capacity.
+ */
+const SHARED_SENDER_POOL_LOCK = "email-sender-pool:shared";
+
 type SenderPoolAccount = {
   id: string;
   email: string;
   displayName: string | null;
   provider: string;
   dailySendLimit: number;
-};
-
-type SenderPoolUsage = SenderPoolAccount & {
-  sentToday: number;
-  reservedToday: number;
 };
 
 function cleanIdempotencyKey(value: string) {
@@ -42,7 +43,6 @@ function cleanRequestHash(value: string) {
 
 async function senderPoolUsage(
   db: SenderPoolDatabase,
-  officeId: string,
   accounts: SenderPoolAccount[],
   now: Date,
 ) {
@@ -62,7 +62,7 @@ async function senderPoolUsage(
     db.emailSenderReservation.groupBy({
       by: ["accountId"],
       where: {
-        officeId,
+        accountId: { in: accountIds },
         usageDate: start,
         status: EmailSenderReservationStatus.RESERVED,
       },
@@ -78,14 +78,9 @@ async function senderPoolUsage(
   }));
 }
 
-export async function listEmailSenderPoolAccounts(officeId: string, now = new Date()) {
+export async function listEmailSenderPoolAccounts(now = new Date()) {
   const accounts = await prisma.emailAccount.findMany({
-    where: {
-      officeId,
-      isActive: true,
-      sendEnabled: true,
-      ...CONNECTED_GMAIL_ACCOUNT_FILTER,
-    },
+    where: SHARED_SENDER_POOL_FILTER,
     select: {
       id: true,
       email: true,
@@ -94,7 +89,7 @@ export async function listEmailSenderPoolAccounts(officeId: string, now = new Da
       dailySendLimit: true,
     },
   });
-  return rankEmailSenderPoolCandidates(await senderPoolUsage(prisma, officeId, accounts, now));
+  return rankEmailSenderPoolCandidates(await senderPoolUsage(prisma, accounts, now));
 }
 
 type ReservedSender = {
@@ -127,7 +122,7 @@ async function reserveEmailSenderAttempt(args: {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ locked: number }>>`
       SELECT 1::integer AS "locked"
-      FROM pg_advisory_xact_lock(hashtextextended(${`email-sender-pool:${args.officeId}`}, 0))
+      FROM pg_advisory_xact_lock(hashtextextended(${SHARED_SENDER_POOL_LOCK}, 0))
     `;
 
     const existing = await tx.emailSenderReservation.findUnique({
@@ -231,11 +226,8 @@ async function reserveEmailSenderAttempt(args: {
 
     const accounts = await tx.emailAccount.findMany({
       where: {
-        officeId: args.officeId,
+        ...SHARED_SENDER_POOL_FILTER,
         ...(args.accountId ? { id: args.accountId } : {}),
-        isActive: true,
-        sendEnabled: true,
-        ...CONNECTED_GMAIL_ACCOUNT_FILTER,
       },
       select: {
         id: true,
@@ -249,7 +241,7 @@ async function reserveEmailSenderAttempt(args: {
       return { error: "No connected email account is enabled in the sender pool.", code: "POOL_EMPTY" };
     }
 
-    const usage = await senderPoolUsage(tx, args.officeId, accounts, args.now);
+    const usage = await senderPoolUsage(tx, accounts, args.now);
     const selected = selectEmailSenderPoolCandidate(usage);
     if (!selected) {
       return {

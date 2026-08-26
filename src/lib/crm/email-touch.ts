@@ -233,9 +233,10 @@ export async function resolveEmailCounterparty(
   return null;
 }
 
-async function getOfficeEmailSet(officeId: string): Promise<Set<string>> {
+async function getOfficeEmailSet(_officeId: string): Promise<Set<string>> {
+  // Every office sends from the shared mailbox pool, so all pool addresses count
+  // as our own addresses when deciding the counterparty of a message.
   const accounts = await prisma.emailAccount.findMany({
-    where: { officeId },
     select: { email: true },
   });
   return new Set(accounts.map((a) => a.email.toLowerCase()));

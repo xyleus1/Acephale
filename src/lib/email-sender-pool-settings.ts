@@ -5,19 +5,20 @@ import { MAX_EMAIL_DAILY_SEND_LIMIT, validEmailDailySendLimit } from "@/lib/emai
 import { prisma } from "@/lib/prisma";
 
 export type EmailSenderPoolSettingsInput = {
-  officeId: string;
   accountIds: string[];
   sendEnabled?: boolean;
   dailySendLimit?: number;
 };
 
-export async function updateEmailSenderPoolAccountsForOffice(input: EmailSenderPoolSettingsInput) {
+// The pool is shared across offices, so a sender-pool change applies to the
+// mailbox itself instead of one office copy of it.
+export async function updateSharedEmailSenderPoolAccounts(input: EmailSenderPoolSettingsInput) {
   const accountIds = [...new Set(
     Array.isArray(input.accountIds)
       ? input.accountIds.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 220)
       : [],
   )].slice(0, 100);
-  if (!input.officeId || accountIds.length === 0) {
+  if (accountIds.length === 0) {
     return { ok: false as const, error: "Select at least one email account." };
   }
   if (input.sendEnabled !== undefined && typeof input.sendEnabled !== "boolean") {
@@ -42,7 +43,6 @@ export async function updateEmailSenderPoolAccountsForOffice(input: EmailSenderP
       const updated = await tx.emailAccount.updateMany({
         where: {
           id: { in: accountIds },
-          officeId: input.officeId,
           isActive: true,
           ...CONNECTED_GMAIL_ACCOUNT_FILTER,
         },

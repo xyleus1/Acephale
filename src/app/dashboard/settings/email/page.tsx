@@ -50,19 +50,25 @@ export default async function EmailSettingsPage({
   const session = await requireEmailAccountAdminSession();
   const sp = await searchParams;
 
+  // Mailboxes are one shared pool across every company, but the WhatsApp
+  // connection stays a per office channel, so it is loaded separately.
   const accounts = await prisma.emailAccount.findMany({
-    where: { officeId: session.officeId },
+    where: { provider: { not: "WHATSAPP" } },
+    orderBy: { createdAt: "desc" },
+  });
+  const whatsappAccount = await prisma.emailAccount.findFirst({
+    where: { officeId: session.officeId, provider: "WHATSAPP" },
     orderBy: { createdAt: "desc" },
   });
 
   const messageCounts = await prisma.emailMessage.groupBy({
     by: ["accountId"],
-    where: { account: { officeId: session.officeId } },
+    where: { accountId: { in: accounts.map((account) => account.id) } },
     _count: true,
   });
   const messageActivity = await prisma.emailMessage.groupBy({
     by: ["accountId", "direction"],
-    where: { account: { officeId: session.officeId } },
+    where: { accountId: { in: accounts.map((account) => account.id) } },
     _count: true,
     _max: { sentAt: true },
   });
@@ -143,7 +149,7 @@ export default async function EmailSettingsPage({
   const whatsAppWebhookConfigured = waInboundReady;
   const waProviderLabel = waProvider === "greenapi" ? "Green API" : "Meta Cloud API";
   const waCallbackPath = waProvider === "greenapi" ? "/api/webhooks/whatsapp/greenapi" : "/api/webhooks/whatsapp";
-  const waAccount = accounts.find((a) => a.provider === "WHATSAPP") ?? null;
+  const waAccount = whatsappAccount;
   const waEnvRows: Array<[string, boolean]> = waProvider === "greenapi"
     ? [
         ["GREEN_API_ID_INSTANCE", !!process.env.GREEN_API_ID_INSTANCE],

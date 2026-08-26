@@ -56,7 +56,7 @@ export type { SupplierCommunicationTask };
 
 export async function listSupplierSenderAccounts(context: SupplyAccessContext) {
   await currentAccessContext(context);
-  const accounts = await listEmailSenderPoolAccounts(context.officeId);
+  const accounts = await listEmailSenderPoolAccounts();
   return accounts.map((account) => ({ id: account.id, email: account.email, provider: account.provider }));
 }
 
@@ -104,7 +104,7 @@ export async function saveSupplierEmailDraft(args: {
   const sender = await prisma.emailAccount.findFirst({
     where: {
       id: draftInput.senderAccountId,
-      officeId: args.context.officeId,
+      // Mailboxes are one shared pool, so any office may send from any of them.
       isActive: true,
       sendEnabled: true,
       ...CONNECTED_GMAIL_ACCOUNT_FILTER,

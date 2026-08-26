@@ -61,7 +61,12 @@ assert.match(connection, /requireTLS: true/);
 assert.match(connection, /host: GMAIL_IMAP_HOST/);
 assert.match(connection, /secure: true/);
 assert.match(connection, /isEncryptedSecret\(account\.credentialSecret\)/);
-assert.match(sync, /officeId: input\.officeId/);
+assert.match(
+  sync,
+  /routeInboundMail/,
+  "a shared mailbox files each message into the office that owns the thread, not the office that connected it",
+);
+assert.match(sync, /const targetOfficeId = routing\?\.routed \? routing\.officeId/);
 assert.match(sync, /MAX_MESSAGES_PER_SYNC = 200/);
 assert.match(sync, /input\.demoObservation && input\.relatedToMessageId/);
 assert.match(sync, /client\.list\(\)/, "exact-message sync must discover Gmail special-use mailboxes");

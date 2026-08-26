@@ -463,7 +463,6 @@ export async function sendProcurementSupplierReply(args: {
   }
   const sender = await prisma.emailAccount.findFirst({
     where: {
-      officeId: access.officeId,
       email: { equals: anchor.accountEmail, mode: "insensitive" },
       isActive: true,
       sendEnabled: true,

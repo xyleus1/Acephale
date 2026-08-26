@@ -238,7 +238,7 @@ async function compatibilityConversation(
 
   const accounts = await prisma.emailAccount.findMany({
     where: {
-      officeId: args.officeId,
+      // Mailboxes are one shared pool, so the sending mailbox can belong to any office.
       provider: "GMAIL",
       isActive: true,
       OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],

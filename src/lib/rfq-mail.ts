@@ -302,7 +302,6 @@ export async function sendRfqMail(args: {
   }
   const approvedSender = await prisma.emailAccount.findFirst({
     where: {
-      officeId: args.officeId,
       email: { equals: config.user, mode: "insensitive" },
       provider: "GMAIL",
       isActive: true,
@@ -347,7 +346,7 @@ export async function sendRfqMail(args: {
   // The rfq@ account row exists even though it is not OAuth-connected.
   try {
     const account = await prisma.emailAccount.findFirst({
-      where: { officeId: args.officeId, email: config.user },
+      where: { email: config.user },
       select: { id: true },
     });
     const now = new Date();

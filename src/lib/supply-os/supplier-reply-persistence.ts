@@ -180,7 +180,7 @@ export async function captureConnectedSupplierReplies(args: {
   const senderAccount = await prisma.emailAccount.findFirst({
     where: {
       id: senderAccountId,
-      officeId: args.context.officeId,
+      // Mailboxes are one shared pool, so any office may send from any of them.
       isActive: true,
       ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },
@@ -396,7 +396,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
   const senderAccount = await prisma.emailAccount.findFirst({
     where: {
       id: senderAccountId,
-      officeId: accessContext.officeId,
+      // Mailboxes are one shared pool, so any office may send from any of them.
       isActive: true,
       ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },

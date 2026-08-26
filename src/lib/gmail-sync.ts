@@ -19,6 +19,7 @@ import {
   GMAIL_BACKFILL_THREADS_PER_WINDOW,
 } from "./gmail-sync-windows";
 import { GMAIL_APP_PASSWORD_PROVIDER } from "./gmail-app-password";
+import { routeInboundMail, UNROUTED_MAIL_THREAD_MARKER } from "./inbound-mail-routing";
 import { syncGmailAppPasswordAccountInternal } from "./imap-sync";
 
 // Sync envelope: how many threads max we'll touch in one run, and how far back
@@ -36,6 +37,7 @@ type GmailSyncResult = {
   threadsTouched: number;
   autoInquiries: number;
   autoLinked: number;
+  unrouted?: number;
   backfillQueued?: number;
   backfillSkipped?: number;
 };
@@ -127,18 +129,20 @@ export async function syncEmailAccount(accountId: string): Promise<
   | GmailSyncResult
   | { error: string }
 > {
-  const session = await requireEmailAccountAdminSession();
+  await requireEmailAccountAdminSession();
+  // The mailbox pool is shared, so the sync runs against the mailbox itself and
+  // files mail under the office that owns each thread.
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, officeId: session.officeId, isActive: true },
-    select: { provider: true },
+    where: { id: accountId, isActive: true },
+    select: { provider: true, officeId: true },
   });
   if (!account) return { error: "Active email account not found" };
   const result = account.provider === GMAIL_APP_PASSWORD_PROVIDER
-    ? await syncGmailAppPasswordAccountInternal({ accountId, officeId: session.officeId })
-    : await _syncEmailAccountInternal({ accountId, officeId: session.officeId });
+    ? await syncGmailAppPasswordAccountInternal({ accountId, officeId: account.officeId })
+    : await _syncEmailAccountInternal({ accountId, officeId: account.officeId });
   if ("error" in result) return result;
   if (account.provider !== "GMAIL") return result;
-  const backfill = await enqueueGmailBackfillJobsForAccount({ accountId, officeId: session.officeId });
+  const backfill = await enqueueGmailBackfillJobsForAccount({ accountId, officeId: account.officeId });
   return { ...result, backfillQueued: backfill.queued, backfillSkipped: backfill.skipped };
 }
 
@@ -149,7 +153,7 @@ export async function syncEmailAccountInternal(accountId: string, officeId: stri
   | { error: string }
 > {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, officeId, isActive: true },
+    where: { id: accountId, isActive: true },
     select: { provider: true },
   });
   if (!account) return { error: "Active email account not found" };
@@ -172,7 +176,7 @@ export async function syncEmailAccountWindowInternal(input: {
   | { error: string }
 > {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: input.accountId, officeId: input.officeId, isActive: true },
+    where: { id: input.accountId, isActive: true },
     select: { provider: true },
   });
   if (!account) return { error: "Active email account not found" };
@@ -197,7 +201,9 @@ export async function syncEmailAccountWindowInternal(input: {
 
 async function _syncEmailAccountInternal({
   accountId,
-  officeId,
+  // The caller's office no longer decides ownership: mailboxes are shared and
+  // each message is filed under the office that owns its thread.
+  officeId: _officeId,
   query = buildRecentGmailSyncQuery(),
   threadFetchLimit = RECENT_THREAD_FETCH_LIMIT,
 }: {
@@ -210,7 +216,7 @@ async function _syncEmailAccountInternal({
   | { error: string }
 > {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, officeId },
+    where: { id: accountId },
   });
   if (!account) return { error: "Account not found" };
   if (account.provider !== "GMAIL") return { error: "Only Gmail sync is implemented" };
@@ -226,15 +232,21 @@ async function _syncEmailAccountInternal({
 
   let processed = 0;
   let created = 0;
+  let unrouted = 0;
   const touchedThreadDbIds: string[] = [];
+  const routedThreadDbIds: string[] = [];
+  const routedOfficeIds = new Set<string>();
 
   for (const tid of threadIds) {
     const thread = await fetchThread(accessToken, tid);
     if (!thread || !thread.messages || thread.messages.length === 0) continue;
 
-    // Find or stub our local EmailThread for this Gmail thread.
+    // Find or stub our local EmailThread for this Gmail thread. Mailboxes are a
+    // shared pool, so a thread is found by provider identity and its own office
+    // decides ownership.
     let localThread = await prisma.emailThread.findFirst({
-      where: { officeId: account.officeId, externalThreadId: tid },
+      where: { externalThreadId: tid },
+      orderBy: { lastMessageAt: "desc" },
     });
 
     // Sort messages chronologically.
@@ -266,12 +278,12 @@ async function _syncEmailAccountInternal({
         // If we don't have a local thread yet, adopt from existing message.
         if (!localThread) {
           localThread = await prisma.emailThread.findFirst({
-            where: { id: existing.threadId, officeId: account.officeId },
+            where: { id: existing.threadId },
           });
           // Backfill externalThreadId so future syncs map directly.
           if (localThread && !localThread.externalThreadId) {
             await prisma.emailThread.updateMany({
-              where: { id: localThread.id, officeId: account.officeId },
+              where: { id: localThread.id, officeId: localThread.officeId },
               data: { externalThreadId: tid },
             });
             localThread.externalThreadId = tid;
@@ -288,15 +300,35 @@ async function _syncEmailAccountInternal({
       const body = extractPlainBody(msg.payload);
       const attachments = extractAttachments(msg.payload);
 
+      const routing = localThread
+        ? localThread.autoLinkSkipReason === UNROUTED_MAIL_THREAD_MARKER
+          // Follow-ups keep the unrouted state of the thread they belong to.
+          ? { routed: false as const }
+          : { routed: true as const, officeId: localThread.officeId }
+        : await routeInboundMail(prisma, {
+          accountId: account.id,
+          externalThreadId: tid,
+          rfcMessageId: messageIdHdr,
+          inReplyTo: header(headers, "In-Reply-To") ?? null,
+          references: (header(headers, "References") ?? "").split(/\s+/).filter(Boolean),
+          subject,
+          fromEmail,
+        });
+      const unroutedMessage = !routing.routed;
+      // A shared mailbox has no owning customer, so mail that answers no known
+      // thread is parked on the connecting office as hidden, admin-only mail.
+      const targetOfficeId = routing.routed ? routing.officeId : account.officeId;
+      if (unroutedMessage) unrouted++;
+
       // Per-message classification (lightweight; AI may match an existing job/inquiry).
       let classificationLabel: string | null = null;
       let classificationReason: string | null = null;
       let classifiedMatchJobId: string | null = null;
       let classifiedMatchInquiryId: string | null = null;
-      if (direction === "INBOUND") {
+      if (direction === "INBOUND" && !unroutedMessage) {
         try {
           const cls = await classifyInboundEmail({
-            subject, fromEmail, bodyText: body, officeId: account.officeId,
+            subject, fromEmail, bodyText: body, officeId: targetOfficeId,
           });
           classificationLabel = cls.kind;
           classificationReason = cls.reason;
@@ -311,19 +343,21 @@ async function _syncEmailAccountInternal({
       if (!localThread) {
         localThread = await prisma.emailThread.create({
           data: {
-            officeId: account.officeId,
+            officeId: targetOfficeId,
             subject,
             participants: JSON.stringify([fromEmail, account.email]),
             externalThreadId: tid,
             jobId: classifiedMatchJobId,
             inquiryId: classifiedMatchInquiryId,
             lastMessageAt: sentAt,
+            hiddenAt: unroutedMessage ? new Date() : null,
+            autoLinkSkipReason: unroutedMessage ? UNROUTED_MAIL_THREAD_MARKER : null,
           },
         });
       } else if (!localThread.jobId && !localThread.inquiryId && (classifiedMatchJobId || classifiedMatchInquiryId)) {
         // Adopt link from this message if the thread isn't yet linked.
         await prisma.emailThread.updateMany({
-          where: { id: localThread.id, officeId: account.officeId },
+          where: { id: localThread.id, officeId: targetOfficeId },
           data: { jobId: classifiedMatchJobId, inquiryId: classifiedMatchInquiryId },
         });
         localThread.jobId = classifiedMatchJobId;
@@ -334,6 +368,7 @@ async function _syncEmailAccountInternal({
         data: {
           threadId: localThread.id,
           accountId: account.id,
+          officeId: targetOfficeId,
           externalId,
           gmailMessageId: msg.id,
           rfcMessageId: messageIdHdr,
@@ -374,8 +409,8 @@ async function _syncEmailAccountInternal({
         deryaInbox: deryaInbox ? { email: deryaInbox.email, owner: deryaInbox.owner, role: deryaInbox.role } : null,
         attachments,
       };
-      const memoryObject = await ingestKnowledgeObject({
-        officeId: account.officeId,
+      const memoryObject = unroutedMessage ? null : await ingestKnowledgeObject({
+        officeId: targetOfficeId,
         sourceType: "GMAIL",
         sourceExternalId,
         sourceLabel: account.email,
@@ -400,8 +435,8 @@ async function _syncEmailAccountInternal({
           sourceExternalId: externalId,
         },
       }).catch(() => null);
-      await recordMemoryEvent({
-        officeId: account.officeId,
+      if (!unroutedMessage) await recordMemoryEvent({
+        officeId: targetOfficeId,
         sourceType: "GMAIL",
         sourceExternalId,
         sourceLabel: account.email,
@@ -424,27 +459,34 @@ async function _syncEmailAccountInternal({
         idempotencyKey: `gmail:message:${createdMessage.id}:ingested`,
       }).catch(() => null);
       await prisma.emailThread.updateMany({
-        where: { id: localThread.id, officeId: account.officeId },
+        where: { id: localThread.id, officeId: targetOfficeId },
         data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
       });
       // CRM touch: resolve the counterparty and log an EMAIL activity.
       // Never throws - CRM logging must not break sync.
-      await logEmailTouch({
-        officeId: account.officeId,
-        threadId: localThread.id,
-        messageId: createdMessage.id,
-        direction,
-        fromEmail,
-        toEmails: toRaw ? [toRaw] : [],
-        subject,
-        snippet: body || null,
-        sentAt,
-      });
+      // Unrouted mail belongs to no customer, so it never enters office memory.
+      if (!unroutedMessage) {
+        await logEmailTouch({
+          officeId: targetOfficeId,
+          threadId: localThread.id,
+          messageId: createdMessage.id,
+          direction,
+          fromEmail,
+          toEmails: toRaw ? [toRaw] : [],
+          subject,
+          snippet: body || null,
+          sentAt,
+        });
+        routedOfficeIds.add(targetOfficeId);
+      }
       created++;
     }
 
     if (localThread && !touchedThreadDbIds.includes(localThread.id)) {
       touchedThreadDbIds.push(localThread.id);
+      if (localThread.autoLinkSkipReason !== UNROUTED_MAIL_THREAD_MARKER) {
+        routedThreadDbIds.push(localThread.id);
+      }
     }
   }
 
@@ -455,33 +497,38 @@ async function _syncEmailAccountInternal({
 
   // Pre-warm supplier-offer summaries out-of-band. This is AI-heavy work; it
   // should not live inside the Gmail sync request.
-  await enqueueBackgroundJob({
-    officeId: account.officeId,
-    type: "PREWARM_OPEN_SOURCING",
-    payload: { officeId: account.officeId },
-    dedupeKey: `prewarm-open-sourcing:${account.officeId}`,
-  }).catch(() => null);
+  const prewarmOfficeIds = routedOfficeIds.size > 0
+    ? Array.from(routedOfficeIds)
+    : [account.officeId];
+  for (const prewarmOfficeId of prewarmOfficeIds) {
+    await enqueueBackgroundJob({
+      officeId: prewarmOfficeId,
+      type: "PREWARM_OPEN_SOURCING",
+      payload: { officeId: prewarmOfficeId },
+      dedupeKey: `prewarm-open-sourcing:${prewarmOfficeId}`,
+    }).catch(() => null);
+  }
 
   // Auto-classify any new email attachments into JobDocuments on linked jobs.
   // Limited to active (non-DELIVERED) jobs that received new messages this run.
   const jobsTouched = await prisma.job.findMany({
     where: {
-      officeId: account.officeId,
+      officeId: { in: prewarmOfficeIds },
       status: { notIn: ["DELIVERED", "CANCELLED"] },
       OR: [
-        { emailThreads: { some: { id: { in: touchedThreadDbIds } } } },
-        { inquiry: { emailThreads: { some: { id: { in: touchedThreadDbIds } } } } },
+        { emailThreads: { some: { id: { in: routedThreadDbIds } } } },
+        { inquiry: { emailThreads: { some: { id: { in: routedThreadDbIds } } } } },
       ],
     },
-    select: { id: true },
+    select: { id: true, officeId: true },
     take: 30,
   });
   for (const j of jobsTouched) {
-    try { await classifyEmailAttachments({ jobId: j.id, officeId: account.officeId }); } catch {}
+    try { await classifyEmailAttachments({ jobId: j.id, officeId: j.officeId }); } catch {}
   }
 
   await prisma.emailAccount.updateMany({
-    where: { id: accountId, officeId: account.officeId },
+    where: { id: accountId },
     data: { lastSyncAt: new Date() },
   });
 
@@ -495,6 +542,7 @@ async function _syncEmailAccountInternal({
     processed,
     created,
     threadsTouched: touchedThreadDbIds.length,
+    unrouted,
     // Mail never auto-creates RFQs anymore; fields kept for result-shape compat.
     autoInquiries: 0,
     autoLinked: 0,
@@ -569,7 +617,7 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
   const session = await requireEmailAccountAdminSession();
   const accounts = await prisma.emailAccount.findMany({
     where: {
-      officeId: session.officeId,
+      // Mailboxes are one shared pool, so these inboxes are found globally.
       provider: "GMAIL",
       isActive: true,
       OR: DERYA_LOAD_RFQ_INBOX_EMAILS.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })),
@@ -619,9 +667,9 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
 }
 
 export async function disconnectEmailAccount(accountId: string): Promise<void> {
-  const session = await requireEmailAccountAdminSession();
+  await requireEmailAccountAdminSession();
   await prisma.emailAccount.update({
-    where: { id: accountId, officeId: session.officeId },
+    where: { id: accountId },
     data: { isActive: false, sendEnabled: false, isDefaultSender: false },
   });
   revalidatePath("/dashboard/settings/email");
@@ -631,9 +679,9 @@ export async function disconnectEmailAccount(accountId: string): Promise<void> {
 
 // Re-enable a paused account: sync resumes and its threads reappear in the inbox.
 export async function resumeEmailAccount(accountId: string): Promise<void> {
-  const session = await requireEmailAccountAdminSession();
+  await requireEmailAccountAdminSession();
   await prisma.emailAccount.update({
-    where: { id: accountId, officeId: session.officeId },
+    where: { id: accountId },
     data: { isActive: true },
   });
   revalidatePath("/dashboard/settings/email");

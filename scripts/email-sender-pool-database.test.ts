@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { releaseEmailSenderReservation, reserveEmailSender } from "../src/lib/email-sender-pool";
-import { updateEmailSenderPoolAccountsForOffice } from "../src/lib/email-sender-pool-settings";
+import { updateSharedEmailSenderPoolAccounts } from "../src/lib/email-sender-pool-settings";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -123,19 +123,20 @@ async function main() {
   });
   assert.ok("ok" in replacement);
 
-  await assert.rejects(
-    () => prisma.emailSenderReservation.create({
-      data: {
-        officeId: otherOfficeId,
-        accountId: accounts[0].id,
-        usageDate: new Date(),
-        idempotencyKey: `cross-office-${suffix}`,
-        requestHash: requestHash("cross office"),
-      },
-    }),
-    /foreign key|constraint/i,
-    "the database must reject a cross-office sender reservation",
-  );
+  // Mailboxes are one shared pool, so an office may reserve a mailbox that
+  // another office connected, and that reservation still belongs to the office
+  // that sent the mail.
+  const pooledReservation = await prisma.emailSenderReservation.create({
+    data: {
+      officeId: otherOfficeId,
+      accountId: accounts[0].id,
+      usageDate: new Date(),
+      idempotencyKey: `cross-office-${suffix}`,
+      requestHash: requestHash("cross office"),
+    },
+  });
+  assert.equal(pooledReservation.officeId, otherOfficeId);
+  await prisma.emailSenderReservation.delete({ where: { id: pooledReservation.id } });
 
   const otherAccount = await prisma.emailAccount.create({
     data: {
@@ -148,22 +149,25 @@ async function main() {
       dailySendLimit: 2,
     },
   });
-  const rejectedBulkUpdate = await updateEmailSenderPoolAccountsForOffice({
-    officeId,
-    accountIds: [accounts[0].id, otherAccount.id],
+  const rejectedBulkUpdate = await updateSharedEmailSenderPoolAccounts({
+    accountIds: [accounts[0].id, `missing-account-${suffix}`],
     dailySendLimit: 10,
   });
-  assert.equal(rejectedBulkUpdate.ok, false, "a mixed-office bulk update must be rejected atomically");
-  assert.equal((await prisma.emailAccount.findUniqueOrThrow({ where: { id: accounts[0].id } })).dailySendLimit, 2, "a rejected bulk update must not partially change an in-office account");
-  const acceptedBulkUpdate = await updateEmailSenderPoolAccountsForOffice({
-    officeId,
-    accountIds: [accounts[0].id, accounts[1].id],
+  assert.equal(rejectedBulkUpdate.ok, false, "a bulk update naming an unknown account must be rejected atomically");
+  assert.equal((await prisma.emailAccount.findUniqueOrThrow({ where: { id: accounts[0].id } })).dailySendLimit, 2, "a rejected bulk update must not partially change an account");
+  // The pool is shared, so mailboxes connected through different offices change together.
+  const acceptedBulkUpdate = await updateSharedEmailSenderPoolAccounts({
+    accountIds: [accounts[0].id, otherAccount.id],
     dailySendLimit: 10,
     sendEnabled: false,
   });
   assert.deepEqual(acceptedBulkUpdate, { ok: true, count: 2 });
-  const bulkUpdatedAccounts = await prisma.emailAccount.findMany({ where: { id: { in: [accounts[0].id, accounts[1].id] } }, orderBy: { id: "asc" } });
+  const bulkUpdatedAccounts = await prisma.emailAccount.findMany({ where: { id: { in: [accounts[0].id, otherAccount.id] } }, orderBy: { id: "asc" } });
   assert.equal(bulkUpdatedAccounts.every((account) => account.dailySendLimit === 10 && !account.sendEnabled), true, "a valid bulk update must apply every selected change");
+  await prisma.emailAccount.updateMany({
+    where: { id: { in: [accounts[0].id, otherAccount.id] } },
+    data: { sendEnabled: true, dailySendLimit: 2 },
+  });
   const concurrentKey = `sender-pool-db-${suffix}-concurrent`;
   const concurrent = await Promise.all(Array.from({ length: 20 }, () => reserveEmailSender({
     officeId: otherOfficeId,

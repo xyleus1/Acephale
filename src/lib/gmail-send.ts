@@ -33,7 +33,7 @@ export async function sendNewEmailFromAccount(args: {
   jobId?: string | null;
 }): Promise<{ ok: true; messageId: string; threadId: string; localThreadId: string } | { error: string; needsReauth?: boolean }> {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: args.accountId, officeId: args.officeId, isActive: true, sendEnabled: true },
+    where: { id: args.accountId, isActive: true, sendEnabled: true },
   });
   if (!account) return { error: "Sender account not found, inactive, or disabled for sending." };
 
@@ -236,7 +236,7 @@ export async function sendReplyToThread(args: {
   if (!acct) return { error: "No account associated with this thread" };
 
   const account = await prisma.emailAccount.findFirst({
-    where: { id: acct, officeId: session.officeId, isActive: true, sendEnabled: true },
+    where: { id: acct, isActive: true, sendEnabled: true },
   });
   if (!account) return { error: "Email account not found, inactive, or disabled for sending" };
 

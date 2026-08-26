@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
     const email = await getUserEmail(tokens.access_token);
     const encryptedAccessToken = encryptOAuthTokenForStorage(tokens.access_token);
 
-    // Upsert by (officeId, email)
+    // Mailboxes are one shared pool, so a mailbox exists once for the whole app.
     const existing = await prisma.emailAccount.findFirst({
-      where: { officeId: session.officeId, email },
+      where: { email: { equals: email, mode: "insensitive" } },
     });
     const encryptedRefreshToken = tokens.refresh_token
       ? encryptOAuthTokenForStorage(tokens.refresh_token)

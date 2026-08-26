@@ -1857,6 +1857,9 @@ model JobMilestone {
 
 model EmailAccount {
   id           String    @id @default(cuid())
+  // Office that connected this mailbox. Connected mailboxes are one shared pool:
+  // every office can send from any of them, so this field is provenance only and
+  // must not scope mailbox lookups or decide which office owns a message.
   officeId     String
   email        String
   displayName  String?
@@ -1897,7 +1900,7 @@ model EmailSenderReservation {
   createdAt         DateTime                     @default(now())
   updatedAt         DateTime                     @updatedAt
 
-  account EmailAccount  @relation(fields: [accountId, officeId], references: [id, officeId], onDelete: Cascade)
+  account EmailAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   message EmailMessage? @relation(fields: [messageId, accountId, officeId], references: [id, accountId, officeId], onDelete: Cascade)
 
   @@unique([officeId, idempotencyKey])

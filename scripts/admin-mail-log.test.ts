@@ -4,23 +4,64 @@ import { resolve } from "node:path";
 import {
   EMPTY_MAIL_LOG_FILTER,
   mailLogMessageWhere,
+  UNROUTED_COMPANY_FILTER,
   type MailLogFilter,
+  type MailLogScope,
 } from "../src/lib/admin-mail-log";
+import { UNROUTED_MAIL_THREAD_MARKER } from "../src/lib/inbound-mail-routing";
 
 const root = process.cwd();
+const office: MailLogScope = { kind: "OFFICE", officeId: "office-1" };
+const allOffices: MailLogScope = { kind: "ALL_OFFICES" };
+const officeThread = {
+  officeId: "office-1",
+  NOT: { autoLinkSkipReason: UNROUTED_MAIL_THREAD_MARKER },
+};
 
-const unfiltered = mailLogMessageWhere("office-1", EMPTY_MAIL_LOG_FILTER, []);
-assert.deepEqual(unfiltered, { thread: { officeId: "office-1" } }, "an empty filter must only scope the office");
+const unfiltered = mailLogMessageWhere(office, EMPTY_MAIL_LOG_FILTER, []);
+assert.deepEqual(
+  unfiltered,
+  { thread: officeThread },
+  "an office reader must stay scoped to its office and never see unrouted mail",
+);
 
-const sent = mailLogMessageWhere("office-1", { ...EMPTY_MAIL_LOG_FILTER, direction: "OUTBOUND" }, []);
+const unified = mailLogMessageWhere(allOffices, EMPTY_MAIL_LOG_FILTER, []);
+assert.deepEqual(unified, {}, "an administrator reads every company in one query");
+
+const unroutedOnly = mailLogMessageWhere(
+  allOffices,
+  { ...EMPTY_MAIL_LOG_FILTER, company: UNROUTED_COMPANY_FILTER },
+  [],
+);
+assert.deepEqual(
+  unroutedOnly.AND,
+  [{ thread: { autoLinkSkipReason: UNROUTED_MAIL_THREAD_MARKER } }],
+  "the unrouted company filter must select shared-mailbox mail that matched no customer",
+);
+
+const byCompany = mailLogMessageWhere(
+  allOffices,
+  { ...EMPTY_MAIL_LOG_FILTER, company: "HypnoDreamz" },
+  [],
+  ["e3f6cacc"],
+);
+const companyClauses = JSON.stringify(byCompany.AND);
+assert.match(companyClauses, /"name":\{"equals":"HypnoDreamz","mode":"insensitive"\}/);
+assert.match(
+  companyClauses,
+  /"contains":"\[RFQ e3f6cacc\]"/,
+  "a company filter must also match sourcing requests owned by that company",
+);
+
+const sent = mailLogMessageWhere(office, { ...EMPTY_MAIL_LOG_FILTER, direction: "OUTBOUND" }, []);
 assert.equal(sent.direction, "OUTBOUND");
-assert.deepEqual(sent.thread, { officeId: "office-1" }, "direction must not drop office scoping");
+assert.deepEqual(sent.thread, officeThread, "direction must not drop office scoping");
 
-const procurement = mailLogMessageWhere("office-1", { ...EMPTY_MAIL_LOG_FILTER, outreach: "Procurement" }, []);
+const procurement = mailLogMessageWhere(office, { ...EMPTY_MAIL_LOG_FILTER, outreach: "Procurement" }, []);
 assert.deepEqual(procurement.subject, { contains: "[RFQ " });
 assert.equal(procurement.NOT, undefined);
 
-const sales = mailLogMessageWhere("office-1", { ...EMPTY_MAIL_LOG_FILTER, outreach: "Sales" }, []);
+const sales = mailLogMessageWhere(office, { ...EMPTY_MAIL_LOG_FILTER, outreach: "Sales" }, []);
 assert.deepEqual(
   sales.AND,
   [{ OR: [{ subject: null }, { NOT: { subject: { contains: "[RFQ " } } }] }],
@@ -29,9 +70,9 @@ assert.deepEqual(
 assert.equal(sales.NOT, undefined);
 assert.equal(sales.subject, undefined);
 
-const searchFilter: MailLogFilter = { search: "  foam  ", direction: "ALL", outreach: "ALL" };
-const searched = mailLogMessageWhere("office-1", searchFilter, ["e3f6cacc"]);
-const clauses = searched.OR;
+const searchFilter: MailLogFilter = { search: "  foam  ", direction: "ALL", outreach: "ALL", company: "" };
+const searched = mailLogMessageWhere(office, searchFilter, ["e3f6cacc"]);
+const clauses = Array.isArray(searched.AND) ? searched.AND[0]?.OR : undefined;
 assert.ok(Array.isArray(clauses), "a search must build OR clauses inside the query");
 const serialized = JSON.stringify(clauses);
 assert.match(serialized, /"subject":\{"contains":"foam","mode":"insensitive"\}/, "search must be trimmed");
@@ -44,16 +85,16 @@ assert.match(
   /"contains":"\[RFQ e3f6cacc\]"/,
   "a company or line item match in the workflow database must widen the query by RFQ reference",
 );
-assert.match(serialized, /"thread":\{"officeId":"office-1"/, "the relation clause must stay office scoped");
+assert.deepEqual(searched.thread, officeThread, "a search must stay inside the office scope");
 
 const combined = mailLogMessageWhere(
-  "office-1",
-  { search: "foam", direction: "INBOUND", outreach: "Procurement" },
+  office,
+  { search: "foam", direction: "INBOUND", outreach: "Procurement", company: "" },
   [],
 );
 assert.equal(combined.direction, "INBOUND");
 assert.deepEqual(combined.subject, { contains: "[RFQ " });
-assert.ok(Array.isArray(combined.OR));
+assert.ok(Array.isArray(combined.AND));
 
 const settingsHeader = readFileSync(
   resolve(root, "src/app/dashboard/settings/settings-header.tsx"),
@@ -79,9 +120,15 @@ assert.match(
 );
 assert.match(
   logPage,
-  /loadMailLog\(session\.officeId, filter\)/,
-  "the mail log must stay office scoped and filter inside the query",
+  /loadMailLog\(scope, filter\)/,
+  "the mail log must filter inside the query",
 );
+assert.match(
+  logPage,
+  /isAdmin[\s\S]{0,120}ALL_OFFICES[\s\S]{0,120}officeId: session\.officeId/,
+  "administrators read every company while other roles stay office scoped",
+);
+assert.match(logPage, /name="company"/, "the log must offer a company filter");
 assert.doesNotMatch(logPage, /\.filter\(\(entry\) => matches/, "filtering must not run over a truncated page");
 assert.match(logPage, /entry\.procurementLink/, "the mail log must deep link into procurement messages");
 

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { UNROUTED_MAIL_THREAD_MARKER } from "@/lib/inbound-mail-routing";
 import { procurementWorkflowDatabase } from "@/lib/procurement-workflow";
 
 export const MAIL_LOG_PAGE_SIZE = 150;
@@ -9,6 +10,17 @@ export const MAIL_LOG_PAGE_SIZE = 150;
 // Every procurement outreach subject carries this reference, so the marker
 // separates procurement mail from ordinary sales mail inside the query.
 const RFQ_SUBJECT_MARKER = "[RFQ ";
+
+/**
+ * Administrators read one unified log across every company. Every other role
+ * stays scoped to its own office, and unrouted shared-mailbox mail is admin
+ * only because it belongs to no customer.
+ */
+export type MailLogScope =
+  | { kind: "ALL_OFFICES" }
+  | { kind: "OFFICE"; officeId: string };
+
+export const UNROUTED_COMPANY_FILTER = "UNROUTED";
 
 export type MailLogEntry = {
   messageId: string;
@@ -23,53 +35,84 @@ export type MailLogEntry = {
   subject: string;
   body: string;
   procurementLink: string | null;
+  routed: boolean;
 };
 
 export type MailLogFilter = {
   search: string;
   direction: "ALL" | "INBOUND" | "OUTBOUND";
   outreach: "ALL" | "Procurement" | "Sales";
+  company: string;
 };
 
 export const EMPTY_MAIL_LOG_FILTER: MailLogFilter = {
   search: "",
   direction: "ALL",
   outreach: "ALL",
+  company: "",
 };
 
-// The filter runs inside the query so a search reaches the whole office mail
-// history instead of only the newest page.
+// The filter runs inside the query so a search reaches the whole mail history
+// instead of only the newest page.
 export function mailLogMessageWhere(
-  officeId: string,
+  scope: MailLogScope,
   filter: MailLogFilter,
   matchedReferences: string[],
+  companyReferences: string[] = [],
 ): Prisma.EmailMessageWhereInput {
-  const where: Prisma.EmailMessageWhereInput = { thread: { officeId } };
+  const conditions: Prisma.EmailMessageWhereInput[] = [];
+  const where: Prisma.EmailMessageWhereInput = scope.kind === "OFFICE"
+    ? {
+      thread: {
+        officeId: scope.officeId,
+        NOT: { autoLinkSkipReason: UNROUTED_MAIL_THREAD_MARKER },
+      },
+    }
+    : {};
   if (filter.direction !== "ALL") where.direction = filter.direction;
   if (filter.outreach === "Procurement") {
     where.subject = { contains: RFQ_SUBJECT_MARKER };
   } else if (filter.outreach === "Sales") {
     // A null subject is Sales in the log, and a NOT clause would drop it.
-    where.AND = [{
+    conditions.push({
       OR: [{ subject: null }, { NOT: { subject: { contains: RFQ_SUBJECT_MARKER } } }],
-    }];
+    });
+  }
+  const company = filter.company.trim();
+  if (company === UNROUTED_COMPANY_FILTER) {
+    conditions.push({ thread: { autoLinkSkipReason: UNROUTED_MAIL_THREAD_MARKER } });
+  } else if (company) {
+    conditions.push({
+      OR: [
+        { thread: { company: { name: { equals: company, mode: "insensitive" } } } },
+        ...companyReferences.map((reference) => ({
+          subject: {
+            contains: `${RFQ_SUBJECT_MARKER}${reference}]`,
+            mode: "insensitive" as const,
+          },
+        })),
+      ],
+    });
   }
   const search = filter.search.trim();
   if (search) {
-    where.OR = [
-      { subject: { contains: search, mode: "insensitive" } },
-      { fromEmail: { contains: search, mode: "insensitive" } },
-      { toEmails: { contains: search, mode: "insensitive" } },
-      { account: { email: { contains: search, mode: "insensitive" } } },
-      { thread: { officeId, company: { name: { contains: search, mode: "insensitive" } } } },
-      ...matchedReferences.map((reference) => ({
-        subject: {
-          contains: `${RFQ_SUBJECT_MARKER}${reference}]`,
-          mode: "insensitive" as const,
-        },
-      })),
-    ];
+    conditions.push({
+      OR: [
+        { subject: { contains: search, mode: "insensitive" } },
+        { fromEmail: { contains: search, mode: "insensitive" } },
+        { toEmails: { contains: search, mode: "insensitive" } },
+        { account: { email: { contains: search, mode: "insensitive" } } },
+        { thread: { company: { name: { contains: search, mode: "insensitive" } } } },
+        ...matchedReferences.map((reference) => ({
+          subject: {
+            contains: `${RFQ_SUBJECT_MARKER}${reference}]`,
+            mode: "insensitive" as const,
+          },
+        })),
+      ],
+    });
   }
+  if (conditions.length > 0) where.AND = conditions;
   return where;
 }
 
@@ -136,17 +179,58 @@ async function workflowOrdersByReference(references: string[]) {
   return map;
 }
 
+async function workflowCompanyNames() {
+  const rows = await procurementWorkflowDatabase().$queryRawUnsafe<{ companyName: string | null }[]>(
+    `
+      SELECT DISTINCT orders.request_context->'source'->>'company_name' AS "companyName"
+      FROM orders
+      WHERE orders.request_context->'source'->>'company_name' IS NOT NULL
+      LIMIT 500
+    `,
+  );
+  return rows.map((row) => (row.companyName ?? "").trim()).filter(Boolean);
+}
+
+// The company filter spans both sides of the log: companies stored in the app
+// and the customer names carried by sourcing requests in the workflow database.
+export async function listMailLogCompanies(scope: MailLogScope): Promise<string[]> {
+  const [companies, workflowNames] = await Promise.all([
+    prisma.company.findMany({
+      where: {
+        ...(scope.kind === "OFFICE" ? { officeId: scope.officeId } : {}),
+        emailThreads: { some: {} },
+      },
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 500,
+    }),
+    scope.kind === "ALL_OFFICES"
+      ? workflowCompanyNames().catch(() => [] as string[])
+      : Promise.resolve([] as string[]),
+  ]);
+  const names = new Map<string, string>();
+  for (const name of [...companies.map((company) => company.name), ...workflowNames]) {
+    const clean = name.trim();
+    if (clean) names.set(clean.toLowerCase(), clean);
+  }
+  return [...names.values()].sort((left, right) => left.localeCompare(right));
+}
+
 export async function loadMailLog(
-  officeId: string,
+  scope: MailLogScope,
   filter: MailLogFilter = EMPTY_MAIL_LOG_FILTER,
   limit = MAIL_LOG_PAGE_SIZE,
 ): Promise<MailLogEntry[]> {
   const search = filter.search.trim();
-  const matchedReferences = search
-    ? await workflowReferencesMatchingSearch(search).catch(() => [] as string[])
-    : [];
+  const company = filter.company.trim();
+  const [matchedReferences, companyReferences] = await Promise.all([
+    search ? workflowReferencesMatchingSearch(search).catch(() => [] as string[]) : [],
+    company && company !== UNROUTED_COMPANY_FILTER
+      ? workflowReferencesMatchingSearch(company).catch(() => [] as string[])
+      : [],
+  ]);
   const messages = await prisma.emailMessage.findMany({
-    where: mailLogMessageWhere(officeId, filter, matchedReferences),
+    where: mailLogMessageWhere(scope, filter, matchedReferences, companyReferences),
     orderBy: { sentAt: "desc" },
     take: Math.min(500, Math.max(1, limit)),
     select: {
@@ -159,7 +243,13 @@ export async function loadMailLog(
       toEmails: true,
       sentAt: true,
       account: { select: { email: true } },
-      thread: { select: { company: { select: { name: true } } } },
+      thread: {
+        select: {
+          autoLinkSkipReason: true,
+          company: { select: { name: true } },
+          office: { select: { name: true } },
+        },
+      },
     },
   });
   const references = new Set<string>();
@@ -174,12 +264,16 @@ export async function loadMailLog(
     const order = match ? orders.get(match[1].toLowerCase()) ?? null : null;
     const outbound = message.direction === "OUTBOUND";
     const recipient = firstRecipient(message.toEmails);
+    const routed = message.thread.autoLinkSkipReason !== UNROUTED_MAIL_THREAD_MARKER;
     return {
       messageId: message.id,
       threadId: message.threadId,
       direction: outbound ? "OUTBOUND" : "INBOUND",
       sentAt: message.sentAt,
-      companyName: order?.companyName ?? message.thread.company?.name ?? "Not linked",
+      companyName: routed
+        ? order?.companyName ?? message.thread.company?.name ?? message.thread.office?.name ?? "Not linked"
+        : "Unrouted",
+      routed,
       outreachType: match ? "Procurement" : "Sales",
       lineItem: order?.material ?? (match ? `Sourcing request ${match[1]}` : "Not applicable"),
       accountEmail: message.account?.email ?? (outbound ? message.fromEmail : recipient),

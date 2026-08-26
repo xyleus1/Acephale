@@ -65,9 +65,9 @@ function cleanHeader(value: string) {
   return stripEmDashes(value).replace(/[\r\n]+/g, " ").trim();
 }
 
-async function gmailAccount(officeId: string, accountId: string, expectedEmail: string) {
+async function gmailAccount(_officeId: string, accountId: string, expectedEmail: string) {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, officeId, provider: "GMAIL", isActive: true },
+    where: { id: accountId, provider: "GMAIL", isActive: true },
     select: { id: true, email: true },
   });
   if (!account) throw new Error("The selected Gmail sender is missing or inactive.");
@@ -77,9 +77,9 @@ async function gmailAccount(officeId: string, accountId: string, expectedEmail: 
   return account;
 }
 
-async function gmailSendAccount(officeId: string, accountId: string, expectedEmail: string) {
+async function gmailSendAccount(_officeId: string, accountId: string, expectedEmail: string) {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, officeId, provider: "GMAIL", isActive: true },
+    where: { id: accountId, provider: "GMAIL", isActive: true },
     select: { id: true, email: true, sendEnabled: true },
   });
   if (!account) throw new Error("The selected Gmail sender is missing or inactive.");
@@ -241,7 +241,6 @@ async function gmailAppPasswordAccount(input: {
   const account = await prisma.emailAccount.findFirst({
     where: {
       id: input.accountId,
-      officeId: input.officeId,
       provider: GMAIL_APP_PASSWORD_PROVIDER,
       isActive: true,
       credentialSecret: { not: null },
@@ -370,7 +369,7 @@ const gmailAppPasswordSupplierEmailProvider: SupplierEmailProvider = {
 
 async function configuredSupplierEmailProvider(input: Pick<SupplierEmailSendInput, "officeId" | "accountId">) {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: input.accountId, officeId: input.officeId },
+    where: { id: input.accountId },
     select: { provider: true },
   });
   return account?.provider === GMAIL_APP_PASSWORD_PROVIDER

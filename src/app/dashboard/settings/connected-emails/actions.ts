@@ -27,14 +27,13 @@ function validAccountId(value: string) {
   return typeof value === "string" && value.length > 0 && value.length <= 220;
 }
 
-async function roundTripAccounts(officeId: string, senderId: string, recipientId: string) {
+async function roundTripAccounts(senderId: string, recipientId: string) {
   if (!validAccountId(senderId) || !validAccountId(recipientId) || senderId === recipientId) {
     return { error: "Choose two different connected email accounts." } as const;
   }
 
   const accounts = await prisma.emailAccount.findMany({
     where: {
-      officeId,
       id: { in: [senderId, recipientId] },
       provider: { in: ["GMAIL", GMAIL_APP_PASSWORD_PROVIDER] },
       isActive: true,
@@ -66,7 +65,7 @@ function testSubject(token: string) {
 
 export async function startEmailRoundTripTest(senderId: string, recipientId: string) {
   const session = await requireEmailAccountAdminSession();
-  const accounts = await roundTripAccounts(session.officeId, senderId, recipientId);
+  const accounts = await roundTripAccounts(senderId, recipientId);
   if ("error" in accounts) return { ok: false as const, error: accounts.error };
 
   const token = randomUUID().replaceAll("-", "").slice(0, 12);
@@ -98,7 +97,7 @@ export async function startEmailRoundTripTest(senderId: string, recipientId: str
 export async function advanceEmailRoundTripTest(input: EmailRoundTripState) {
   const session = await requireEmailAccountAdminSession();
   if (!TOKEN_PATTERN.test(input.token)) return { ok: false as const, error: "Invalid mailbox test." };
-  const accounts = await roundTripAccounts(session.officeId, input.senderId, input.recipientId);
+  const accounts = await roundTripAccounts(input.senderId, input.recipientId);
   if ("error" in accounts) return { ok: false as const, error: accounts.error };
 
   const subject = testSubject(input.token);

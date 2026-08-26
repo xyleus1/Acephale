@@ -65,20 +65,36 @@ assert.match(component, /Turn on/);
 assert.match(component, /Turn off/);
 assert.match(component, /Set limit/);
 assert.match(component, /account\.sentToday\} \/ \{account\.dailySendLimit/);
-assert.match(actions, /updateEmailSenderPoolAccounts/);
+assert.match(actions, /updateSharedEmailSenderPoolAccounts/);
 assert.match(actions, /officeId: session\.officeId/);
 assert.match(settings, /validEmailDailySendLimit/);
 assert.match(settings, /await prisma\.\$transaction/);
 assert.match(settings, /No accounts were changed/);
-assert.match(settings, /officeId: input\.officeId/);
+assert.doesNotMatch(
+  settings,
+  /officeId: input\.officeId/,
+  "the mailbox pool is shared, so settings must not scope mailboxes to one office",
+);
+assert.match(settings, /CONNECTED_GMAIL_ACCOUNT_FILTER/);
 assert.match(allocator, /pg_advisory_xact_lock/);
+assert.match(
+  allocator,
+  /SHARED_SENDER_POOL_LOCK = "email-sender-pool:shared"/,
+  "offices must serialize on one lock or two of them hand out the same mailbox capacity",
+);
+assert.match(allocator, /SHARED_SENDER_POOL_FILTER/);
+assert.match(
+  allocator,
+  /by: \["accountId"\]/,
+  "a mailbox daily limit counts every office that used the mailbox",
+);
 assert.match(allocator, /EmailSenderReservationStatus\.RESERVED/);
 assert.match(allocator, /selectEmailSenderPoolCandidate/);
 assert.match(allocator, /idempotencyKey/);
 assert.match(allocator, /existing\.requestHash !== args\.requestHash/);
 assert.match(allocator, /IDEMPOTENCY_CONFLICT/);
 assert.match(allocator, /officeId: args\.officeId/);
-assert.match(supplierCommunication, /listEmailSenderPoolAccounts\(context\.officeId\)/);
+assert.match(supplierCommunication, /listEmailSenderPoolAccounts\(\)/);
 assert.match(supplierCommunication, /reserveEmailSender/);
 assert.match(supplierCommunication, /releaseEmailSenderReservation/);
 assert.match(supplierCommunication, /messageId: localMessageId/);

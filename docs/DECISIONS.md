@@ -4331,3 +4331,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
   idempotency controls.
 - Consequence: The feature cannot invent quantities, dates, or specifications,
   and it cannot send on its own.
+
+## 2026-08-25: Mailboxes are shared, mail ownership is routed
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Connected mailboxes are one application wide pool. Any office may
+  send from any enabled mailbox, and a mailbox is stored once, never duplicated
+  per office. `EmailAccount.officeId` survives only as connection provenance.
+- Ownership boundary: The office that owns a message is the office that owns its
+  thread, resolved deterministically from local thread identity, RFC references,
+  the RFQ subject reference, then unambiguous outbound participant history. The
+  mailbox never confers ownership.
+- Ambiguity boundary: When provenance is missing or points at more than one
+  office, the message stays unrouted rather than being guessed into an office.
+  Unrouted mail is hidden from office views, memory, and CRM touches.
+- Admin boundary: Administrators read one unified mail log across all companies
+  and offices, with a company filter and an explicit `Unrouted mail` option.
+  Non admin users stay office scoped.
+- Capacity boundary: Daily send limits and reservation serialization are global
+  per mailbox, so sharing cannot multiply a mailbox limit by the office count.
+- Consequence: One mailbox pool serves every customer without cross office mail
+  leakage, and unmatched inbound mail surfaces only to the administrator.
