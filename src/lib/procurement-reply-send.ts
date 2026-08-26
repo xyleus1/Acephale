@@ -3,6 +3,9 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
+import { SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
+import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
+import { selectEmailSenderPoolCandidate } from "@/lib/email-sender-pool-policy";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import {
@@ -228,6 +231,37 @@ async function resolveReplyAnchor(args: {
   throw new SupplyPersistenceError("Sync this Gmail thread into Derya before sending a supplier reply.", "conflict");
 }
 
+// A thread whose original mailbox is no longer connected cannot be answered
+// from that address. The operator can allow a mailbox from the shared pool
+// instead: the supplier gets the same message and files from a new sender,
+// threaded through the supplier's own message id rather than a Gmail thread
+// that belongs to another mailbox.
+async function pooledReplySender(args: { workspaceId: string; taskScopeKey: string }) {
+  // A retry or reconciliation has to reuse the mailbox the first attempt
+  // claimed: the sender identity is part of the delivery hash, and pool load
+  // shifts constantly, so re-picking would make the attempt unresolvable.
+  const existing = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      workspaceId: args.workspaceId,
+      taskType: PROCUREMENT_REPLY_EMAIL_TASK_TYPE,
+      taskKey: { startsWith: `${args.taskScopeKey}:` },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { input: true },
+  });
+  const claimedSender = record(record(existing?.input).message).senderEmail;
+  if (typeof claimedSender === "string" && claimedSender.trim()) {
+    const previous = await prisma.emailAccount.findFirst({
+      where: { email: { equals: claimedSender.trim(), mode: "insensitive" }, ...SHARED_SENDER_POOL_FILTER },
+      select: { id: true, email: true },
+    });
+    if (previous) return previous;
+  }
+  const candidate = selectEmailSenderPoolCandidate(await listEmailSenderPoolAccounts());
+  if (!candidate) return null;
+  return { id: candidate.id, email: candidate.email };
+}
+
 function deliveryFromTask(task: { input: unknown; result: unknown }, alreadySent: boolean): ProcurementReplyDelivery {
   const input = record(task.input);
   const message = record(input.message);
@@ -432,6 +466,8 @@ export async function sendProcurementSupplierReply(args: {
   vendor: ProcurementOrderVendor;
   conversation: ProcurementConversation;
   input: ProcurementReplySendInput;
+  // Set only by an operator command: it changes who the supplier hears from.
+  allowPooledSender?: boolean;
   dependencies?: Partial<SendDependencies>;
 }): Promise<ProcurementReplyDelivery> {
   const dependencies = { ...defaultDependencies, ...args.dependencies };
@@ -461,7 +497,7 @@ export async function sendProcurementSupplierReply(args: {
   if (input.recipient !== anchor.recipient || inbound.fromEmail.trim().toLowerCase() !== anchor.recipient) {
     throw new SupplyPersistenceError("The supplier recipient changed. Refresh and generate a new reply draft.", "conflict");
   }
-  const sender = await prisma.emailAccount.findFirst({
+  const threadSender = await prisma.emailAccount.findFirst({
     where: {
       email: { equals: anchor.accountEmail, mode: "insensitive" },
       isActive: true,
@@ -470,9 +506,20 @@ export async function sendProcurementSupplierReply(args: {
     },
     select: { id: true, email: true },
   });
+  const sourceHash = createHash("sha256").update(input.sourceMessageId).digest("hex").slice(0, 20);
+  const taskScopeKey = `procurement-reply:${args.order.id}:${args.vendor.id}:${sourceHash}`;
+  const sender = threadSender
+    ?? (args.allowPooledSender ? await pooledReplySender({ workspaceId, taskScopeKey }) : null);
   if (!sender) {
     throw new ProcurementReplySenderUnavailableError(anchor.accountEmail);
   }
+  // A Gmail thread id belongs to the mailbox that holds it, so a pooled sender
+  // starts a new provider thread and relies on the reply headers instead. The
+  // stored thread stays pointed at the original mailbox, so the pooled send is
+  // filed on its own thread rather than repointing the supplier's history.
+  const threadedFromOriginalMailbox = Boolean(threadSender);
+  const providerThreadId = threadedFromOriginalMailbox ? anchor.providerThreadId : null;
+  const localThreadId = threadedFromOriginalMailbox ? anchor.localThreadId : null;
 
   const message = {
     senderAccountId: sender.id,
@@ -486,8 +533,6 @@ export async function sendProcurementSupplierReply(args: {
     ...(plannedAttachments.length ? { attachments: plannedAttachments } : {}),
   };
   const messageHash = digest(message);
-  const sourceHash = createHash("sha256").update(input.sourceMessageId).digest("hex").slice(0, 20);
-  const taskScopeKey = `procurement-reply:${args.order.id}:${args.vendor.id}:${sourceHash}`;
   const claimed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`${workspaceId}:${taskScopeKey}`}, 0))) AS reply_lock`);
     const existing = await tx.supplyExecutionTask.findFirst({
@@ -531,9 +576,9 @@ export async function sendProcurementSupplierReply(args: {
       source: args.conversation.source,
       message,
       messageHash,
-      providerThreadId: anchor.providerThreadId,
+      providerThreadId,
       inReplyToRfcMessageId: anchor.inReplyToRfcMessageId,
-      localThreadId: anchor.localThreadId,
+      localThreadId,
       operatorConfirmation: {
         confirmed: true,
         userId: access.userId,
@@ -636,7 +681,7 @@ export async function sendProcurementSupplierReply(args: {
     subject: message.subject,
     body: message.body,
     rfcMessageId: claimed.rfcMessageId,
-    providerThreadId: anchor.providerThreadId,
+    providerThreadId,
     inReplyToRfcMessageId: anchor.inReplyToRfcMessageId,
     attachments,
   });

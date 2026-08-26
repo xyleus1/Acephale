@@ -7796,3 +7796,10 @@ Use this file for chronological implementation notes that future agents should s
   valid public suffix, plausible company name, and non-reject fit tier, 437
   rows were loaded to the Maneks prospects list. Phones were withheld from
   that load because the previous extractor stamped every number as Turkish.
+
+### 2026-08-25 - Pooled sender fallback
+
+- Supplier file drafts on threads owned by a disconnected mailbox can now be
+  delivered from a shared pool mailbox with `allowPooledSender: true` on the
+  operator send command. The pooled send is a new provider thread that
+  references the supplier message, so no thread is repointed to another mailbox.

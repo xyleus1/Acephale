@@ -23,6 +23,7 @@ export type FileSendOutcome = {
   vendorName: string;
   recipient: string;
   state: "SENT" | "ALREADY_SENT" | "FAILED";
+  sender: string | null;
   attachments: string[];
   providerMessageId: string | null;
   error: string | null;
@@ -45,6 +46,10 @@ export async function runProcurementFileDraftSendBatch(args: {
   // When present, only these suppliers may be delivered to. The sourcing loop
   // uses it so a thread it decided to escalate is never answered automatically.
   vendorIds?: readonly string[];
+  // When the mailbox that owns a thread is no longer connected, deliver from a
+  // shared pool mailbox instead of failing. Operator commands opt in; the
+  // sourcing loop never does, because it changes who the supplier hears from.
+  allowPooledSender?: boolean;
 }): Promise<FileSendRunResult | null> {
   const summary = await loadBulkRfqOrder(args.orderId);
   if (!summary) return null;
@@ -86,6 +91,7 @@ export async function runProcurementFileDraftSendBatch(args: {
           body: draft.body,
           attachmentDocumentIds: draft.attachments.map((attachment) => attachment.documentId),
         },
+        allowPooledSender: args.allowPooledSender === true,
       });
       await markProcurementFileDeliveryDraftSent({
         context: access,
@@ -99,6 +105,7 @@ export async function runProcurementFileDraftSendBatch(args: {
         vendorName: vendor.name,
         recipient: draft.recipient,
         state: delivery.alreadySent ? "ALREADY_SENT" : "SENT",
+        sender: delivery.accountEmail,
         attachments,
         providerMessageId: delivery.providerMessageId,
         error: null,
@@ -109,6 +116,7 @@ export async function runProcurementFileDraftSendBatch(args: {
         vendorName: vendor.name,
         recipient: draft.recipient,
         state: "FAILED",
+        sender: null,
         attachments,
         providerMessageId: null,
         error: error instanceof Error ? error.message : "The supplier reply send failed.",

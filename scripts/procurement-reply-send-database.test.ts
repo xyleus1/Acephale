@@ -132,6 +132,7 @@ async function deliver(args: {
   fixture: Fixture;
   provider: SupplierEmailProvider;
   requestDocumentAttachments?: typeof loadRequestDocumentAttachments;
+  allowPooledSender?: boolean;
 }) {
   return sendProcurementSupplierReply({
     context: args.context,
@@ -140,6 +141,7 @@ async function deliver(args: {
     vendor: args.fixture.vendor,
     conversation: args.fixture.conversation,
     input: args.fixture.input,
+    ...(args.allowPooledSender ? { allowPooledSender: true } : {}),
     dependencies: {
       communicationMessages: args.fixture.communicationMessages,
       provider: args.provider,
@@ -532,7 +534,123 @@ async function main() {
       provider: successProvider,
     }), /disconnected or disabled/);
 
-    console.log("Supplier reply send task, persistence, attachment ordering, reconciliation, concurrency, and tenant checks passed.");
+    // A thread whose mailbox is no longer connected can only be answered from a
+    // pool mailbox, and only when the operator asked for that.
+    const orphaned = fixture(workspace.id, `orphaned-${suffix}`, "gone@derya.ai");
+    await assert.rejects(deliver({
+      context,
+      fixture: orphaned,
+      provider: guardProvider,
+    }), /disconnected or disabled/);
+    assert.equal(rejectedBeforeProvider, 0, "A missing mailbox must stop before Gmail.");
+    const pooledFallbackSends: SupplierEmailSendInput[] = [];
+    const pooledFallbackProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        pooledFallbackSends.push(input);
+        return sentReceipt(input);
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    const fallback = await deliver({
+      context,
+      fixture: orphaned,
+      provider: pooledFallbackProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(fallback.alreadySent, false);
+    assert.equal(pooledFallbackSends.length, 1);
+    const fallbackSend = pooledFallbackSends[0]!;
+    assert.notEqual(fallbackSend.senderEmail, "gone@derya.ai");
+    assert.ok(
+      ["operator@derya.ai", "foreign-only@derya.ai"].includes(fallbackSend.senderEmail),
+      "A pooled fallback must send from a connected send enabled mailbox.",
+    );
+    assert.equal(
+      fallbackSend.providerThreadId,
+      null,
+      "A pooled fallback cannot claim the Gmail thread of another mailbox.",
+    );
+    assert.equal(
+      fallbackSend.inReplyToRfcMessageId,
+      `<${orphaned.input.sourceMessageId}@example.com>`,
+      "A pooled fallback must still reference the supplier message it answers.",
+    );
+    const fallbackReplay = await deliver({
+      context,
+      fixture: orphaned,
+      provider: pooledFallbackProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(fallbackReplay.alreadySent, true);
+    assert.equal(pooledFallbackSends.length, 1, "A pooled fallback replay must not send twice.");
+
+    // Pool load shifts constantly, so a pooled attempt has to pin its mailbox:
+    // re-picking would change the delivery hash and make the reply unretryable.
+    const retried = fixture(workspace.id, `orphaned-retry-${suffix}`, "gone@derya.ai");
+    const retrySends: SupplierEmailSendInput[] = [];
+    let rejectFirstPooled = true;
+    const retryProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        retrySends.push(input);
+        if (rejectFirstPooled) {
+          rejectFirstPooled = false;
+          return { state: "REJECTED", error: "The test sender rejected the message." };
+        }
+        return sentReceipt(input);
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    await assert.rejects(deliver({
+      context,
+      fixture: retried,
+      provider: retryProvider,
+      allowPooledSender: true,
+    }), /rejected/);
+    const claimedSender = retrySends[0]!.senderEmail;
+    // Fresh pool selection would now skip this mailbox, since it is at its daily
+    // limit, so only a pinned sender keeps the retry on the same identity and
+    // therefore on the same delivery hash.
+    const loadedThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: `Pool load ${suffix}`,
+        participants: JSON.stringify([claimedSender]),
+        lastMessageAt: new Date(),
+        messageCount: 1,
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: loadedThread.id,
+        accountId: retrySends[0]!.accountId,
+        externalId: `pool-load-${suffix}`,
+        direction: "OUTBOUND",
+        fromEmail: claimedSender,
+        toEmails: JSON.stringify(["load@example.com"]),
+        subject: `Pool load ${suffix}`,
+        bodyText: "Load that puts this mailbox at its daily limit.",
+        sentAt: new Date(),
+      },
+    });
+    await prisma.emailAccount.update({
+      where: { id: retrySends[0]!.accountId },
+      data: { dailySendLimit: 1 },
+    });
+    const retryDelivered = await deliver({
+      context,
+      fixture: retried,
+      provider: retryProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(retryDelivered.alreadySent, false);
+    assert.equal(retrySends.length, 2);
+    assert.equal(
+      retrySends[1]!.senderEmail,
+      claimedSender,
+      "A pooled retry must reuse the mailbox the first attempt claimed.",
+    );
+
+    console.log("Supplier reply send task, persistence, attachment ordering, reconciliation, concurrency, pooled sender fallback, and tenant checks passed.");
   } finally {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");

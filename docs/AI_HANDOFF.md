@@ -10931,3 +10931,24 @@ Verification caveat:
 - The list overlay loads every listed order in one query whose row cap is per
   order (`row_number()` partitioned by the RFQ subject token), so a high volume
   order cannot starve the rest of the list.
+
+## 2026-08-25: Pooled sender fallback for orphaned supplier threads
+
+- A supplier thread whose original mailbox is no longer connected could not be
+  answered at all: the reply send path required that exact address to be active
+  and send enabled.
+- `sendProcurementSupplierReply` now takes `allowPooledSender`. When the
+  original mailbox is missing and the flag is set, the least loaded connected
+  send enabled mailbox from the shared pool delivers the message instead.
+- A pooled send starts its own provider thread: a Gmail thread id belongs to the
+  mailbox that holds it, so `providerThreadId` and the stored local thread are
+  dropped and threading relies on `In-Reply-To` of the supplier message. The
+  supplier history stays pointed at the original mailbox.
+- The flag is opt in per request on `POST /api/admin/procurement-file-sends`
+  (`allowPooledSender: true`) and is never set by the sourcing loop, because it
+  changes which address the supplier hears from. Idempotency is unchanged, so a
+  replay never sends twice, and each send outcome now reports its `sender`.
+- A pooled attempt pins its mailbox: the sender identity is part of the delivery
+  hash, so a retry or reconciliation reuses the mailbox recorded on the existing
+  task instead of re-ranking the pool, which would otherwise make an unresolved
+  pooled delivery unretryable.

@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
     orderId?: unknown;
     limit?: unknown;
     confirm?: unknown;
+    allowPooledSender?: unknown;
   };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
   const invalid = procurementOrderIdError(orderId);
@@ -36,7 +37,13 @@ export async function POST(req: NextRequest) {
     ? Math.min(FILE_SEND_MAX_PER_RUN, Math.max(1, Math.trunc(payload.limit)))
     : FILE_SEND_MAX_PER_RUN;
   try {
-    const result = await runProcurementFileDraftSendBatch({ orderId, limit });
+    const result = await runProcurementFileDraftSendBatch({
+      orderId,
+      limit,
+      // Opt in per run: a pooled mailbox answers a thread whose original
+      // mailbox is gone, so the supplier hears from a different address.
+      allowPooledSender: payload.allowPooledSender === true,
+    });
     if (!result) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
     return NextResponse.json(result);
   } catch (error) {
