@@ -10952,3 +10952,28 @@ Verification caveat:
   hash, so a retry or reconciliation reuses the mailbox recorded on the existing
   task instead of re-ranking the pool, which would otherwise make an unresolved
   pooled delivery unretryable.
+
+## 2026-08-25: Chat driven sourcing waves with category scoped RFQ files
+
+- "find 100 more in each category and send" is now a first class instruction.
+  `procurement-sourcing-command` parses it deterministically (count, per
+  category scope, whether a send was asked for), plans one wave per sourcing
+  category of the customer, and queues a background job. The phrase never
+  reaches the model, so a paraphrase cannot invent a different wave.
+- The wave itself is bounded work: `SOURCING_COMMAND_SLICE` suppliers per
+  invocation, remainder requeued under one dedupe key per workspace, and the
+  requeue stops as soon as a slice adds nothing. Repeating the phrase while a
+  wave runs joins the running wave instead of starting a second one.
+- Supplier discovery crawls each candidate site (home plus capability, contact
+  and RFQ pages), requires the category's own capability evidence before the row
+  is kept, takes only published addresses, and verifies deliverability. Molded
+  foam rejects fabricators, converters, mattress and bedding sellers, which is
+  what made the first foam list weak. Source URLs, provider, evidence and
+  verification verdict are stored on every row.
+- RFQ files are category scoped: a PCBA enquiry may carry the fab spec and the
+  BOM, a molded foam enquiry may carry the STL geometry, and anything out of
+  category is withheld with a stated reason instead of being attached. The
+  operator preview returns the exact attachment names and the withheld list
+  before anything is sent.
+- The scheduled procurement pass also drains queued sourcing waves, so a wave
+  asked for in chat keeps moving without an operator command.

@@ -4402,3 +4402,23 @@ Use this log for durable product and engineering decisions. Do not put every imp
   supplier, even while sending is on.
 - Completion boundary: A request is PO ready only when enough recorded supplier
   quotes exist. Replies, interest and drafts never count as quotes.
+
+## 2026-08-25: A sourcing instruction is parsed deterministically, not interpreted
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Operator sourcing instructions of the form "find N more in each
+  category and send" are parsed by a deterministic pattern that yields the
+  count, the per category scope and whether a send was requested. The model
+  never decides that suppliers should be crawled or contacted.
+- Bound: The count is capped, the work runs in slices as a queued job, and one
+  dedupe key per workspace means a repeated instruction cannot double the crawl
+  or the outreach.
+- Authorization: In the context chat the operator who typed the instruction is
+  the authorization, recorded on the job with their user id and the verbatim
+  instruction. The admin API is a secret rather than a person, so it keeps
+  requiring its explicit confirmation phrase.
+- Category boundary: Files attached to an RFQ must belong to the request and to
+  the request's own sourcing category. Out of category files are withheld with a
+  reason rather than sent, so a board BOM cannot reach a foam molder and mold
+  geometry cannot reach a board shop.

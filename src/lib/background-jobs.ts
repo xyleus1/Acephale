@@ -2,14 +2,15 @@ import "server-only";
 import type { BackgroundJob, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
-type BackgroundJobType =
+export type BackgroundJobType =
   | "ANALYZE_JOB_DOCUMENT"
   | "GMAIL_SYNC_WINDOW"
   | "PREWARM_OPEN_SOURCING"
   | "PREWARM_INQUIRY_SUMMARY"
   | "CUSTOMER_STATUS_NOTIFY"
   | "CUSTOMER_MILESTONE_NOTIFY"
-  | "DEMO_EMAIL_CAPABILITY_TEST";
+  | "DEMO_EMAIL_CAPABILITY_TEST"
+  | "PROCUREMENT_SOURCING_WAVE";
 
 type EnqueueInput = {
   officeId: string;
@@ -18,6 +19,9 @@ type EnqueueInput = {
   dedupeKey?: string | null;
   runAfter?: Date;
   maxAttempts?: number;
+  // A job that continues its own work re-uses its dedupe key, so it has to be
+  // able to exclude itself from the check while it is still RUNNING.
+  ignoreJobId?: string | null;
 };
 
 type RunResult = {
@@ -51,6 +55,7 @@ export async function enqueueBackgroundJob(input: EnqueueInput) {
         officeId: input.officeId,
         dedupeKey: input.dedupeKey,
         status: { in: ["QUEUED", "RUNNING"] },
+        ...(input.ignoreJobId ? { id: { not: input.ignoreJobId } } : {}),
       },
       select: { id: true },
     });
@@ -144,6 +149,12 @@ async function executeBackgroundJob(job: BackgroundJob) {
     return;
   }
 
+  if (type === "PROCUREMENT_SOURCING_WAVE") {
+    const { runQueuedSourcingWaveJob } = await import("./procurement-sourcing-command");
+    await runQueuedSourcingWaveJob({ officeId: job.officeId, jobId: job.id, payload: job.payload });
+    return;
+  }
+
   throw new Error(`Unknown background job type: ${type}`);
 }
 
@@ -223,8 +234,13 @@ export async function runBackgroundJobById(input: {
   return { found: true as const, outcome };
 }
 
-export async function runDueBackgroundJobs(input: { limit?: number } = {}): Promise<RunResult> {
+export async function runDueBackgroundJobs(
+  input: { limit?: number; onlyTypes?: readonly BackgroundJobType[] } = {},
+): Promise<RunResult> {
   const limit = Math.min(50, Math.max(1, input.limit ?? 10));
+  const typeFilter = input.onlyTypes?.length
+    ? { in: [...input.onlyTypes] }
+    : { not: "DEMO_EMAIL_CAPABILITY_TEST" };
   const now = new Date();
   const offices = await prisma.office.findMany({ select: { id: true } });
   const jobs: BackgroundJob[] = [];
@@ -235,7 +251,7 @@ export async function runDueBackgroundJobs(input: { limit?: number } = {}): Prom
         officeId: office.id,
         status: "QUEUED",
         runAfter: { lte: now },
-        type: { not: "DEMO_EMAIL_CAPABILITY_TEST" },
+        type: typeFilter,
       },
       orderBy: { runAfter: "asc" },
       take: limit - jobs.length,

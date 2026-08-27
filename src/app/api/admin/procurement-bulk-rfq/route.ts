@@ -9,6 +9,10 @@ import {
   reconcileProcurementBulkRfq,
   runProcurementBulkRfq,
 } from "@/lib/procurement-bulk-rfq";
+import {
+  EMPTY_RFQ_ATTACHMENT_PACKAGE,
+  loadProcurementRfqAttachmentPackage,
+} from "@/lib/procurement-rfq-attachments";
 
 export const maxDuration = 300;
 
@@ -47,6 +51,13 @@ export async function GET(req: NextRequest) {
     const order = await loadBulkRfqOrder(orderId);
     if (!order) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
     const targets = await listBulkRfqTargets(order, BULK_RFQ_MAX_PER_RUN);
+    // The preview resolves the same package the send would, so the operator sees
+    // the exact files each RFQ carries before any of them go out.
+    const files = await loadProcurementRfqAttachmentPackage({
+      orderId: order.orderId,
+      customerId: order.customerId,
+      officeId: order.officeId,
+    }).catch(() => EMPTY_RFQ_ATTACHMENT_PACKAGE);
     return NextResponse.json({
       order: {
         orderId: order.orderId,
@@ -57,6 +68,8 @@ export async function GET(req: NextRequest) {
         unit: order.unit,
       },
       pending: targets.length,
+      attachments: files.names,
+      withheldFiles: files.withheld,
       recipients: targets.map((target) => target.contactEmail),
       drafts: withDrafts
         ? targets.map((target) => ({
@@ -65,7 +78,8 @@ export async function GET(req: NextRequest) {
           website: target.website,
           recipient: target.contactEmail,
           subject: buildBulkRfqSubject(order),
-          body: buildBulkRfqBody(order, target),
+          body: buildBulkRfqBody(order, target, files),
+          attachments: files.names,
         }))
         : undefined,
     });

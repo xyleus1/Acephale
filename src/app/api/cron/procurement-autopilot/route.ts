@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { runDueBackgroundJobs } from "@/lib/background-jobs";
 import { listAutopilotOrderIds, runProcurementAutopilot } from "@/lib/procurement-autopilot";
 
 export const runtime = "nodejs";
@@ -25,6 +26,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
   }
   try {
+    // A sourcing wave asked for from the context chat runs in slices, so this
+    // pass carries it forward instead of leaving it for the hourly job sweep.
+    const waves = await runDueBackgroundJobs({ limit: 2, onlyTypes: ["PROCUREMENT_SOURCING_WAVE"] })
+      .catch(() => null);
     const orderIds = await listAutopilotOrderIds();
     const runs = [];
     let failed = 0;
@@ -48,6 +53,7 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({
       ranAt: new Date().toISOString(),
+      sourcingWaves: waves?.scanned ?? 0,
       requests: runs.length,
       failed,
       runs,

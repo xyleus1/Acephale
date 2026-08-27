@@ -7803,3 +7803,18 @@ Use this file for chronological implementation notes that future agents should s
   delivered from a shared pool mailbox with `allowPooledSender: true` on the
   operator send command. The pooled send is a new provider thread that
   references the supplier message, so no thread is repointed to another mailbox.
+
+### 2026-08-25 - Sourcing waves from the context chat
+
+- Added `procurement-sourcing-command` (parse, plan, run, queued slice worker),
+  `procurement-supplier-sourcing` (crawl, qualify, verify, insert with a
+  duplicate guard), `supplier-sourcing-category` (deterministic PCBA and molded
+  foam policy) and `procurement-rfq-attachments` (request scoped, safety
+  screened, category filtered files).
+- The context agent recognizes the sourcing phrase before any model call and
+  answers with what was queued. `runDueBackgroundJobs` now takes an `onlyTypes`
+  filter so the 15 minute procurement cron can carry a queued wave forward.
+- Contracts: `npm run test:procurement-sourcing-command` and
+  `npm run test:procurement-sourcing-wave`. The wave contract caught two real
+  defects: company names came from the shortest title segment, and generic sales
+  inboxes outranked published RFQ inboxes.

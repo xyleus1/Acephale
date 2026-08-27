@@ -8,6 +8,11 @@ import {
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
 import {
+  EMPTY_RFQ_ATTACHMENT_PACKAGE,
+  loadProcurementRfqAttachmentPackage,
+  type ProcurementRfqAttachmentPackage,
+} from "@/lib/procurement-rfq-attachments";
+import {
   procurementOfficeIdFromServerMetadata,
   procurementWorkflowDatabase,
 } from "@/lib/procurement-workflow";
@@ -66,6 +71,8 @@ export type BulkRfqOutcome = {
 export type BulkRfqRunResult = {
   orderId: string;
   material: string;
+  attachments: string[];
+  withheldFiles: Array<{ name: string; reason: string }>;
   candidates: number;
   sent: number;
   alreadySent: number;
@@ -115,7 +122,11 @@ export function buildBulkRfqSubject(order: BulkRfqOrder) {
   return clean(`[RFQ ${reference}] ${order.material}, ${quantityText(order)}`).slice(0, 180);
 }
 
-export function buildBulkRfqBody(order: BulkRfqOrder, target: BulkRfqTarget) {
+export function buildBulkRfqBody(
+  order: BulkRfqOrder,
+  target: BulkRfqTarget,
+  files: ProcurementRfqAttachmentPackage = EMPTY_RFQ_ATTACHMENT_PACKAGE,
+) {
   const greetingName = clean(target.name).replace(/[.,]$/, "");
   const lines = [
     `Hello ${greetingName || "there"},`,
@@ -125,10 +136,17 @@ export function buildBulkRfqBody(order: BulkRfqOrder, target: BulkRfqTarget) {
     `Item: ${clean(order.material)}`,
     `Quantity: ${quantityText(order)}`,
     ...(order.neededBy ? [`Needed by: ${order.neededBy}`] : []),
+    ...(files.names.length
+      ? ["", "Attached files:", ...files.names.map((name) => `- ${name}`)]
+      : []),
     "",
     "Specification:",
     stripEmDashes(order.specification?.trim() || "Full specification available on request."),
+    ...(files.contextSections.length ? ["", ...files.contextSections] : []),
     ...(order.notes?.trim() ? ["", "Additional notes:", stripEmDashes(order.notes.trim())] : []),
+    ...(files.attachments.length
+      ? ["", "The figures above are read from the attached files, so please treat the files as the controlling source and tell us where they disagree with your process."]
+      : []),
     "",
     "Please reply with:",
     "1. Unit price at the quantity above, and price at 250 and 500 units.",
@@ -180,8 +198,15 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
   };
 }
 
-export async function listBulkRfqTargets(order: BulkRfqOrder, limit: number): Promise<BulkRfqTarget[]> {
+export async function listBulkRfqTargets(
+  order: BulkRfqOrder,
+  limit: number,
+  // A sourcing wave contacts the suppliers it just found. Oldest first ordering
+  // would otherwise spend the run on vendors that were already sitting there.
+  vendorIds?: readonly string[] | null,
+): Promise<BulkRfqTarget[]> {
   const bounded = Math.min(BULK_RFQ_MAX_PER_RUN, Math.max(1, limit));
+  const only = vendorIds?.length ? new Set(vendorIds) : null;
   const rows = await procurementWorkflowDatabase().$queryRawUnsafe<VendorRow[]>(`
     SELECT
       order_vendors.id AS "vendorId",
@@ -208,6 +233,7 @@ export async function listBulkRfqTargets(order: BulkRfqOrder, limit: number): Pr
   const alreadyHandled = new Set(contacted.map((entry) => entry.idempotencyKey.split(":").at(-1)));
   return rows
     .filter((row): row is VendorRow & { contactEmail: string } => Boolean(row.contactEmail?.includes("@")))
+    .filter((row) => !only || only.has(row.vendorId))
     .filter((row) => !alreadyHandled.has(row.vendorId))
     .slice(0, bounded)
     .map((row) => ({
@@ -339,10 +365,21 @@ export async function reconcileProcurementBulkRfq(input: {
   orderId: string;
   limit?: number;
   provider?: SupplierEmailProvider;
+  attachRequestFiles?: boolean;
+  loadFiles?: typeof loadProcurementRfqAttachmentPackage;
 }) {
   const order = await loadBulkRfqOrder(input.orderId);
   if (!order) throw new Error("The sourcing request was not found.");
   const provider = input.provider ?? gmailSupplierEmailProvider;
+  // A reconciled send is recorded with the body it actually carried, so the
+  // same file package the run used has to be resolved again here.
+  const files = input.attachRequestFiles === false
+    ? EMPTY_RFQ_ATTACHMENT_PACKAGE
+    : await (input.loadFiles ?? loadProcurementRfqAttachmentPackage)({
+      orderId: order.orderId,
+      customerId: order.customerId,
+      officeId: order.officeId,
+    });
   const pending = await prisma.emailSenderReservation.findMany({
     where: {
       officeId: order.officeId,
@@ -393,7 +430,7 @@ export async function reconcileProcurementBulkRfq(input: {
           name: target.name,
           website: null,
           contactEmail: target.contactEmail.trim().toLowerCase(),
-        }),
+        }, files),
         rfcMessageId,
         providerMessageId: receipt.providerMessageId,
         providerThreadId: receipt.providerThreadId,
@@ -423,16 +460,32 @@ export async function runProcurementBulkRfq(input: {
   limit: number;
   provider?: SupplierEmailProvider;
   pauseMs?: number;
+  // The request's own files ride along by default. A caller can opt out, and a
+  // request with nothing linked simply sends the text RFQ it always sent.
+  attachRequestFiles?: boolean;
+  loadFiles?: typeof loadProcurementRfqAttachmentPackage;
+  // Restrict the run to these vendors, used when a caller knows exactly which
+  // suppliers it means rather than "the next few uncontacted ones".
+  vendorIds?: readonly string[] | null;
 }): Promise<BulkRfqRunResult> {
   const order = await loadBulkRfqOrder(input.orderId);
   if (!order) throw new Error("The sourcing request was not found.");
   const provider = input.provider ?? gmailSupplierEmailProvider;
   const pauseMs = input.pauseMs ?? 400;
-  const targets = await listBulkRfqTargets(order, input.limit);
+  const targets = await listBulkRfqTargets(order, input.limit, input.vendorIds ?? null);
+  const files = input.attachRequestFiles === false
+    ? EMPTY_RFQ_ATTACHMENT_PACKAGE
+    : await (input.loadFiles ?? loadProcurementRfqAttachmentPackage)({
+      orderId: order.orderId,
+      customerId: order.customerId,
+      officeId: order.officeId,
+    });
   const subject = buildBulkRfqSubject(order);
   const result: BulkRfqRunResult = {
     orderId: order.orderId,
     material: order.material,
+    attachments: files.names,
+    withheldFiles: files.withheld,
     candidates: targets.length,
     sent: 0,
     alreadySent: 0,
@@ -443,7 +496,7 @@ export async function runProcurementBulkRfq(input: {
   };
 
   for (const target of targets) {
-    const body = buildBulkRfqBody(order, target);
+    const body = buildBulkRfqBody(order, target, files);
     const hash = requestHash({ orderId: order.orderId, vendorId: target.vendorId, recipient: target.contactEmail, subject, body });
     const reservation = await reserveEmailSender({
       officeId: order.officeId,
@@ -490,6 +543,7 @@ export async function runProcurementBulkRfq(input: {
       subject,
       body,
       rfcMessageId,
+      ...(files.attachments.length ? { attachments: files.attachments } : {}),
     });
 
     if (receipt.state === "SENT") {

@@ -13,6 +13,8 @@ import {
   CompanyContextLimitError,
   type CompanyContextCitation,
 } from "@/lib/company-context";
+import { queueSourcingCommandFromChat } from "@/lib/procurement-sourcing-command";
+import { procurementCustomerIdFromServerMetadata } from "@/lib/procurement-workflow";
 import {
   createCompanyContextProcurementActions,
   normalizeContextProcurementDraft,
@@ -131,6 +133,38 @@ export async function chatWithCompanyContext(args: {
     }
     throw error;
   }
+  // An operator sourcing command is recognized deterministically and queued
+  // before any model call, so the wave it starts is the phrase the operator
+  // typed and never a model's reading of it. Customer portal users cannot start
+  // one.
+  if (!isCustomerContextAccess(args.context)) {
+    const queued = await queueSourcingCommandFromChat({
+      officeId: args.context.officeId,
+      customerId: procurementCustomerIdFromServerMetadata(args.context.officeId),
+      workspaceId: args.workspaceId,
+      instruction,
+      requestedByUserId: args.context.userId,
+    }).catch(() => null);
+    if (queued) {
+      const categories = queued.plan.map((entry) => entry.material).join(", ");
+      const message = await appendCompanyContextMessage({
+        context: args.context,
+        workspaceId: args.workspaceId,
+        role: "AGENT",
+        body: [
+          `Queued a sourcing wave for up to ${queued.perCategory} new suppliers per category on: ${categories}.`,
+          "Each candidate site is fetched and has to publish the capability the category requires before it is added, and its address is deliverability checked.",
+          queued.send
+            ? "Qualified suppliers are then sent the RFQ for their own request, carrying that request's own files."
+            : "Nothing is sent: the suppliers are added for review only.",
+          "Repeating this instruction while the wave is running does not start a second one.",
+        ].join("\n\n"),
+        citations: [],
+      });
+      return { message, citations: [], procurementActions: [], prospectingActions: [] };
+    }
+  }
+
   if (!process.env.OPENAI_API_KEY) {
     throw new ContextAgentError("AI replies are not configured for this environment.", "unavailable", true);
   }
