@@ -2,12 +2,13 @@ import "dotenv/config";
 import { createWriteStream } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MANEKS_CORRIDOR_PROFILE, MANEKS_PROFILE } from "../src/lib/leadgen/profile";
 import { buildQueryPlan, type LeadGenQueryShape } from "../src/lib/leadgen/query-plan";
 import { dedupeByDomain, parseSearchResults, searchUrl, selectSearchProvider, type SearchEngine, type SearchHit } from "../src/lib/leadgen/search";
 import { defaultFetcher, extractDirectoryTargets, harvestSite, type LeadCandidate } from "../src/lib/leadgen/harvest";
 import { verifyEmails, type EmailVerification } from "../src/lib/leadgen/verify";
 import { runProspectingBatch, type ProspectingBatchCandidate } from "../src/lib/leadgen/run";
+import { resolveLeadGenProfile } from "../src/lib/leadgen/registry";
+import type { LeadGenProfile } from "../src/lib/leadgen/profile";
 
 // Lead generation pipeline runner.
 //
@@ -19,12 +20,15 @@ import { runProspectingBatch, type ProspectingBatchCandidate } from "../src/lib/
 //   load     upsert qualified leads into an office (requires DATABASE_URL)
 //
 // Example:
-//   npx tsx scripts/leadgen-run.ts plan --limit 400 --out .leadgen/queries.txt
-//   npx tsx scripts/leadgen-run.ts corridor-plan --out .leadgen/corridor-queries.txt
-//   npx tsx scripts/leadgen-run.ts corridor-harvest --jsonl .leadgen/serps.jsonl
-//   npx tsx scripts/leadgen-run.ts harvest --urls .leadgen/urls.txt --out .leadgen/candidates.jsonl
+//   npx tsx scripts/leadgen-run.ts plan --profile wens --limit 400 --out .leadgen/queries.txt
+//   npx tsx scripts/leadgen-run.ts corridor-plan --profile maneks-corridor --out .leadgen/corridor-queries.txt
+//   npx tsx scripts/leadgen-run.ts corridor-harvest --profile maneks-corridor --jsonl .leadgen/serps.jsonl
+//   npx tsx scripts/leadgen-run.ts harvest --profile wens --urls .leadgen/urls.txt --out .leadgen/candidates.jsonl
 //   npx tsx scripts/leadgen-run.ts verify --in .leadgen/candidates.jsonl --out .leadgen/verified.jsonl
-//   npx tsx scripts/leadgen-run.ts load --in .leadgen/verified.jsonl --office-id <id>
+//   npx tsx scripts/leadgen-run.ts load --profile wens --in .leadgen/verified.jsonl --office-id <id>
+//
+// Profiles: maneks, maneks-corridor, wens. The default is maneks, except
+// corridor-plan and corridor-harvest default to maneks-corridor.
 
 type Args = Record<string, string | boolean>;
 
@@ -71,10 +75,10 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function commandPlan(args: Args) {
-  const plan = buildQueryPlan(MANEKS_PROFILE, {
+async function commandPlan(profile: LeadGenProfile, args: Args) {
+  const plan = buildQueryPlan(profile, {
     limit: numberArg(args, "limit", 500),
-    maxRegionsPerSegment: numberArg(args, "regions", MANEKS_PROFILE.regions.length),
+    maxRegionsPerSegment: numberArg(args, "regions", profile.regions.length),
   });
   const out = stringArg(args, "out", ".leadgen/queries.txt");
   await ensureDir(out);
@@ -88,11 +92,11 @@ function shapeArgs(args: Args): LeadGenQueryShape[] | undefined {
   return value.split(",").map((shape) => shape.trim()).filter(Boolean) as LeadGenQueryShape[];
 }
 
-async function commandCorridorPlan(args: Args) {
+async function commandCorridorPlan(profile: LeadGenProfile, args: Args) {
   const out = stringArg(args, "out", ".leadgen/corridor-queries.txt");
-  const plan = buildQueryPlan(MANEKS_CORRIDOR_PROFILE, {
+  const plan = buildQueryPlan(profile, {
     limit: numberArg(args, "limit", 0),
-    maxRegionsPerSegment: numberArg(args, "regions", MANEKS_CORRIDOR_PROFILE.regions.length),
+    maxRegionsPerSegment: numberArg(args, "regions", profile.regions.length),
     shapes: shapeArgs(args),
   });
   await ensureDir(out);
@@ -133,13 +137,13 @@ function corridorCandidateRecord(record: ProspectingBatchCandidate) {
   };
 }
 
-async function commandCorridorHarvest(args: Args) {
+async function commandCorridorHarvest(profile: LeadGenProfile, args: Args) {
   const jsonlPath = stringArg(args, "jsonl");
   const out = stringArg(args, "out", ".leadgen/corridor-rows.jsonl");
   await ensureDir(out);
   const provider = selectSearchProvider({ providerName: "jsonl", jsonlPath });
   const result = await runProspectingBatch({
-    profile: MANEKS_CORRIDOR_PROFILE,
+    profile,
     queryOffset: numberArg(args, "query-offset", 0),
     maxQueries: numberArg(args, "max-queries", 24),
     maxPages: numberArg(args, "max-pages", 60),
@@ -171,7 +175,7 @@ async function commandCorridorHarvest(args: Args) {
   }, null, 2));
 }
 
-async function commandSearch(args: Args) {
+async function commandSearch(_profile: LeadGenProfile, args: Args) {
   const engine = stringArg(args, "engine", "brave") as SearchEngine;
   const queries = await readLines(stringArg(args, "queries", ".leadgen/queries.txt"));
   const out = stringArg(args, "out", ".leadgen/urls.txt");
@@ -219,7 +223,7 @@ async function commandDirectory(args: Args) {
   console.log(`targets=${targets.size} out=${out}`);
 }
 
-async function commandHarvest(args: Args) {
+async function commandHarvest(profile: LeadGenProfile, args: Args) {
   const urls = await readLines(stringArg(args, "urls", ".leadgen/urls.txt"));
   const out = stringArg(args, "out", ".leadgen/candidates.jsonl");
   const concurrency = numberArg(args, "concurrency", 6);
@@ -234,7 +238,7 @@ async function commandHarvest(args: Args) {
     for (;;) {
       const url = queue.shift();
       if (!url) return;
-      const candidate = await harvestSite(MANEKS_PROFILE, url, { discoveredVia: url });
+      const candidate = await harvestSite(profile, url, { discoveredVia: url });
       processed += 1;
       if (candidate && candidate.emails.length > 0 && candidate.fit.tier !== "reject") {
         kept += 1;
@@ -270,11 +274,11 @@ async function commandVerify(args: Args) {
   console.log(`records=${results.length} deliverable=${deliverable} out=${out}`);
 }
 
-async function commandLoad(args: Args) {
+async function commandLoad(profile: LeadGenProfile, args: Args) {
   const { persistLeads } = await import("../src/lib/leadgen/persist");
   const input = stringArg(args, "in", ".leadgen/verified.jsonl");
   const officeId = stringArg(args, "office-id");
-  const campaignTag = stringArg(args, "campaign", `leadgen_${MANEKS_PROFILE.slug}`);
+  const campaignTag = stringArg(args, "campaign", `leadgen_${profile.slug}`);
   const records = (await readLines(input)).map((line) => JSON.parse(line));
   const { PrismaClient } = await import("@prisma/client");
   const client = new PrismaClient();
@@ -291,15 +295,17 @@ async function commandLoad(args: Args) {
 
 async function main() {
   const { command, args } = parseArgs(process.argv.slice(2));
-  if (command === "plan") return commandPlan(args);
-  if (command === "corridor-plan") return commandCorridorPlan(args);
-  if (command === "corridor-harvest") return commandCorridorHarvest(args);
-  if (command === "search") return commandSearch(args);
+  const defaultProfile = command === "corridor-plan" || command === "corridor-harvest" ? "maneks-corridor" : "maneks";
+  const profile = resolveLeadGenProfile(stringArg(args, "profile", defaultProfile));
+  if (command === "plan") return commandPlan(profile, args);
+  if (command === "corridor-plan") return commandCorridorPlan(profile, args);
+  if (command === "corridor-harvest") return commandCorridorHarvest(profile, args);
+  if (command === "search") return commandSearch(profile, args);
   if (command === "directory") return commandDirectory(args);
-  if (command === "harvest") return commandHarvest(args);
+  if (command === "harvest") return commandHarvest(profile, args);
   if (command === "verify") return commandVerify(args);
-  if (command === "load") return commandLoad(args);
-  console.log("commands: plan | corridor-plan | corridor-harvest | search | directory | harvest | verify | load");
+  if (command === "load") return commandLoad(profile, args);
+  console.log("commands: plan | corridor-plan | corridor-harvest | search | directory | harvest | verify | load; option: --profile <slug>");
 }
 
 main().catch((error) => {

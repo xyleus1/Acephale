@@ -10977,3 +10977,18 @@ Verification caveat:
   before anything is sent.
 - The scheduled procurement pass also drains queued sourcing waves, so a wave
   asked for in chat keeps moving without an operator command.
+
+## 2026-08-26: Wens profile-aware leadgen
+
+- `src/lib/leadgen/profile-wens.ts` now has buyer-language keyword sets across
+  the requested European locales. Existing Wens segments, signals and offering
+  remain unchanged.
+- `src/lib/leadgen/query-plan.ts` covers the European locale union with
+  localized directory phrases, URL tokens and Wens country mappings. Slovenia
+  intentionally uses the English fallback because no Slovenian phrase set was
+  added.
+- `src/lib/leadgen/registry.ts` resolves `maneks`, `maneks-corridor` and `wens`.
+  `scripts/leadgen-run.ts` accepts `--profile`; regular commands default to
+  `maneks`, and corridor commands default to `maneks-corridor`.
+- The leadgen test script covers Wens localization, registry errors, complete
+  locale dictionaries and deterministic query IDs.

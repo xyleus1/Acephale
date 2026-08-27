@@ -7818,3 +7818,16 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:procurement-sourcing-wave`. The wave contract caught two real
   defects: company names came from the shortest title segment, and generic sales
   inboxes outranked published RFQ inboxes.
+
+### 2026-08-26 - Wens profile-aware leadgen
+
+- Added European locale phrases and URL tokens for deterministic query planning,
+  plus native locale fallback mappings for Wens regions.
+- Added Wens keyword sets for Spanish, Portuguese, Polish, Romanian, Swedish,
+  Danish, Czech, Hungarian, Bulgarian, Croatian and Finnish.
+- Added the `maneks`, `maneks-corridor` and `wens` profile registry and a
+  `--profile` runner option. Regular commands default to Maneks, while corridor
+  commands default to the Maneks corridor profile.
+- Verification: leadgen assertions, TypeScript, and both profile plan smoke
+  checks passed. Repository lint remains blocked by unrelated pre-existing
+  diagnostics.

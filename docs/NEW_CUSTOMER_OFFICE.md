@@ -19,6 +19,18 @@ Everything downstream (queries, scoring, persistence tags) is derived from the
 profile, so a new customer needs a profile plus configuration, not new pipeline
 code.
 
+The leadgen runner selects profiles with `--profile <slug>`. The registry in
+`src/lib/leadgen/registry.ts` currently exposes `maneks`, `maneks-corridor`,
+and `wens`, and rejects unknown slugs before a run starts. For example:
+
+```bash
+npx tsx scripts/leadgen-run.ts plan --profile wens --limit 900 --out .leadgen/wens-queries.txt
+```
+
+The default profile remains `maneks` for regular commands. `corridor-plan` and
+`corridor-harvest` default to `maneks-corridor` unless another profile is
+provided.
+
 ## 2. Create the office
 
 ```bash

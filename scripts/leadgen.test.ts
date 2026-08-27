@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
-import { buildQueryPlan } from "../src/lib/leadgen/query-plan";
+import {
+  buildQueryPlan,
+  LOCALIZED_PHRASES,
+  LOCALIZED_URL_TOKENS,
+  type QueryLocale,
+} from "../src/lib/leadgen/query-plan";
 import { MANEKS_CORRIDOR_PROFILE, MANEKS_PROFILE } from "../src/lib/leadgen/profile";
+import { WENS_PROFILE } from "../src/lib/leadgen/profile-wens";
+import { resolveLeadGenProfile } from "../src/lib/leadgen/registry";
 import {
   createSerperSearchProvider,
   dedupeByDomain,
@@ -72,6 +79,47 @@ assert.ok(
       && entry.query.includes("список участников"),
   ),
   "Russia corridor queries must use Cyrillic segment and directory keywords",
+);
+const wensPlan = buildQueryPlan(WENS_PROFILE, { limit: 5_000 });
+assert.ok(
+  wensPlan.some((entry) =>
+    entry.region === "Greece" && entry.locale === "el" && entry.query.includes("βιομηχανια αρτοποιιας"),
+  ),
+  "Greece must use Greek segment keywords and directory phrases",
+);
+assert.ok(
+  wensPlan.some((entry) =>
+    entry.region === "Germany" && entry.locale === "de" && entry.query.includes("Grossbackerei Hersteller"),
+  ),
+  "Germany must use German segment keywords and directory phrases",
+);
+assert.ok(
+  wensPlan.some((entry) =>
+    entry.region === "Italy" && entry.locale === "it" && entry.query.includes("industria da forno produttore"),
+  ),
+  "Italy must use Italian segment keywords and directory phrases",
+);
+const queryLocales: readonly QueryLocale[] = [
+  "tr", "es", "ru", "en", "de", "it", "pl", "ro", "ar", "fa", "zh", "pt",
+  "el", "fr", "nl", "sv", "da", "no", "fi", "cs", "sk", "hu", "bg", "hr", "lt", "et", "lv",
+];
+const phraseConcepts = [
+  "memberList", "companyDirectory", "industrialZone", "chamberIndustry",
+  "chamberCommerce", "exhibitorList", "supplierList", "associationMembers", "contactEmail",
+] as const;
+for (const locale of queryLocales) {
+  assert.ok(LOCALIZED_PHRASES[locale], `${locale} must have localized phrases`);
+  for (const concept of phraseConcepts) {
+    assert.ok(LOCALIZED_PHRASES[locale][concept], `${locale} must define ${concept}`);
+  }
+  assert.ok(LOCALIZED_URL_TOKENS[locale], `${locale} must have a URL token`);
+}
+assert.equal(resolveLeadGenProfile("wens").slug, "wens");
+assert.throws(() => resolveLeadGenProfile("unknown"), /Unknown leadgen profile "unknown".*Valid slugs:/);
+assert.deepEqual(
+  wensPlan.map((entry) => entry.id),
+  buildQueryPlan(WENS_PROFILE, { limit: 5_000 }).map((entry) => entry.id),
+  "Wens query ids must be stable",
 );
 const legacyKeywordPlan = buildQueryPlan({
   ...MANEKS_CORRIDOR_PROFILE,

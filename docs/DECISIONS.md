@@ -4422,3 +4422,16 @@ Use this log for durable product and engineering decisions. Do not put every imp
   the request's own sourcing category. Out of category files are withheld with a
   reason rather than sent, so a board BOM cannot reach a foam molder and mold
   geometry cannot reach a board shop.
+
+## 2026-08-26: Leadgen profiles resolve through one deterministic registry
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Leadgen commands resolve a named profile through
+  `src/lib/leadgen/registry.ts`. Regular commands default to `maneks`, while
+  corridor commands default to `maneks-corridor`; an explicit `--profile`
+  overrides either default.
+- Context boundary: Query planning, harvesting, scoring and persistence receive
+  the resolved profile, while office and persistence scoping remain unchanged.
+- Failure boundary: Unknown profile slugs fail before command work begins and
+  list the valid profile slugs.
