@@ -1,5 +1,26 @@
 # AI Handoff
 
+## 2026-08-28: A supplier that answered once and then went quiet gets followed up
+
+- `src/lib/procurement-supplier-chase.ts` is the pure policy: chase only when the
+  newest message on the thread is ours, the thread has been quiet for
+  `CHASE_QUIET_MS` (4 days), no quote is recorded, and fewer than
+  `MAX_SUPPLIER_CHASES` (2) follow ups were already sent after the supplier's
+  newest reply. `chasesSentAfterLastReply` counts only the outbound messages
+  after that reply and does not count the answer itself.
+- `planAutopilotVendorAction` returns a `CHASE` action, and the autopilot saves a
+  `CHASE` variant file delivery draft anchored on the supplier's newest inbound
+  message, carrying the same category scoped files and the same derived facts as
+  the first answer. Wording says we have not heard back instead of thanking them
+  for a reply.
+- `sendProcurementSupplierReply` takes `mode: "CHASE"`, which requires a quiet
+  thread (newest message outbound, anchor is the newest inbound) and mixes a
+  chase discriminator plus the newest outbound message id into the idempotency
+  hash, so a follow up can never collide with the original reply and a second
+  follow up can never repeat the first.
+- Sending still needs the explicit operator confirmation, so a draft only pass
+  leaves the follow ups reviewable.
+
 ## 2026-08-28: A sourcing slice fits inside its invocation, and a killed job comes back
 
 - Checking the clock between rounds was not enough: one web search (90s client

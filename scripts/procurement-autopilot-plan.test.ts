@@ -5,6 +5,10 @@ import {
   planAutopilotVendorAction,
   type AutopilotVendorState,
 } from "../src/lib/procurement-autopilot-plan";
+import {
+  chasesSentAfterLastReply,
+  MAX_SUPPLIER_CHASES,
+} from "../src/lib/procurement-supplier-chase";
 
 // The loop may only act for a reason written into the plan, so every branch is
 // pinned here: bounces and wrong contacts reach a human, commercial questions
@@ -76,5 +80,77 @@ const escalations = autopilotEscalations(plan);
 assert.equal(escalations.length, 1);
 assert.equal(escalations[0]?.vendorId, "a");
 assert.ok(escalations[0]?.reason.length);
+
+// A supplier that answered once and then went quiet is followed up on the same
+// thread, but only after the thread has been quiet and only a bounded number of
+// times, so nobody is mailed twice a day and nobody is mailed forever.
+const now = Date.parse("2026-09-01T12:00:00.000Z");
+const quiet = (overrides: Partial<AutopilotVendorState>) => planAutopilotVendorAction(
+  state({
+    lastDirection: "OUTBOUND",
+    inboundKind: null,
+    triageDecision: null,
+    hasDraft: false,
+    lastMessageAt: "2026-08-20T12:00:00.000Z",
+    chasesSent: 0,
+    ...overrides,
+  }),
+  { autoSend: true, now },
+);
+
+assert.equal(quiet({}).kind, "CHASE", "A supplier quiet for 12 days is chased.");
+assert.match(quiet({}).reason, /quiet for 12 days/);
+assert.equal(
+  quiet({ lastMessageAt: "2026-08-31T12:00:00.000Z" }).kind,
+  "NONE",
+  "A supplier answered yesterday is not chased.",
+);
+assert.equal(
+  quiet({ chasesSent: MAX_SUPPLIER_CHASES }).kind,
+  "NONE",
+  "The follow ups a request allows are bounded.",
+);
+assert.equal(
+  quiet({ hasQuote: true }).kind,
+  "NONE",
+  "A quoted supplier is never chased.",
+);
+assert.equal(
+  quiet({ lastMessageAt: null }).kind,
+  "NONE",
+  "A thread with no known last message is left alone.",
+);
+assert.equal(
+  planAutopilotVendorAction(state({ lastDirection: "OUTBOUND", inboundKind: null, triageDecision: null }), draftOnly).kind,
+  "NONE",
+  "A caller that reports a plan without thread timings never proposes a chase.",
+);
+
+// Only the outbound messages after the supplier's newest reply count, and the
+// first of those is the answer they asked for rather than a chase.
+assert.equal(chasesSentAfterLastReply([]), 0);
+assert.equal(chasesSentAfterLastReply([{ direction: "OUTBOUND" }]), 0, "An RFQ with no reply is not a chase.");
+assert.equal(chasesSentAfterLastReply([{ direction: "INBOUND" }]), 0);
+assert.equal(chasesSentAfterLastReply([{ direction: "INBOUND" }, { direction: "OUTBOUND" }]), 0);
+assert.equal(
+  chasesSentAfterLastReply([
+    { direction: "INBOUND" },
+    { direction: "OUTBOUND" },
+    { direction: "OUTBOUND" },
+  ]),
+  1,
+);
+assert.equal(
+  chasesSentAfterLastReply([
+    { direction: "OUTBOUND" },
+    { direction: "INBOUND" },
+    { direction: "OUTBOUND" },
+    { direction: "OUTBOUND" },
+    { direction: "INBOUND" },
+    { direction: "OUTBOUND" },
+  ]),
+  0,
+  "A newer supplier reply resets the follow up count.",
+);
 
 console.log("procurement autopilot plan checks passed");

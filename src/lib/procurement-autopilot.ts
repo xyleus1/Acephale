@@ -10,7 +10,12 @@ import {
 } from "@/lib/procurement-autopilot-plan";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { getProcurementFileDeliveryDraft } from "@/lib/procurement-file-delivery-draft";
+import {
+  getProcurementFileDeliveryDraft,
+  saveProcurementFileDeliveryDraft,
+} from "@/lib/procurement-file-delivery-draft";
+import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
+import { chasesSentAfterLastReply } from "@/lib/procurement-supplier-chase";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
 import { procurementReplyFacts, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
@@ -61,6 +66,7 @@ export type AutopilotRunResult = {
   quotes: number;
   replied: number;
   drafted: number;
+  chased: number;
   sent: number;
   alreadySent: number;
   failed: number;
@@ -70,11 +76,19 @@ export type AutopilotRunResult = {
   plan: AutopilotVendorPlan[];
 };
 
+// What a chase has to be built from: the supplier's newest reply anchors the
+// follow up, exactly as the first answer was anchored.
+type ChaseAnchor = {
+  sourceMessageId: string;
+  recipient: string;
+  conversationSubject: string | null;
+};
+
 async function vendorStates(args: {
   officeId: string;
   customerId: string;
   order: ProcurementOrderDetail;
-}): Promise<AutopilotVendorState[]> {
+}): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor> }> {
   const facts = procurementReplyFacts({
     material: args.order.material,
     quantity: args.order.quantity,
@@ -84,6 +98,7 @@ async function vendorStates(args: {
     requestContext: args.order.requestContext,
   });
   const states: AutopilotVendorState[] = [];
+  const anchors = new Map<string, ChaseAnchor>();
   for (const vendor of args.order.vendors) {
     const conversation = await procurementVendorConversation({
       officeId: args.officeId,
@@ -93,6 +108,14 @@ async function vendorStates(args: {
     });
     const latest = conversation.messages.at(-1);
     const inbound = latest?.direction === "INBOUND" ? latest : null;
+    const newestReply = [...conversation.messages].reverse().find((message) => message.direction === "INBOUND") ?? null;
+    if (newestReply) {
+      anchors.set(vendor.id, {
+        sourceMessageId: newestReply.id,
+        recipient: newestReply.fromEmail,
+        conversationSubject: newestReply.subject ?? null,
+      });
+    }
     const triage = inbound
       ? triageSupplierInbound({ subject: inbound.subject ?? null, body: inbound.body, facts })
       : null;
@@ -109,9 +132,52 @@ async function vendorStates(args: {
       triageDecision: triage?.decision ?? null,
       hasDraft: Boolean(draft),
       hasQuote: Boolean(vendor.quote),
+      lastMessageAt: latest?.sentAt ?? null,
+      chasesSent: chasesSentAfterLastReply(conversation.messages),
     });
   }
-  return states;
+  return { states, anchors };
+}
+
+// A supplier that answered once and then went quiet gets the same files again
+// on the same thread. The draft is saved first either way, so an operator sees
+// exactly what a chase would say before sending is ever turned on.
+async function draftChases(args: {
+  officeId: string;
+  customerId: string;
+  order: ProcurementOrderDetail;
+  vendorIds: readonly string[];
+  anchors: Map<string, ChaseAnchor>;
+}) {
+  const drafted: string[] = [];
+  const failures: AutopilotRunResult["failures"] = [];
+  if (!args.vendorIds.length) return { drafted, failures };
+  const access = await procurementOperatorAccess(args.officeId);
+  for (const vendorId of args.vendorIds) {
+    const vendor = args.order.vendors.find((candidate) => candidate.id === vendorId);
+    const anchor = args.anchors.get(vendorId);
+    if (!vendor || !anchor) continue;
+    try {
+      await saveProcurementFileDeliveryDraft({
+        context: access,
+        customerId: args.customerId,
+        order: args.order,
+        vendor,
+        sourceMessageId: anchor.sourceMessageId,
+        recipient: anchor.recipient,
+        conversationSubject: anchor.conversationSubject,
+        variant: "CHASE",
+      });
+      drafted.push(vendorId);
+    } catch (error) {
+      failures.push({
+        vendorId,
+        vendorName: vendor.name,
+        error: error instanceof Error ? error.message : "The supplier follow up draft failed.",
+      });
+    }
+  }
+  return { drafted, failures };
 }
 
 export async function runProcurementAutopilot(args: {
@@ -127,7 +193,7 @@ export async function runProcurementAutopilot(args: {
   if (!draftRun) return null;
   const order = await getProcurementRequest(summary.customerId, args.orderId);
   if (!order) return null;
-  const states = await vendorStates({
+  const { states, anchors } = await vendorStates({
     officeId: summary.officeId,
     customerId: summary.customerId,
     order,
@@ -141,9 +207,17 @@ export async function runProcurementAutopilot(args: {
   // Drafts exist for threads the plan escalates, so delivery is restricted to
   // the suppliers the plan chose. The plan is therefore computed before the
   // send, never after it.
-  const deliverable = plan
-    .filter((entry) => entry.action.kind === "SEND_DRAFT")
-    .map((entry) => entry.vendorId);
+  const chaseRun = await draftChases({
+    officeId: summary.officeId,
+    customerId: summary.customerId,
+    order,
+    vendorIds: plan.filter((entry) => entry.action.kind === "CHASE").map((entry) => entry.vendorId),
+    anchors,
+  });
+  const deliverable = [
+    ...plan.filter((entry) => entry.action.kind === "SEND_DRAFT").map((entry) => entry.vendorId),
+    ...chaseRun.drafted,
+  ];
   const sendRun = autoSend && deliverable.length
     ? await runProcurementFileDraftSendBatch({ orderId: args.orderId, limit, vendorIds: deliverable })
     : null;
@@ -155,18 +229,22 @@ export async function runProcurementAutopilot(args: {
     quotes,
     replied: states.filter((state) => state.lastDirection === "INBOUND").length,
     drafted: draftRun.drafted,
+    chased: chaseRun.drafted.length,
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
     failed: sendRun?.failed ?? 0,
     // A delivery that fails needs an operator, so it is reported next to the
     // escalations instead of being reduced to a count.
-    failures: (sendRun?.outcomes ?? [])
-      .filter((outcome) => outcome.state === "FAILED")
-      .map((outcome) => ({
-        vendorId: outcome.vendorId,
-        vendorName: outcome.vendorName,
-        error: outcome.error ?? "The supplier send failed.",
-      })),
+    failures: [
+      ...chaseRun.failures,
+      ...(sendRun?.outcomes ?? [])
+        .filter((outcome) => outcome.state === "FAILED")
+        .map((outcome) => ({
+          vendorId: outcome.vendorId,
+          vendorName: outcome.vendorName,
+          error: outcome.error ?? "The supplier send failed.",
+        })),
+    ],
     autoSend,
     escalations: autopilotEscalations(plan),
     plan,

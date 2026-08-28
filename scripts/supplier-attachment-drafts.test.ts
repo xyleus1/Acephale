@@ -303,6 +303,35 @@ function replyBody() {
     "Only extracted facts may be quoted back to the supplier.",
   );
 
+  // A follow up to a supplier that went quiet says so and carries the same
+  // files and the same derived facts the first answer did.
+  const chase = buildFileDeliveryReplyBody({
+    order,
+    vendor,
+    companyName: "HypnoDreamz",
+    documents,
+    attachments: [
+      { documentId: "doc-spec", name: "hypnodreamz-order-1-doc-1.png", mimeType: "image/png", size: 240_000 },
+      { documentId: "doc-bom", name: "hypnodreamz-order-1-doc-2.csv", mimeType: "text/csv", size: 4_096 },
+    ],
+    variant: "CHASE",
+  });
+  for (const expected of [
+    "have not heard back",
+    "hypnodreamz-order-1-doc-1.png",
+    "hypnodreamz-order-1-doc-2.csv",
+    "Board size: 68.4 x 21.6 mm",
+    "Tooling, setup, or NRE cost",
+  ]) {
+    assert.equal(chase.includes(expected), true, `The follow up must state: ${expected}`);
+  }
+  assert.equal(
+    chase.includes("Thank you for coming back to us"),
+    false,
+    "A follow up does not thank a supplier for a reply that never came.",
+  );
+  assert.equal(chase.includes("\u2014"), false, "A follow up must not contain an em dash.");
+
   assert.equal(
     fileDeliveryReplySubject({ conversationSubject: "Re: [RFQ 24cb31bd] PCBA", order }),
     "Re: [RFQ 24cb31bd] PCBA",

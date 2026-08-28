@@ -51,8 +51,11 @@ export type ProcurementDraftAttachment = {
   size: number;
 };
 
+export type ProcurementDraftVariant = "REPLY" | "CHASE";
+
 export type ProcurementFileDeliveryDraft = {
   state: "DRAFT";
+  variant: ProcurementDraftVariant;
   orderId: string;
   vendorId: string;
   sourceMessageId: string;
@@ -149,8 +152,10 @@ export function buildFileDeliveryReplyBody(args: {
   companyName: string;
   documents: ProcurementRequestDocument[];
   attachments: ProcurementDraftAttachment[];
+  variant?: ProcurementDraftVariant;
 }) {
   const { order, attachments } = args;
+  const chase = args.variant === "CHASE";
   const attachedIds = new Set(attachments.map((attachment) => attachment.documentId));
   let budget = MAX_TOTAL_DOCUMENT_CONTEXT_CHARS;
   const included = new Set<string>();
@@ -175,7 +180,9 @@ export function buildFileDeliveryReplyBody(args: {
     .slice(0, 14);
   const sections = [
     `Hello ${supplierGreetingName(args.vendor)},`,
-    `Thank you for coming back to us on ${order.material}. The technical package you asked for is attached to this reply.`,
+    chase
+      ? `Following up on ${order.material}. We sent the technical package you asked for and have not heard back, so it is attached again here in case it did not reach you.`
+      : `Thank you for coming back to us on ${order.material}. The technical package you asked for is attached to this reply.`,
     [
       "Attached files:",
       ...attachments.map((attachment) => `- ${attachment.name} (${attachment.mimeType}, ${sizeLabel(attachment.size)})`),
@@ -233,6 +240,7 @@ function draftFromTask(task: { input: Prisma.JsonValue | null; result: Prisma.Js
   const result = record(task.result);
   return {
     state: "DRAFT",
+    variant: input.variant === "CHASE" ? "CHASE" : "REPLY",
     orderId: String(input.orderId ?? ""),
     vendorId: String(input.vendorId ?? ""),
     sourceMessageId: String(input.sourceMessageId ?? ""),
@@ -268,6 +276,9 @@ export async function saveProcurementFileDeliveryDraft(args: {
   sourceMessageId: string;
   recipient: string;
   conversationSubject: string | null;
+  // A chase repeats the same files on a thread the supplier left quiet, so it
+  // opens differently and is delivered by the chase send path.
+  variant?: ProcurementDraftVariant;
 }): Promise<ProcurementFileDeliveryDraft> {
   const access = await currentAccessContext(args.context);
   const workspaceId = requestWorkspaceId(args.order);
@@ -306,6 +317,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
       companyName: companyName(args.order),
       documents,
       attachments,
+      variant: args.variant,
     })),
   };
   const sourceMessageId = requiredText(args.sourceMessageId, "Displayed supplier message", 512);
@@ -315,6 +327,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
     customerId: args.customerId,
     orderId: args.order.id,
     vendorId: args.vendor.id,
+    variant: args.variant === "CHASE" ? "CHASE" : "REPLY",
     sourceMessageId,
     message,
     messageHash: digest(message),
@@ -367,7 +380,9 @@ export async function saveProcurementFileDeliveryDraft(args: {
       actorUserId: access.userId,
       eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_DRAFTED",
       status: "PLANNED",
-      message: "A supplier reply carrying the stored request files was saved as a draft. Nothing was sent.",
+      message: args.variant === "CHASE"
+        ? "A follow up carrying the stored request files was saved as a draft for a supplier that went quiet. Nothing was sent."
+        : "A supplier reply carrying the stored request files was saved as a draft. Nothing was sent.",
       payload: inputJson({
         orderId: args.order.id,
         vendorId: args.vendor.id,

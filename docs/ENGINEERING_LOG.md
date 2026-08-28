@@ -1,5 +1,23 @@
 # Engineering Log
 
+## 2026-08-28: Bounded follow ups for quiet suppliers
+
+- Added `src/lib/procurement-supplier-chase.ts` (pure quiet thread policy) and a
+  `CHASE` action in `src/lib/procurement-autopilot-plan.ts`.
+- `src/lib/procurement-file-delivery-draft.ts` stores a draft `variant`, and the
+  chase body states the package is attached again instead of thanking the
+  supplier for a reply. `src/lib/procurement-file-draft-send.ts` sends a saved
+  draft in its own variant.
+- `src/lib/procurement-reply-send.ts` gained `requireQuietThread`, which anchors
+  the follow up on the supplier's newest inbound message, refuses to send when a
+  newer supplier message arrived after the draft, and gives the chase its own
+  idempotency scope.
+- Verification: `npx tsc --noEmit` (only the pre-existing typed route error on
+  `src/app/dashboard/admin/page.tsx`), `next lint` clean on the changed files,
+  `npm run test:procurement-autopilot-plan`,
+  `npm run test:supplier-attachment-drafts`,
+  `npm run test:procurement-file-draft-batch`.
+
 ## 2026-08-25: Draft tasks stay PLANNED, attachment bytes load after the claim
 
 - `src/lib/procurement-file-delivery-draft.ts` inserted the draft task as

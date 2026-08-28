@@ -91,6 +91,9 @@ export async function runProcurementFileDraftSendBatch(args: {
           body: draft.body,
           attachmentDocumentIds: draft.attachments.map((attachment) => attachment.documentId),
         },
+        // A chase draft is delivered on a thread whose newest message is ours,
+        // so the send path anchors it on the supplier's newest reply instead.
+        mode: draft.variant,
         allowPooledSender: args.allowPooledSender === true,
       });
       await markProcurementFileDeliveryDraftSent({

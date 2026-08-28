@@ -1,4 +1,5 @@
 import type { ProcurementInboundTriage, SupplierInboundKind } from "@/lib/procurement-inbound-triage";
+import { supplierChaseDecision } from "@/lib/procurement-supplier-chase";
 
 // The autopilot decides what a sourcing request needs next from the state of
 // each supplier thread. The decision is a pure function so the loop is
@@ -12,6 +13,8 @@ export type AutopilotPolicy = {
   // facing sending on, and even then it covers file delivery and answers the
   // stored facts fully support, never price, terms, dates or legal replies.
   autoSend: boolean;
+  // Injected by tests so a chase decision is reproducible.
+  now?: number;
 };
 
 export type AutopilotVendorState = {
@@ -22,11 +25,16 @@ export type AutopilotVendorState = {
   triageDecision: ProcurementInboundTriage["decision"] | null;
   hasDraft: boolean;
   hasQuote: boolean;
+  // Set for threads that can be chased. Left out by callers that only report a
+  // plan, in which case a quiet thread stays untouched.
+  lastMessageAt?: string | null;
+  chasesSent?: number;
 };
 
 export type AutopilotAction =
   | { kind: "SEND_DRAFT"; reason: string }
   | { kind: "DRAFT_REPLY"; reason: string }
+  | { kind: "CHASE"; reason: string }
   | { kind: "AWAIT_APPROVAL"; reason: string }
   | { kind: "ESCALATE"; reason: string }
   | { kind: "NONE"; reason: string };
@@ -57,7 +65,18 @@ export function planAutopilotVendorAction(
     return { kind: "DRAFT_REPLY", reason: "The supplier replied and the request files answer it." };
   }
   if (state.lastDirection === "OUTBOUND") {
-    return { kind: "NONE", reason: "The supplier has not answered the last message yet." };
+    // A supplier that replied once and then went quiet is chased on the same
+    // thread, carrying the same request files, up to the bounded limit.
+    const chase = supplierChaseDecision({
+      lastDirection: state.lastDirection,
+      lastMessageAt: state.lastMessageAt ?? null,
+      chasesSent: state.chasesSent ?? 0,
+      hasQuote: state.hasQuote,
+      now: policy.now,
+    });
+    return chase.chase
+      ? { kind: "CHASE", reason: chase.reason }
+      : { kind: "NONE", reason: chase.reason };
   }
   return { kind: "NONE", reason: "This supplier has no thread yet." };
 }

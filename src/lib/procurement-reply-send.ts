@@ -8,6 +8,7 @@ import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { selectEmailSenderPoolCandidate } from "@/lib/email-sender-pool-policy";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
+import { chasesSentAfterLastReply, supplierChaseDecision } from "@/lib/procurement-supplier-chase";
 import {
   getProcurementCommunicationMessages,
   type ProcurementOrderDetail,
@@ -155,6 +156,42 @@ function storedAttachmentsJson(value: unknown) {
     // exact bytes, so the type and size stay out rather than reading as zero.
     return mimeType && size > 0 ? { name, mimeType, size } : { name };
   }));
+}
+
+// A chase is sent on a thread whose newest message is ours, so it anchors on
+// the supplier's newest reply instead. It is only allowed once the thread has
+// been quiet long enough, which keeps a loop pass from mailing a supplier that
+// was answered minutes ago.
+function requireQuietThread(args: {
+  conversation: ProcurementConversation;
+  vendor: ProcurementOrderVendor;
+  sourceMessageId: string;
+  now?: number;
+}) {
+  const messages = args.conversation.messages;
+  const latest = messages.at(-1);
+  if (!args.conversation.available || !latest || latest.direction !== "OUTBOUND") {
+    throw new SupplyPersistenceError("This supplier thread is not waiting on the supplier, so no follow up is sent.", "conflict");
+  }
+  const inbound = [...messages].reverse().find((message) => message.direction === "INBOUND") ?? null;
+  if (!inbound || inbound.id !== args.sourceMessageId) {
+    throw new SupplyPersistenceError("The supplier reply this follow up answers is no longer the newest one. Refresh before sending.", "conflict");
+  }
+  const decision = supplierChaseDecision({
+    lastDirection: "OUTBOUND",
+    lastMessageAt: latest.sentAt,
+    chasesSent: chasesSentAfterLastReply(messages),
+    hasQuote: false,
+    now: args.now,
+  });
+  if (!decision.chase) {
+    throw new SupplyPersistenceError(`No follow up is sent: ${decision.reason}`, "conflict");
+  }
+  const expectedSupplier = args.vendor.contact?.email?.trim().toLowerCase() ?? null;
+  if (args.conversation.source !== "BOURNE_LEDGER" && (!expectedSupplier || inbound.fromEmail.trim().toLowerCase() !== expectedSupplier)) {
+    throw new SupplyPersistenceError("The supplier sender could not be verified for this thread.", "conflict");
+  }
+  return { inbound, latest };
 }
 
 function requireCurrentInbound(args: {
@@ -466,6 +503,9 @@ export async function sendProcurementSupplierReply(args: {
   vendor: ProcurementOrderVendor;
   conversation: ProcurementConversation;
   input: ProcurementReplySendInput;
+  // A chase repeats the answer on a thread the supplier left quiet. It anchors
+  // on the supplier's newest reply and is bounded by the chase policy.
+  mode?: "REPLY" | "CHASE";
   // Set only by an operator command: it changes who the supplier hears from.
   allowPooledSender?: boolean;
   dependencies?: Partial<SendDependencies>;
@@ -480,7 +520,15 @@ export async function sendProcurementSupplierReply(args: {
     order: args.order,
     requestedDocumentIds: args.input.attachmentDocumentIds ?? [],
   });
-  const inbound = requireCurrentInbound({
+  const chasing = args.mode === "CHASE";
+  const quiet = chasing
+    ? requireQuietThread({
+        conversation: args.conversation,
+        vendor: args.vendor,
+        sourceMessageId: input.sourceMessageId,
+      })
+    : null;
+  const inbound = quiet?.inbound ?? requireCurrentInbound({
     conversation: args.conversation,
     vendor: args.vendor,
     sourceMessageId: input.sourceMessageId,
@@ -506,8 +554,14 @@ export async function sendProcurementSupplierReply(args: {
     },
     select: { id: true, email: true },
   });
-  const sourceHash = createHash("sha256").update(input.sourceMessageId).digest("hex").slice(0, 20);
-  const taskScopeKey = `procurement-reply:${args.order.id}:${args.vendor.id}:${sourceHash}`;
+  // A chase answers the same supplier message the first reply did, so its scope
+  // also carries the message it follows up on. Without that the idempotency key
+  // would match the delivered reply and the chase would report as already sent.
+  const sourceHash = createHash("sha256")
+    .update(quiet ? `${input.sourceMessageId}:chase:${quiet.latest.id}` : input.sourceMessageId)
+    .digest("hex")
+    .slice(0, 20);
+  const taskScopeKey = `procurement-${chasing ? "chase" : "reply"}:${args.order.id}:${args.vendor.id}:${sourceHash}`;
   const sender = threadSender
     ?? (args.allowPooledSender ? await pooledReplySender({ workspaceId, taskScopeKey }) : null);
   if (!sender) {
