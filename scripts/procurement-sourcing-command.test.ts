@@ -47,6 +47,7 @@ async function main() {
     runQueuedSourcingWaveJob,
     SOURCING_COMMAND_MAX_PER_CATEGORY,
     SOURCING_COMMAND_SLICE,
+    SOURCING_OUTAGE_RETRIES,
   } = await import("../src/lib/procurement-sourcing-command");
 
   // The exact operator phrase, plus the wording variants around it.
@@ -159,6 +160,8 @@ async function main() {
       rejected: [],
       queriesUsed: [],
       discoveryExhausted: false,
+      timedOut: false,
+      providerFailures: [],
     };
   };
   const rfq = async (input: { orderId: string; limit: number }) => {
@@ -201,6 +204,31 @@ async function main() {
     "a send outcome records the files it carried",
   );
 
+  // A category scope runs that category alone, so a failed or slow category can
+  // be retried without re-running the whole plan.
+  const scopedCalls: Array<{ orderId: string; deadlineAt?: number | null }> = [];
+  const scoped = await runSourcingCommand({
+    customerId: "customer-1",
+    onlyCategory: "molded-foam",
+    budgetMs: 60_000,
+    intent: { perCategory: 4, send: false, scope: "each-category" },
+    confirmed: false,
+    dependencies: {
+      plan: async () => plan,
+      sourcing: async (input: { orderId: string; target: number; deadlineAt?: number | null }) => {
+        scopedCalls.push({ orderId: input.orderId, deadlineAt: input.deadlineAt });
+        return sourcing(input);
+      },
+      rfq,
+    },
+  });
+  assert.deepEqual(scopedCalls.map((call) => call.orderId), ["order-foam"], "a scoped run touches one category");
+  assert.ok(
+    typeof scopedCalls[0]!.deadlineAt === "number" && scopedCalls[0]!.deadlineAt > Date.now(),
+    "a budgeted run hands the wave a deadline so the invocation is never killed mid write",
+  );
+  assert.equal(scoped.categories.length, 1);
+
   // A queued wave runs in slices and re-queues only while it keeps finding.
   const enqueued: Array<Record<string, unknown>> = [];
   const enqueueCalls: Array<{ dedupeKey?: string | null; ignoreJobId?: string | null }> = [];
@@ -234,7 +262,9 @@ async function main() {
   });
   assert.equal(sliceTarget, SOURCING_COMMAND_SLICE, "a queued wave runs a bounded slice");
   assert.equal(enqueued.length, 1, "the remainder is queued to continue");
-  assert.equal(enqueued[0]!.perCategory, 100 - SOURCING_COMMAND_SLICE);
+  // The slice added 5 of the 20 it asked for, for example because it ran out of
+  // its time budget, so 95 are still owed rather than 80.
+  assert.equal(enqueued[0]!.perCategory, 95, "the remainder credits the suppliers actually added");
   assert.equal(enqueued[0]!.confirmed, true, "the original authorization carries to the remainder");
   assert.equal(
     enqueueCalls[0]!.dedupeKey,
@@ -263,6 +293,86 @@ async function main() {
     },
   });
   assert.equal(enqueued.length, 0, "a slice that found nothing must not re-queue forever");
+
+  // A slice that spent its whole budget before qualifying anyone still owes the
+  // rest of the count, so the wave has to continue rather than quietly stop.
+  enqueued.length = 0;
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    payload: { customerId: "customer-1", workspaceId: "workspace-1", perCategory: 100, send: false, confirmed: false },
+    dependencies: {
+      run: async () => ({
+        perCategory: SOURCING_COMMAND_SLICE,
+        send: false,
+        categories: [{
+          category: "pcba" as const,
+          orderId: "order-pcba",
+          material: "m",
+          wave: { added: 0, timedOut: true } as never,
+          send: null,
+          error: null,
+        }],
+        added: 0,
+        sent: 0,
+      }),
+      enqueue: enqueue as never,
+    },
+  });
+  assert.equal(enqueued.length, 1, "a slice that ran out of time keeps the wave going");
+  assert.equal(enqueued[0]!.perCategory, 99, "the timed out slice only credits real progress");
+
+  // Every discovery provider down is an outage, not an exhausted category, so
+  // the same count is retried on a delay until the attempts run out.
+  const outageSlice = (providerRetries?: number) => ({
+    officeId: "office-1",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 100,
+      send: false,
+      confirmed: false,
+      ...(providerRetries === undefined ? {} : { providerRetries }),
+    },
+    dependencies: {
+      run: async () => ({
+        perCategory: SOURCING_COMMAND_SLICE,
+        send: false,
+        categories: [{
+          category: "pcba" as const,
+          orderId: "order-pcba",
+          material: "m",
+          wave: { added: 0, timedOut: false, providerFailures: ["serper", "openai"] } as never,
+          send: null,
+          error: null,
+        }],
+        added: 0,
+        sent: 0,
+      }),
+      enqueue: enqueue as never,
+    },
+  });
+  enqueued.length = 0;
+  enqueueCalls.length = 0;
+  const outageEnqueue: Array<{ runAfter?: Date }> = [];
+  await runQueuedSourcingWaveJob({
+    ...outageSlice(),
+    dependencies: {
+      ...outageSlice().dependencies,
+      enqueue: (async (input: { payload: Record<string, unknown>; runAfter?: Date }) => {
+        enqueued.push(input.payload);
+        outageEnqueue.push({ runAfter: input.runAfter });
+        return { id: "job-outage" };
+      }) as never,
+    },
+  });
+  assert.equal(enqueued.length, 1, "a discovery outage retries instead of abandoning the wave");
+  assert.equal(enqueued[0]!.perCategory, 100, "the retry still owes the whole remaining count");
+  assert.equal(enqueued[0]!.providerRetries, 1, "the retry attempt is counted");
+  assert.ok(outageEnqueue[0]!.runAfter instanceof Date, "the retry waits for the provider to recover");
+
+  enqueued.length = 0;
+  await runQueuedSourcingWaveJob(outageSlice(SOURCING_OUTAGE_RETRIES) as never);
+  assert.equal(enqueued.length, 0, "the outage retries are bounded, so the chain cannot run forever");
 
   await assert.rejects(
     runQueuedSourcingWaveJob({ officeId: "office-1", payload: { workspaceId: "workspace-1", perCategory: 10 } }),

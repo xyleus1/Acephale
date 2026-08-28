@@ -29,6 +29,13 @@ export const SOURCING_COMMAND_MAX_PER_CATEGORY = SOURCING_WAVE_MAX_TARGET;
 // A hundred crawls plus a hundred sends per category outlive a serverless
 // invocation, so a queued wave runs in slices and re-queues its remainder.
 export const SOURCING_COMMAND_SLICE = 20;
+// A slice has to hand its result back before the invocation is killed, so the
+// wave work stops here and the remainder is queued instead.
+export const SOURCING_COMMAND_SLICE_BUDGET_MS = 200_000;
+// How many times a slice that lost every discovery provider may be retried
+// before the wave gives up, and how long it waits between those attempts.
+export const SOURCING_OUTAGE_RETRIES = 3;
+export const SOURCING_OUTAGE_RETRY_DELAY_MS = 10 * 60_000;
 
 export type SourcingCommandIntent = {
   perCategory: number;
@@ -189,9 +196,14 @@ export async function runQueuedSourcingWaveJob(args: {
   const workspaceId = typeof payload.workspaceId === "string" ? payload.workspaceId : null;
   const remaining = Math.min(SOURCING_COMMAND_MAX_PER_CATEGORY, perCategoryValue);
   const slice = Math.min(SOURCING_COMMAND_SLICE, remaining);
+  const onlyCategory = payload.category === "pcba" || payload.category === "molded-foam"
+    ? payload.category
+    : null;
   const result = await (args.dependencies?.run ?? runSourcingCommand)({
     customerId,
     workspaceId,
+    onlyCategory,
+    budgetMs: SOURCING_COMMAND_SLICE_BUDGET_MS,
     intent: {
       perCategory: slice,
       send: payload.send === true,
@@ -199,17 +211,36 @@ export async function runQueuedSourcingWaveJob(args: {
     },
     confirmed: payload.confirmed === true,
   });
-  // Only keep going while the last slice still found qualified suppliers,
-  // otherwise a category with nothing left to find would re-queue forever.
-  const stillFinding = result.categories.some((entry) => (entry.wave?.added ?? 0) > 0);
-  const left = remaining - slice;
-  if (left > 0 && stillFinding) {
+  // Only keep going while the last slice still found qualified suppliers or ran
+  // out of time before it could, otherwise a category with nothing left to find
+  // would re-queue forever.
+  const stillFinding = result.categories.some(
+    (entry) => (entry.wave?.added ?? 0) > 0 || entry.wave?.timedOut === true,
+  );
+  // Credit the progress actually made, not the slice size, because a slice that
+  // ran out of time added fewer suppliers than it asked for and the rest of the
+  // count is still owed. Counting at least one keeps the chain finite.
+  const progressed = Math.max(1, ...result.categories.map((entry) => entry.wave?.added ?? 0));
+  const left = remaining - Math.min(slice, progressed);
+  // A slice where every discovery provider threw made no progress and did not
+  // run out of time, so treat it as a transient outage: retry the same count a
+  // few times on a delay instead of abandoning the wave, and stop retrying once
+  // the attempts are spent so the chain stays finite.
+  const outage = !stillFinding
+    && result.categories.some((entry) => (entry.wave?.providerFailures?.length ?? 0) > 0)
+    && result.categories.every((entry) => (entry.wave?.added ?? 0) === 0);
+  const retriesUsed = typeof payload.providerRetries === "number" ? Math.trunc(payload.providerRetries) : 0;
+  const retryOutage = outage && retriesUsed < SOURCING_OUTAGE_RETRIES;
+  if (left > 0 && (stillFinding || retryOutage)) {
     await (args.dependencies?.enqueue ?? enqueueBackgroundJob)({
       officeId: args.officeId,
       type: "PROCUREMENT_SOURCING_WAVE",
-      payload: { ...payload, perCategory: left },
+      payload: retryOutage
+        ? { ...payload, perCategory: remaining, providerRetries: retriesUsed + 1 }
+        : { ...payload, perCategory: left, providerRetries: 0 },
+      runAfter: retryOutage ? new Date(Date.now() + SOURCING_OUTAGE_RETRY_DELAY_MS) : undefined,
       dedupeKey: typeof payload.workspaceId === "string"
-        ? `procurement-sourcing-wave:${payload.workspaceId}`
+        ? `procurement-sourcing-wave:${payload.workspaceId}${onlyCategory ? `:${onlyCategory}` : ""}`
         : null,
       ignoreJobId: args.jobId ?? null,
       maxAttempts: 1,
@@ -222,6 +253,11 @@ export async function runSourcingCommand(args: {
   customerId: string;
   workspaceId?: string | null;
   intent: SourcingCommandIntent;
+  // Only source this category, so a failed or slow category can be retried on
+  // its own instead of re-running the whole plan.
+  onlyCategory?: SupplierSourcingCategoryKey | null;
+  // Total wall clock the whole run may use, shared across the plan.
+  budgetMs?: number | null;
   // Sending supplier mail needs the same explicit confirmation the operator
   // send commands require, whatever asked for the run.
   confirmed: boolean;
@@ -231,10 +267,13 @@ export async function runSourcingCommand(args: {
     rfq?: typeof runProcurementBulkRfq;
   };
 }): Promise<SourcingCommandResult> {
-  const plan = await (args.dependencies?.plan ?? planSourcingCommand)({
+  const fullPlan = await (args.dependencies?.plan ?? planSourcingCommand)({
     customerId: args.customerId,
     workspaceId: args.workspaceId ?? null,
   });
+  const plan = args.onlyCategory
+    ? fullPlan.filter((entry) => entry.category === args.onlyCategory)
+    : fullPlan;
   const sourcing = args.dependencies?.sourcing ?? runProcurementSupplierSourcingWave;
   const rfq = args.dependencies?.rfq ?? runProcurementBulkRfq;
   const result: SourcingCommandResult = {
@@ -244,7 +283,15 @@ export async function runSourcingCommand(args: {
     added: 0,
     sent: 0,
   };
-  for (const entry of plan) {
+  const startedAt = Date.now();
+  const budget = typeof args.budgetMs === "number" && args.budgetMs > 0 ? args.budgetMs : null;
+
+  for (const [index, entry] of plan.entries()) {
+    // Split the remaining budget across the categories still to run, so the
+    // last category is never starved by the first one.
+    const categoryDeadline = budget
+      ? startedAt + budget * ((index + 1) / plan.length)
+      : null;
     const outcome: SourcingCommandCategoryOutcome = {
       category: entry.category,
       orderId: entry.orderId,
@@ -254,7 +301,11 @@ export async function runSourcingCommand(args: {
       error: null,
     };
     try {
-      outcome.wave = await sourcing({ orderId: entry.orderId, target: args.intent.perCategory });
+      outcome.wave = await sourcing({
+        orderId: entry.orderId,
+        target: args.intent.perCategory,
+        deadlineAt: categoryDeadline,
+      });
       result.added += outcome.wave.added;
     } catch (error) {
       outcome.error = error instanceof SupplierSourcingError

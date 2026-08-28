@@ -1,16 +1,27 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { enqueueBackgroundJob, runDueBackgroundJobs } from "@/lib/background-jobs";
+import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import {
   parseSourcingCommand,
   planSourcingCommand,
   runSourcingCommand,
   SOURCING_COMMAND_CONFIRMATION,
   SOURCING_COMMAND_MAX_PER_CATEGORY,
+  SOURCING_COMMAND_SLICE_BUDGET_MS,
 } from "@/lib/procurement-sourcing-command";
+import { type SupplierSourcingCategoryKey } from "@/lib/supply-os/supplier-sourcing-category";
 
 export const maxDuration = 300;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CATEGORY_KEYS: readonly SupplierSourcingCategoryKey[] = ["pcba", "molded-foam"];
+
+function categoryScope(value: unknown): SupplierSourcingCategoryKey | null {
+  return typeof value === "string" && CATEGORY_KEYS.includes(value as SupplierSourcingCategoryKey)
+    ? value as SupplierSourcingCategoryKey
+    : null;
+}
 
 function operatorSecret(req: NextRequest) {
   const headerAuth = req.headers.get("authorization");
@@ -67,7 +78,20 @@ export async function POST(req: NextRequest) {
     perCategory?: unknown;
     send?: unknown;
     confirm?: unknown;
+    category?: unknown;
+    queue?: unknown;
+    drain?: unknown;
   };
+  // A full hundred per category outlives any request, so the operator can hand
+  // the wave to the queue and then carry its slices forward from here instead of
+  // waiting on the fifteen minute schedule.
+  if (payload.drain === true) {
+    const drained = await runDueBackgroundJobs({ limit: 1, onlyTypes: ["PROCUREMENT_SOURCING_WAVE"] })
+      .catch(() => null);
+    return NextResponse.json({
+      drained: drained ?? { scanned: 0, completed: 0, failed: 0, retried: 0 },
+    });
+  }
   const customerId = typeof payload.customerId === "string" ? payload.customerId.trim() : "";
   if (!UUID_PATTERN.test(customerId)) {
     return NextResponse.json({ error: "customerId is required." }, { status: 400 });
@@ -90,10 +114,42 @@ export async function POST(req: NextRequest) {
   if (send && !confirmed) {
     return NextResponse.json({ error: "This send needs an explicit confirmation." }, { status: 400 });
   }
+  const category = categoryScope(payload.category);
   try {
+    if (payload.queue === true) {
+      const plan = await planSourcingCommand({ customerId, workspaceId });
+      const scoped = category ? plan.filter((entry) => entry.category === category) : plan;
+      if (!scoped.length) {
+        return NextResponse.json({ error: "No sourcing request matches this scope." }, { status: 400 });
+      }
+      const order = await loadBulkRfqOrder(scoped[0].orderId);
+      if (!order) {
+        return NextResponse.json({ error: "No sourcing request matches this scope." }, { status: 400 });
+      }
+      const job = await enqueueBackgroundJob({
+        officeId: order.officeId,
+        type: "PROCUREMENT_SOURCING_WAVE",
+        payload: {
+          customerId,
+          workspaceId,
+          perCategory,
+          category,
+          send,
+          confirmed,
+          instruction: typeof payload.instruction === "string" ? payload.instruction.slice(0, 500) : "",
+        },
+        dedupeKey: workspaceId
+          ? `procurement-sourcing-wave:${workspaceId}${category ? `:${category}` : ""}`
+          : null,
+        maxAttempts: 1,
+      });
+      return NextResponse.json({ queued: true, jobId: job.id, perCategory, send, category, plan: scoped });
+    }
     return NextResponse.json(await runSourcingCommand({
       customerId,
       workspaceId,
+      onlyCategory: category,
+      budgetMs: SOURCING_COMMAND_SLICE_BUDGET_MS,
       intent: { perCategory, send, scope: "each-category" },
       confirmed,
     }));

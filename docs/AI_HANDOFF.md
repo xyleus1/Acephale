@@ -1,5 +1,23 @@
 # AI Handoff
 
+## 2026-08-28: A sourcing wave survives provider failures and invocation limits
+
+- `runProcurementSupplierSourcingWave` catches a throwing domain proposer,
+  records it in `providerFailures`, and falls through to the next provider. One
+  exhausted search API used to fail the whole category, which is what surfaced in
+  production as an opaque "supplier wave failed" on the PCBA request.
+- The wave takes `deadlineAt` and reports `timedOut`. `runSourcingCommand` splits
+  `budgetMs` (`SOURCING_COMMAND_SLICE_BUDGET_MS`, 200s) across the planned
+  categories, so a slice stops between rounds instead of being killed mid write
+  by the 300s serverless limit.
+- A queued slice credits the suppliers it actually added, and continues while it
+  either added someone or ran out of time. `onlyCategory` scopes a run to one
+  category, and the category is part of the continuation dedupe key.
+- `POST /api/admin/procurement-sourcing-wave` accepts `category`, `queue: true`
+  (hand the wave to the background queue) and `drain: true` (carry one queued
+  slice forward without waiting for the schedule). Send authorization is
+  unchanged: supplier mail still needs the confirmation phrase.
+
 ## 2026-08-25: Connected mailboxes are one shared pool with a unified admin Log
 
 - `EmailAccount` is no longer a per office mailbox. Every office selects senders

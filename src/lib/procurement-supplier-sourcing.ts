@@ -14,6 +14,7 @@ import { loadBulkRfqOrder, type BulkRfqOrder } from "@/lib/procurement-bulk-rfq"
 import { procurementWorkflowDatabase } from "@/lib/procurement-workflow";
 import {
   selectSupplierDomainProposers,
+  type SupplierDomainProposal,
   type SupplierDomainProposer,
 } from "@/lib/supply-os/supplier-domain-discovery";
 import {
@@ -71,6 +72,11 @@ export type SourcingWaveResult = {
   rejected: SourcingWaveRejection[];
   queriesUsed: string[];
   discoveryExhausted: boolean;
+  // Set when the wave stopped on its time budget with work still left, so the
+  // caller knows the remainder is worth queueing.
+  timedOut: boolean;
+  // Discovery providers that failed during this wave, kept for the audit trail.
+  providerFailures: string[];
 };
 
 export class SupplierSourcingError extends Error {
@@ -266,6 +272,9 @@ async function insertSourcedVendor(args: {
 export async function runProcurementSupplierSourcingWave(input: {
   orderId: string;
   target: number;
+  // A wave runs inside a serverless invocation, so it stops cleanly at this
+  // moment and lets the caller queue the remainder instead of being killed.
+  deadlineAt?: number | null;
   proposers?: readonly SupplierDomainProposer[];
   fetchPage?: PageFetcher;
   verify?: typeof verifyEmail;
@@ -308,18 +317,34 @@ export async function runProcurementSupplierSourcingWave(input: {
     rejected: [],
     queriesUsed: [],
     discoveryExhausted: false,
+    timedOut: false,
+    providerFailures: [],
   };
 
+  const outOfTime = () => typeof input.deadlineAt === "number" && Date.now() >= input.deadlineAt;
+
   for (let round = 0; round < MAX_PROPOSAL_ROUNDS && result.added < target; round += 1) {
+    if (outOfTime()) {
+      result.timedOut = true;
+      break;
+    }
     const queries = supplierSourcingQueries(category, round, 2);
     const proposals: Array<{ domain: string; url: string; via: string }> = [];
     for (const query of queries) {
       for (const proposer of proposers) {
-        const found = await proposer.propose({
-          query,
-          limit: Math.min(25, Math.max(8, (target - result.added) * 2)),
-          excludeDomains: [...seenDomains].slice(-400),
-        });
+        // One failing discovery provider, for example an exhausted search API
+        // quota, must not end the wave while another provider still answers.
+        let found: SupplierDomainProposal[] = [];
+        try {
+          found = await proposer.propose({
+            query,
+            limit: Math.min(25, Math.max(8, (target - result.added) * 2)),
+            excludeDomains: [...seenDomains].slice(-400),
+          });
+        } catch {
+          result.providerFailures.push(proposer.name);
+          continue;
+        }
         if (!found.length) continue;
         result.queriesUsed.push(`${proposer.name}: ${query}`);
         for (const proposal of found) {
@@ -359,6 +384,10 @@ export async function runProcurementSupplierSourcingWave(input: {
 
     for (const { site, via } of crawled) {
       if (result.added >= target) break;
+      if (outOfTime()) {
+        result.timedOut = true;
+        break;
+      }
       const qualification = qualifySupplierSite(category, site);
       if (qualification.state === "REJECTED") {
         result.rejected.push({ domain: site.domain, reason: qualification.reason });

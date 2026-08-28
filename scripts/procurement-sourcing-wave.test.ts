@@ -124,6 +124,48 @@ async function main() {
   assert.ok(wave.additions[0]!.matched.length >= 3, "the loaded supplier keeps its capability evidence");
   assert.equal(wave.discoveryExhausted, true, "the wave stops once discovery repeats itself");
 
+  // A discovery provider that fails, for example an exhausted search API quota,
+  // must not end the wave while another provider still answers.
+  inserted.length = 0;
+  const failing = {
+    name: "failing-provider",
+    propose: async () => {
+      throw new Error("provider quota exhausted");
+    },
+  };
+  const survived = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 1,
+    proposers: [failing, ...proposers] as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: insertVendor as never,
+  });
+  assert.equal(survived.added, 1, "a failing provider falls through to the next one");
+  assert.ok(
+    survived.providerFailures.includes("failing-provider"),
+    "the failing provider is recorded for the audit trail",
+  );
+
+  // A wave stops on its time budget instead of being killed by the platform.
+  inserted.length = 0;
+  const expired = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 10,
+    deadlineAt: Date.now() - 1,
+    proposers: proposers as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: insertVendor as never,
+  });
+  assert.equal(expired.timedOut, true, "an expired budget stops the wave and says so");
+  assert.equal(expired.added, 0);
+  assert.deepEqual(inserted, [], "no supplier is written after the budget is spent");
+
   // Suppliers already on the request are never proposed, crawled, or mailed twice.
   inserted.length = 0;
   const repeat = await runProcurementSupplierSourcingWave({
