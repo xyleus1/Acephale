@@ -234,6 +234,34 @@ export async function runBackgroundJobById(input: {
   return { found: true as const, outcome };
 }
 
+// A serverless invocation can be killed mid-job, which leaves the row RUNNING
+// with nothing running it, holding its dedupe key and stalling any wave that
+// continues itself. Such a row is handed back to the queue after this long.
+export const STALE_RUNNING_JOB_MS = 15 * 60_000;
+const MAX_STALE_RECLAIMS = 5;
+
+async function reclaimStaleRunningJobs(input: {
+  onlyTypes?: readonly BackgroundJobType[];
+  now: Date;
+}) {
+  const reclaimed = await prisma.backgroundJob.updateMany({
+    where: {
+      status: "RUNNING",
+      lockedAt: { lt: new Date(input.now.getTime() - STALE_RUNNING_JOB_MS) },
+      // A row that keeps dying is left alone rather than cycled forever.
+      attempts: { lt: MAX_STALE_RECLAIMS },
+      ...(input.onlyTypes?.length ? { type: { in: [...input.onlyTypes] } } : {}),
+    },
+    data: {
+      status: "QUEUED",
+      lockedAt: null,
+      runAfter: input.now,
+      lastError: "The previous attempt did not finish, so the job was queued again.",
+    },
+  });
+  return reclaimed.count;
+}
+
 export async function runDueBackgroundJobs(
   input: { limit?: number; onlyTypes?: readonly BackgroundJobType[] } = {},
 ): Promise<RunResult> {
@@ -242,6 +270,7 @@ export async function runDueBackgroundJobs(
     ? { in: [...input.onlyTypes] }
     : { not: "DEMO_EMAIL_CAPABILITY_TEST" };
   const now = new Date();
+  await reclaimStaleRunningJobs({ onlyTypes: input.onlyTypes, now }).catch(() => 0);
   const offices = await prisma.office.findMany({ select: { id: true } });
   const jobs: BackgroundJob[] = [];
   for (const office of offices) {

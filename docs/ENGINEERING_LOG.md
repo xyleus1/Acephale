@@ -7878,3 +7878,14 @@ Use this file for chronological implementation notes that future agents should s
 - The direct production script now delegates to the shared service, preserving
   its environment contract and JSON output. The GitHub Actions fallback keeps
   invoking that script.
+
+### 2026-08-28 - A sourcing slice fits inside one invocation
+
+- Capped every external call inside the supplier sourcing wave (discovery,
+  crawl, email verification) and clamped each cap to the wave deadline, because
+  a single 90s web search with a retry outlasted the whole slice budget and the
+  drained invocation was killed at 300s with no response.
+- Cut the slice to 10 suppliers and 120s of sourcing so the remainder of the
+  invocation covers the RFQ sends and the continuation enqueue.
+- `runDueBackgroundJobs` now reclaims jobs stuck `RUNNING` for 15 minutes, up to
+  five attempts, so a job killed mid invocation stops holding its dedupe key.

@@ -166,6 +166,34 @@ async function main() {
   assert.equal(expired.added, 0);
   assert.deepEqual(inserted, [], "no supplier is written after the budget is spent");
 
+  // One hanging provider call must not eat the whole slice: the call is dropped
+  // at the deadline, the wave reports the timeout, and it returns on its own.
+  inserted.length = 0;
+  const hanging = {
+    name: "hanging-provider",
+    propose: () => new Promise<never>(() => {}),
+  };
+  const startedAt = Date.now();
+  const capped = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 1,
+    // Far shorter than the call cap, so the deadline is what stops the call.
+    deadlineAt: Date.now() + 300,
+    proposers: [hanging] as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: insertVendor as never,
+  });
+  assert.ok(Date.now() - startedAt < 5_000, "the wave returned without waiting on the hanging call");
+  assert.equal(capped.timedOut, true, "a call abandoned on the deadline is reported as a timeout");
+  assert.ok(
+    capped.providerFailures.includes("hanging-provider"),
+    "the provider that outlasted its budget is recorded",
+  );
+  assert.deepEqual(inserted, [], "nothing is written when discovery never answered");
+
   // Suppliers already on the request are never proposed, crawled, or mailed twice.
   inserted.length = 0;
   const repeat = await runProcurementSupplierSourcingWave({

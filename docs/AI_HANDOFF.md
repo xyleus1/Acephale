@@ -1,5 +1,21 @@
 # AI Handoff
 
+## 2026-08-28: A sourcing slice fits inside its invocation, and a killed job comes back
+
+- Checking the clock between rounds was not enough: one web search (90s client
+  timeout with a retry) or one slow site could outlast the whole slice, so a
+  drained slice still hit the 300s platform limit with no response body. Every
+  external call in the wave is now capped as well (`MAX_DISCOVERY_CALL_MS` 60s,
+  `MAX_CRAWL_CALL_MS` 45s, `MAX_VERIFY_CALL_MS` 15s) and never allowed past
+  `deadlineAt`. An abandoned call marks `timedOut`, so the remainder is queued.
+- `SOURCING_COMMAND_SLICE_BUDGET_MS` is 120s and `SOURCING_COMMAND_SLICE` is 10,
+  which leaves the rest of the invocation for the RFQ sends the slice earned and
+  for queueing the remainder.
+- `runDueBackgroundJobs` reclaims a job left `RUNNING` for more than
+  `STALE_RUNNING_JOB_MS` (15 minutes) with fewer than five attempts. A job killed
+  mid invocation used to hold its dedupe key forever, which stalled every wave
+  that continues itself.
+
 ## 2026-08-28: A sourcing wave survives provider failures and invocation limits
 
 - `runProcurementSupplierSourcingWave` catches a throwing domain proposer,

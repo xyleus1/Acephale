@@ -28,10 +28,12 @@ export const SOURCING_COMMAND_CONFIRMATION = "SEND SUPPLIER FILES";
 export const SOURCING_COMMAND_MAX_PER_CATEGORY = SOURCING_WAVE_MAX_TARGET;
 // A hundred crawls plus a hundred sends per category outlive a serverless
 // invocation, so a queued wave runs in slices and re-queues its remainder.
-export const SOURCING_COMMAND_SLICE = 20;
+export const SOURCING_COMMAND_SLICE = 10;
 // A slice has to hand its result back before the invocation is killed, so the
-// wave work stops here and the remainder is queued instead.
-export const SOURCING_COMMAND_SLICE_BUDGET_MS = 200_000;
+// wave work stops here and the remainder is queued instead. The rest of the
+// three hundred second invocation pays for the RFQ sends the slice earned and
+// for queueing the remainder, so this stays well under that limit.
+export const SOURCING_COMMAND_SLICE_BUDGET_MS = 120_000;
 // How many times a slice that lost every discovery provider may be retried
 // before the wave gives up, and how long it waits between those attempts.
 export const SOURCING_OUTAGE_RETRIES = 3;

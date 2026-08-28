@@ -35,6 +35,29 @@ const MAX_CRAWLED_PAGES = 4;
 const MAX_TEXT_PER_SITE = 60_000;
 const MAX_PROPOSAL_ROUNDS = 12;
 const CRAWL_CONCURRENCY = 4;
+// Checking the clock between calls is not enough, because one web search or one
+// slow site can outlast the whole slice on its own. Every external call is also
+// capped, and never allowed past the wave deadline.
+const MAX_DISCOVERY_CALL_MS = 60_000;
+const MAX_CRAWL_CALL_MS = 45_000;
+const MAX_VERIFY_CALL_MS = 15_000;
+
+class CallExpired extends Error {}
+
+async function boundedCall<T>(work: () => Promise<T>, budgetMs: number): Promise<T> {
+  if (budgetMs <= 0) throw new CallExpired("No time left for this call.");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new CallExpired("The call outlasted its budget.")), budgetMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 const CRAWL_PATH_HINTS = [
   "contact",
@@ -322,6 +345,10 @@ export async function runProcurementSupplierSourcingWave(input: {
   };
 
   const outOfTime = () => typeof input.deadlineAt === "number" && Date.now() >= input.deadlineAt;
+  // How long a single call may take: its own cap, and never past the deadline.
+  const callBudget = (cap: number) => typeof input.deadlineAt === "number"
+    ? Math.min(cap, input.deadlineAt - Date.now())
+    : cap;
 
   for (let round = 0; round < MAX_PROPOSAL_ROUNDS && result.added < target; round += 1) {
     if (outOfTime()) {
@@ -331,17 +358,22 @@ export async function runProcurementSupplierSourcingWave(input: {
     const queries = supplierSourcingQueries(category, round, 2);
     const proposals: Array<{ domain: string; url: string; via: string }> = [];
     for (const query of queries) {
+      if (outOfTime()) {
+        result.timedOut = true;
+        break;
+      }
       for (const proposer of proposers) {
         // One failing discovery provider, for example an exhausted search API
         // quota, must not end the wave while another provider still answers.
         let found: SupplierDomainProposal[] = [];
         try {
-          found = await proposer.propose({
+          found = await boundedCall(() => proposer.propose({
             query,
             limit: Math.min(25, Math.max(8, (target - result.added) * 2)),
             excludeDomains: [...seenDomains].slice(-400),
-          });
-        } catch {
+          }), callBudget(MAX_DISCOVERY_CALL_MS));
+        } catch (error) {
+          if (error instanceof CallExpired) result.timedOut = true;
           result.providerFailures.push(proposer.name);
           continue;
         }
@@ -365,10 +397,17 @@ export async function runProcurementSupplierSourcingWave(input: {
     const failures: SourcingWaveRejection[] = [];
     await Promise.all(Array.from({ length: Math.min(CRAWL_CONCURRENCY, queue.length) }, async () => {
       for (;;) {
+        if (outOfTime()) {
+          result.timedOut = true;
+          return;
+        }
         const next = queue.shift();
         if (!next) return;
         try {
-          const site = await crawlSupplierSite(next.url, fetchPage);
+          const site = await boundedCall(
+            () => crawlSupplierSite(next.url, fetchPage),
+            callBudget(MAX_CRAWL_CALL_MS),
+          );
           if (!site) {
             failures.push({ domain: next.domain, reason: "the public site could not be read" });
             continue;
@@ -396,7 +435,16 @@ export async function runProcurementSupplierSourcingWave(input: {
       let accepted: { email: string; verification: EmailVerification } | null = null;
       for (const email of site.emails.slice(0, 4)) {
         if (usedEmails.has(email)) continue;
-        const verification = await verify(email, { companyDomain: site.domain });
+        let verification: EmailVerification;
+        try {
+          verification = await boundedCall(
+            () => verify(email, { companyDomain: site.domain }),
+            callBudget(MAX_VERIFY_CALL_MS),
+          );
+        } catch (error) {
+          if (error instanceof CallExpired) result.timedOut = true;
+          continue;
+        }
         if (verification.verdict === "deliverable_likely") {
           accepted = { email, verification };
           break;

@@ -1,0 +1,109 @@
+---
+name: testing-derya-local
+description: How to bring up derya-crm locally (app DB, workflow DB, login allow-list, Supply OS fixtures) so admin and Supply OS features can be tested end to end in a browser without touching production or sending email.
+---
+
+# Local runtime testing for derya-crm
+
+## App database
+
+- No Postgres is installed on the box by default. Start one in Docker, e.g.
+  `docker run -d --name pgtest -e POSTGRES_PASSWORD=... -p 5432:5432 postgres:16`,
+  create a database (for example `derya_crm_app`), put the URL in `.env` as `DATABASE_URL`,
+  then run `npx prisma migrate deploy && npx prisma generate`.
+- `User` has a composite unique key `[officeId, email]`, so upserts must use
+  `where: { officeId_email: { officeId, email } }`, and `fullName` is required (`name` does not exist).
+- `UserRole` values are `ADMIN`, `MANAGER`, `SALES`, `EMPLOYEE` (there is no `MEMBER`).
+- Passwords use scrypt via `src/lib/password.ts` (`hashPassword`), not bcrypt. Seed hashes with that helper.
+
+## Login
+
+- Sign-in is allow-list gated (`src/lib/login-code.ts`): only a few founder addresses work by default.
+  For any seeded test user, start the dev server with
+  `LOGIN_ALLOWED_EMAILS="mert@usederya.com,manager@usederya.com,sales@usederya.com"`.
+- On `/login`, expand "Use password instead" and use the password form. The email-code path needs SMTP.
+- There is no `/logout` route. Sign out through the avatar menu in the top-right header
+  (present on `/dashboard/admin`, `/dashboard/leads`, and similar pages, but not inside the Supply OS shell).
+- Role gating check: `SALES` is redirected away from `/dashboard/admin` to `/dashboard/supply-os`;
+  `ADMIN` and `MANAGER` see the admin tabs.
+
+## Workflow (procurement) database
+
+- `src/lib/procurement-workflow.ts` requires `WORKFLOW_DATABASE_URL` to use username `dashboard_api`
+  and an SSL `sslmode`. The org secret uses a different role, so procurement joins silently fall back
+  (rows show "Not linked") because the loader catches the error. Do not weaken the role check.
+- Workaround that works: `pg_dump` the public schema of the workflow DB into a second local Postgres
+  container, create a `dashboard_api` role with SELECT on all tables, enable SSL in that container
+  (self-signed cert, `alter system set ssl=on`), and point `WORKFLOW_DATABASE_URL` at it with `?sslmode=require`.
+  `orders` and `bill_of_materials` are views over Prisma tables, so dump the whole schema, not single relations.
+- IMPORTANT: Next.js does NOT override variables already present in the shell environment, so an org
+  secret `WORKFLOW_DATABASE_URL` beats the value in `.env`. Start the dev server with the override
+  inline: `WORKFLOW_DATABASE_URL="postgresql://dashboard_api:...@localhost:5433/...?sslmode=require" npm run dev`.
+- Start the dev server with `setsid nohup ... &` (or a persistent shell) or it can die with the shell.
+
+## Supply OS fixtures and deep links
+
+- The Supply OS materials panel only mounts after a company/workspace is selected AND the workspace has a
+  company profile. Without one you get "Company profile unavailable"; client effects such as the
+  `?procurementOrder=` deep link never run. Use the "Enter profile" form on that screen to save a manual
+  profile (company name plus website etc.), which avoids live research calls.
+- Deep-link URL shape: `/dashboard/supply-os?panel=materials&procurementOrder=<full workflow order uuid>`.
+  The mail log builds it from the full UUID while the subject only carries the first 8 hex chars.
+- A procurement request only shows up in the queue if the workflow order's
+  `request_context->source->workspace_id` matches the local `SupplyWorkspace` id (or, without a workspace id,
+  campaign `CUSTOM` plus a matching company name).
+
+- The `?procurementOrder=` deep link can land on the sourcing detail view stuck at the Compare stage
+  ("0 supplier candidates", "Results are read-only while the shortlist is reviewed"), which has no
+  conversation panel. Supplier threads and saved reply drafts live in the queue instead: click
+  "Back to sourcing queue", then the "Messages" tab, then the request row, then the vendor in the
+  Manufacturers list. Vendors default to the first one, so reselect the vendor you care about.
+- Saved file-bearing drafts render inside the vendor thread as "Saved draft, not sent" with an
+  "Attached request files" list, a "Files held back" list with reasons, and an editable subject/body.
+  "Send reply" only opens a confirm prompt; never click "Confirm send" in a test run.
+
+## Operator-secret admin endpoints (e.g. /api/admin/procurement-file-drafts)
+
+- Auth is `operatorSecretAuthorized`: `x-cron-secret` header, `Authorization: Bearer <secret>`, or
+  `?secret=`, compared timing-safe against `PROCUREMENT_BULK_RFQ_SECRET` or `CRON_SECRET`. Secrets
+  shorter than 16 characters are ignored entirely, so a short configured secret means every request
+  is 401. Start the dev server with the secret inline to test both accept and reject paths.
+- These batch endpoints resolve an acting operator from the office (active ADMIN/MANAGER, non-portal),
+  so the local office needs such a user or every vendor outcome fails.
+- Office to workflow-customer mapping comes from `PROCUREMENT_CUSTOMER_MAP_JSON`; running a second
+  server with a rival office mapped to the same customer id is a cheap cross-tenant leak test.
+- Malformed (non-UUID) order ids may surface a raw Prisma "invalid input syntax for type uuid" 500
+  instead of a 400/404; check whether validation was added before treating a 500 as a new defect.
+
+## Testing a PR while the main checkout is in use
+
+- If someone else is switching branches in `/home/ubuntu/repos/derya-crm`, create an isolated worktree
+  (`git worktree add /home/ubuntu/prNNN <sha>`) and run a second dev server on another port
+  (`PORT=3010 npm run dev`). Copy `.env` over and keep the inline `WORKFLOW_DATABASE_URL` override.
+- After deleting or renaming an exported helper on the branch, restart the dev server and clear
+  `.next/cache`, otherwise you get stale "X is not exported from ..." import errors.
+
+## Settings mail log (/dashboard/settings/log)
+
+- Gate is `requireEmailAccountAdminSession`: role must be `ADMIN`, anyone else is redirected to
+  `/dashboard/supply-os`, and the Settings nav for that user only shows the tabs they may use.
+- Filters are GET params `q`, `direction` (`ALL|INBOUND|OUTBOUND`), `outreach` (`ALL|Procurement|Sales`);
+  you can drive every filter case straight from the URL bar.
+- The page renders only the newest 150 office rows, but the search runs in the database, so verifying the
+  review fix needs a fixture row older than 150 newer filler rows plus a same-subject row in another office
+  to prove `officeId` scoping still holds.
+- `EmailThread.subject` is non-null in Prisma, so a "no subject" fixture must set only
+  `EmailMessage.subject = null`.
+- Layout caution: the mail-log panel has `overflow-x: hidden` with a fixed grid wider than the panel, so
+  below roughly 1000px the Subject column is clipped with no way to scroll to it. Check this at 900px and
+  600px on any change to that table.
+
+## Off limits
+
+- `POST /api/admin/procurement-bulk-rfq` performs a real Gmail send. Never call it during testing;
+  use the `?drafts=1` preview and the read-only replies endpoint instead.
+
+## Devin Secrets Needed
+
+- `WORKFLOW_DATABASE_URL` (read-only workflow DB, wrong role for the app's check, still usable for dumps).
+- Optional: a real `dashboard_api` connection string would remove the need for the local replica.
