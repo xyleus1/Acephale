@@ -24,7 +24,11 @@ export type SupplierDomainProposer = {
   }) => Promise<SupplierDomainProposal[]>;
 };
 
-const OPENAI_DISCOVERY_TIMEOUT_MS = 90_000;
+// One attempt only: a retry doubled the wall clock of a call the wave has to fit
+// inside a single serverless invocation, so a slow search took the whole slice
+// and the wave added nobody.
+const OPENAI_DISCOVERY_TIMEOUT_MS = 110_000;
+const OPENAI_DISCOVERY_RETRIES = 0;
 
 const DOMAIN_SCHEMA = {
   type: "object",
@@ -97,7 +101,7 @@ export function createOpenAiDomainProposer(options: {
       if (!options.createResponse && !apiKey) return [];
       const client = options.createResponse
         ? null
-        : new OpenAI({ apiKey, timeout: OPENAI_DISCOVERY_TIMEOUT_MS, maxRetries: 1 });
+        : new OpenAI({ apiKey, timeout: OPENAI_DISCOVERY_TIMEOUT_MS, maxRetries: OPENAI_DISCOVERY_RETRIES });
       const excluded = new Set(input.excludeDomains ?? []);
       const request: Parameters<OpenAI["responses"]["create"]>[0] = {
         model: DERYA_AI_MODEL,

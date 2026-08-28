@@ -1,5 +1,20 @@
 # Engineering Log
 
+## 2026-08-28: A discovery call gets enough time to answer
+
+- Production symptom: every drained sourcing slice completed and added nobody,
+  with `providerFailures: ["openai-web-search", "openai-web-search"]`,
+  `examined: 0`, `timedOut: true`.
+- Cause: `MAX_DISCOVERY_CALL_MS` was 60s while one high context web search takes
+  roughly 60 to 100s, and `runSourcingCommand` split the 120s slice budget evenly
+  across the planned categories, so each discovery call was abandoned before it
+  could answer.
+- `MAX_DISCOVERY_CALL_MS` is 130s, `SOURCING_COMMAND_SLICE_BUDGET_MS` is 230s,
+  the OpenAI discovery client makes one attempt with a 110s timeout instead of
+  retrying, and a category is handed the whole remaining budget. A later category
+  that no longer has room for one discovery call is left to the continuation
+  slice, while the first category always runs.
+
 ## 2026-08-28: Bounded follow ups for quiet suppliers
 
 - Added `src/lib/procurement-supplier-chase.ts` (pure quiet thread policy) and a

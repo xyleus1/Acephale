@@ -7,6 +7,7 @@ import {
   type BulkRfqRunResult,
 } from "@/lib/procurement-bulk-rfq";
 import {
+  MAX_DISCOVERY_CALL_MS,
   runProcurementSupplierSourcingWave,
   SOURCING_WAVE_MAX_TARGET,
   SupplierSourcingError,
@@ -33,7 +34,7 @@ export const SOURCING_COMMAND_SLICE = 10;
 // wave work stops here and the remainder is queued instead. The rest of the
 // three hundred second invocation pays for the RFQ sends the slice earned and
 // for queueing the remainder, so this stays well under that limit.
-export const SOURCING_COMMAND_SLICE_BUDGET_MS = 120_000;
+export const SOURCING_COMMAND_SLICE_BUDGET_MS = 230_000;
 // How many times a slice that lost every discovery provider may be retried
 // before the wave gives up, and how long it waits between those attempts.
 export const SOURCING_OUTAGE_RETRIES = 3;
@@ -288,12 +289,16 @@ export async function runSourcingCommand(args: {
   const startedAt = Date.now();
   const budget = typeof args.budgetMs === "number" && args.budgetMs > 0 ? args.budgetMs : null;
 
-  for (const [index, entry] of plan.entries()) {
-    // Split the remaining budget across the categories still to run, so the
-    // last category is never starved by the first one.
-    const categoryDeadline = budget
-      ? startedAt + budget * ((index + 1) / plan.length)
-      : null;
+  let ran = 0;
+  for (const entry of plan) {
+    // A category needs room for at least one discovery call, so the budget is
+    // handed over whole and a later category that no longer fits is left to the
+    // continuation slice. Splitting it evenly starved every category below the
+    // discovery cap, and the wave added nobody. The first category always runs,
+    // so a small budget still does the work it can.
+    const categoryDeadline = budget ? startedAt + budget : null;
+    if (ran && categoryDeadline && categoryDeadline - Date.now() < MAX_DISCOVERY_CALL_MS) break;
+    ran += 1;
     const outcome: SourcingCommandCategoryOutcome = {
       category: entry.category,
       orderId: entry.orderId,

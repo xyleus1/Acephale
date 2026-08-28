@@ -38,7 +38,9 @@ const CRAWL_CONCURRENCY = 4;
 // Checking the clock between calls is not enough, because one web search or one
 // slow site can outlast the whole slice on its own. Every external call is also
 // capped, and never allowed past the wave deadline.
-const MAX_DISCOVERY_CALL_MS = 60_000;
+// One high context web search answers in roughly 60 to 100 seconds, so a cap
+// below that aborted every discovery call and the wave added nobody.
+export const MAX_DISCOVERY_CALL_MS = 130_000;
 const MAX_CRAWL_CALL_MS = 45_000;
 const MAX_VERIFY_CALL_MS = 15_000;
 

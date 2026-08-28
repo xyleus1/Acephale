@@ -47,8 +47,10 @@ async function main() {
     runQueuedSourcingWaveJob,
     SOURCING_COMMAND_MAX_PER_CATEGORY,
     SOURCING_COMMAND_SLICE,
+    SOURCING_COMMAND_SLICE_BUDGET_MS,
     SOURCING_OUTAGE_RETRIES,
   } = await import("../src/lib/procurement-sourcing-command");
+  const { MAX_DISCOVERY_CALL_MS } = await import("../src/lib/procurement-supplier-sourcing");
 
   // The exact operator phrase, plus the wording variants around it.
   const exact = parseSourcingCommand("find 100 more in each category and send");
@@ -228,6 +230,32 @@ async function main() {
     "a budgeted run hands the wave a deadline so the invocation is never killed mid write",
   );
   assert.equal(scoped.categories.length, 1);
+
+  // Every category that runs gets room for a whole discovery call. Splitting the
+  // slice budget evenly gave each category less than one web search, so every
+  // discovery call was abandoned and the wave added nobody.
+  const budgetCalls: Array<number | null | undefined> = [];
+  await runSourcingCommand({
+    customerId: "customer-1",
+    budgetMs: SOURCING_COMMAND_SLICE_BUDGET_MS,
+    intent: { perCategory: 10, send: false, scope: "each-category" },
+    confirmed: false,
+    dependencies: {
+      plan: async () => plan,
+      sourcing: async (input: { orderId: string; target: number; deadlineAt?: number | null }) => {
+        budgetCalls.push(input.deadlineAt);
+        return sourcing(input);
+      },
+      rfq,
+    },
+  });
+  assert.ok(budgetCalls.length >= 1, "a budgeted plan still sources");
+  for (const deadlineAt of budgetCalls) {
+    assert.ok(
+      typeof deadlineAt === "number" && deadlineAt - Date.now() >= MAX_DISCOVERY_CALL_MS,
+      "a sourced category must have room for one discovery call",
+    );
+  }
 
   // A queued wave runs in slices and re-queues only while it keeps finding.
   const enqueued: Array<Record<string, unknown>> = [];
