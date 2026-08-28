@@ -33,6 +33,27 @@ provided.
 
 ## 2. Create the office
 
+### Create an office in the app
+
+An allowlisted platform operator with an `ADMIN` session can create an office
+from the Supply OS company index at `/dashboard/supply-os`. The `New office`
+action is hidden from customer sessions, preview sessions, managers, and
+non-allowlisted accounts.
+
+The form asks for:
+
+- Office name
+- Optional customer login username
+- Optional customer login password, at least 12 characters when supplied
+
+The acting operator is added as an admin in the new office, so it appears in
+the office switcher immediately. The optional username creates a second admin
+using the reserved customer login identity. The in-app form refuses an office
+name that already exists. The direct script and GitHub Actions workflow remain
+idempotent and reuse existing records.
+
+### Direct script fallback
+
 ```bash
 DATABASE_URL="$DERYA_PROD_DATABASE_URL" \
 ALLOW_PRODUCTION_OFFICE_SEED=1 \
@@ -51,14 +72,14 @@ identity, so an operator email is never tied to two offices and email-code login
 cannot resolve into the wrong tenant. The customer signs in with the username
 and the password on the same form; the code flow rejects reserved identities.
 
-### Create an office without a local database URL
+### GitHub Actions fallback
 
 Use the `Create production office` workflow in GitHub Actions when the
-production database URL is not available locally. Dispatch it from `main`,
-select the `Production` environment, enter the office and admin inputs, and
-type the exact confirmation phrase `create production office`. The workflow
-checks the pinned Neon host and database role before running
-`scripts/create-production-office.ts`.
+in-app route is unavailable or a local production database URL is not available.
+Dispatch it from `main`, select the `Production` environment, enter the office
+and admin inputs, and type the exact confirmation phrase `create production
+office`. The workflow checks the pinned Neon host and database role before
+running `scripts/create-production-office.ts`.
 
 The admin password is read from the `PRODUCTION_ADMIN_PASSWORD` secret on the
 `Production` environment. Add or rotate that secret in GitHub rather than

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canProvisionOffice } from "@/lib/office-provisioning";
 import { listSwitchableOffices } from "@/lib/office-switch";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import { switchOfficeAction } from "./actions";
@@ -83,6 +84,7 @@ export default async function SupplyOsPage({
         accountRole={isCustomer || previewMode ? "CUSTOMER" : currentUser.role}
         initialPanel={params.panel}
         canCreateCompany={!isCustomer && !previewMode && currentUser.role === "ADMIN"}
+        canCreateOffice={!isCustomer && !previewMode && canProvisionOffice(session)}
         canImportSupplyData={!previewMode && (customerCanEdit || (!isCustomer && (currentUser.role === "ADMIN" || currentUser.role === "MANAGER")))}
         canApproveProcurement={!previewMode && (customerCanEdit || (!isCustomer && (currentUser.role === "ADMIN" || currentUser.role === "MANAGER")))}
         canAuthorizePurchase={!previewMode && (customerCanEdit || (!isCustomer && currentUser.role === "ADMIN"))}

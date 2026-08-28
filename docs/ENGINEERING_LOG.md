@@ -3070,7 +3070,7 @@ Use this file for chronological implementation notes that future agents should s
 - Branch: crm-v1-review-and-push
 - Commit: see git log (stacked on 6dcd65c Internal CRM Relationship OS V1)
 - Task: Post-review hardening of CRM V1 plus direction decisions from the
-  founder: (1) fix pack — rank-correct priority/leverage sorting (string enums
+  founder: (1) fix pack - rank-correct priority/leverage sorting (string enums
   sorted alphabetically in Postgres), contact and opportunity edit forms,
   working Follow-ups status filter with Done view and reopen, per-entity
   filter options, form success/error notices via returnTo redirects, active
@@ -3098,7 +3098,7 @@ Use this file for chronological implementation notes that future agents should s
   a scratch Postgres with prisma migrate diff showing no drift; npm run build.
 - Failed/skipped checks: none.
 - Caveats: production deploy requires `npx prisma migrate deploy` (two pending
-  migrations) BEFORE the code deploys — Vercel build does not run migrations.
+  migrations) BEFORE the code deploys - Vercel build does not run migrations.
   Legacy `Company.status` no longer has an editing surface.
 - Follow-up: run `npm run backfill:crm-email` against production after deploy;
   agent-generated CRM mutation proposals via the AgentProposal dispatcher;
@@ -3184,14 +3184,14 @@ Use this file for chronological implementation notes that future agents should s
 - Branch: berlin (Conductor workspace)
 - Commit: see git log
 - Task: (1) Remove the focused-load context strip from the dashboard layout
-  on all pages (focus cookie mechanism kept — the workbench still uses it;
+  on all pages (focus cookie mechanism kept - the workbench still uses it;
   unused hide-on-routes.tsx deleted). (2) Make /dashboard/rfq an inline-
   editable sheet like the CRM: subject, from company/email, lane, mode,
   status and target price edit in place; per-row delete with confirm
   (status Ignored doubles as archive). (3) New RFQ status vocabulary
   BOOKED / PRICING / MISSED ($) / RECEIVED / IGNORED with legacy aliases
   (INGESTED,PARSED→RECEIVED; PRICED,QUOTED→PRICING; WON→BOOKED;
-  LOST→MISSED) in src/lib/inquiry-status.ts — no data backfill needed; all
+  LOST→MISSED) in src/lib/inquiry-status.ts - no data backfill needed; all
   "open inquiry" predicates now share openInquiryStatusFilter(). New status
   and mode options can be added on the fly from the cell dropdowns
   ("Add option…"); options and filter tabs derive from values in use.
@@ -3212,7 +3212,7 @@ Use this file for chronological implementation notes that future agents should s
   scripts/validate-office-import.ts.
 - Verification: tsc clean; next build clean; eslint no new errors (102
   pre-existing before and after); test:strategy, test:rfq-load-draft,
-  test:email-labels pass; adversarial multi-agent review over the diff —
+  test:email-labels pass; adversarial multi-agent review over the diff -
   confirmed findings fixed: status-demotion guards added to
   rfq-load-review.ts and job-actions.ts confirmProposedJob; merge-actions +
   agent-proposals open-status checks unified; reports funnel canonicalized;
@@ -3221,9 +3221,9 @@ Use this file for chronological implementation notes that future agents should s
   reserved status names "all"/"open" rejected; parseRFQWithAI update
   officeId-scoped; select-menu padding clicks no longer toggle the row;
   job-focus.ts trimmed to getFocusedJobId.
-- Failed/skipped checks: DB-backed tests (test:security, test:crm) skipped —
+- Failed/skipped checks: DB-backed tests (test:security, test:crm) skipped -
   no local DATABASE_URL in this workspace.
-- Caveats: no schema change, no data backfill — legacy status values stay in
+- Caveats: no schema change, no data backfill - legacy status values stay in
   the DB and alias onto the canonical set for display/filtering. Custom
   statuses/modes persist only while at least one row uses them (options are
   derived from data, not a config table). Old job-focus-* CSS is now dead
@@ -3250,8 +3250,8 @@ Use this file for chronological implementation notes that future agents should s
 - Verification: tsc clean; next build clean; eslint no new findings in
   touched files (2 pre-existing no-html-link-for-pages errors in
   rfq/page.tsx confirmed on base commit via stash).
-- Failed/skipped checks: DB-backed tests skipped — no local DATABASE_URL.
-- Caveats: selection state is component-local (not bulk-select-store — the
+- Failed/skipped checks: DB-backed tests skipped - no local DATABASE_URL.
+- Caveats: selection state is component-local (not bulk-select-store - the
   module singleton would leak selection between inbox and RFQ pages);
   select-all covers the 200 visible rows only; stale selected ids are pruned
   against visible rows before acting.
@@ -3277,7 +3277,7 @@ Use this file for chronological implementation notes that future agents should s
   rfq-layout-reset picker row).
 - Verification: tsc clean; next build clean; eslint no new findings in
   touched files.
-- Failed/skipped checks: DB-backed tests skipped — no local DATABASE_URL.
+- Failed/skipped checks: DB-backed tests skipped - no local DATABASE_URL.
 - Caveats: persistence is per user per browser (localStorage, no schema
   change; DB roaming would need a migration). HTML5 DnD = mouse only.
   Default layout flashes briefly before the stored layout loads (same as
@@ -3304,7 +3304,7 @@ Use this file for chronological implementation notes that future agents should s
 ### 2026-07-07 - Trash closed status, ⌘K global search, RFQ search bar
 
 - Branch: rfq-bulk-select-status → main
-- Task: (1) Trash promoted to canonical closed RFQ status TRASH — case
+- Task: (1) Trash promoted to canonical closed RFQ status TRASH - case
   variants alias like legacy values, CLOSED_INQUIRY_STATUSES covers
   TRASH/Trash/trash, ?status= param canonicalized for old links; trashed rows
   leave Open, topbar count, Send-all-to-desk, agent surfaces. (2) ⌘K palette
@@ -3315,10 +3315,10 @@ Use this file for chronological implementation notes that future agents should s
   status tabs; debounced toolbar search bar; empty state moved into RfqSheet.
 - Verification: tsc clean; next build clean; test:rfq-whatsapp/strategy/
   email-labels/rfq-load-draft pass; adversarial review workflow (4 dimensions,
-  refute-style verify) — 11 confirmed findings fixed before commit, including
+  refute-style verify) - 11 confirmed findings fixed before commit, including
   ContactSheet remount key for same-route ?q= picks, RfqSearchBar URL resync,
   duplicate-?q= crash guard, pricing STATUS_META TRASH entry.
-- Failed/skipped checks: DB-backed tests skipped — no local DATABASE_URL.
+- Failed/skipped checks: DB-backed tests skipped - no local DATABASE_URL.
 - Caveats: /dashboard/search page untouched (palette supersedes it); no
   company/contact detail routes so picks land on the CRM sheet filter.
 - Follow-up: consider retiring /dashboard/search or upgrading it to reuse
@@ -3334,7 +3334,7 @@ Use this file for chronological implementation notes that future agents should s
 - Confirmed state (console screenshots): credits are in Neon org `Derya`
   (Launch plan, empty). Production is project `neon-champagne-cable`
   (AWS US East 1, ~191 MB, 4 branches, no project integrations) in org
-  `Vercel: mert's projects` — Vercel-managed, Free plan. Neon's self-serve
+  `Vercel: mert's projects` - Vercel-managed, Free plan. Neon's self-serve
   transfer does not support Vercel-managed orgs, so the zero-downtime
   console transfer is expected to be blocked.
 - Urgency: the console warns the project is over 80% of the monthly
@@ -3370,7 +3370,7 @@ Use this file for chronological implementation notes that future agents should s
     on the new DB). `/api/health` returns `ok:false` on BOTH old and new
     databases for the same pre-existing reason: 1 FAILED
     `ANALYZE_JOB_DOCUMENT` job (3/3 attempts, `NEXT_REDIRECT`) and 4 stale
-    RUNNING background jobs — copied state, not a migration regression.
+    RUNNING background jobs - copied state, not a migration regression.
   - Writes to the old DB between 11:41:57 and go-live (~11:50) were not
     carried over (announced; quiet window).
 - Independent verification (~09:50-10:00Z, 5 read-only verifier agents +
@@ -3380,22 +3380,22 @@ Use this file for chronological implementation notes that future agents should s
   serving deployment was built 08:46:18Z, 30-50s after the env vars were
   set; 49-table parity holds (33 equal, 14 grew live on new). Exactly 2
   orphaned rows exist only on the old db from the dump-to-flip gap
-  (AgentProposal cmrbtz0cr..., Event cmrbtz3ub..., both ~08:43Z) — decide
+  (AgentProposal cmrbtz0cr..., Event cmrbtz3ub..., both ~08:43Z) - decide
   before decommission. Old-endpoint wake at 09:23-09:56Z was attributed to
   the verification's own psql traffic plus one transient write-free
   connection burst; old db data-frozen throughout. Neon console usage tiles
   read 0 because billing counters aggregate with lag (cpu_used_sec=0 in API
-  while compute demonstrably ran 2.4h) — recheck within 24h, escalate to
+  while compute demonstrably ran 2.4h) - recheck within 24h, escalate to
   Neon if still 0. Legacy integration vars (POSTGRES_*, PGHOST,
   NEON_PROJECT_ID) still point at the old project in all Vercel scopes:
   unused by code, clean up at decommission. Pre-08:46Z Vercel deployments
   (prod and preview URLs) still carry the old DATABASE_URL baked in.
-- Follow-ups: old project untouched as rollback — decommission the Vercel
+- Follow-ups: old project untouched as rollback - decommission the Vercel
   Marketplace Neon resource no earlier than 2026-07-15 after a clean week
   (that deletion destroys the old database); clean up the 5 stuck
   BackgroundJob rows so health returns ok=true; rotate the two Neon API
   keys pasted into chat during the migration; Neon startup credits expire
-  ~2027-07 — see runbook section G for deliberate spend-down.
+  ~2027-07 - see runbook section G for deliberate spend-down.
 
 ### 2026-07-17 - US lead sheet panel on Incoming RFQs
 
@@ -3424,7 +3424,7 @@ Use this file for chronological implementation notes that future agents should s
   + the real sheets (`.context/e2e-us-leads.ts`): 34 US / 63 TR leads,
   correct tags/subjects/references, partition queries split 98 rows with no
   leakage and keep NULL-parsedData rows visible (naive NOT-contains drops
-  them on Prisma 6 — the OR-null guard is required), resync idempotent and
+  them on Prisma 6 - the OR-null guard is required), resync idempotent and
   preserves operator status + whatsappSentAt. The e2e caught that the US
   spreadsheet's gid-0 "Sayfa1" tab is header-only; real data is tab
   "ca leads" gid 86480056 (now the default, plus a zero-rows warning).
@@ -3432,7 +3432,7 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: leads appear in the US panel after the next sheet sync writes the
   market tag; the sheet must remain link-viewable (or configure a Google
   service account / API key).
-- Follow-up: none required; optional — English variants for other
+- Follow-up: none required; optional - English variants for other
   customer-facing copy if US leads start flowing through portal/pricing flows.
 
 ### 2026-07-17 - US leads: panel -> chosen tab (view switcher)
@@ -3460,7 +3460,7 @@ Use this file for chronological implementation notes that future agents should s
 - Commit: see git log (follow-up to PR #16, same branch)
 - Task: Mert's iteration on the US leads flow: (1) US leads behind a
   Türkiye/US flag toggle instead of a stacked panel, (2) show only good
-  leads by default, (3) one click emails the lead — confirmation when their
+  leads by default, (3) one click emails the lead - confirmation when their
   details are complete, a missing-info request otherwise.
 - Files changed: `src/lib/lead-quality.ts` (new), `src/lib/lead-emails.ts`
   (new), `src/lib/rfq-whatsapp.ts` (leadMissingQuestions/leadFirstName
@@ -3487,7 +3487,7 @@ Use this file for chronological implementation notes that future agents should s
   baseline; prod read-only dry run of the scorer: 42 leads → 18 GOOD /
   21 REVIEW / 3 WEAK (junk lanes gated to WEAK).
 - Failed/skipped checks: none.
-- Caveats: quality thresholds are v1 heuristics — tune GOOD_MIN/REVIEW_MIN
+- Caveats: quality thresholds are v1 heuristics - tune GOOD_MIN/REVIEW_MIN
   and the junk-token sets in `src/lib/lead-quality.ts` as the desk gives
   feedback. First tuning applied 2026-07-18 per Mert: explicitly commercial
   shipments (EN "yes, commercial…" / TR "evet, ticari…") are always GOOD
@@ -3506,14 +3506,14 @@ Use this file for chronological implementation notes that future agents should s
   vs bad ones; if in doubt send only the good ones and ignore the bad").
   Policy implemented: GOOD-tier US leads get the smart customer email
   automatically after every lead sync (hourly cron + button); Review/Weak
-  leads are left untouched — no auto-declines (a wrong decline to a
+  leads are left untouched - no auto-declines (a wrong decline to a
   mislabeled real customer costs more than silence).
 - Files changed: `src/lib/lead-auto-reply.ts` (new),
   `src/lib/google-sheets-sync.ts` (containerType derived from the size
   answers; auto-reply pass wired in after lead sync; autoReplies in the
   summary; autoRepliedAt stamp preserved on resync),
   `src/lib/rfq-whatsapp.ts` (leadMissingQuestions: timing-range answers
-  satisfy the ready-date question; DG probe — UN38.3/MSDS — appended for
+  satisfy the ready-date question; DG probe - UN38.3/MSDS - appended for
   battery/solar/hazmat commodities, EN+TR),
   `src/lib/rfq-mail.ts` (autoRepliedAt stamp key),
   `src/components/sync-google-sheet-button.tsx` (auto-reply count),
@@ -3525,7 +3525,7 @@ Use this file for chronological implementation notes that future agents should s
   switch, failures logged to sync warnings and never fail the sync.
 - Verification: build clean; test:lead-emails/-quality/rfq-whatsapp/crm
   pass; tenant-scope at baseline (9). Read-only prod dry run
-  (.context/auto-reply-dry-run.ts): 16 sends queued — 3 confirmations
+  (.context/auto-reply-dry-run.ts): 16 sends queued - 3 confirmations
   (Erin/roof panels, Adam Rifi/kitchen cabinets, Saygin/furniture→Mersin:
   complete, pass straight to pricing) + 13 info-requests with per-lead
   missing lists; 55 leads untouched.
@@ -7843,3 +7843,15 @@ Use this file for chronological implementation notes that future agents should s
   JSON result to the run summary.
 - Updated the new-office documentation with the workflow path. Verification
   is limited to local static checks because the workflow was not dispatched.
+
+### 2026-08-28 - In-app office provisioning
+
+- Extracted office creation into `src/lib/office-provisioning.ts`, including
+  idempotent office, admin, company, workspace, and owner membership writes in
+  one transaction.
+- Added the allowlisted admin API route and Supply OS `New office` form. The
+  acting operator becomes the first admin in the new office, with an optional
+  reserved username admin for the customer.
+- The direct production script now delegates to the shared service, preserving
+  its environment contract and JSON output. The GitHub Actions fallback keeps
+  invoking that script.

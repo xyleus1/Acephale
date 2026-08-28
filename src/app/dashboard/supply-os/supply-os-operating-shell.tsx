@@ -41,6 +41,7 @@ export function SupplyOsOperatingShell({
   accountRole,
   initialPanel,
   canCreateCompany,
+  canCreateOffice,
   canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
@@ -60,6 +61,7 @@ export function SupplyOsOperatingShell({
   accountRole: string;
   initialPanel?: string;
   canCreateCompany: boolean;
+  canCreateOffice?: boolean;
   canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
@@ -278,6 +280,7 @@ export function SupplyOsOperatingShell({
             {companyIndexOpen ? (
               <SupplyOsCompanyIndex
                 canCreateCompany={canCreateCompany}
+                canCreateOffice={canCreateOffice}
                 allowedWorkspaceIds={allowedWorkspaceIds}
                 crossOffice={Boolean(!previewMode && switchableOffices && switchableOffices.length > 1)}
                 switchOfficeAction={switchOfficeAction}

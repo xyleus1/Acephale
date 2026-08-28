@@ -53,6 +53,7 @@ function updatedLabel(value: string) {
 
 export function SupplyOsCompanyIndex({
   canCreateCompany,
+  canCreateOffice = false,
   allowedWorkspaceIds,
   autoOpenFirstWorkspace = false,
   crossOffice = false,
@@ -62,6 +63,7 @@ export function SupplyOsCompanyIndex({
   onOpenWorkspace,
 }: {
   canCreateCompany: boolean;
+  canCreateOffice?: boolean;
   allowedWorkspaceIds?: string[];
   autoOpenFirstWorkspace?: boolean;
   crossOffice?: boolean;
@@ -77,6 +79,11 @@ export function SupplyOsCompanyIndex({
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyWebsite, setNewCompanyWebsite] = useState("");
   const [creating, setCreating] = useState(false);
+  const [officeCreateOpen, setOfficeCreateOpen] = useState(false);
+  const [newOfficeName, setNewOfficeName] = useState("");
+  const [newOfficeUsername, setNewOfficeUsername] = useState("");
+  const [newOfficePassword, setNewOfficePassword] = useState("");
+  const [creatingOffice, setCreatingOffice] = useState(false);
   const [editing, setEditing] = useState<{ id: string; name: string; website: string } | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
@@ -202,6 +209,36 @@ export function SupplyOsCompanyIndex({
     }
   }
 
+  async function createOffice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const officeName = newOfficeName.trim();
+    if (officeName.length < 2 || creatingOffice) return;
+    setCreatingOffice(true);
+    setError("");
+    const payload: {
+      officeName: string;
+      adminUsername?: string;
+      adminPassword?: string;
+    } = { officeName };
+    const adminUsername = newOfficeUsername.trim();
+    if (adminUsername) payload.adminUsername = adminUsername;
+    if (newOfficePassword) payload.adminPassword = newOfficePassword;
+    try {
+      const response = await fetch("/api/supply-os/offices", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Office could not be created.");
+      window.location.assign("/dashboard/supply-os");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Office could not be created.");
+    } finally {
+      setCreatingOffice(false);
+    }
+  }
+
   async function archiveCompany(workspace: Workspace) {
     if (archivingId) return;
     const confirmed = window.confirm(
@@ -240,6 +277,11 @@ export function SupplyOsCompanyIndex({
               {createOpen ? <X size={15} /> : <Plus size={15} />} {createOpen ? "Cancel" : "Add"}
             </button>
           ) : null}
+          {canCreateOffice ? (
+            <button type="button" className={styles.officeButton} onClick={() => setOfficeCreateOpen((open) => !open)}>
+              {officeCreateOpen ? <X size={15} /> : <Plus size={15} />} {officeCreateOpen ? "Cancel" : "New office"}
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -264,6 +306,43 @@ export function SupplyOsCompanyIndex({
           />
           <button type="submit" disabled={creating || newCompanyName.trim().length < 2}>
             {creating ? <LoaderCircle className={styles.spin} size={15} /> : <Plus size={15} />} {creating ? "Adding" : "Add"}
+          </button>
+        </form>
+      ) : null}
+
+      {officeCreateOpen ? (
+        <form className={styles.officeCreateRow} onSubmit={(event) => void createOffice(event)}>
+          <label>
+            <span>Office name</span>
+            <input
+              value={newOfficeName}
+              minLength={2}
+              maxLength={80}
+              autoFocus
+              onChange={(event) => setNewOfficeName(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Customer login username</span>
+            <input
+              value={newOfficeUsername}
+              maxLength={31}
+              autoComplete="off"
+              onChange={(event) => setNewOfficeUsername(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Customer login password <small>Min 12 characters</small></span>
+            <input
+              type="password"
+              value={newOfficePassword}
+              minLength={12}
+              autoComplete="new-password"
+              onChange={(event) => setNewOfficePassword(event.target.value)}
+            />
+          </label>
+          <button type="submit" disabled={creatingOffice || newOfficeName.trim().length < 2}>
+            {creatingOffice ? <LoaderCircle className={styles.spin} size={15} /> : <Plus size={15} />} {creatingOffice ? "Creating" : "Create"}
           </button>
         </form>
       ) : null}

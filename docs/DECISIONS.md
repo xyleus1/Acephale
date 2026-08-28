@@ -4435,3 +4435,16 @@ Use this log for durable product and engineering decisions. Do not put every imp
   the resolved profile, while office and persistence scoping remain unchanged.
 - Failure boundary: Unknown profile slugs fail before command work begins and
   list the valid profile slugs.
+
+## 2026-08-28: Office provisioning uses one shared transaction
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Office provisioning is implemented through one shared
+  `provisionOffice` function. The in-app route, direct production script, and
+  GitHub Actions workflow all use it.
+- Authorization boundary: In-app provisioning is gated by the login allowlist,
+  requires an active `ADMIN` operator session, and rejects reserved customer
+  username identities.
+- Tenant boundary: Office, user, company, workspace, and membership writes
+  remain scoped by `officeId` where the schema supports the relationship.

@@ -1,9 +1,8 @@
 import "dotenv/config";
-import { PrismaClient, UserRole } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
 import { isUsernameIdentifier, usernameLoginEmail } from "../src/lib/login-code";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/lib/prisma";
+import { provisionOffice } from "../src/lib/office-provisioning";
 
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
@@ -34,127 +33,17 @@ async function main() {
   const adminPassword = requiredEnv("PRODUCTION_ADMIN_PASSWORD");
   const adminName = process.env.PRODUCTION_ADMIN_NAME?.trim() || adminUsername || adminEmail;
   const companyName = process.env.PRODUCTION_COMPANY_NAME?.trim() || officeName;
-  const workspaceName = process.env.PRODUCTION_WORKSPACE_NAME?.trim() || companyName;
-  const workspaceExternalKey = process.env.PRODUCTION_WORKSPACE_EXTERNAL_KEY?.trim() || "production:primary";
-
   if (adminPassword.length < 12) {
     throw new Error("PRODUCTION_ADMIN_PASSWORD must be at least 12 characters for production.");
   }
 
   const passwordHash = await hashPassword(adminPassword);
-
-  const result = await prisma.$transaction(async (tx) => {
-    const existingOffice = await tx.office.findUnique({
-      where: { name: officeName },
-      select: { id: true, name: true, createdAt: true },
-    });
-    const office = existingOffice ?? await tx.office.create({
-      data: { name: officeName },
-      select: { id: true, name: true, createdAt: true },
-    });
-    const createdOffice = !existingOffice;
-
-    const existingAdmin = await tx.user.findUnique({
-      where: { officeId_email: { officeId: office.id, email: adminEmail } },
-      select: { id: true, email: true, role: true, isActive: true, canViewWholeOffice: true },
-    });
-
-    const admin = existingAdmin
-      ? await tx.user.update({
-        where: { id: existingAdmin.id },
-        data: {
-          fullName: adminName,
-          passwordHash,
-          role: UserRole.ADMIN,
-          isActive: true,
-          canViewWholeOffice: true,
-        },
-        select: { id: true, email: true, role: true, isActive: true },
-      })
-      : await tx.user.create({
-        data: {
-          officeId: office.id,
-          email: adminEmail,
-          fullName: adminName,
-          role: UserRole.ADMIN,
-          isActive: true,
-          canViewWholeOffice: true,
-          passwordHash,
-        },
-        select: { id: true, email: true, role: true, isActive: true },
-      });
-
-    const existingCompany = await tx.company.findUnique({
-      where: { officeId_name: { officeId: office.id, name: companyName } },
-      select: { id: true, name: true },
-    });
-    const company = existingCompany ?? await tx.company.create({
-      data: {
-        officeId: office.id,
-        name: companyName,
-        status: "IN_PROGRESS",
-        crmCategory: "customer",
-        crmStage: "active",
-        crmPriority: "high",
-        crmSource: "production_commissioning",
-      },
-      select: { id: true, name: true },
-    });
-
-    const existingWorkspace = await tx.supplyWorkspace.findUnique({
-      where: {
-        officeId_externalKey: {
-          officeId: office.id,
-          externalKey: workspaceExternalKey,
-        },
-      },
-      select: { id: true, name: true, companyId: true, externalKey: true },
-    });
-    const workspace = existingWorkspace
-      ? await tx.supplyWorkspace.update({
-        where: { id: existingWorkspace.id },
-        data: {
-          companyId: company.id,
-          createdByUserId: admin.id,
-          name: workspaceName,
-          status: "ACTIVE",
-          archivedAt: null,
-        },
-        select: { id: true, name: true, companyId: true, externalKey: true },
-      })
-      : await tx.supplyWorkspace.create({
-        data: {
-          officeId: office.id,
-          companyId: company.id,
-          createdByUserId: admin.id,
-          externalKey: workspaceExternalKey,
-          name: workspaceName,
-        },
-        select: { id: true, name: true, companyId: true, externalKey: true },
-      });
-
-    await tx.supplyWorkspaceMember.upsert({
-      where: { workspaceId_userId: { workspaceId: workspace.id, userId: admin.id } },
-      create: {
-        officeId: office.id,
-        workspaceId: workspace.id,
-        userId: admin.id,
-        role: "OWNER",
-        isActive: true,
-      },
-      update: { officeId: office.id, role: "OWNER", isActive: true },
-    });
-
-    return {
-      office,
-      admin,
-      company,
-      workspace,
-      createdOffice,
-      createdAdmin: !existingAdmin,
-      createdCompany: !existingCompany,
-      createdWorkspace: !existingWorkspace,
-    };
+  const result = await provisionOffice(prisma, {
+    officeName,
+    admins: [{ email: adminEmail, fullName: adminName, passwordHash }],
+    companyName,
+    workspaceName: process.env.PRODUCTION_WORKSPACE_NAME?.trim() || companyName,
+    workspaceExternalKey: process.env.PRODUCTION_WORKSPACE_EXTERNAL_KEY?.trim() || "production:primary",
   });
 
   console.log(JSON.stringify({

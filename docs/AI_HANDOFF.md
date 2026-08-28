@@ -11004,3 +11004,15 @@ Verification caveat:
   runs the existing idempotent office creation script.
 - The script's JSON result is written to the GitHub Actions step summary.
   No database URL or password is printed or stored in the repository.
+
+## 2026-08-28: In-app office provisioning
+
+- Added the server-only `provisionOffice` service and `canProvisionOffice`
+  allowlist guard. It handles the office, admin, company, workspace, and
+  office-scoped owner memberships in one idempotent transaction.
+- The Supply OS company index now exposes `New office` to allowlisted admin
+  operator sessions. The route adds the acting operator first, then an
+  optional customer username admin.
+- The direct script and GitHub Actions workflow continue to use the shared
+  provisioning service. No production database operation was run during this
+  change.

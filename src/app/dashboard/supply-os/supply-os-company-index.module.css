@@ -63,6 +63,10 @@
   white-space: nowrap;
 }
 
+.headerActions .officeButton {
+  white-space: nowrap;
+}
+
 .createRow {
   display: grid;
   grid-template-columns: 92px minmax(180px, 0.8fr) 58px minmax(220px, 1fr) auto;
@@ -90,6 +94,61 @@
 
 .createRow button:disabled,
 .headerActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.officeCreateRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e0e4e2;
+  background: #f1f3f2;
+}
+
+.officeCreateRow label,
+.officeCreateRow label span {
+  display: grid;
+  gap: 6px;
+  color: #525a56;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.officeCreateRow label small {
+  color: #747c78;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.officeCreateRow input {
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid #c7ceca;
+  border-radius: 10px;
+  color: #1b1d1c;
+  background: #ffffff;
+  font: inherit;
+  font-weight: 400;
+}
+
+.officeCreateRow button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #1b1d1c;
+  border-radius: 10px;
+  color: #ffffff;
+  background: #1b1d1c;
+  cursor: pointer;
+}
+
+.officeCreateRow button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -371,6 +430,7 @@
   .index { width: calc(100% - 24px); margin: 12px auto; }
   .companyOpen { grid-template-columns: 38px minmax(0, 1fr) 20px; }
   .companyFacts { display: none; }
-  .createRow { grid-template-columns: 1fr; }
+  .createRow,
+  .officeCreateRow { grid-template-columns: 1fr; }
   .editRow { grid-template-columns: 1fr; }
 }
