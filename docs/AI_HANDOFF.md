@@ -10993,6 +10993,27 @@ Verification caveat:
 - The leadgen test script covers Wens localization, registry errors, complete
   locale dictionaries and deterministic query IDs.
 
+## 2026-08-26: Leadgen discovery attribution
+
+- Default leadgen search now tries DuckDuckGo, Brave and Bing before using
+  Serper only when free results are thin. Explicit provider selection remains
+  unchanged, and the page budget counts each search request.
+- Search attribution now survives harvesting and directory expansion through
+  provider, engine, rank and source URL fields. The original query remains in
+  `discoveredVia`.
+- `LeadGenRun` and `LeadDiscovery` record office-scoped run lifecycle,
+  provider counters, every candidate, skipped reasons and persisted company
+  links. The admin lead discovery report groups these records by provider,
+  campaign and profile over a selectable time window.
+- The context prospecting action and the leadgen load command create and close
+  run records. The corridor JSONL command remains offline and does not create
+  database runs.
+- Context prospecting records discoveries through the shared recorder after
+  research-row upserts, with persisted status and created, updated, and skipped
+  counts derived from those results. Provider stats use combined identities
+  such as `html:duckduckgo`, and contact metrics distinguish extracted emails
+  from usable verified contacts.
+
 ## 2026-08-27: Production office creation workflow
 
 - Added `.github/workflows/production-create-office.yml`, a

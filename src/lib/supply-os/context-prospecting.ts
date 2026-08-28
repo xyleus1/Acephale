@@ -14,6 +14,7 @@ import {
   RESEARCH_MAX_ROWS,
   slugify,
   upsertResearchRecords,
+  type ParsedResearchRow,
   type ResearchInputRow,
 } from "@/lib/research-lists";
 import {
@@ -22,10 +23,12 @@ import {
   runProspectingBatch,
   type ProspectingBatchResult,
   type ProspectingBatchCandidate,
+  type ProspectingBatchStats,
   type ProspectingDraft,
   type ProspectingSearch,
 } from "@/lib/leadgen/run";
 import { defaultFetcher } from "@/lib/leadgen/harvest";
+import { createLeadGenRun, finishLeadGenRun, recordLeadDiscoveries } from "@/lib/leadgen/persist";
 import type { VerifyOptions } from "@/lib/leadgen/verify";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
 import type { CompanyContextCitation } from "@/lib/company-context";
@@ -250,7 +253,8 @@ async function ensureResearchList(officeId: string, draft: ProspectingDraft) {
 }
 
 function candidateRows(records: readonly ProspectingBatchCandidate[]) {
-  return records.filter((record) => !record.directoryRow).map(({ candidate, verifications, region }) => {
+  return records.flatMap(({ candidate, verifications, region, directoryRow }, index) => {
+    if (directoryRow) return [];
     const verification = verifications[0] ?? null;
     const email = candidate.emails[0] ?? null;
     const evidenceUrls = candidate.evidence.map((item) => item.url).slice(0, 8).join("\n");
@@ -271,17 +275,17 @@ function candidateRows(records: readonly ProspectingBatchCandidate[]) {
       evidence_urls: evidenceUrls,
       source_query: candidate.discoveredVia,
     };
-    return { row, dedupeField: email ? "email" : "domain" };
+    return { row: { row, sourceRow: index + 1 }, dedupeField: email ? "email" : "domain" };
   });
 }
 
 export type ProspectingResearchRow = {
-  row: ResearchInputRow;
+  row: ResearchInputRow | ParsedResearchRow;
   dedupeField: string;
 };
 
 function directoryInputRows(records: readonly ProspectingBatchCandidate[]): ProspectingResearchRow[] {
-  return records.flatMap(({ candidate, directoryRow, verifications, region }) => {
+  return records.flatMap(({ candidate, directoryRow, verifications, region }, index) => {
     if (!directoryRow) return [];
     const email = directoryRow.emails[0] ?? null;
     const domain = directoryRow.domain;
@@ -304,14 +308,14 @@ function directoryInputRows(records: readonly ProspectingBatchCandidate[]): Pros
       source_query: candidate.discoveredVia,
     };
     return [{
-      row,
+      row: { row, sourceRow: index + 1 },
       dedupeField: email ? "email" : domain ? "domain" : "company_name",
     }];
   });
 }
 
 export function groupProspectingResearchRows(items: readonly ProspectingResearchRow[]) {
-  const groups = new Map<string, ResearchInputRow[]>();
+  const groups = new Map<string, Array<ResearchInputRow | ParsedResearchRow>>();
   for (const item of items) {
     const rows = groups.get(item.dedupeField) ?? [];
     rows.push(item.row);
@@ -325,6 +329,7 @@ async function persistCandidates(officeId: string, draft: ProspectingDraft, reco
   const groups = groupProspectingResearchRows([...candidateRows(records), ...directoryInputRows(records)]);
   let created = 0;
   let updated = 0;
+  const persistedRecordIndexes = new Set<number>();
   for (const [field, rows] of groups) {
     for (let index = 0; index < rows.length; index += RESEARCH_MAX_ROWS) {
       const result = await upsertResearchRecords(officeId, draft.listSlug, rows.slice(index, index + RESEARCH_MAX_ROWS), {
@@ -333,9 +338,28 @@ async function persistCandidates(officeId: string, draft: ProspectingDraft, reco
       });
       created += result.created;
       updated += result.updated;
+      const errors = new Set((result.errorRows ?? result.errors).map((error) => error.row));
+      for (const input of rows.slice(index, index + RESEARCH_MAX_ROWS)) {
+        const sourceRow = "sourceRow" in input && typeof input.sourceRow === "number" ? input.sourceRow : 0;
+        if (sourceRow > 0 && !errors.has(sourceRow)) persistedRecordIndexes.add(sourceRow - 1);
+      }
     }
   }
-  return { created, updated };
+  return {
+    created,
+    updated,
+    contactsCreated: 0,
+    persistedRecordIndexes,
+    skipped: records.length - persistedRecordIndexes.size,
+  };
+}
+
+async function discardLeadGenRunDiscoveries(officeId: string, runId: string) {
+  try {
+    await prisma.leadDiscovery.deleteMany({ where: { officeId, runId } });
+  } catch {
+    return;
+  }
 }
 
 export async function runCompanyContextProspectingAction(args: {
@@ -392,8 +416,17 @@ export async function runCompanyContextProspectingAction(args: {
   });
   if (claim.count !== 1) throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
 
+  let leadGenRunId: string | null = null;
+  let batchStats: ProspectingBatchStats | null = null;
   try {
     const profile = profileFromProspectingDraft(running.draft);
+    const leadGenRun = await createLeadGenRun(prisma, {
+      officeId: args.context.officeId,
+      profileSlug: profile.slug,
+      campaignTag: running.draft.listSlug,
+      workspaceId: args.workspaceId,
+    });
+    leadGenRunId = leadGenRun.id;
     const result = await (args.runBatch ?? runProspectingBatch)({
       profile,
       queryOffset: running.nextQueryOffset,
@@ -401,7 +434,31 @@ export async function runCompanyContextProspectingAction(args: {
       fetchPage: args.fetchPage ?? defaultFetcher,
       resolveMx: args.resolveMx,
     });
+    batchStats = result.stats;
     const persisted = await persistCandidates(args.context.officeId, running.draft, result.candidates);
+    await recordLeadDiscoveries(prisma, {
+      officeId: args.context.officeId,
+      runId: leadGenRunId,
+      campaignTag: running.draft.listSlug,
+      profileSlug: profile.slug,
+      records: result.candidates.map((record, index) => ({
+        ...record,
+        persisted: persisted.persistedRecordIndexes.has(index),
+      })),
+    });
+    await finishLeadGenRun(prisma, {
+      officeId: args.context.officeId,
+      runId: leadGenRunId,
+      status: "COMPLETED",
+      counters: {
+        ...result.stats,
+        companiesCreated: persisted.created,
+        companiesUpdated: persisted.updated,
+        contactsCreated: persisted.contactsCreated,
+        skipped: persisted.skipped,
+        providerStats: result.stats.providerStats ?? {},
+      },
+    });
     const completed: StoredProspectingAction = {
       ...running,
       status: "COMPLETED",
@@ -429,6 +486,25 @@ export async function runCompanyContextProspectingAction(args: {
     });
     return { id: found.id, createdAt: found.createdAt, ...completed };
   } catch (error) {
+    if (leadGenRunId) {
+      await finishLeadGenRun(prisma, {
+        officeId: args.context.officeId,
+        runId: leadGenRunId,
+        status: "FAILED",
+        counters: {
+          queriesUsed: batchStats?.queriesUsed ?? 0,
+          pagesFetched: batchStats?.pagesFetched ?? 0,
+          candidatesFound: batchStats?.candidatesFound ?? 0,
+          companiesCreated: 0,
+          companiesUpdated: 0,
+          contactsCreated: 0,
+          skipped: 0,
+          providerStats: batchStats?.providerStats ?? {},
+        },
+        error: error instanceof Error ? error.message.slice(0, 500) : "Prospecting run failed.",
+      });
+      await discardLeadGenRunDiscoveries(args.context.officeId, leadGenRunId);
+    }
     const failed: StoredProspectingAction = {
       ...running,
       status: "FAILED",

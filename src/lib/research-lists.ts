@@ -421,7 +421,7 @@ export async function upsertResearchRecords(
     }
   }
 
-  return { created, updated, skipped, errors: errors.slice(0, 50) };
+  return { created, updated, skipped, errors: errors.slice(0, 50), errorRows: errors };
 }
 
 function parseCsv(text: string): Array<{ values: string[]; sourceRow: number }> {

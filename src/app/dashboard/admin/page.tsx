@@ -490,6 +490,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 <button type="button" className={tab === "jobs" ? "btn-sm" : "secondary btn-sm"}>System jobs</button>
               </Link>
             )}
+            {canSeeAgentAudit && (
+              <Link href="/dashboard/admin/leadgen">
+                <button type="button" className="secondary btn-sm">Lead discovery</button>
+              </Link>
+            )}
             {isAdmin && (
               <Link href="/dashboard/admin?tab=settings">
                 <button type="button" className={tab === "settings" ? "btn-sm" : "secondary btn-sm"}>Settings</button>

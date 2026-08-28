@@ -47,6 +47,10 @@ export type LeadCandidate = {
   fit: LeadFitResult;
   evidence: LeadEvidence[];
   discoveredVia: string;
+  discoveryProvider?: string;
+  discoveryEngine?: string;
+  discoveryRank?: number;
+  discoverySourceUrl?: string;
   harvestedAt: string;
 };
 
@@ -123,6 +127,10 @@ export type HarvestOptions = {
   fetcher?: PageFetcher;
   segmentKey?: string | null;
   discoveredVia?: string;
+  discoveryProvider?: string;
+  discoveryEngine?: string;
+  discoveryRank?: number;
+  discoverySourceUrl?: string;
   maxContactPages?: number;
   now?: () => Date;
   directoryMode?: boolean;
@@ -224,6 +232,10 @@ export async function harvestSite(
     fit,
     evidence,
     discoveredVia: options.discoveredVia ?? siteUrl,
+    discoveryProvider: options.discoveryProvider,
+    discoveryEngine: options.discoveryEngine,
+    discoveryRank: options.discoveryRank,
+    discoverySourceUrl: options.discoverySourceUrl ?? siteUrl,
     harvestedAt: (options.now?.() ?? new Date()).toISOString(),
   };
 }

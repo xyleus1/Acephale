@@ -1,8 +1,8 @@
 import {
+  createCascadingSearchProvider,
   dedupeByDomain,
   parseSearchResults,
   searchUrl,
-  selectSearchProvider,
   type SearchEngine,
   type SearchHit,
 } from "./search";
@@ -33,6 +33,7 @@ export type ProspectingDraft = {
 export type ProspectingSearchResult = {
   hits: readonly SearchHit[];
   pagesFetched: number;
+  providersUsed?: readonly string[];
 };
 
 export type ProspectingSearch = (
@@ -51,6 +52,13 @@ export type ProspectingBatchStats = {
   queriesUsed: number;
   pagesFetched: number;
   candidatesFound: number;
+  providerStats?: Record<string, {
+    queries: number;
+    hits: number;
+    candidates: number;
+    withContact: number;
+    deliverableLikely: number;
+  }>;
 };
 
 export type ProspectingBatchResult = {
@@ -118,6 +126,7 @@ function candidateFromDirectoryRow(
   profile: LeadGenProfile,
   row: DirectoryRow,
   query: LeadGenQuery,
+  hit: SearchHit,
 ): ProspectingBatchCandidate {
   const domain = row.domain ?? "";
   const fit = scoreLead(profile, {
@@ -144,6 +153,10 @@ function candidateFromDirectoryRow(
       phones: row.phones,
     }],
     discoveredVia: query.query,
+    discoveryProvider: hit.provider ?? providerNameForHit(hit),
+    discoveryEngine: hit.engine,
+    discoveryRank: hit.rank,
+    discoverySourceUrl: row.sourceUrl || hit.url,
     harvestedAt: new Date().toISOString(),
   };
   return { candidate, directoryRow: row, verifications: [], region: query.region };
@@ -168,13 +181,37 @@ export async function searchProspectingQuery(
 
 export const defaultProspectingSearch: ProspectingSearch = async (query, options) =>
   {
-    if (!process.env.SERPER_API_KEY) {
-      return searchProspectingQuery(query, defaultFetcher, options?.maxPagesRemaining ?? SEARCH_ENGINES.length);
-    }
-    const provider = selectSearchProvider({ providerName: "serper" });
-    const hits = await provider.search(query.query);
-    return { hits, pagesFetched: options?.maxPagesRemaining === 0 ? 0 : 1 };
+    const maxPagesRemaining = options?.maxPagesRemaining;
+    if (maxPagesRemaining === 0) return { hits: [], pagesFetched: 0 };
+    const provider = createCascadingSearchProvider({ serperApiKey: process.env.SERPER_API_KEY });
+    const result = provider.searchWithStats
+      ? await provider.searchWithStats(query.query, { maxPagesRemaining })
+      : { hits: await provider.search(query.query, { maxPagesRemaining }), pagesFetched: 0, providersUsed: [] };
+    return {
+      hits: result.hits,
+      pagesFetched: result.pagesFetched,
+      providersUsed: result.providersUsed,
+    };
   };
+
+function providerNameForHit(hit: SearchHit) {
+  if (hit.engine === "serper" || hit.provider === "serper") return "serper";
+  if (hit.engine === "jsonl" || hit.provider === "jsonl") return "jsonl";
+  if (hit.engine === "duckduckgo" || hit.engine === "brave" || hit.engine === "bing") {
+    return `html:${hit.engine}`;
+  }
+  return hit.provider ?? "unknown";
+}
+
+function providersForSearchResult(
+  searchResult: readonly SearchHit[] | ProspectingSearchResult,
+  hits: readonly SearchHit[],
+) {
+  if ("providersUsed" in searchResult && searchResult.providersUsed?.length) {
+    return searchResult.providersUsed;
+  }
+  return [...new Set(hits.map(providerNameForHit))];
+}
 
 export async function runProspectingBatch(args: {
   profile: LeadGenProfile;
@@ -197,7 +234,24 @@ export async function runProspectingBatch(args: {
   const candidates: ProspectingBatchCandidate[] = [];
   const seenDomains = new Set<string>();
   const seenDocumentUrls = new Set<string>();
-  const stats = { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 };
+  const stats: ProspectingBatchStats = {
+    queriesUsed: 0,
+    pagesFetched: 0,
+    candidatesFound: 0,
+    providerStats: {},
+  };
+
+  const providerStatsFor = (provider: string) => {
+    const providerStats = stats.providerStats ?? (stats.providerStats = {});
+    providerStats[provider] ??= {
+      queries: 0,
+      hits: 0,
+      candidates: 0,
+      withContact: 0,
+      deliverableLikely: 0,
+    };
+    return providerStats[provider]!;
+  };
 
   for (let queryIndex = start; queryIndex < plan.length && stats.queriesUsed < maxQueries; queryIndex += 1) {
     if (Date.now() >= deadline) break;
@@ -211,6 +265,8 @@ export async function runProspectingBatch(args: {
       searchHits = structuredResult.hits;
       stats.pagesFetched += structuredResult.pagesFetched;
     }
+    for (const provider of providersForSearchResult(searchResult, searchHits)) providerStatsFor(provider).queries += 1;
+    for (const hit of searchHits) providerStatsFor(providerNameForHit(hit)).hits += 1;
     const hits = selectSearchHits(searchHits, query);
     stats.queriesUsed += 1;
     for (const hit of hits) {
@@ -231,6 +287,10 @@ export async function runProspectingBatch(args: {
         },
         segmentKey: query.segmentKey,
         discoveredVia: query.query,
+        discoveryProvider: hit.provider ?? providerNameForHit(hit),
+        discoveryEngine: hit.engine,
+        discoveryRank: hit.rank,
+        discoverySourceUrl: hit.url,
         directoryMode: documentHit,
         directoryRegions: args.profile.regions,
       });
@@ -238,13 +298,17 @@ export async function runProspectingBatch(args: {
       if (Array.isArray(harvested)) {
         for (const row of harvested.slice(0, maxDirectoryRowsPerDocument)) {
           if (Date.now() >= deadline) break;
-          const directoryCandidate = candidateFromDirectoryRow(args.profile, row, query);
+          const directoryCandidate = candidateFromDirectoryRow(args.profile, row, query, hit);
           directoryCandidate.verifications = await verifyEmails(row.emails, {
             companyDomain: row.domain ?? undefined,
             resolveMx: args.resolveMx,
           });
           candidates.push(directoryCandidate);
           stats.candidatesFound += 1;
+          const providerStats = providerStatsFor(providerNameForHit(hit));
+          providerStats.candidates += 1;
+          if (directoryCandidate.candidate.emails.length > 0) providerStats.withContact += 1;
+          if (directoryCandidate.verifications.some((item) => item.verdict === "deliverable_likely")) providerStats.deliverableLikely += 1;
         }
         continue;
       }
@@ -255,6 +319,10 @@ export async function runProspectingBatch(args: {
       });
       candidates.push({ candidate: harvested, verifications, region: query.region });
       stats.candidatesFound += 1;
+      const providerStats = providerStatsFor(providerNameForHit(hit));
+      providerStats.candidates += 1;
+      if (harvested.emails.length > 0) providerStats.withContact += 1;
+      if (verifications.some((item) => item.verdict === "deliverable_likely")) providerStats.deliverableLikely += 1;
     }
     if (Date.now() >= deadline || stats.pagesFetched >= maxPages) break;
   }

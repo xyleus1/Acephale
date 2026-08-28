@@ -142,6 +142,8 @@ model Office {
   marketIngestionRuns  MarketIngestionRun[]
   auditLogs            AuditLog[]
   outreachPlanItems    OutreachPlanItem[]
+  leadGenRuns          LeadGenRun[]
+  leadDiscoveries      LeadDiscovery[]
   customerPortalUsers       CustomerPortalUser[]
   researchLists        ResearchList[]
   customerPortalMemberships CustomerPortalMembership[]
@@ -312,6 +314,7 @@ model Company {
   customerPortalActions     CustomerPortalAction[]
   supplyWorkspaces           SupplyWorkspace[]
   supplySupplierProfiles     SupplySupplierProfile[]
+  leadDiscoveries            LeadDiscovery[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -369,6 +372,68 @@ model Contact {
   @@index([category])
   @@index([importance])
   @@index([outreachChannel, status])
+}
+
+model LeadGenRun {
+  id              String    @id @default(cuid())
+  officeId        String
+  profileSlug     String
+  campaignTag     String
+  workspaceId     String?
+  startedAt       DateTime
+  finishedAt      DateTime?
+  status          String    @default("RUNNING")
+  queriesUsed     Int       @default(0)
+  pagesFetched    Int       @default(0)
+  candidatesFound Int       @default(0)
+  companiesCreated Int      @default(0)
+  companiesUpdated Int      @default(0)
+  contactsCreated Int       @default(0)
+  skipped         Int       @default(0)
+  providerStats   Json
+  error           String?
+
+  office       Office         @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  discoveries  LeadDiscovery[]
+
+  @@index([officeId, startedAt])
+}
+
+model LeadDiscovery {
+  id                  String    @id @default(cuid())
+  officeId            String
+  runId               String?
+  companyId           String?
+  companyName         String
+  domain              String
+  provider            String
+  engine              String
+  rank                Int
+  query               String
+  sourceUrl           String
+  campaignTag         String
+  profileSlug         String
+  segmentKey          String?
+  fitScore            Int
+  fitTier             String
+  emailsFound         Int
+  contactFound        Boolean
+  usableContact       Boolean
+  bestEmailVerdict    String?
+  bestEmailConfidence Int?
+  persisted           Boolean
+  skipReason          String?
+  discoveredAt        DateTime
+
+  office Office      @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  run    LeadGenRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  company Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, discoveredAt])
+  @@index([officeId, provider, discoveredAt])
+  @@index([officeId, campaignTag])
+  @@index([officeId, profileSlug])
+  @@index([runId])
 }
 
 // One office-scoped weekly outreach slot for a contact. Contacts remain the

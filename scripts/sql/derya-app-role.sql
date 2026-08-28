@@ -41,7 +41,7 @@ DECLARE
     'MarketSignal', 'MarketSignalLink', 'MarketImpactReview',
     'MarketSignalFeedback', 'MarketIngestionRun', 'Task',
     'RiskAlert', 'CompanyContext', 'Item', 'Supplier', 'CompanySupplier',
-    'LaneRate', 'Inquiry',
+    'LaneRate', 'Inquiry', 'LeadGenRun', 'LeadDiscovery',
     'TargetPriceHistory', 'CarrierQuote', 'Forwarder', 'ForwarderRequestDraft',
     'LoadSecurityCheck', 'Carrier', 'CarrierChecklistItem', 'CarrierBid',
     'TruckloadQuote', 'ShipmentRecord', 'Job', 'AgentProposal',

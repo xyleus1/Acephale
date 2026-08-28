@@ -275,22 +275,78 @@ async function commandVerify(args: Args) {
 }
 
 async function commandLoad(profile: LeadGenProfile, args: Args) {
-  const { persistLeads } = await import("../src/lib/leadgen/persist");
+  const { createLeadGenRun, finishLeadGenRun, persistLeads } = await import("../src/lib/leadgen/persist");
   const input = stringArg(args, "in", ".leadgen/verified.jsonl");
   const officeId = stringArg(args, "office-id");
   const campaignTag = stringArg(args, "campaign", `leadgen_${profile.slug}`);
   const records = (await readLines(input)).map((line) => JSON.parse(line));
   const { PrismaClient } = await import("@prisma/client");
   const client = new PrismaClient();
-  const result = await persistLeads(records, {
+  const providerStats = records.reduce<Record<string, {
+    queries: number;
+    hits: number;
+    candidates: number;
+    withContact: number;
+    deliverableLikely: number;
+  }>>((stats, record) => {
+    const provider = record.candidate.discoveryProvider === "html" && record.candidate.discoveryEngine
+      ? `html:${record.candidate.discoveryEngine}`
+      : record.candidate.discoveryProvider ?? "unknown";
+    const current = stats[provider] ??= { queries: 0, hits: 0, candidates: 0, withContact: 0, deliverableLikely: 0 };
+    current.candidates += 1;
+    if (record.candidate.emails.length > 0) current.withContact += 1;
+    if (record.verifications.some((item: EmailVerification) => item.verdict === "deliverable_likely")) current.deliverableLikely += 1;
+    return stats;
+  }, {});
+  const run = await createLeadGenRun(client, {
     officeId,
+    profileSlug: profile.slug,
     campaignTag,
-    client,
-    minScore: numberArg(args, "min-score", 50),
-    minEmailConfidence: numberArg(args, "min-confidence", 55),
   });
-  await client.$disconnect();
-  console.log(JSON.stringify(result, null, 2));
+  try {
+    const result = await persistLeads(records, {
+      officeId,
+      campaignTag,
+      profileSlug: profile.slug,
+      runId: run.id,
+      client,
+      minScore: numberArg(args, "min-score", 50),
+      minEmailConfidence: numberArg(args, "min-confidence", 55),
+    });
+    await finishLeadGenRun(client, {
+      officeId,
+      runId: run.id,
+      status: "COMPLETED",
+      counters: {
+        queriesUsed: 0,
+        pagesFetched: 0,
+        candidatesFound: records.length,
+        ...result,
+        providerStats,
+      },
+    });
+    console.log(JSON.stringify(result, null, 2));
+  } catch (error) {
+    await finishLeadGenRun(client, {
+      officeId,
+      runId: run.id,
+      status: "FAILED",
+      counters: {
+        queriesUsed: 0,
+        pagesFetched: 0,
+        candidatesFound: records.length,
+        companiesCreated: 0,
+        companiesUpdated: 0,
+        contactsCreated: 0,
+        skipped: 0,
+        providerStats,
+      },
+      error: error instanceof Error ? error.message.slice(0, 500) : "Lead load failed.",
+    });
+    throw error;
+  } finally {
+    await client.$disconnect();
+  }
 }
 
 async function main() {

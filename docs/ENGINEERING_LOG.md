@@ -7832,6 +7832,29 @@ Use this file for chronological implementation notes that future agents should s
   checks passed. Repository lint remains blocked by unrelated pre-existing
   diagnostics.
 
+### 2026-08-26 - Leadgen search attribution and run reporting
+
+- Added a free-first search cascade with DuckDuckGo, Brave and Bing, falling
+  back to Serper only below the configurable usable-hit threshold.
+- Preserved provider, engine, rank and source URL from search hits through
+  candidate harvesting and directory rows. `discoveredVia` remains the query.
+- Added office-scoped `LeadGenRun` and `LeadDiscovery` records, including
+  skipped candidates and provider counters, plus the admin report grouped by
+  provider, campaign and profile.
+- The context prospecting action and `leadgen-run load` now close durable run
+  records. Tests use mocked search and page fixtures.
+
+### 2026-08-26 - Leadgen attribution follow-up
+
+- Context research upserts now record every discovery through the shared
+  recorder and derive persisted, created, updated, and skipped counts from
+  actual upsert results.
+- The free search cascade stops after enough deduplicated usable domains,
+  returns per-call page and provider statistics, and reports HTML engines as
+  combined provider identities.
+- Discovery reports now distinguish extracted contact from usable verified
+  contact, with both rates shown using explicit numerators and denominators.
+
 ### 2026-08-27 - Production office creation workflow
 
 - Added a dispatchable GitHub Actions workflow for running

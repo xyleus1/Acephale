@@ -4436,6 +4436,26 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Failure boundary: Unknown profile slugs fail before command work begins and
   list the valid profile slugs.
 
+## 2026-08-26: Leadgen search attribution is durable
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Default leadgen search tries free HTML engines in the fixed order
+  DuckDuckGo, Brave and Bing, then uses Serper only when the free result pool
+  is below the configured threshold. Explicit provider overrides remain direct.
+- Provenance boundary: Every candidate carries the provider, engine, rank and
+  original source URL from its search hit. Directory candidates use the
+  document URL that produced the row, while `discoveredVia` remains the query.
+- Storage boundary: Every candidate becomes a `LeadDiscovery` row, including
+  below-score and no-usable-email skips. `LeadGenRun` stores office-scoped
+  lifecycle counters and provider statistics, and the admin report reads only
+  the session office.
+- Shared persistence boundary: both CRM load and context research upsert paths
+  call the same discovery recorder. A discovery's `contactFound` means any
+  extracted email, while `usableContact` means the verification gate passed.
+  Search call statistics are returned per call, and provider identities retain
+  the HTML engine.
+
 ## 2026-08-28: Office provisioning uses one shared transaction
 
 - Status: accepted

@@ -13,6 +13,7 @@ export type SearchHit = {
   domain: string;
   engine: SearchEngine;
   rank: number;
+  provider?: SearchProviderName;
   title?: string;
   snippet?: string;
 };
@@ -20,11 +21,22 @@ export type SearchHit = {
 export type SearchProviderOptions = {
   offset?: number;
   signal?: AbortSignal;
+  maxPagesRemaining?: number;
+};
+
+export type SearchProviderResult = {
+  hits: SearchHit[];
+  pagesFetched: number;
+  providersUsed: string[];
 };
 
 export type SearchProvider = {
   name: string;
   search(query: string, options?: SearchProviderOptions): Promise<SearchHit[]>;
+  searchWithStats?: (
+    query: string,
+    options?: SearchProviderOptions,
+  ) => Promise<SearchProviderResult>;
 };
 
 const ENGINE_HOSTS: Record<"brave" | "duckduckgo" | "bing", readonly string[]> = {
@@ -163,35 +175,50 @@ export function createHtmlSearchProvider(options: {
 } = {}): SearchProvider {
   const engine = options.engine ?? "duckduckgo";
   const fetchPage = options.fetchPage ?? defaultHtmlFetch;
+  const searchWithStats = async (query: string, providerOptions?: SearchProviderOptions): Promise<SearchProviderResult> => {
+    const html = await fetchPage(searchUrl(engine, query, providerOptions?.offset ?? 0), providerOptions?.signal);
+    return {
+      hits: html ? parseSearchResults(html, engine).map((hit) => ({ ...hit, provider: "html" as const })) : [],
+      pagesFetched: 1,
+      providersUsed: [`html:${engine}`],
+    };
+  };
   return {
     name: "html",
-    async search(query, providerOptions) {
-      const html = await fetchPage(searchUrl(engine, query, providerOptions?.offset ?? 0), providerOptions?.signal);
-      return html ? parseSearchResults(html, engine) : [];
-    },
+    search: async (query, providerOptions) => (await searchWithStats(query, providerOptions)).hits,
+    searchWithStats,
   };
 }
 
 export function createSerperSearchProvider(apiKey = process.env.SERPER_API_KEY): SearchProvider {
+  const searchWithStats = async (query: string, options?: SearchProviderOptions): Promise<SearchProviderResult> => {
+    if (!apiKey) return { hits: [], pagesFetched: 0, providersUsed: [] };
+    const check = await checkPublicUrl("https://google.serper.dev/search");
+    if (!check.ok) return { hits: [], pagesFetched: 0, providersUsed: [] };
+    try {
+      const response = await guardedRequest(check.url, {
+        method: "POST",
+        signal: options?.signal,
+        headers: { accept: "application/json", "content-type": "application/json", "X-API-KEY": apiKey },
+        body: JSON.stringify({ q: query, page: (options?.offset ?? 0) + 1 }),
+      });
+      if (response.status !== 200) return { hits: [], pagesFetched: 1, providersUsed: ["serper"] };
+      return {
+        hits: parseSerperResults(JSON.parse(response.body.toString("utf8"))).map((hit) => ({
+          ...hit,
+          provider: "serper" as const,
+        })),
+        pagesFetched: 1,
+        providersUsed: ["serper"],
+      };
+    } catch {
+      return { hits: [], pagesFetched: 1, providersUsed: ["serper"] };
+    }
+  };
   return {
     name: "serper",
-    async search(query, options) {
-      if (!apiKey) return [];
-      const check = await checkPublicUrl("https://google.serper.dev/search");
-      if (!check.ok) return [];
-      try {
-        const response = await guardedRequest(check.url, {
-          method: "POST",
-          signal: options?.signal,
-          headers: { accept: "application/json", "content-type": "application/json", "X-API-KEY": apiKey },
-          body: JSON.stringify({ q: query, page: (options?.offset ?? 0) + 1 }),
-        });
-        if (response.status !== 200) return [];
-        return parseSerperResults(JSON.parse(response.body.toString("utf8")));
-      } catch {
-        return [];
-      }
-    },
+    search: async (query, options) => (await searchWithStats(query, options)).hits,
+    searchWithStats,
   };
 }
 
@@ -200,13 +227,73 @@ export function createJsonlSearchProvider(filePath: string): SearchProvider {
   return {
     name: "jsonl",
     async search(query) {
+      const result = await this.searchWithStats!(query);
+      return result.hits;
+    },
+    async searchWithStats(query) {
       contents ??= readFile(filePath, "utf8");
       try {
-        return parseJsonlResults(await contents, query);
+        return {
+          hits: parseJsonlResults(await contents, query).map((hit) => ({ ...hit, provider: "jsonl" as const })),
+          pagesFetched: 0,
+          providersUsed: ["jsonl"],
+        };
       } catch {
-        return [];
+        return { hits: [], pagesFetched: 0, providersUsed: ["jsonl"] };
       }
     },
+  };
+}
+
+export function createCascadingSearchProvider(options: {
+  freeEngines?: readonly Exclude<SearchEngine, "serper" | "jsonl">[];
+  threshold?: number;
+  serperFallbackThreshold?: number;
+  serperApiKey?: string;
+  serperProvider?: SearchProvider;
+  fetchPage?: (url: string, signal?: AbortSignal) => Promise<string | null>;
+} = {}): SearchProvider {
+  const freeEngines = options.freeEngines ?? ["duckduckgo", "brave", "bing"];
+  const fallbackThreshold = Math.max(0, Math.floor(options.threshold ?? options.serperFallbackThreshold ?? 3));
+  const serperApiKey = options.serperApiKey ?? process.env.SERPER_API_KEY;
+  const searchWithStats = async (query: string, providerOptions?: SearchProviderOptions): Promise<SearchProviderResult> => {
+    let pagesFetched = 0;
+    const providersUsed: string[] = [];
+    const freeHits: SearchHit[] = [];
+    const maxPages = providerOptions?.maxPagesRemaining;
+    for (const engine of freeEngines) {
+      if (maxPages !== undefined && pagesFetched >= maxPages) break;
+      const provider = createHtmlSearchProvider({ engine, fetchPage: options.fetchPage });
+      const result = provider.searchWithStats
+        ? await provider.searchWithStats(query, providerOptions)
+        : { hits: await provider.search(query, providerOptions), pagesFetched: 1, providersUsed: [`html:${engine}`] };
+      pagesFetched += result.pagesFetched;
+      providersUsed.push(...result.providersUsed);
+      freeHits.push(...result.hits);
+      if (dedupeByDomain(freeHits).length >= fallbackThreshold) break;
+    }
+
+    if (
+      dedupeByDomain(freeHits).length >= fallbackThreshold
+      || !serperApiKey
+      || (maxPages !== undefined && pagesFetched >= maxPages)
+    ) {
+      return { hits: freeHits, pagesFetched, providersUsed };
+    }
+    const serper = options.serperProvider ?? createSerperSearchProvider(serperApiKey);
+    const result = serper.searchWithStats
+      ? await serper.searchWithStats(query, providerOptions)
+      : { hits: await serper.search(query, providerOptions), pagesFetched: 1, providersUsed: ["serper"] };
+    return {
+      hits: [...freeHits, ...result.hits],
+      pagesFetched: pagesFetched + result.pagesFetched,
+      providersUsed: [...providersUsed, ...result.providersUsed],
+    };
+  };
+  return {
+    name: "cascade",
+    search: async (query, providerOptions) => (await searchWithStats(query, providerOptions)).hits,
+    searchWithStats,
   };
 }
 
@@ -231,7 +318,7 @@ export function selectSearchProvider(options: {
   }
   if (options.providerName === "serper") return createSerperSearchProvider();
   if (options.providerName === "html") return createHtmlSearchProvider({ engine: options.htmlEngine });
-  return process.env.SERPER_API_KEY ? createSerperSearchProvider() : createHtmlSearchProvider({ engine: options.htmlEngine });
+  return createCascadingSearchProvider({ serperApiKey: process.env.SERPER_API_KEY });
 }
 
 export const getSearchProvider = selectSearchProvider;
