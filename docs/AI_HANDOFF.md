@@ -10992,3 +10992,15 @@ Verification caveat:
   `maneks`, and corridor commands default to `maneks-corridor`.
 - The leadgen test script covers Wens localization, registry errors, complete
   locale dictionaries and deterministic query IDs.
+
+## 2026-08-27: Production office creation workflow
+
+- Added `.github/workflows/production-create-office.yml`, a
+  `workflow_dispatch` job restricted to `main` and the `Production`
+  environment.
+- The workflow requires the exact confirmation phrase `create production
+  office`, checks that `PRODUCTION_ADMIN_PASSWORD` exists in the Production
+  environment, verifies the pinned Neon host and `neondb_owner` role, then
+  runs the existing idempotent office creation script.
+- The script's JSON result is written to the GitHub Actions step summary.
+  No database URL or password is printed or stored in the repository.

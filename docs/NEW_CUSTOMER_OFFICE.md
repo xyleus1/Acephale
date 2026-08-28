@@ -51,6 +51,21 @@ identity, so an operator email is never tied to two offices and email-code login
 cannot resolve into the wrong tenant. The customer signs in with the username
 and the password on the same form; the code flow rejects reserved identities.
 
+### Create an office without a local database URL
+
+Use the `Create production office` workflow in GitHub Actions when the
+production database URL is not available locally. Dispatch it from `main`,
+select the `Production` environment, enter the office and admin inputs, and
+type the exact confirmation phrase `create production office`. The workflow
+checks the pinned Neon host and database role before running
+`scripts/create-production-office.ts`.
+
+The admin password is read from the `PRODUCTION_ADMIN_PASSWORD` secret on the
+`Production` environment. Add or rotate that secret in GitHub rather than
+putting it in a shell command or repository file. The workflow writes the
+script result to the run summary and keeps the idempotent behavior of the
+existing script.
+
 ## 3. Harvest, verify, load
 
 ```bash

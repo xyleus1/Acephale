@@ -7831,3 +7831,15 @@ Use this file for chronological implementation notes that future agents should s
 - Verification: leadgen assertions, TypeScript, and both profile plan smoke
   checks passed. Repository lint remains blocked by unrelated pre-existing
   diagnostics.
+
+### 2026-08-27 - Production office creation workflow
+
+- Added a dispatchable GitHub Actions workflow for running
+  `scripts/create-production-office.ts` against the pinned Production Neon
+  database without exposing the database URL to a local session.
+- The workflow requires an exact confirmation phrase, checks the
+  `PRODUCTION_ADMIN_PASSWORD` Production secret before database access,
+  verifies the expected host and `neondb_owner` role, and writes the script
+  JSON result to the run summary.
+- Updated the new-office documentation with the workflow path. Verification
+  is limited to local static checks because the workflow was not dispatched.

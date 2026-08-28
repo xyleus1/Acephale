@@ -1,0 +1,146 @@
+name: Create production office
+
+on:
+  workflow_dispatch:
+    inputs:
+      office_name:
+        description: Production office name
+        required: true
+        type: string
+      admin_username:
+        description: Lowercase production admin username
+        required: true
+        type: string
+      admin_name:
+        description: Optional admin display name
+        required: false
+        type: string
+      company_name:
+        description: Optional company name
+        required: false
+        type: string
+      workspace_name:
+        description: Optional workspace name
+        required: false
+        type: string
+      workspace_external_key:
+        description: Optional workspace external key
+        required: false
+        type: string
+      confirm:
+        description: Type create production office
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-create-office
+  cancel-in-progress: false
+
+jobs:
+  create-office:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Production
+    env:
+      REQUEST_CONFIRMATION: ${{ inputs.confirm }}
+      PRODUCTION_OFFICE_NAME: ${{ inputs.office_name }}
+      PRODUCTION_ADMIN_USERNAME: ${{ inputs.admin_username }}
+      PRODUCTION_ADMIN_NAME: ${{ inputs.admin_name }}
+      PRODUCTION_COMPANY_NAME: ${{ inputs.company_name }}
+      PRODUCTION_WORKSPACE_NAME: ${{ inputs.workspace_name }}
+      PRODUCTION_WORKSPACE_EXTERNAL_KEY: ${{ inputs.workspace_external_key }}
+      DATABASE_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+      DATABASE_URL_UNPOOLED: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+      ALLOW_PRODUCTION_OFFICE_SEED: "1"
+      PRODUCTION_ADMIN_PASSWORD: ${{ secrets.PRODUCTION_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate production office request
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$REQUEST_CONFIRMATION" != "create production office" ]]; then
+            echo 'The confirmation phrase must be exactly "create production office".' >&2
+            exit 1
+          fi
+
+          if [[ -z "${PRODUCTION_ADMIN_PASSWORD:-}" ]]; then
+            echo "PRODUCTION_ADMIN_PASSWORD is empty. Add it to the Production environment secrets." >&2
+            exit 1
+          fi
+
+      - name: Verify exact production database target
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null
+
+          database_host="$(
+            DATABASE_URL="$WORKFLOW_DATABASE_OWNER_URL" node --input-type=module --eval='
+              const value = process.env.DATABASE_URL;
+              if (!value) process.exit(1);
+              process.stdout.write(new URL(value).hostname);
+            '
+          )"
+
+          if [[ "$database_host" != "ep-summer-cake-audzi8ve.c-10.us-east-1.aws.neon.tech" ]]; then
+            echo "Refusing to create an office on an unexpected Neon endpoint." >&2
+            exit 1
+          fi
+
+          database_identity="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --command='SELECT current_database(), session_user;'
+          )"
+
+          if [[ "$database_identity" != "neondb|neondb_owner" ]]; then
+            echo "Refusing to create an office on an unexpected database or role." >&2
+            exit 1
+          fi
+
+          database_role="${database_identity#*|}"
+          echo "Verified production target: host=$database_host role=$database_role."
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        env:
+          DATABASE_URL: postgresql://unused:unused@127.0.0.1:9/unused
+          DATABASE_URL_UNPOOLED: postgresql://unused:unused@127.0.0.1:9/unused
+        run: npm ci
+
+      - name: Create production office
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_file="$RUNNER_TEMP/production-office-result.json"
+          npx tsx scripts/create-production-office.ts > "$output_file"
+          node --input-type=module --eval='
+            import { readFileSync } from "node:fs";
+            JSON.parse(readFileSync(process.argv[1], "utf8"));
+          ' "$output_file"
+          {
+            echo "## Production office result"
+            echo '```json'
+            cat "$output_file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
