@@ -162,6 +162,16 @@ export function classifySupplierSourcingCategory(input: {
   return candidates[0]!.category;
 }
 
+/**
+ * How many distinct rounds of `count` phrases a category can still serve. A
+ * wave that has already spent every curated phrase has genuinely run out of
+ * discovery, which is different from one empty search.
+ */
+export function supplierSourcingQueryRounds(category: SupplierSourcingCategory, count: number) {
+  const phrases = category.queries.length * category.regions.length;
+  return Math.ceil(phrases / Math.max(1, Math.trunc(count)));
+}
+
 export function supplierSourcingQueries(category: SupplierSourcingCategory, cycle: number, count: number) {
   const queries: string[] = [];
   const start = Math.max(0, Math.trunc(cycle));

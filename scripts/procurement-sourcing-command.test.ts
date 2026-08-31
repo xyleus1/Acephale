@@ -313,14 +313,69 @@ async function main() {
       run: async () => ({
         perCategory: SOURCING_COMMAND_SLICE,
         send: false,
-        categories: [{ category: "pcba" as const, orderId: "order-pcba", material: "m", wave: { added: 0 } as never, send: null, error: null }],
+        categories: [{
+          category: "pcba" as const,
+          orderId: "order-pcba",
+          material: "m",
+          wave: { added: 0, discoveryExhausted: true } as never,
+          send: null,
+          error: null,
+        }],
         added: 0,
         sent: 0,
       }),
       enqueue: enqueue as never,
     },
   });
-  assert.equal(enqueued.length, 0, "a slice that found nothing must not re-queue forever");
+  assert.equal(enqueued.length, 0, "a category with no phrases left must not re-queue forever");
+
+  // A barren slice that still has curated phrases left has to carry on, and the
+  // continuation has to start where the last slice stopped searching, otherwise
+  // every slice repeats the first phrases and proposes only known domains.
+  enqueued.length = 0;
+  const startRoundsSeen: Array<unknown> = [];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 100,
+      send: false,
+      confirmed: false,
+      startRounds: { pcba: 4 },
+    },
+    dependencies: {
+      run: async (input) => {
+        startRoundsSeen.push(input.startRounds);
+        return {
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "m",
+            wave: { added: 0, discoveryExhausted: false, nextRound: 9 } as never,
+            send: null,
+            error: null,
+          }],
+          added: 0,
+          sent: 0,
+        };
+      },
+      enqueue: enqueue as never,
+    },
+  });
+  assert.deepEqual(
+    startRoundsSeen[0],
+    { pcba: 4 },
+    "a continuation resumes the phrases the payload recorded",
+  );
+  assert.equal(enqueued.length, 1, "unsearched phrases keep the wave going");
+  assert.deepEqual(
+    enqueued[0]!.startRounds,
+    { pcba: 9 },
+    "the next slice starts where this one stopped searching",
+  );
 
   // A slice that spent its whole budget before qualifying anyone still owes the
   // rest of the count, so the wave has to continue rather than quietly stop.
@@ -369,7 +424,12 @@ async function main() {
           category: "pcba" as const,
           orderId: "order-pcba",
           material: "m",
-          wave: { added: 0, timedOut: false, providerFailures: ["serper", "openai"] } as never,
+          wave: {
+            added: 0,
+            timedOut: false,
+            discoveryExhausted: true,
+            providerFailures: ["serper", "openai"],
+          } as never,
           send: null,
           error: null,
         }],

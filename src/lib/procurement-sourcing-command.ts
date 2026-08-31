@@ -178,6 +178,19 @@ export async function queueSourcingCommandFromChat(args: {
   return { jobId: job.id, perCategory: intent.perCategory, send: intent.send, plan };
 }
 
+function readStartRounds(value: unknown): Partial<Record<SupplierSourcingCategoryKey, number>> {
+  const rounds: Partial<Record<SupplierSourcingCategoryKey, number>> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return rounds;
+  const record = value as Record<string, unknown>;
+  for (const key of ["pcba", "molded-foam"] as const) {
+    const round = record[key];
+    if (typeof round === "number" && Number.isFinite(round) && round > 0) {
+      rounds[key] = Math.trunc(round);
+    }
+  }
+  return rounds;
+}
+
 export async function runQueuedSourcingWaveJob(args: {
   officeId: string;
   // The running job holds the wave dedupe key, so its own continuation has to
@@ -202,11 +215,13 @@ export async function runQueuedSourcingWaveJob(args: {
   const onlyCategory = payload.category === "pcba" || payload.category === "molded-foam"
     ? payload.category
     : null;
+  const startRounds = readStartRounds(payload.startRounds);
   const result = await (args.dependencies?.run ?? runSourcingCommand)({
     customerId,
     workspaceId,
     onlyCategory,
     budgetMs: SOURCING_COMMAND_SLICE_BUDGET_MS,
+    startRounds,
     intent: {
       perCategory: slice,
       send: payload.send === true,
@@ -214,12 +229,24 @@ export async function runQueuedSourcingWaveJob(args: {
     },
     confirmed: payload.confirmed === true,
   });
-  // Only keep going while the last slice still found qualified suppliers or ran
-  // out of time before it could, otherwise a category with nothing left to find
-  // would re-queue forever.
+  // Only keep going while the last slice found qualified suppliers, ran out of
+  // time before it could, or still has unsearched phrases left. A category whose
+  // curated phrases are spent reports discovery exhausted and the chain ends, so
+  // nothing re-queues forever.
   const stillFinding = result.categories.some(
-    (entry) => (entry.wave?.added ?? 0) > 0 || entry.wave?.timedOut === true,
+    (entry) => (entry.wave?.added ?? 0) > 0
+      || entry.wave?.timedOut === true
+      || (entry.wave ? !entry.wave.discoveryExhausted : false),
   );
+  const nextStartRounds = { ...startRounds };
+  for (const entry of result.categories) {
+    if (!entry.wave) continue;
+    if (entry.category !== "pcba" && entry.category !== "molded-foam") continue;
+    nextStartRounds[entry.category] = Math.max(
+      nextStartRounds[entry.category] ?? 0,
+      entry.wave.nextRound,
+    );
+  }
   // Credit the progress actually made, not the slice size, because a slice that
   // ran out of time added fewer suppliers than it asked for and the rest of the
   // count is still owed. Counting at least one keeps the chain finite.
@@ -238,9 +265,16 @@ export async function runQueuedSourcingWaveJob(args: {
     await (args.dependencies?.enqueue ?? enqueueBackgroundJob)({
       officeId: args.officeId,
       type: "PROCUREMENT_SOURCING_WAVE",
+      // An outage retry keeps the phrases it never got to search, while a normal
+      // continuation moves on to the phrases this slice did not reach.
       payload: retryOutage
-        ? { ...payload, perCategory: remaining, providerRetries: retriesUsed + 1 }
-        : { ...payload, perCategory: left, providerRetries: 0 },
+        ? {
+          ...payload,
+          perCategory: remaining,
+          providerRetries: retriesUsed + 1,
+          startRounds,
+        }
+        : { ...payload, perCategory: left, providerRetries: 0, startRounds: nextStartRounds },
       runAfter: retryOutage ? new Date(Date.now() + SOURCING_OUTAGE_RETRY_DELAY_MS) : undefined,
       dedupeKey: typeof payload.workspaceId === "string"
         ? `procurement-sourcing-wave:${payload.workspaceId}${onlyCategory ? `:${onlyCategory}` : ""}`
@@ -261,6 +295,10 @@ export async function runSourcingCommand(args: {
   onlyCategory?: SupplierSourcingCategoryKey | null;
   // Total wall clock the whole run may use, shared across the plan.
   budgetMs?: number | null;
+  // Where each category should resume its curated search phrases, so a
+  // continuation slice searches something new instead of the first phrases
+  // again.
+  startRounds?: Readonly<Partial<Record<SupplierSourcingCategoryKey, number>>> | null;
   // Sending supplier mail needs the same explicit confirmation the operator
   // send commands require, whatever asked for the run.
   confirmed: boolean;
@@ -312,6 +350,7 @@ export async function runSourcingCommand(args: {
         orderId: entry.orderId,
         target: args.intent.perCategory,
         deadlineAt: categoryDeadline,
+        startRound: args.startRounds?.[entry.category] ?? 0,
       });
       result.added += outcome.wave.added;
     } catch (error) {

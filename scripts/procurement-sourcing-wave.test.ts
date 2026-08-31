@@ -213,6 +213,79 @@ async function main() {
   assert.equal(inserted.length, 0, "a repeated wave loads nobody twice");
   assert.equal(repeat.examined, 0, "already known domains are not even fetched");
 
+  // A continuation slice has to search phrases the earlier slices never used,
+  // and one search that returns nothing new must not end the wave while curated
+  // phrases are left. Without this every queued slice repeated the first search,
+  // proposed only known domains, and the wave stopped after one slice.
+  inserted.length = 0;
+  const asked: string[] = [];
+  const barrenThenFinding = [{
+    name: "phrase-recorder",
+    propose: async (input: { query: string; excludeDomains?: readonly string[] }) => {
+      asked.push(input.query);
+      if (asked.length <= 2) return [];
+      return proposals.filter((entry) => !(input.excludeDomains ?? []).includes(entry.domain));
+    },
+  }];
+  const resumed = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 1,
+    startRound: 5,
+    proposers: barrenThenFinding as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: insertVendor as never,
+  });
+  assert.equal(resumed.startRound, 5, "a wave reports where it resumed");
+  assert.ok(resumed.nextRound > 5, "the wave hands the next phrase round forward");
+  assert.equal(resumed.added, 1, "an empty search does not end a wave that still has phrases");
+  assert.equal(resumed.discoveryExhausted, false, "phrases were still left when the wave stopped");
+  const firstRoundQueries = (await import("../src/lib/supply-os/supplier-sourcing-category"))
+    .supplierSourcingQueries(
+      (await import("../src/lib/supply-os/supplier-sourcing-category")).SUPPLIER_SOURCING_CATEGORIES
+        .find((entry) => entry.key === "molded-foam")!,
+      0,
+      2,
+    );
+  assert.ok(
+    asked.every((query) => !firstRoundQueries.includes(query)),
+    "a resumed wave does not repeat the phrases the first slice already searched",
+  );
+
+  // A round cut short by the deadline is retried, not skipped: its phrases were
+  // never searched, so the cursor must stay where it was.
+  const cutShort = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 1,
+    startRound: 3,
+    deadlineAt: Date.now() + 300,
+    proposers: [hanging] as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: insertVendor as never,
+  });
+  assert.equal(cutShort.timedOut, true);
+  assert.equal(cutShort.nextRound, 3, "an unsearched round is handed back, not skipped");
+
+  // Same for a round where every provider failed, for example on a spent search
+  // quota: nobody searched those phrases, so the cursor must not move past them.
+  const allFailed = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 1,
+    startRound: 2,
+    proposers: [failing] as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: insertVendor as never,
+  });
+  assert.equal(allFailed.nextRound, 2, "a round every provider failed on is retried, not skipped");
+
   // A losing insert race is reported as a duplicate rather than counted.
   const raced = await runProcurementSupplierSourcingWave({
     orderId: order.orderId,

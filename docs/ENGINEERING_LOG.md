@@ -1,5 +1,25 @@
 # Engineering Log
 
+## 2026-08-29: A queued sourcing wave stopped after one slice
+
+- Production symptom: the 100 per category wave queued, the first slice ran, and
+  then no job was ever due again. Repeated drains returned
+  `{"scanned":0}`, while the direct run showed `examined: 12`, `added: 1`,
+  `discoveryExhausted: true`, `queriesUsed` of length one.
+- Cause: every slice started at query round 0, so it searched the same phrase the
+  earlier slice had searched. Discovery excludes known domains, the search
+  returned nothing new, the wave set `discoveryExhausted` on that first barren
+  round, and the continuation condition read that as a category with nothing left
+  to find.
+- Fix: the wave takes `startRound` and returns `nextRound`, the queued job stores
+  a per category `startRounds` cursor, a barren round moves to the next phrases
+  (up to 3 in a row) instead of ending the wave, and a category is exhausted only
+  once `supplierSourcingQueryRounds` are spent. A slice with phrases left keeps
+  the chain alive; an outage retry replays the phrases it never searched.
+- Verification: `npm run test:procurement-sourcing-wave`,
+  `npm run test:procurement-sourcing-command`, `npx tsc --noEmit` (only the
+  pre-existing typed route error on `src/app/dashboard/admin/page.tsx`).
+
 ## 2026-08-28: A discovery call gets enough time to answer
 
 - Production symptom: every drained sourcing slice completed and added nobody,

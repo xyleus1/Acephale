@@ -21,6 +21,7 @@ import {
   classifySupplierSourcingCategory,
   qualifySupplierSite,
   supplierSourcingQueries,
+  supplierSourcingQueryRounds,
   type SupplierSourcingCategory,
 } from "@/lib/supply-os/supplier-sourcing-category";
 
@@ -34,6 +35,7 @@ export const SOURCING_WAVE_MAX_TARGET = 120;
 const MAX_CRAWLED_PAGES = 4;
 const MAX_TEXT_PER_SITE = 60_000;
 const MAX_PROPOSAL_ROUNDS = 12;
+const MAX_EMPTY_ROUNDS = 3;
 const CRAWL_CONCURRENCY = 4;
 // Checking the clock between calls is not enough, because one web search or one
 // slow site can outlast the whole slice on its own. Every external call is also
@@ -97,6 +99,12 @@ export type SourcingWaveResult = {
   rejected: SourcingWaveRejection[];
   queriesUsed: string[];
   discoveryExhausted: boolean;
+  // The search phrase round this wave started on, and the one a continuation
+  // should start on. Without carrying this forward every queued slice repeated
+  // the first phrases, every proposal was already known, and the wave stopped
+  // after one slice.
+  startRound: number;
+  nextRound: number;
   // Set when the wave stopped on its time budget with work still left, so the
   // caller knows the remainder is worth queueing.
   timedOut: boolean;
@@ -300,6 +308,7 @@ export async function runProcurementSupplierSourcingWave(input: {
   // A wave runs inside a serverless invocation, so it stops cleanly at this
   // moment and lets the caller queue the remainder instead of being killed.
   deadlineAt?: number | null;
+  startRound?: number | null;
   proposers?: readonly SupplierDomainProposer[];
   fetchPage?: PageFetcher;
   verify?: typeof verifyEmail;
@@ -342,6 +351,8 @@ export async function runProcurementSupplierSourcingWave(input: {
     rejected: [],
     queriesUsed: [],
     discoveryExhausted: false,
+    startRound: 0,
+    nextRound: 0,
     timedOut: false,
     providerFailures: [],
   };
@@ -352,18 +363,37 @@ export async function runProcurementSupplierSourcingWave(input: {
     ? Math.min(cap, input.deadlineAt - Date.now())
     : cap;
 
-  for (let round = 0; round < MAX_PROPOSAL_ROUNDS && result.added < target; round += 1) {
+  const totalRounds = supplierSourcingQueryRounds(category, 2);
+  const startRound = Math.max(0, Math.trunc(input.startRound ?? 0));
+  result.startRound = startRound;
+  result.nextRound = startRound;
+  let emptyRounds = 0;
+
+  for (let step = 0; step < MAX_PROPOSAL_ROUNDS && result.added < target; step += 1) {
+    const round = startRound + step;
+    if (round >= totalRounds) {
+      // Every curated phrase for this category has been searched.
+      result.discoveryExhausted = true;
+      break;
+    }
     if (outOfTime()) {
       result.timedOut = true;
       break;
     }
     const queries = supplierSourcingQueries(category, round, 2);
     const proposals: Array<{ domain: string; url: string; via: string }> = [];
+    // A round whose phrases were not all searched must not be skipped by the
+    // continuation, so the cursor only moves once the round is fully searched.
+    let roundSearched = true;
     for (const query of queries) {
       if (outOfTime()) {
         result.timedOut = true;
+        roundSearched = false;
         break;
       }
+      // A phrase counts as searched when some provider answered, even with an
+      // empty list. A phrase every provider failed on was never searched.
+      let answered = false;
       for (const proposer of proposers) {
         // One failing discovery provider, for example an exhausted search API
         // quota, must not end the wave while another provider still answers.
@@ -379,6 +409,7 @@ export async function runProcurementSupplierSourcingWave(input: {
           result.providerFailures.push(proposer.name);
           continue;
         }
+        answered = true;
         if (!found.length) continue;
         result.queriesUsed.push(`${proposer.name}: ${query}`);
         for (const proposal of found) {
@@ -388,11 +419,21 @@ export async function runProcurementSupplierSourcingWave(input: {
         }
         break;
       }
+      if (!answered) roundSearched = false;
     }
+    if (roundSearched) result.nextRound = round + 1;
     if (!proposals.length) {
-      result.discoveryExhausted = true;
-      break;
+      // One search that returns nothing new is normal once a request already
+      // holds hundreds of domains, so the wave moves on to the next phrases and
+      // only gives up after several barren rounds in a row.
+      emptyRounds += 1;
+      if (emptyRounds >= MAX_EMPTY_ROUNDS) {
+        result.discoveryExhausted = true;
+        break;
+      }
+      continue;
     }
+    emptyRounds = 0;
 
     const queue = [...proposals];
     const crawled: Array<{ site: CrawledSupplierSite; via: string }> = [];

@@ -1,5 +1,20 @@
 # AI Handoff
 
+## 2026-08-29: A sourcing wave carries a search phrase cursor across slices
+
+- Each category has 8 curated query phrases times 10 regions, consumed 2 per
+  round. A wave now takes `startRound` and returns `nextRound`, and
+  `runQueuedSourcingWaveJob` stores `startRounds` per category on the job payload,
+  so a continuation slice searches phrases nobody searched yet. Before this every
+  queued slice restarted at round 0, every proposal was a known domain, and the
+  wave declared discovery exhausted after one slice.
+- One search that returns nothing new no longer ends a wave. Discovery counts as
+  exhausted only after `MAX_EMPTY_ROUNDS` (3) barren rounds in a row or once the
+  curated phrases for the category are spent (`supplierSourcingQueryRounds`).
+- The continuation condition follows: a slice that added nobody but still has
+  phrases left keeps the chain alive, while a spent category ends it, so nothing
+  re-queues forever. An outage retry keeps the phrases it never got to search.
+
 ## 2026-08-28: A supplier that answered once and then went quiet gets followed up
 
 - `src/lib/procurement-supplier-chase.ts` is the pure policy: chase only when the
