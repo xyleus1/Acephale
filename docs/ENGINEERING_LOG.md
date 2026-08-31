@@ -1,5 +1,26 @@
 # Engineering Log
 
+## 2026-08-31: A coverage number for the stale action guard
+
+- Context: the guards existed (`scopeHash`, immutable task input, gate
+  revalidation, draft revisions) but nobody could say which action paths block
+  on state that moved, or how often the guard refuses work it should allow.
+- Added `scripts/state-recheck.test.ts` and the `test:state-recheck` script. It
+  drives real persistence functions on a local database, advances the process
+  clock past a specific validity window, and classifies each run as a detected
+  stale execution, an escaped stale execution, or a false conflict.
+- Two scenarios were written wrong before they were written right, and both
+  taught something. Rewriting a frozen approval input to fake staleness is not
+  reachable in production because the database refuses it, so that case became a
+  tamper assertion instead. Recording a quote release with an old release date is
+  legitimate when qualification was valid on that date, so the release scenario
+  now records the release on the day the guard runs.
+- Result on 2026-08-31, 6 repeats per scenario: 114/114 stale executions
+  detected, 0 escaped, 0/36 false conflicts, p50 15 to 17ms and p95 26 to 32ms on
+  a local database.
+- Verification: `npm run test:state-recheck`, `npx tsc --noEmit`, `npm run lint`
+  (only pre-existing findings in unrelated files).
+
 ## 2026-08-31: Context chat works for offices without a procurement mapping
 
 - `chatWithCompanyContext` resolved the procurement customer id synchronously

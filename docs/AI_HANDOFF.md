@@ -1,5 +1,31 @@
 # AI Handoff
 
+## 2026-08-31: Stale state before an action is measured, not assumed
+
+- `scripts/state-recheck.test.ts` (`npm run test:state-recheck`) runs the real
+  procurement persistence path against a local database: it builds a case
+  through sourcing, qualification, RFQ, supplier quote, gate reviews, approval,
+  order draft, and purchase authorization, lets one piece of state lapse, then
+  fires the action and records whether the server refused it.
+- Staleness is produced the way production produces it. The suite shifts the
+  process clock forward past a validity window instead of rewriting frozen
+  provenance, so every refusal comes from a rule the product actually enforces.
+  The one exception is the tamper case, which asserts the database itself
+  refuses an edit to an immutable execution task input.
+- Negative controls carry the same weight as the positives. Unrelated cases in
+  the same office and in a second office lapse during the same clock shift, an
+  unrelated event is appended to the case history, and time passes inside the
+  validity window. None of these may block the action, which is what stops a
+  guard that simply refuses everything from scoring well.
+- Measured on 2026-08-31, 6 repeats per scenario, 25 scenarios: 114/114 stale
+  executions detected, 0 stale actions escaped, 0/36 false conflicts. Guarded
+  action latency on a local database was p50 15 to 17ms and p95 26 to 32ms across
+  runs, dominated by the transaction itself. These numbers describe the
+  procurement path only. Nothing else in the product has been measured this way.
+- Coverage per action: `saveSupplierQuoteRequest`, `recordSupplierQuoteRelease`,
+  `decideProcurementApproval`, `savePurchaseOrderDraft`, and
+  `decidePurchaseActionApproval`.
+
 ## 2026-08-31: The context chat is a project workspace with an interactive intake agent
 
 - The Supply OS context chat now works like a project folder. Chat threads are

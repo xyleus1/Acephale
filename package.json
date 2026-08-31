@@ -82,6 +82,7 @@
     "test:supply-os-exa-retrieval": "node --import tsx scripts/supply-os-exa-retrieval.test.ts",
     "test:supply-os-openai-retrieval": "node --import tsx scripts/supply-os-openai-retrieval.test.ts",
     "test:supply-os-sourcing-persistence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-sourcing-persistence.test.ts",
+    "test:state-recheck": "NODE_OPTIONS='--conditions=react-server' tsx scripts/state-recheck.test.ts",
     "test:supply-os-supply-intelligence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supply-intelligence.test.ts",
     "test:supply-os-supplier-quote-extraction": "tsx scripts/supply-os-supplier-quote-extraction.test.ts",
     "test:supply-os-supplier-quote-attachments": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-quote-attachments.test.ts",

@@ -1,5 +1,19 @@
 # Decisions
 
+## Stale state in tests is produced by moving the clock, not by rewriting provenance
+
+Date: 2026-08-31
+
+Execution task input and its hash are immutable, and the database enforces that.
+A test that reaches for `derya.allow_supply_provenance_mutation` to fake an
+expired quote is therefore measuring a state the product can never reach, and it
+hides whether the guard would fire in production. `scripts/state-recheck.test.ts`
+builds cases with short validity windows and shifts the process clock past them,
+so an expired qualification, an expired quote, a passed delivery date, a lapsed
+quality plan, and an expired purchase authorization all arise the way they arise
+in production. Future state or freshness tests should follow this and keep
+provenance mutation for asserting that the database refuses tampering.
+
 ## Chat threads live in CompanyContext rows, not a new table
 
 Date: 2026-08-31
