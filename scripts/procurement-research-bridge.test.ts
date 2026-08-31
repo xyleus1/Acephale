@@ -12,6 +12,7 @@ import { parseProcurementResearchMode } from "../src/lib/procurement-research-mo
 import { projectProcurementResearchShortlist } from "../src/lib/procurement-research-shortlist";
 import { procurementResearchShortlistResponse } from "../src/lib/procurement-research-shortlist-route";
 import { GET as procurementResearchCron } from "../src/app/api/cron/procurement-research/route";
+import { runProcurementResearchCronCycle } from "../src/lib/procurement-research-cron";
 import { sharedSecretMatches } from "../src/lib/procurement-research-security";
 import { SupplyResearchIdempotencyConflictError } from "../src/lib/supply-os/persistence";
 
@@ -180,6 +181,84 @@ assert.equal(new ProcurementResearchAccessError("office-1").code, "missing_admin
 assert.equal(isProcurementResearchOrder({ supplierCount: 0, status: "researching" }), true);
 assert.equal(isProcurementResearchOrder({ supplierCount: 1, status: "new" }), false);
 assert.equal(isProcurementResearchOrder({ supplierCount: 0, status: "ordered" }), false);
+
+const enqueueCycleResult = {
+  scanned: 1,
+  enqueued: 1,
+  reused: 0,
+  skipped: 0,
+  skippedReasons: {},
+};
+const drainCycleResult = {
+  scanned: 1,
+  succeeded: 1,
+  failed: 0,
+  skipped: 0,
+  staleFailed: 0,
+};
+let cycleEnqueueCalls = 0;
+let cycleDrainCalls = 0;
+const happyCycle = await runProcurementResearchCronCycle({
+  enqueue: async () => {
+    cycleEnqueueCalls += 1;
+    return enqueueCycleResult;
+  },
+  drain: async (options) => {
+    cycleDrainCalls += 1;
+    assert.deepEqual(options, { limit: 2 });
+    return drainCycleResult;
+  },
+});
+assert.equal(cycleEnqueueCalls, 1);
+assert.equal(cycleDrainCalls, 1);
+assert.deepEqual(happyCycle, {
+  enqueue: enqueueCycleResult,
+  enqueueError: null,
+  drain: drainCycleResult,
+  drainError: null,
+});
+
+let drainAfterEnqueueFailure = false;
+const enqueueFailedCycle = await runProcurementResearchCronCycle({
+  enqueue: async () => {
+    throw new Error("expected enqueue failure");
+  },
+  drain: async () => {
+    drainAfterEnqueueFailure = true;
+    return drainCycleResult;
+  },
+});
+assert.equal(drainAfterEnqueueFailure, true);
+assert.equal(enqueueFailedCycle.enqueue, null);
+assert.equal(enqueueFailedCycle.enqueueError, "enqueue_failed");
+assert.deepEqual(enqueueFailedCycle.drain, drainCycleResult);
+assert.equal(enqueueFailedCycle.drainError, null);
+
+const drainFailedCycle = await runProcurementResearchCronCycle({
+  enqueue: async () => enqueueCycleResult,
+  drain: async () => {
+    throw new Error("expected drain failure");
+  },
+});
+assert.deepEqual(drainFailedCycle.enqueue, enqueueCycleResult);
+assert.equal(drainFailedCycle.enqueueError, null);
+assert.equal(drainFailedCycle.drain, null);
+assert.equal(drainFailedCycle.drainError, "drain_failed");
+
+const bothFailedCycle = await runProcurementResearchCronCycle({
+  enqueue: async () => {
+    throw new Error("expected enqueue failure");
+  },
+  drain: async () => {
+    throw new Error("expected drain failure");
+  },
+});
+assert.deepEqual(bothFailedCycle, {
+  enqueue: null,
+  enqueueError: "enqueue_failed",
+  drain: null,
+  drainError: "drain_failed",
+});
 
 const publicSource = { url: "https://catalog.example/items", sourceType: "PUBLIC" as const };
 const unknownEnvelope = {
@@ -435,6 +514,8 @@ const securitySource = readFileSync(resolve(process.cwd(), "src/lib/procurement-
 const workflowSource = readFileSync(resolve(process.cwd(), "src/lib/procurement-workflow.ts"), "utf8");
 assert.match(cronRoute, /CRON_SECRET/);
 assert.match(cronRoute, /mode: "bourne"/);
+assert.match(cronRoute, /maxDuration = 300/);
+assert.match(cronRoute, /runProcurementResearchCronCycle/);
 assert.match(shortlistRouteSource, /authorization/);
 assert.match(securitySource, /timingSafeEqual/);
 const persistenceSource = readFileSync(resolve(process.cwd(), "src/lib/supply-os/sourcing-research-persistence.ts"), "utf8");

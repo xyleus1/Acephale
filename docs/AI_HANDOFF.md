@@ -11160,3 +11160,13 @@ Verification caveat:
 - The direct script and GitHub Actions workflow continue to use the shared
   provisioning service. No production database operation was run during this
   change.
+
+## 2026-08-31: Procurement research queue draining
+
+- The protected procurement research cron now runs the Derya enqueue backstop
+  and the queued supplier research worker in one cycle.
+- Enqueue and drain failures are isolated. A failed enqueue still drains
+  previously queued runs, and a partial failure returns a successful cron
+  response with the bounded result and error marker.
+- The cycle defaults to a drain limit of two and leaves the legacy supplier
+  research cron unchanged.

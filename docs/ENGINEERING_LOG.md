@@ -8062,3 +8062,14 @@ Use this file for chronological implementation notes that future agents should s
   one line, the operator command reports it as `errorReason` next to the same
   opaque message, and the queued continuation carries it as `lastFailure` so the
   status endpoint explains an unattended wave that keeps failing.
+
+### 2026-08-31 - Procurement research cron drains queued runs
+
+- The procurement research cron now runs the enqueue backstop first and then
+  drains queued supplier research with the existing lease and stale-run
+  handling.
+- Each phase has an independent error boundary. Previously queued work still
+  drains after an enqueue failure, while both failures produce the only 503
+  response. Partial failures remain 200 responses with explicit error markers.
+- The worker limit remains capped at two, and the legacy supplier research cron
+  remains untouched.

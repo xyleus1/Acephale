@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { procurementResearchMode } from "@/lib/procurement-research-mode";
-import { runProcurementResearchCron } from "@/lib/procurement-research-bridge";
+import { runProcurementResearchCronCycle } from "@/lib/procurement-research-cron";
 import { sharedSecretMatches } from "@/lib/procurement-research-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const responseHeaders = {
   "cache-control": "no-store",
@@ -35,16 +35,10 @@ export async function GET(request: Request) {
       { status: 200, headers: responseHeaders },
     );
   }
-  try {
-    const result = await runProcurementResearchCron();
-    return NextResponse.json(
-      { ranAt: new Date().toISOString(), mode: "derya", ...result },
-      { status: 200, headers: responseHeaders },
-    );
-  } catch {
-    return NextResponse.json(
-      { error: "Procurement research reconciliation failed." },
-      { status: 503, headers: responseHeaders },
-    );
-  }
+  const result = await runProcurementResearchCronCycle();
+  const status = result.enqueueError && result.drainError ? 503 : 200;
+  return NextResponse.json(
+    { ranAt: new Date().toISOString(), mode: "derya", ...result },
+    { status, headers: responseHeaders },
+  );
 }
