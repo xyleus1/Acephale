@@ -507,23 +507,25 @@ async function main() {
   // The standing status is what the operator reads while a queued wave grinds
   // through its slices, so it has to report real supplier counts and the work
   // the queue still owes.
-  const { sourcingCommandStatus, countContactedSuppliers } =
+  const { sourcingCommandStatus, countSupplierDeliveries } =
     await import("../src/lib/procurement-sourcing-command");
 
-  // The workflow write back is best effort, so a send whose only receipt is the
-  // local reservation still counts, and a supplier in both stores counts once.
-  assert.equal(
-    countContactedSuppliers(
+  // The workflow write back is best effort, so a RECORDED local receipt also
+  // proves delivery, a supplier in both stores counts once, and a RESERVED row
+  // is only an in-flight or unreconciled send, never a contacted supplier.
+  assert.deepEqual(
+    countSupplierDeliveries(
       [
         { vendorId: "vendor-1", lastEmailMessageId: "<a@derya>" },
         { vendorId: "vendor-2", lastEmailMessageId: null },
         { vendorId: "vendor-3", lastEmailMessageId: "<c@derya>" },
         { vendorId: "vendor-4", lastEmailMessageId: null },
+        { vendorId: "vendor-5", lastEmailMessageId: null },
       ],
-      new Set(["vendor-2", "vendor-3"]),
+      { recorded: new Set(["vendor-2", "vendor-3"]), reserved: new Set(["vendor-3", "vendor-4"]) },
     ),
-    3,
-    "a locally recorded send counts and a supplier in both stores counts once",
+    { contacted: 3, pending: 1 },
+    "a recorded receipt counts once and a reserved send stays pending",
   );
 
   const status = await sourcingCommandStatus({
@@ -537,8 +539,8 @@ async function main() {
     counts: async ({ orderId, officeId }) => {
       assert.equal(officeId, "office-1", "supplier counts stay inside the owning office");
       return orderId === "order-pcba"
-        ? { suppliers: 214, contacted: 210 }
-        : { suppliers: 118, contacted: 118 };
+        ? { suppliers: 214, contacted: 210, pending: 2 }
+        : { suppliers: 118, contacted: 118, pending: 0 };
     },
     jobs: async ({ officeId }) => {
       assert.equal(officeId, "office-1", "queued work is read inside the owning office only");
@@ -552,8 +554,14 @@ async function main() {
     },
   });
   assert.deepEqual(
-    status.categories.map((entry) => [entry.category, entry.suppliers, entry.contacted, entry.uncontacted]),
-    [["pcba", 214, 210, 4], ["molded-foam", 118, 118, 0]],
+    status.categories.map((entry) => [
+      entry.category,
+      entry.suppliers,
+      entry.contacted,
+      entry.pendingDelivery,
+      entry.uncontacted,
+    ]),
+    [["pcba", 214, 210, 2, 2], ["molded-foam", 118, 118, 0, 0]],
     "each category reports how many suppliers it holds and how many were mailed",
   );
   assert.equal(status.queued.length, 1, "a continuation still owed is visible");

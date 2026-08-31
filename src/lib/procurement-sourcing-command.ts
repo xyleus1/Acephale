@@ -387,17 +387,29 @@ export async function runSourcingCommand(args: {
 /**
  * The workflow write-back that stamps `last_email_message_id` is best effort,
  * because the deployed workflow role cannot always update `order_vendors`, so a
- * send that really happened can leave no workflow receipt. The local send
- * reservations are the authoritative record, so a supplier counts as contacted
- * when either store says so, and never twice.
+ * send that really happened can leave no workflow receipt. A RECORDED local
+ * reservation is the second proof of delivery, so a supplier counts as
+ * contacted when either store says so, and never twice.
+ *
+ * A RESERVED reservation is not proof: the pool reserves the sender before the
+ * provider call, and an UNKNOWN delivery outcome is deliberately left RESERVED
+ * for reconciliation. Those suppliers are reported as pending instead, so the
+ * status never claims mail that may not have left.
  */
-export function countContactedSuppliers(
+export function countSupplierDeliveries(
   vendors: ReadonlyArray<{ vendorId: string; lastEmailMessageId: string | null }>,
-  locallySentVendorIds: ReadonlySet<string>,
+  receipts: { recorded: ReadonlySet<string>; reserved: ReadonlySet<string> },
 ) {
-  return vendors.filter(
-    (vendor) => Boolean(vendor.lastEmailMessageId) || locallySentVendorIds.has(vendor.vendorId),
-  ).length;
+  let contacted = 0;
+  let pending = 0;
+  for (const vendor of vendors) {
+    if (vendor.lastEmailMessageId || receipts.recorded.has(vendor.vendorId)) {
+      contacted += 1;
+      continue;
+    }
+    if (receipts.reserved.has(vendor.vendorId)) pending += 1;
+  }
+  return { contacted, pending };
 }
 
 async function supplierContactCounts(args: { orderId: string; officeId: string }) {
@@ -417,14 +429,20 @@ async function supplierContactCounts(args: { orderId: string; officeId: string }
       status: { in: ["RESERVED", "RECORDED"] },
       idempotencyKey: { startsWith: `procurement-bulk-rfq:${args.orderId}:` },
     },
-    select: { idempotencyKey: true },
+    select: { idempotencyKey: true, status: true },
   });
-  const locallySent = new Set(
-    reservations
-      .map((entry) => entry.idempotencyKey.split(":").at(-1))
-      .filter((vendorId): vendorId is string => Boolean(vendorId)),
-  );
-  return { suppliers: rows.length, contacted: countContactedSuppliers(rows, locallySent) };
+  const recorded = new Set<string>();
+  const reserved = new Set<string>();
+  for (const entry of reservations) {
+    const vendorId = entry.idempotencyKey.split(":").at(-1);
+    if (!vendorId) continue;
+    if (entry.status === "RECORDED") recorded.add(vendorId);
+    else reserved.add(vendorId);
+  }
+  return {
+    suppliers: rows.length,
+    ...countSupplierDeliveries(rows, { recorded, reserved }),
+  };
 }
 
 function queuedSourcingWaveJobs(args: { officeId: string; workspaceId: string }) {
@@ -444,6 +462,7 @@ function queuedSourcingWaveJobs(args: { officeId: string; workspaceId: string })
 export type SourcingCommandStatusCategory = SourcingCommandPlanEntry & {
   suppliers: number;
   contacted: number;
+  pendingDelivery: number;
   uncontacted: number;
 };
 
@@ -471,7 +490,8 @@ export async function sourcingCommandStatus(args: {
   workspaceId?: string | null;
   officeId?: string | null;
   plan?: typeof planSourcingCommand;
-  counts?: (args: { orderId: string; officeId: string }) => Promise<{ suppliers: number; contacted: number }>;
+  counts?: (args: { orderId: string; officeId: string }) =>
+    Promise<{ suppliers: number; contacted: number; pending: number }>;
   jobs?: (args: { officeId: string; workspaceId: string }) => Promise<Array<{
     id: string;
     status: string;
@@ -490,12 +510,13 @@ export async function sourcingCommandStatus(args: {
   const counts = args.counts ?? supplierContactCounts;
   const categories: SourcingCommandStatusCategory[] = [];
   for (const entry of plan) {
-    const { suppliers, contacted } = await counts({ orderId: entry.orderId, officeId });
+    const { suppliers, contacted, pending } = await counts({ orderId: entry.orderId, officeId });
     categories.push({
       ...entry,
       suppliers,
       contacted,
-      uncontacted: Math.max(0, suppliers - contacted),
+      pendingDelivery: pending,
+      uncontacted: Math.max(0, suppliers - contacted - pending),
     });
   }
   const workspaceId = args.workspaceId?.trim() || null;
