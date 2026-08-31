@@ -257,6 +257,60 @@ async function main() {
     );
   }
 
+  // The rotation puts the named category first, so a plan whose first category
+  // eats the whole budget cannot starve the other one forever.
+  sourcingCalls.length = 0;
+  await runSourcingCommand({
+    customerId: "customer-1",
+    firstCategory: "molded-foam",
+    intent: { perCategory: 10, send: false, scope: "each-category" },
+    confirmed: false,
+    dependencies: { plan: async () => plan, sourcing, rfq },
+  });
+  assert.deepEqual(
+    sourcingCalls.map((call) => call.orderId),
+    ["order-foam", "order-pcba"],
+    "the rotated category is sourced first",
+  );
+
+  // A category owed nothing is finished, and a category owed less than the slice
+  // must not overshoot its own target.
+  sourcingCalls.length = 0;
+  await runSourcingCommand({
+    customerId: "customer-1",
+    categoryTargets: { pcba: 0, "molded-foam": 3 },
+    intent: { perCategory: 10, send: false, scope: "each-category" },
+    confirmed: false,
+    dependencies: { plan: async () => plan, sourcing, rfq },
+  });
+  assert.deepEqual(
+    sourcingCalls,
+    [{ orderId: "order-foam", target: 3 }],
+    "a finished category is skipped and a partial count is not exceeded",
+  );
+
+  // Only a failure that can succeed later is worth another slice.
+  const { SupplierSourcingError } = await import("@/lib/procurement-supplier-sourcing");
+  const failWith = async (code: "not_found" | "unsupported_category" | "discovery_unavailable") => {
+    const failed = await runSourcingCommand({
+      customerId: "customer-1",
+      onlyCategory: "pcba",
+      intent: { perCategory: 10, send: false, scope: "each-category" },
+      confirmed: false,
+      dependencies: {
+        plan: async () => plan,
+        sourcing: (async () => {
+          throw new SupplierSourcingError("failed", code);
+        }) as never,
+        rfq,
+      },
+    });
+    return failed.categories[0]!.errorRetryable;
+  };
+  assert.equal(await failWith("discovery_unavailable"), true, "an unavailable provider is retryable");
+  assert.equal(await failWith("not_found"), false, "a missing request fails the same way forever");
+  assert.equal(await failWith("unsupported_category"), false, "an unsupported category is permanent");
+
   // A queued wave runs in slices and re-queues only while it keeps finding.
   const enqueued: Array<Record<string, unknown>> = [];
   const enqueueCalls: Array<{ dedupeKey?: string | null; ignoreJobId?: string | null }> = [];
@@ -323,6 +377,7 @@ async function main() {
         }],
         added: 0,
         sent: 0,
+        skipped: [],
       }),
       enqueue: enqueue as never,
     },
@@ -360,6 +415,7 @@ async function main() {
           }],
           added: 0,
           sent: 0,
+          skipped: [],
         };
       },
       enqueue: enqueue as never,
@@ -375,6 +431,251 @@ async function main() {
     enqueued[0]!.startRounds,
     { pcba: 9 },
     "the next slice starts where this one stopped searching",
+  );
+
+  // A slice hands the whole budget to one category, so the category that never
+  // got its turn has to go first next time. Without this the plan order alone
+  // decides and the second category is never sourced at all.
+  enqueued.length = 0;
+  const firstSeen: Array<unknown> = [];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    payload: { customerId: "customer-1", workspaceId: "workspace-1", perCategory: 100, send: false, confirmed: false },
+    dependencies: {
+      run: async (input) => {
+        firstSeen.push(input.firstCategory ?? null);
+        return {
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "molded-foam" as const,
+            orderId: "order-foam",
+            material: "m",
+            // This category is finished, and on its own that would end the wave
+            // while the skipped one still holds nobody.
+            wave: { added: 0, discoveryExhausted: true, nextRound: 7 } as never,
+            send: null,
+            error: null,
+          }],
+          added: 0,
+          sent: 0,
+          skipped: ["pcba" as const],
+        };
+      },
+      enqueue: enqueue as never,
+    },
+  });
+  assert.deepEqual(firstSeen, [null], "the first slice follows the plan order");
+  assert.equal(enqueued.length, 1, "a category that never ran keeps the wave going");
+  assert.equal(
+    enqueued[0]!.firstCategory,
+    "pcba",
+    "the starved category takes the next budget",
+  );
+  assert.deepEqual(
+    enqueued[0]!.remaining,
+    { "molded-foam": 0, pcba: 100 },
+    "only the category that ran spends its own count, and a spent category is owed nothing",
+  );
+
+  // Alternating slices must not share one remainder, otherwise each category
+  // stops at about half the target. The count each category still owes travels
+  // in the payload and only the category that ran is charged.
+  enqueued.length = 0;
+  const targetsSeen: Array<unknown> = [];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 60,
+      send: false,
+      confirmed: false,
+      remaining: { pcba: 60, "molded-foam": 25 },
+    },
+    dependencies: {
+      run: async (input) => {
+        targetsSeen.push(input.categoryTargets);
+        return {
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "m",
+            wave: { added: SOURCING_COMMAND_SLICE, discoveryExhausted: false, nextRound: 3 } as never,
+            send: null,
+            error: null,
+          }],
+          added: SOURCING_COMMAND_SLICE,
+          sent: 0,
+          skipped: ["molded-foam" as const],
+        };
+      },
+      enqueue: enqueue as never,
+    },
+  });
+  assert.deepEqual(
+    targetsSeen[0],
+    { pcba: 60, "molded-foam": 25 },
+    "a slice sources against the count each category still owes",
+  );
+  assert.deepEqual(
+    enqueued[0]!.remaining,
+    { pcba: 60 - SOURCING_COMMAND_SLICE, "molded-foam": 25 },
+    "the category that sat out keeps its whole count",
+  );
+  assert.equal(
+    enqueued[0]!.perCategory,
+    60 - SOURCING_COMMAND_SLICE,
+    "the payload target follows the largest count still owed",
+  );
+
+  // A category whose sourcing threw never searched, so its count has to survive
+  // untouched, otherwise repeated failures drain a target nobody sourced.
+  enqueued.length = 0;
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 60,
+      send: false,
+      confirmed: false,
+      remaining: { pcba: 60, "molded-foam": 25 },
+    },
+    dependencies: {
+      run: async () => ({
+        perCategory: SOURCING_COMMAND_SLICE,
+        send: false,
+        categories: [
+          {
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "m",
+            wave: null,
+            send: null,
+            error: "discovery failed",
+            errorRetryable: true,
+          },
+          {
+            category: "molded-foam" as const,
+            orderId: "order-foam",
+            material: "m",
+            wave: { added: 4, discoveryExhausted: false, nextRound: 3 } as never,
+            send: null,
+            error: null,
+          },
+        ],
+        added: 4,
+        sent: 0,
+        skipped: [],
+      }),
+      enqueue: enqueue as never,
+    },
+  });
+  assert.deepEqual(
+    enqueued[0]!.remaining,
+    { pcba: 60, "molded-foam": 21 },
+    "a failed category keeps its count while the category that ran is charged",
+  );
+
+  // A permanent failure is different: the wave stays alive for the other
+  // category, so the broken one has to leave the count or every slice retries
+  // the same failure.
+  enqueued.length = 0;
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 60,
+      send: false,
+      confirmed: false,
+      remaining: { pcba: 60, "molded-foam": 25 },
+    },
+    dependencies: {
+      run: async () => ({
+        perCategory: SOURCING_COMMAND_SLICE,
+        send: false,
+        categories: [
+          {
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "m",
+            wave: null,
+            send: null,
+            error: "The sourcing request was not found.",
+            errorRetryable: false,
+          },
+          {
+            category: "molded-foam" as const,
+            orderId: "order-foam",
+            material: "m",
+            wave: { added: 4, discoveryExhausted: false, nextRound: 3 } as never,
+            send: null,
+            error: null,
+          },
+        ],
+        added: 4,
+        sent: 0,
+        skipped: [],
+      }),
+      enqueue: enqueue as never,
+    },
+  });
+  assert.deepEqual(
+    enqueued[0]!.remaining,
+    { pcba: 0, "molded-foam": 21 },
+    "a permanently failed category leaves the count instead of being retried every slice",
+  );
+
+  // A scoped job whose only category throws still owes its whole count, so the
+  // failure is retried on a delay a bounded number of times.
+  const failScoped = async (retries: number, retryable = true) => {
+    enqueued.length = 0;
+    await runQueuedSourcingWaveJob({
+      officeId: "office-1",
+      payload: {
+        customerId: "customer-1",
+        workspaceId: "workspace-1",
+        perCategory: 60,
+        category: "pcba",
+        send: false,
+        confirmed: false,
+        providerRetries: retries,
+      },
+      dependencies: {
+        run: async () => ({
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "m",
+            wave: null,
+            send: null,
+            error: "discovery failed",
+            errorRetryable: retryable,
+          }],
+          added: 0,
+          sent: 0,
+          skipped: [],
+        }),
+        enqueue: enqueue as never,
+      },
+    });
+  };
+  await failScoped(0);
+  assert.equal(enqueued.length, 1, "a scoped category failure is retried instead of ending the wave");
+  assert.equal(enqueued[0]!.providerRetries, 1, "the retry is counted");
+  await failScoped(SOURCING_OUTAGE_RETRIES);
+  assert.equal(enqueued.length, 0, "a category that keeps failing stops once the retries are spent");
+  await failScoped(0, false);
+  assert.equal(
+    enqueued.length,
+    0,
+    "a permanent failure, a missing request or an unsupported category, is not retried",
   );
 
   // A slice that spent its whole budget before qualifying anyone still owes the
@@ -397,6 +698,7 @@ async function main() {
         }],
         added: 0,
         sent: 0,
+        skipped: [],
       }),
       enqueue: enqueue as never,
     },
@@ -435,6 +737,7 @@ async function main() {
         }],
         added: 0,
         sent: 0,
+        skipped: [],
       }),
       enqueue: enqueue as never,
     },
@@ -567,6 +870,48 @@ async function main() {
   assert.equal(status.queued.length, 1, "a continuation still owed is visible");
   assert.equal(status.queued[0]!.remainingPerCategory, 40, "the remaining count is reported");
   assert.deepEqual(status.queued[0]!.startRounds, { pcba: 12 }, "the search phrase cursor is reported");
+  assert.deepEqual(
+    status.queued[0]!.remainingByCategory,
+    { pcba: 40, "molded-foam": 40 },
+    "a job that has not written per category counts yet still owes each category its target",
+  );
+
+  const scopedStatus = await sourcingCommandStatus({
+    customerId: "customer-1",
+    workspaceId: "workspace-1",
+    plan: (async () => [
+      { orderId: "order-pcba", material: "PCBA", category: "pcba" as const },
+      { orderId: "order-foam", material: "Custom memory foam parts", category: "molded-foam" as const },
+    ]) as never,
+    officeId: "office-1",
+    counts: async () => ({ suppliers: 0, contacted: 0, pending: 0 }),
+    jobs: async () => [
+      {
+        id: "job-scoped",
+        status: "QUEUED",
+        payload: { perCategory: 40, category: "pcba" },
+        runAfter: new Date("2026-09-01T00:00:00.000Z"),
+        lastError: null,
+      },
+      {
+        id: "job-progressed",
+        status: "QUEUED",
+        payload: { perCategory: 40, remaining: { pcba: 30, "molded-foam": 0 } },
+        runAfter: new Date("2026-09-01T00:00:00.000Z"),
+        lastError: null,
+      },
+    ],
+  });
+  assert.deepEqual(
+    scopedStatus.queued[0]!.remainingByCategory,
+    { pcba: 40 },
+    "a category scoped job owes nothing outside its own category",
+  );
+  assert.deepEqual(
+    scopedStatus.queued[1]!.remainingByCategory,
+    { pcba: 30, "molded-foam": 0 },
+    "counts written by an earlier slice win, including a finished category",
+  );
 
   console.log("procurement sourcing command contract passed");
 }

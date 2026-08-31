@@ -11,7 +11,7 @@ import {
   MAX_DISCOVERY_CALL_MS,
   runProcurementSupplierSourcingWave,
   SOURCING_WAVE_MAX_TARGET,
-  SupplierSourcingError,
+  supplierSourcingErrorCode,
   type SourcingWaveResult,
 } from "@/lib/procurement-supplier-sourcing";
 import {
@@ -84,6 +84,9 @@ export type SourcingCommandCategoryOutcome = {
   wave: SourcingWaveResult | null;
   send: BulkRfqRunResult | null;
   error: string | null;
+  // Whether the failure is worth another slice. A missing request or a category
+  // the engine does not support will fail the same way forever.
+  errorRetryable: boolean;
 };
 
 export type SourcingCommandResult = {
@@ -92,6 +95,9 @@ export type SourcingCommandResult = {
   categories: SourcingCommandCategoryOutcome[];
   added: number;
   sent: number;
+  // Categories the budget could not reach, so the continuation slice knows who
+  // is still owed a turn.
+  skipped: SupplierSourcingCategoryKey[];
 };
 
 export type SourcingCommandPlanEntry = {
@@ -196,6 +202,43 @@ function readStartRounds(value: unknown): Partial<Record<SupplierSourcingCategor
   return rounds;
 }
 
+function readCategoryCounts(value: unknown): Partial<Record<SupplierSourcingCategoryKey, number>> {
+  const counts: Partial<Record<SupplierSourcingCategoryKey, number>> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return counts;
+  const record = value as Record<string, unknown>;
+  for (const key of ["pcba", "molded-foam"] as const) {
+    const count = record[key];
+    if (typeof count === "number" && Number.isFinite(count) && count >= 0) {
+      counts[key] = Math.trunc(count);
+    }
+  }
+  return counts;
+}
+
+/**
+ * What a queued job still owes each category. Counts written by an earlier slice
+ * win, including an explicit zero for a category that is finished, and any
+ * category the job will still source falls back to the job target.
+ */
+function queuedRemainingByCategory(
+  payload: Record<string, unknown>,
+  planned: readonly SupplierSourcingCategoryKey[],
+): Partial<Record<SupplierSourcingCategoryKey, number>> {
+  const counts = readCategoryCounts(payload.remaining);
+  const target = typeof payload.perCategory === "number" && payload.perCategory > 0
+    ? Math.trunc(payload.perCategory)
+    : null;
+  if (target === null) return counts;
+  const onlyCategory = payload.category === "pcba" || payload.category === "molded-foam"
+    ? payload.category
+    : null;
+  for (const category of planned) {
+    if (onlyCategory && category !== onlyCategory) continue;
+    if (counts[category] === undefined) counts[category] = target;
+  }
+  return counts;
+}
+
 export async function runQueuedSourcingWaveJob(args: {
   officeId: string;
   // The running job holds the wave dedupe key, so its own continuation has to
@@ -221,12 +264,21 @@ export async function runQueuedSourcingWaveJob(args: {
     ? payload.category
     : null;
   const startRounds = readStartRounds(payload.startRounds);
+  const firstCategory = payload.firstCategory === "pcba" || payload.firstCategory === "molded-foam"
+    ? payload.firstCategory
+    : null;
+  // Each category owns its own count. A slice usually runs one category, so a
+  // single shared remainder would let the category that ran spend the other
+  // category's suppliers and both would stop around half the target.
+  const owedByCategory = readCategoryCounts(payload.remaining);
   const result = await (args.dependencies?.run ?? runSourcingCommand)({
     customerId,
     workspaceId,
     onlyCategory,
     budgetMs: SOURCING_COMMAND_SLICE_BUDGET_MS,
     startRounds,
+    firstCategory,
+    categoryTargets: owedByCategory,
     intent: {
       perCategory: slice,
       send: payload.send === true,
@@ -235,10 +287,11 @@ export async function runQueuedSourcingWaveJob(args: {
     confirmed: payload.confirmed === true,
   });
   // Only keep going while the last slice found qualified suppliers, ran out of
-  // time before it could, or still has unsearched phrases left. A category whose
-  // curated phrases are spent reports discovery exhausted and the chain ends, so
-  // nothing re-queues forever.
-  const stillFinding = result.categories.some(
+  // time before it could, still has unsearched phrases left, or never got its
+  // turn at the budget. A category whose curated phrases are spent reports
+  // discovery exhausted and the chain ends, so nothing re-queues forever.
+  const skipped = result.skipped ?? [];
+  const stillFinding = skipped.length > 0 || result.categories.some(
     (entry) => (entry.wave?.added ?? 0) > 0
       || entry.wave?.timedOut === true
       || (entry.wave ? !entry.wave.discoveryExhausted : false),
@@ -254,15 +307,42 @@ export async function runQueuedSourcingWaveJob(args: {
   }
   // Credit the progress actually made, not the slice size, because a slice that
   // ran out of time added fewer suppliers than it asked for and the rest of the
-  // count is still owed. Counting at least one keeps the chain finite.
-  const progressed = Math.max(1, ...result.categories.map((entry) => entry.wave?.added ?? 0));
-  const left = remaining - Math.min(slice, progressed);
-  // A slice where every discovery provider threw made no progress and did not
-  // run out of time, so treat it as a transient outage: retry the same count a
-  // few times on a delay instead of abandoning the wave, and stop retrying once
-  // the attempts are spent so the chain stays finite.
+  // count is still owed. Counting at least one keeps the chain finite, and a
+  // category whose curated phrases are spent is owed nothing more.
+  const nextOwed: Partial<Record<SupplierSourcingCategoryKey, number>> = { ...owedByCategory };
+  for (const entry of result.categories) {
+    if (entry.category !== "pcba" && entry.category !== "molded-foam") continue;
+    const owed = nextOwed[entry.category] ?? remaining;
+    // A category whose sourcing threw never searched, so it is charged nothing.
+    const progressed = entry.wave
+      ? Math.min(slice, Math.max(1, entry.wave.added))
+      : 0;
+    // A category that ran out of curated phrases is owed nothing more, but a
+    // barren round where the providers themselves failed is an outage, not an
+    // exhausted category, so its count survives for the retry.
+    const exhausted = entry.wave
+      ? entry.wave.discoveryExhausted
+        && !entry.wave.timedOut
+        && entry.wave.added === 0
+        && (entry.wave.providerFailures?.length ?? 0) === 0
+      : false;
+    // A category that failed the same way forever is owed nothing either, so a
+    // wave kept alive by its other category stops re-running the failure.
+    const permanent = !entry.wave && !entry.errorRetryable;
+    nextOwed[entry.category] = exhausted || permanent ? 0 : Math.max(0, owed - progressed);
+  }
+  for (const category of skipped) {
+    nextOwed[category] = nextOwed[category] ?? remaining;
+  }
+  const left = Math.max(0, ...Object.values(nextOwed));
+  // A slice where every discovery provider threw, or where a category threw
+  // before it could search at all, made no progress and did not run out of
+  // time, so treat it as a transient outage: retry the same count a few times on
+  // a delay instead of abandoning the wave, and stop retrying once the attempts
+  // are spent so the chain stays finite.
   const outage = !stillFinding
-    && result.categories.some((entry) => (entry.wave?.providerFailures?.length ?? 0) > 0)
+    && result.categories.some((entry) => (entry.wave?.providerFailures?.length ?? 0) > 0
+      || (!entry.wave && entry.errorRetryable))
     && result.categories.every((entry) => (entry.wave?.added ?? 0) === 0);
   const retriesUsed = typeof payload.providerRetries === "number" ? Math.trunc(payload.providerRetries) : 0;
   const retryOutage = outage && retriesUsed < SOURCING_OUTAGE_RETRIES;
@@ -279,7 +359,16 @@ export async function runQueuedSourcingWaveJob(args: {
           providerRetries: retriesUsed + 1,
           startRounds,
         }
-        : { ...payload, perCategory: left, providerRetries: 0, startRounds: nextStartRounds },
+        : {
+          ...payload,
+          perCategory: left,
+          remaining: nextOwed,
+          providerRetries: 0,
+          startRounds: nextStartRounds,
+          // Hand the budget to the category that lost it, otherwise the plan
+          // order alone decides and the second category is never sourced.
+          firstCategory: skipped.at(0) ?? null,
+        },
       runAfter: retryOutage ? new Date(Date.now() + SOURCING_OUTAGE_RETRY_DELAY_MS) : undefined,
       dedupeKey: typeof payload.workspaceId === "string"
         ? `procurement-sourcing-wave:${payload.workspaceId}${onlyCategory ? `:${onlyCategory}` : ""}`
@@ -304,6 +393,14 @@ export async function runSourcingCommand(args: {
   // continuation slice searches something new instead of the first phrases
   // again.
   startRounds?: Readonly<Partial<Record<SupplierSourcingCategoryKey, number>>> | null;
+  // Which category takes the budget first. A slice hands the whole budget to
+  // one category, so without rotation the same category would always run and
+  // the other would never be sourced at all.
+  firstCategory?: SupplierSourcingCategoryKey | null;
+  // How many suppliers each category is still owed. A category owed nothing is
+  // skipped entirely, and a category owed less than the slice is capped, so
+  // alternating slices cannot spend one category's count on the other.
+  categoryTargets?: Readonly<Partial<Record<SupplierSourcingCategoryKey, number>>> | null;
   // Sending supplier mail needs the same explicit confirmation the operator
   // send commands require, whatever asked for the run.
   confirmed: boolean;
@@ -317,9 +414,19 @@ export async function runSourcingCommand(args: {
     customerId: args.customerId,
     workspaceId: args.workspaceId ?? null,
   });
-  const plan = args.onlyCategory
+  const scoped = args.onlyCategory
     ? fullPlan.filter((entry) => entry.category === args.onlyCategory)
     : fullPlan;
+  const categoryTarget = (category: SupplierSourcingCategoryKey) => Math.min(
+    args.intent.perCategory,
+    args.categoryTargets?.[category] ?? args.intent.perCategory,
+  );
+  const owed = scoped.filter((entry) => categoryTarget(entry.category) > 0);
+  // Rotate so the category that lost the previous budget goes first.
+  const pivot = args.firstCategory
+    ? owed.findIndex((entry) => entry.category === args.firstCategory)
+    : -1;
+  const plan = pivot > 0 ? [...owed.slice(pivot), ...owed.slice(0, pivot)] : owed;
   const sourcing = args.dependencies?.sourcing ?? runProcurementSupplierSourcingWave;
   const rfq = args.dependencies?.rfq ?? runProcurementBulkRfq;
   const result: SourcingCommandResult = {
@@ -328,6 +435,7 @@ export async function runSourcingCommand(args: {
     categories: [],
     added: 0,
     sent: 0,
+    skipped: [],
   };
   const startedAt = Date.now();
   const budget = typeof args.budgetMs === "number" && args.budgetMs > 0 ? args.budgetMs : null;
@@ -340,7 +448,10 @@ export async function runSourcingCommand(args: {
     // discovery cap, and the wave added nobody. The first category always runs,
     // so a small budget still does the work it can.
     const categoryDeadline = budget ? startedAt + budget : null;
-    if (ran && categoryDeadline && categoryDeadline - Date.now() < MAX_DISCOVERY_CALL_MS) break;
+    if (ran && categoryDeadline && categoryDeadline - Date.now() < MAX_DISCOVERY_CALL_MS) {
+      result.skipped = plan.slice(plan.indexOf(entry)).map((pending) => pending.category);
+      break;
+    }
     ran += 1;
     const outcome: SourcingCommandCategoryOutcome = {
       category: entry.category,
@@ -349,19 +460,25 @@ export async function runSourcingCommand(args: {
       wave: null,
       send: null,
       error: null,
+      errorRetryable: false,
     };
     try {
       outcome.wave = await sourcing({
         orderId: entry.orderId,
-        target: args.intent.perCategory,
+        target: categoryTarget(entry.category),
         deadlineAt: categoryDeadline,
         startRound: args.startRounds?.[entry.category] ?? 0,
       });
       result.added += outcome.wave.added;
     } catch (error) {
-      outcome.error = error instanceof SupplierSourcingError
+      const code = supplierSourcingErrorCode(error);
+      outcome.error = code && error instanceof Error
         ? error.message
         : "The supplier wave failed for this request.";
+      // A missing request or an unsupported category fails the same way forever,
+      // so only an unavailable provider or an unexpected error earns another
+      // slice.
+      outcome.errorRetryable = code === null || code === "discovery_unavailable";
       result.categories.push(outcome);
       continue;
     }
@@ -473,6 +590,8 @@ export type SourcingCommandStatus = {
     status: string;
     remainingPerCategory: number | null;
     startRounds: Partial<Record<SupplierSourcingCategoryKey, number>>;
+    remainingByCategory: Partial<Record<SupplierSourcingCategoryKey, number>>;
+    firstCategory: SupplierSourcingCategoryKey | null;
     providerRetries: number;
     runAfter: string;
     lastError: string | null;
@@ -534,6 +653,13 @@ export async function sourcingCommandStatus(args: {
         status: job.status,
         remainingPerCategory: typeof payload.perCategory === "number" ? payload.perCategory : null,
         startRounds: readStartRounds(payload.startRounds),
+        // A job queued for the first time carries only `perCategory`, so fill
+        // the categories it will actually source from that target, otherwise the
+        // status reads as no work owed while the whole wave is still ahead.
+        remainingByCategory: queuedRemainingByCategory(payload, categories.map((entry) => entry.category)),
+        firstCategory: payload.firstCategory === "pcba" || payload.firstCategory === "molded-foam"
+          ? payload.firstCategory
+          : null,
         providerRetries: typeof payload.providerRetries === "number" ? payload.providerRetries : 0,
         runAfter: job.runAfter.toISOString(),
         lastError: job.lastError,

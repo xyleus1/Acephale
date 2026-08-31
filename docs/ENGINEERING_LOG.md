@@ -1,5 +1,33 @@
 # Engineering Log
 
+## 2026-08-31: A sourcing wave starved its second category
+
+- Production symptom: across nine drains of the 100 per category wave, molded
+  foam grew from 126 to 136 suppliers while PCBA stayed frozen at 181, and the
+  queue payload only ever carried a `molded-foam` search cursor.
+- Cause: a slice hands the whole budget to one category because a discovery call
+  needs room to answer, and a later category that no longer fits is left to the
+  continuation slice. The continuation rebuilt the same plan order, so the first
+  category took the budget again and the second one never ran.
+- Fix: `runSourcingCommand` reports the categories it could not reach as
+  `skipped` and accepts `firstCategory`, which rotates the plan. The queued job
+  hands the next slice the starved category and keeps the chain alive while any
+  category is still owed a turn, so the two categories alternate.
+- Rotation also forced per-category accounting: the payload used to carry one
+  shared `perCategory` remainder, and with one category per slice the category
+  that ran spent the other one's count, so both would stop near half the target.
+  The payload now carries `remaining` per category, only the category that ran
+  is charged, an exhausted category is zeroed, and a category owed less than the
+  slice is capped instead of overshooting.
+- A category that threw before searching keeps its whole count and is retried on
+  a delay, but only when the failure can succeed later. `supplierSourcingErrorCode`
+  reads the reason by shape, so `discovery_unavailable` and unexpected errors are
+  retryable while `not_found` and `unsupported_category` end the wave instead of
+  burning three futile delayed slices.
+- Verification: `npm run test:procurement-sourcing-command`,
+  `npm run test:procurement-sourcing-wave`, `npx tsc --noEmit` (only the
+  pre-existing `dashboard/admin/page.tsx` route typing error).
+
 ## 2026-08-31: Context chat threads, clarifying questions, request drawer
 
 - Added chat threads to the company context without a schema change: threads

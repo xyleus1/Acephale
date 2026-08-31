@@ -112,14 +112,29 @@ export type SourcingWaveResult = {
   providerFailures: string[];
 };
 
+export type SupplierSourcingErrorCode = "not_found" | "unsupported_category" | "discovery_unavailable";
+
 export class SupplierSourcingError extends Error {
   constructor(
     message: string,
-    readonly code: "not_found" | "unsupported_category" | "discovery_unavailable",
+    readonly code: SupplierSourcingErrorCode,
   ) {
     super(message);
     this.name = "SupplierSourcingError";
   }
+}
+
+// Reads the failure reason off a sourcing error by shape rather than by class,
+// so a caller loaded through a different module instance still classifies the
+// failure instead of treating it as an unexpected one.
+export function supplierSourcingErrorCode(error: unknown): SupplierSourcingErrorCode | null {
+  if (!(error instanceof Error) || error.name !== "SupplierSourcingError") return null;
+  if (!("code" in error)) return null;
+  const { code } = error;
+  if (code === "not_found" || code === "unsupported_category" || code === "discovery_unavailable") {
+    return code;
+  }
+  return null;
 }
 
 type ExistingVendorRow = {
