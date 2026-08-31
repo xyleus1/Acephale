@@ -9,6 +9,7 @@ import {
   SOURCING_COMMAND_CONFIRMATION,
   SOURCING_COMMAND_MAX_PER_CATEGORY,
   SOURCING_COMMAND_SLICE_BUDGET_MS,
+  sourcingCommandStatus,
 } from "@/lib/procurement-sourcing-command";
 import { type SupplierSourcingCategoryKey } from "@/lib/supply-os/supplier-sourcing-category";
 
@@ -57,6 +58,15 @@ export async function GET(req: NextRequest) {
   }
   const workspaceId = req.nextUrl.searchParams.get("workspaceId")?.trim() || null;
   const instruction = req.nextUrl.searchParams.get("instruction");
+  // A queued wave runs for an hour or more, so the operator can read where it
+  // stands instead of inferring progress from queue tallies.
+  if (req.nextUrl.searchParams.get("status") === "1") {
+    try {
+      return NextResponse.json(await sourcingCommandStatus({ customerId, workspaceId }));
+    } catch {
+      return NextResponse.json({ error: "The sourcing status could not be read." }, { status: 500 });
+    }
+  }
   try {
     return NextResponse.json({
       intent: instruction === null ? null : parseSourcingCommand(instruction),

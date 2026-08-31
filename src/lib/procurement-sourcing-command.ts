@@ -1,6 +1,7 @@
 import "server-only";
 
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { prisma } from "@/lib/prisma";
 import {
   BULK_RFQ_MAX_PER_RUN,
   runProcurementBulkRfq,
@@ -13,7 +14,11 @@ import {
   SupplierSourcingError,
   type SourcingWaveResult,
 } from "@/lib/procurement-supplier-sourcing";
-import { listProcurementRequests } from "@/lib/procurement-workflow";
+import {
+  listProcurementRequests,
+  procurementOfficeIdFromServerMetadata,
+  procurementWorkflowDatabase,
+} from "@/lib/procurement-workflow";
 import {
   classifySupplierSourcingCategory,
   type SupplierSourcingCategoryKey,
@@ -377,4 +382,141 @@ export async function runSourcingCommand(args: {
     result.categories.push(outcome);
   }
   return result;
+}
+
+/**
+ * The workflow write-back that stamps `last_email_message_id` is best effort,
+ * because the deployed workflow role cannot always update `order_vendors`, so a
+ * send that really happened can leave no workflow receipt. The local send
+ * reservations are the authoritative record, so a supplier counts as contacted
+ * when either store says so, and never twice.
+ */
+export function countContactedSuppliers(
+  vendors: ReadonlyArray<{ vendorId: string; lastEmailMessageId: string | null }>,
+  locallySentVendorIds: ReadonlySet<string>,
+) {
+  return vendors.filter(
+    (vendor) => Boolean(vendor.lastEmailMessageId) || locallySentVendorIds.has(vendor.vendorId),
+  ).length;
+}
+
+async function supplierContactCounts(args: { orderId: string; officeId: string }) {
+  const rows = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{
+    vendorId: string;
+    lastEmailMessageId: string | null;
+  }>>(`
+    SELECT
+      order_vendors.id AS "vendorId",
+      order_vendors.last_email_message_id AS "lastEmailMessageId"
+    FROM order_vendors
+    WHERE order_vendors.order_id = $1::uuid
+  `, args.orderId);
+  const reservations = await prisma.emailSenderReservation.findMany({
+    where: {
+      officeId: args.officeId,
+      status: { in: ["RESERVED", "RECORDED"] },
+      idempotencyKey: { startsWith: `procurement-bulk-rfq:${args.orderId}:` },
+    },
+    select: { idempotencyKey: true },
+  });
+  const locallySent = new Set(
+    reservations
+      .map((entry) => entry.idempotencyKey.split(":").at(-1))
+      .filter((vendorId): vendorId is string => Boolean(vendorId)),
+  );
+  return { suppliers: rows.length, contacted: countContactedSuppliers(rows, locallySent) };
+}
+
+function queuedSourcingWaveJobs(args: { officeId: string; workspaceId: string }) {
+  return prisma.backgroundJob.findMany({
+    where: {
+      officeId: args.officeId,
+      type: "PROCUREMENT_SOURCING_WAVE",
+      status: { in: ["QUEUED", "RUNNING"] },
+      dedupeKey: { startsWith: `procurement-sourcing-wave:${args.workspaceId}` },
+    },
+    orderBy: { runAfter: "asc" },
+    take: 10,
+    select: { id: true, status: true, payload: true, runAfter: true, lastError: true },
+  });
+}
+
+export type SourcingCommandStatusCategory = SourcingCommandPlanEntry & {
+  suppliers: number;
+  contacted: number;
+  uncontacted: number;
+};
+
+export type SourcingCommandStatus = {
+  categories: SourcingCommandStatusCategory[];
+  queued: Array<{
+    jobId: string;
+    status: string;
+    remainingPerCategory: number | null;
+    startRounds: Partial<Record<SupplierSourcingCategoryKey, number>>;
+    providerRetries: number;
+    runAfter: string;
+    lastError: string | null;
+  }>;
+};
+
+/**
+ * A queued wave runs in slices for an hour or more, so the operator needs the
+ * standing counts instead of a per-slice queue tally: how many suppliers each
+ * category holds, how many of them were mailed, and whether a continuation is
+ * still owed.
+ */
+export async function sourcingCommandStatus(args: {
+  customerId: string;
+  workspaceId?: string | null;
+  officeId?: string | null;
+  plan?: typeof planSourcingCommand;
+  counts?: (args: { orderId: string; officeId: string }) => Promise<{ suppliers: number; contacted: number }>;
+  jobs?: (args: { officeId: string; workspaceId: string }) => Promise<Array<{
+    id: string;
+    status: string;
+    payload: unknown;
+    runAfter: Date;
+    lastError: string | null;
+  }>>;
+}): Promise<SourcingCommandStatus> {
+  const plan = await (args.plan ?? planSourcingCommand)({
+    customerId: args.customerId,
+    workspaceId: args.workspaceId ?? null,
+  });
+  // Both reads stay inside the office that owns this customer, so an operator
+  // secret cannot surface another tenant's suppliers or queued work.
+  const officeId = args.officeId ?? procurementOfficeIdFromServerMetadata(args.customerId);
+  const counts = args.counts ?? supplierContactCounts;
+  const categories: SourcingCommandStatusCategory[] = [];
+  for (const entry of plan) {
+    const { suppliers, contacted } = await counts({ orderId: entry.orderId, officeId });
+    categories.push({
+      ...entry,
+      suppliers,
+      contacted,
+      uncontacted: Math.max(0, suppliers - contacted),
+    });
+  }
+  const workspaceId = args.workspaceId?.trim() || null;
+  const jobs = workspaceId
+    ? await (args.jobs ?? queuedSourcingWaveJobs)({ officeId, workspaceId })
+    : [];
+  return {
+    categories,
+    queued: jobs.map((job) => {
+      const payload = job.payload && typeof job.payload === "object" && !Array.isArray(job.payload)
+        ? job.payload as Record<string, unknown>
+        : {};
+      return {
+        jobId: job.id,
+        status: job.status,
+        remainingPerCategory: typeof payload.perCategory === "number" ? payload.perCategory : null,
+        startRounds: readStartRounds(payload.startRounds),
+        providerRetries: typeof payload.providerRetries === "number" ? payload.providerRetries : 0,
+        runAfter: job.runAfter.toISOString(),
+        lastError: job.lastError,
+      };
+    }),
+  };
 }

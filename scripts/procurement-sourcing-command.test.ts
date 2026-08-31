@@ -504,6 +504,62 @@ async function main() {
     "the campaign is restricted to the vendors the wave added",
   );
 
+  // The standing status is what the operator reads while a queued wave grinds
+  // through its slices, so it has to report real supplier counts and the work
+  // the queue still owes.
+  const { sourcingCommandStatus, countContactedSuppliers } =
+    await import("../src/lib/procurement-sourcing-command");
+
+  // The workflow write back is best effort, so a send whose only receipt is the
+  // local reservation still counts, and a supplier in both stores counts once.
+  assert.equal(
+    countContactedSuppliers(
+      [
+        { vendorId: "vendor-1", lastEmailMessageId: "<a@derya>" },
+        { vendorId: "vendor-2", lastEmailMessageId: null },
+        { vendorId: "vendor-3", lastEmailMessageId: "<c@derya>" },
+        { vendorId: "vendor-4", lastEmailMessageId: null },
+      ],
+      new Set(["vendor-2", "vendor-3"]),
+    ),
+    3,
+    "a locally recorded send counts and a supplier in both stores counts once",
+  );
+
+  const status = await sourcingCommandStatus({
+    customerId: "customer-1",
+    workspaceId: "workspace-1",
+    plan: (async () => [
+      { orderId: "order-pcba", material: "PCBA", category: "pcba" as const },
+      { orderId: "order-foam", material: "Custom memory foam parts", category: "molded-foam" as const },
+    ]) as never,
+    officeId: "office-1",
+    counts: async ({ orderId, officeId }) => {
+      assert.equal(officeId, "office-1", "supplier counts stay inside the owning office");
+      return orderId === "order-pcba"
+        ? { suppliers: 214, contacted: 210 }
+        : { suppliers: 118, contacted: 118 };
+    },
+    jobs: async ({ officeId }) => {
+      assert.equal(officeId, "office-1", "queued work is read inside the owning office only");
+      return [{
+        id: "job-next",
+        status: "QUEUED",
+        payload: { perCategory: 40, startRounds: { pcba: 12 }, providerRetries: 0 },
+        runAfter: new Date("2026-09-01T00:00:00.000Z"),
+        lastError: null,
+      }];
+    },
+  });
+  assert.deepEqual(
+    status.categories.map((entry) => [entry.category, entry.suppliers, entry.contacted, entry.uncontacted]),
+    [["pcba", 214, 210, 4], ["molded-foam", 118, 118, 0]],
+    "each category reports how many suppliers it holds and how many were mailed",
+  );
+  assert.equal(status.queued.length, 1, "a continuation still owed is visible");
+  assert.equal(status.queued[0]!.remainingPerCategory, 40, "the remaining count is reported");
+  assert.deepEqual(status.queued[0]!.startRounds, { pcba: 12 }, "the search phrase cursor is reported");
+
   console.log("procurement sourcing command contract passed");
 }
 
