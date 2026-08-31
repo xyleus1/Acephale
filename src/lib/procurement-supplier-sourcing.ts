@@ -124,6 +124,17 @@ export class SupplierSourcingError extends Error {
   }
 }
 
+/**
+ * A short, quotable reason for an unexpected failure, for the audit trail and
+ * for the operator command. Database drivers put table and column names in
+ * their messages, so the text is trimmed to one line and clipped, and nothing
+ * else about the error is repeated.
+ */
+export function failureReason(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return stripEmDashes(message).replace(/\s+/g, " ").trim().slice(0, 200) || "no reason was reported";
+}
+
 // Reads the failure reason off a sourcing error by shape rather than by class,
 // so a caller loaded through a different module instance still classifies the
 // failure instead of treating it as an unexpected one.
@@ -512,15 +523,28 @@ export async function runProcurementSupplierSourcingWave(input: {
         result.rejected.push({ domain: site.domain, reason: "no published address passed deliverability screening" });
         continue;
       }
-      const vendorId = await insertVendor({
-        order,
-        category,
-        site,
-        contactEmail: accepted.email,
-        verification: accepted.verification,
-        matched: qualification.matched,
-        discoveredVia: via,
-      });
+      // A single row that will not save, a name the column cannot hold or a
+      // pool that has no connection left, used to throw away the whole wave
+      // including the suppliers it had already qualified, so the failure is
+      // recorded against that supplier and the wave keeps going.
+      let vendorId: string | null;
+      try {
+        vendorId = await insertVendor({
+          order,
+          category,
+          site,
+          contactEmail: accepted.email,
+          verification: accepted.verification,
+          matched: qualification.matched,
+          discoveredVia: via,
+        });
+      } catch (error) {
+        result.rejected.push({
+          domain: site.domain,
+          reason: `the supplier could not be saved: ${failureReason(error)}`,
+        });
+        continue;
+      }
       if (!vendorId) {
         result.rejected.push({ domain: site.domain, reason: "the supplier is already on this request" });
         continue;

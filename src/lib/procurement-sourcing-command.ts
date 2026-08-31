@@ -11,6 +11,7 @@ import {
   MAX_DISCOVERY_CALL_MS,
   runProcurementSupplierSourcingWave,
   SOURCING_WAVE_MAX_TARGET,
+  failureReason,
   supplierSourcingErrorCode,
   type SourcingWaveResult,
 } from "@/lib/procurement-supplier-sourcing";
@@ -87,6 +88,9 @@ export type SourcingCommandCategoryOutcome = {
   // Whether the failure is worth another slice. A missing request or a category
   // the engine does not support will fail the same way forever.
   errorRetryable: boolean;
+  // Why an unexpected failure happened, for the operator reading the command
+  // result. Without it a wave that threw looked identical whatever broke.
+  errorReason: string | null;
 };
 
 export type SourcingCommandResult = {
@@ -345,6 +349,12 @@ export async function runQueuedSourcingWaveJob(args: {
       || (!entry.wave && entry.errorRetryable))
     && result.categories.every((entry) => (entry.wave?.added ?? 0) === 0);
   const retriesUsed = typeof payload.providerRetries === "number" ? Math.trunc(payload.providerRetries) : 0;
+  // Carry why the last slice failed, because a queued wave runs unattended for
+  // an hour and the operator only ever sees its status, not the slice result.
+  const failed = result.categories.find((entry) => entry.error);
+  const lastFailure = failed
+    ? `${failed.category}: ${failed.errorReason ?? failed.error}`.slice(0, 300)
+    : null;
   const retryOutage = outage && retriesUsed < SOURCING_OUTAGE_RETRIES;
   if (left > 0 && (stillFinding || retryOutage)) {
     await (args.dependencies?.enqueue ?? enqueueBackgroundJob)({
@@ -358,10 +368,12 @@ export async function runQueuedSourcingWaveJob(args: {
           perCategory: remaining,
           providerRetries: retriesUsed + 1,
           startRounds,
+          lastFailure,
         }
         : {
           ...payload,
           perCategory: left,
+          lastFailure,
           remaining: nextOwed,
           providerRetries: 0,
           startRounds: nextStartRounds,
@@ -461,6 +473,7 @@ export async function runSourcingCommand(args: {
       send: null,
       error: null,
       errorRetryable: false,
+      errorReason: null,
     };
     try {
       outcome.wave = await sourcing({
@@ -475,6 +488,12 @@ export async function runSourcingCommand(args: {
       outcome.error = code && error instanceof Error
         ? error.message
         : "The supplier wave failed for this request.";
+      outcome.errorReason = code ? null : failureReason(error);
+      console.error("procurement sourcing wave failed", {
+        orderId: entry.orderId,
+        category: entry.category,
+        reason: outcome.errorReason ?? code,
+      });
       // A missing request or an unsupported category fails the same way forever,
       // so only an unavailable provider or an unexpected error earns another
       // slice.
@@ -595,6 +614,9 @@ export type SourcingCommandStatus = {
     providerRetries: number;
     runAfter: string;
     lastError: string | null;
+    // Why the previous slice failed, if it did. A slice failure is handled
+    // inside the job, so it never reaches `lastError`.
+    lastFailure: string | null;
   }>;
 };
 
@@ -663,6 +685,7 @@ export async function sourcingCommandStatus(args: {
         providerRetries: typeof payload.providerRetries === "number" ? payload.providerRetries : 0,
         runAfter: job.runAfter.toISOString(),
         lastError: job.lastError,
+        lastFailure: typeof payload.lastFailure === "string" ? payload.lastFailure : null,
       };
     }),
   };

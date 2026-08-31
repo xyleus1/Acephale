@@ -149,6 +149,30 @@ async function main() {
     "the failing provider is recorded for the audit trail",
   );
 
+  // A row the database refuses used to throw away the whole wave, including the
+  // suppliers it had already qualified and the RFQ sends they had earned, so the
+  // failure belongs to that supplier and the wave keeps its result.
+  inserted.length = 0;
+  const unsaved = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 10,
+    proposers: proposers as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: (async () => {
+      throw new Error("Timed out fetching a new connection from the connection pool");
+    }) as never,
+  });
+  assert.equal(unsaved.added, 0, "a supplier that cannot be saved is not counted");
+  assert.ok(
+    unsaved.rejected.some((entry) =>
+      entry.domain === "polymerlabs.example"
+      && /could not be saved: Timed out fetching/.test(entry.reason)),
+    "the wave survives the write failure and records why the supplier was lost",
+  );
+
   // A wave stops on its time budget instead of being killed by the platform.
   inserted.length = 0;
   const expired = await runProcurementSupplierSourcingWave({

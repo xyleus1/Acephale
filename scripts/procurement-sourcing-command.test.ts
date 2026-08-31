@@ -308,6 +308,31 @@ async function main() {
     return failed.categories[0]!.errorRetryable;
   };
   assert.equal(await failWith("discovery_unavailable"), true, "an unavailable provider is retryable");
+  // An unexpected failure keeps its reason, because the operator only sees the
+  // command result and every wave failure otherwise read the same.
+  const unexpected = await runSourcingCommand({
+    customerId: "customer-1",
+    onlyCategory: "pcba",
+    intent: { perCategory: 10, send: false, scope: "each-category" },
+    confirmed: false,
+    dependencies: {
+      plan: async () => plan,
+      sourcing: (async () => {
+        throw new Error("Timed out fetching a new connection from the connection pool");
+      }) as never,
+      rfq,
+    },
+  });
+  assert.match(
+    unexpected.categories[0]!.errorReason ?? "",
+    /Timed out fetching a new connection/,
+    "an unexpected wave failure reports why it failed",
+  );
+  assert.equal(
+    unexpected.categories[0]!.error,
+    "The supplier wave failed for this request.",
+    "the operator message stays the same, the reason is separate",
+  );
   assert.equal(await failWith("not_found"), false, "a missing request fails the same way forever");
   assert.equal(await failWith("unsupported_category"), false, "an unsupported category is permanent");
 
@@ -628,6 +653,11 @@ async function main() {
     enqueued[0]!.remaining,
     { pcba: 0, "molded-foam": 21 },
     "a permanently failed category leaves the count instead of being retried every slice",
+  );
+  assert.match(
+    String(enqueued[0]!.lastFailure ?? ""),
+    /^pcba: /,
+    "the continuation carries why the last slice failed, since status is all the operator sees",
   );
 
   // A scoped job whose only category throws still owes its whole count, so the

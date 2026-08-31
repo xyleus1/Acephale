@@ -8029,3 +8029,15 @@ Use this file for chronological implementation notes that future agents should s
   invocation covers the RFQ sends and the continuation enqueue.
 - `runDueBackgroundJobs` now reclaims jobs stuck `RUNNING` for 15 minutes, up to
   five attempts, so a job killed mid invocation stops holding its dedupe key.
+
+### 2026-08-31 - A sourcing wave survives a supplier that will not save
+
+- `insertSourcedVendor` was the one uncaught call inside the wave, so a single
+  rejected row, for example an exhausted Prisma connection pool, threw away the
+  whole slice including the suppliers already qualified and the RFQ sends they
+  had earned. The write now fails only that supplier, recorded as a rejection
+  with its reason.
+- An unexpected wave failure keeps a short reason. `failureReason` clips it to
+  one line, the operator command reports it as `errorReason` next to the same
+  opaque message, and the queued continuation carries it as `lastFailure` so the
+  status endpoint explains an unattended wave that keeps failing.
