@@ -39,6 +39,17 @@ export type CompanyContextCitation = {
   label: string;
 };
 
+export type CompanyContextQuestion = {
+  question: string;
+  kind: "yes_no" | "options";
+  options: string[];
+};
+
+const CHAT_THREAD_KIND = "CHAT_THREAD";
+const MAX_CHAT_THREADS = 100;
+const MAX_QUESTIONS = 6;
+const MAX_QUESTION_OPTIONS = 6;
+
 export class CompanyContextLimitError extends Error {
   constructor(
     message: string,
@@ -76,6 +87,25 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function questionsFromPayload(payload: unknown): CompanyContextQuestion[] | null {
+  if (!isObject(payload) || !Array.isArray(payload.questions)) return null;
+  const questions = payload.questions.flatMap((entry) => {
+    if (!isObject(entry) || typeof entry.question !== "string" || !entry.question.trim()) return [];
+    const kind = entry.kind === "yes_no" ? "yes_no" as const : entry.kind === "options" ? "options" as const : null;
+    if (!kind) return [];
+    const options = Array.isArray(entry.options)
+      ? entry.options.filter((option): option is string => typeof option === "string" && Boolean(option.trim())).slice(0, MAX_QUESTION_OPTIONS)
+      : [];
+    if (kind === "options" && options.length < 2) return [];
+    return [{ question: entry.question.trim().slice(0, 500), kind, options }];
+  }).slice(0, MAX_QUESTIONS);
+  return questions.length ? questions : null;
+}
+
+function threadIdFromPayload(payload: unknown) {
+  return isObject(payload) && typeof payload.threadId === "string" && payload.threadId ? payload.threadId : null;
+}
+
 function citationsFromPayload(payload: unknown) {
   if (!isObject(payload) || !Array.isArray(payload.citations)) return null;
   const citations = payload.citations.flatMap((entry) => {
@@ -104,8 +134,69 @@ function parseMessage(row: {
     role,
     body: row.markdown ?? "",
     citations: citationsFromPayload(row.payload),
+    questions: questionsFromPayload(row.payload),
+    threadId: threadIdFromPayload(row.payload),
     createdAt: row.createdAt,
   };
+}
+
+export function normalizeCompanyContextQuestions(value: unknown): CompanyContextQuestion[] {
+  return questionsFromPayload({ questions: Array.isArray(value) ? value : [] }) ?? [];
+}
+
+export async function requireCompanyContextThread(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  threadId: unknown;
+}) {
+  if (args.threadId === null || args.threadId === undefined || args.threadId === "") return null;
+  if (typeof args.threadId !== "string") {
+    throw new SupplyPersistenceError("The chat thread is invalid.", "invalid_input");
+  }
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "view");
+  const thread = await prisma.companyContext.findFirst({
+    where: {
+      id: args.threadId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: CHAT_THREAD_KIND,
+      ...companyContextVisibilityWhere(args.context),
+    },
+    select: { id: true },
+  });
+  if (!thread) throw new SupplyPersistenceError("The chat thread was not found.", "not_found");
+  return thread.id;
+}
+
+export async function createCompanyContextChatThread(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  title: unknown;
+}) {
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  const title = cleanMarkdown(args.title, 120) || "New chat";
+  const existing = await prisma.companyContext.count({
+    where: {
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: CHAT_THREAD_KIND,
+    },
+  });
+  if (existing >= MAX_CHAT_THREADS) {
+    throw new CompanyContextLimitError(`Companies can keep up to ${MAX_CHAT_THREADS} chats.`, "document_count");
+  }
+  const row = await prisma.companyContext.create({
+    data: {
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: CHAT_THREAD_KIND,
+      name: title,
+      processingState: "READY",
+      ...companyContextActorData(args.context),
+    },
+    select: { id: true, name: true, createdAt: true },
+  });
+  return { id: row.id, title: row.name, createdAt: row.createdAt };
 }
 
 async function contextWorkspace(context: CompanyContextAccess, workspaceId: string, mode: "view" | "edit") {
@@ -263,7 +354,7 @@ export async function loadCompanyContext(context: CompanyContextAccess, workspac
     where: {
       officeId: context.officeId,
       companyId: workspace.companyId,
-      kind: { in: ["DOCUMENT", "MESSAGE"] },
+      kind: { in: ["DOCUMENT", "MESSAGE", CHAT_THREAD_KIND] },
       ...companyContextVisibilityWhere(context),
     },
     select: {
@@ -289,6 +380,11 @@ export async function loadCompanyContext(context: CompanyContextAccess, workspac
 
   return {
     workspace: { id: workspace.id, name: workspace.name },
+    threads: rows.filter((row) => row.kind === CHAT_THREAD_KIND).map((row) => ({
+      id: row.id,
+      title: row.name,
+      createdAt: row.createdAt,
+    })),
     documents: rows.filter((row) => row.kind === "DOCUMENT").reverse().map((row) => ({
       id: row.id,
       itemId: row.itemId,
@@ -631,6 +727,8 @@ export async function appendCompanyContextMessage(args: {
   body: unknown;
   citations?: CompanyContextCitation[];
   itemId?: unknown;
+  threadId?: string | null;
+  questions?: CompanyContextQuestion[];
 }) {
   const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
   const item = await itemScope(
@@ -641,6 +739,7 @@ export async function appendCompanyContextMessage(args: {
   const body = cleanMarkdown(args.body);
   if (!body) throw new SupplyPersistenceError("Message is required.", "invalid_input");
   const citations = args.citations?.slice(0, 20) ?? [];
+  const questions = args.role === "AGENT" ? (args.questions ?? []).slice(0, MAX_QUESTIONS) : [];
   const row = await prisma.companyContext.create({
     data: {
       officeId: args.context.officeId,
@@ -650,7 +749,7 @@ export async function appendCompanyContextMessage(args: {
       name: args.role === "AGENT" ? "Derya reply" : "Operator message",
       markdown: body,
       processingState: "READY",
-      payload: { role: args.role, citations },
+      payload: { role: args.role, citations, threadId: args.threadId ?? null, questions },
       ...companyContextActorData(args.context),
     },
     select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
@@ -664,6 +763,7 @@ export async function appendRateLimitedCustomerContextMessage(args: {
   body: unknown;
   maxMessages: number;
   windowMs: number;
+  threadId?: string | null;
 }) {
   const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
   const body = cleanMarkdown(args.body);
@@ -697,7 +797,7 @@ export async function appendRateLimitedCustomerContextMessage(args: {
         name: "Operator message",
         markdown: body,
         processingState: "READY",
-        payload: { role: "OPERATOR", citations: [] },
+        payload: { role: "OPERATOR", citations: [], threadId: args.threadId ?? null, questions: [] },
         ...companyContextActorData(args.context),
       },
       select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
@@ -706,7 +806,11 @@ export async function appendRateLimitedCustomerContextMessage(args: {
   });
 }
 
-export async function assembleCompanyContextForAgent(context: CompanyContextAccess, workspaceId: string) {
+export async function assembleCompanyContextForAgent(
+  context: CompanyContextAccess,
+  workspaceId: string,
+  options?: { threadId?: string | null },
+) {
   const workspace = await contextWorkspace(context, workspaceId, "view");
   const rows = await prisma.companyContext.findMany({
     where: {
@@ -747,12 +851,15 @@ export async function assembleCompanyContextForAgent(context: CompanyContextAcce
       processedAt: row.createdAt,
     }];
   });
-  const messages = rows.filter((row) => row.kind === "MESSAGE").map(parseMessage).map((message) => ({
-    citationId: `message:${message.id}`,
-    role: message.role,
-    body: message.body,
-    createdAt: message.createdAt,
-  }));
+  const threadFilter = options?.threadId === undefined ? undefined : options.threadId;
+  const messages = rows.filter((row) => row.kind === "MESSAGE").map(parseMessage)
+    .filter((message) => threadFilter === undefined || message.threadId === threadFilter)
+    .map((message) => ({
+      citationId: `message:${message.id}`,
+      role: message.role,
+      body: message.body,
+      createdAt: message.createdAt,
+    }));
   return {
     company: { id: workspace.companyId, name: workspace.name },
     documents,

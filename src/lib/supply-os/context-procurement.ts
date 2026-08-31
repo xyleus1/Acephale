@@ -59,6 +59,7 @@ type StoredContextProcurementAction = {
   requestMessageId: string;
   requestBody: string;
   requestCreatedAt: string;
+  threadId: string | null;
   confirmationStartedAt: string | null;
   order: null | {
     id: string;
@@ -199,6 +200,7 @@ function decodeAction(payload: unknown) {
       !(["PENDING", "CREATING", "CREATED", "DISMISSED"] as unknown[]).includes(status)
     ) return null;
     const confirmationStartedAt = cleanText(value.confirmationStartedAt, 40);
+    const threadId = cleanText(value.threadId, 200) || null;
     const citations = Array.isArray(value.citations) ? value.citations.flatMap((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
       const citation = entry as Record<string, unknown>;
@@ -218,6 +220,7 @@ function decodeAction(payload: unknown) {
       requestMessageId,
       requestBody,
       requestCreatedAt,
+      threadId,
       confirmationStartedAt: confirmationStartedAt && !Number.isNaN(new Date(confirmationStartedAt).valueOf())
         ? confirmationStartedAt
         : null,
@@ -297,6 +300,7 @@ export async function createCompanyContextProcurementActions(args: {
   requestMessageId: string;
   requestBody: string;
   requestCreatedAt: Date;
+  threadId?: string | null;
 }) {
   if (!args.items.length) return [];
   const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
@@ -308,6 +312,7 @@ export async function createCompanyContextProcurementActions(args: {
     requestMessageId: args.requestMessageId,
     requestBody: cleanText(args.requestBody, 4_000),
     requestCreatedAt: args.requestCreatedAt.toISOString(),
+    threadId: args.threadId ?? null,
     confirmationStartedAt: null,
     order: null,
   }));
@@ -510,6 +515,7 @@ export async function confirmCompanyContextProcurementAction(args: {
       requestMessageId: action.requestMessageId,
       requestBody: action.requestBody,
       requestCreatedAt: action.requestCreatedAt,
+      threadId: action.threadId,
       confirmationStartedAt: new Date().toISOString(),
       order: null,
     };
@@ -589,6 +595,7 @@ export async function confirmCompanyContextProcurementAction(args: {
       requestMessageId: action.requestMessageId,
       requestBody: action.requestBody,
       requestCreatedAt: action.requestCreatedAt,
+      threadId: action.threadId,
       confirmationStartedAt: action.confirmationStartedAt,
       order: {
         id: order.orderId,
@@ -660,6 +667,7 @@ export async function dismissCompanyContextProcurementAction(args: {
     requestMessageId: action.requestMessageId,
     requestBody: action.requestBody,
     requestCreatedAt: action.requestCreatedAt,
+    threadId: action.threadId,
     confirmationStartedAt: null,
     order: action.order,
   };

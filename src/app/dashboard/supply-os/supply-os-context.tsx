@@ -7,10 +7,13 @@ import {
   FileImage,
   FileSpreadsheet,
   FileText,
-  Files,
+  ListTodo,
   LoaderCircle,
+  MessageSquarePlus,
+  MessagesSquare,
   Paperclip,
   Search,
+  Sparkles,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,11 +32,25 @@ import {
 import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
 import styles from "./supply-os-context.module.css";
 
+type ContextQuestion = {
+  question: string;
+  kind: "yes_no" | "options";
+  options: string[];
+};
+
+type ContextThread = {
+  id: string;
+  title: string;
+  createdAt: string;
+};
+
 type ContextMessage = {
   id: string;
   role: string;
   body: string;
   citations?: Array<{ id: string; label: string }> | null;
+  questions?: ContextQuestion[] | null;
+  threadId?: string | null;
   createdAt: string;
 };
 
@@ -98,6 +115,7 @@ type ContextProspectingAction = {
 
 type ContextPayload = {
   workspace: { id: string; name: string };
+  threads?: ContextThread[];
   messages: ContextMessage[];
   documents: ContextDocument[];
   procurementActions: ContextProcurementAction[];
@@ -109,6 +127,12 @@ type OptimisticMessage = ContextMessage & { pending: true };
 const ACCEPTED_FILES = ".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip,.stl";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
+const PROCESSING_PHASES = [
+  "Digesting company context",
+  "Checking files and open requests",
+  "Preparing clarifying questions",
+  "Shaping the workflow",
+] as const;
 
 function fileExtension(name: string) {
   const extension = name.split(".").pop()?.toLowerCase();
@@ -219,9 +243,14 @@ export function SupplyOsContext({
   const [message, setMessage] = useState("");
   const [optimisticMessage, setOptimisticMessage] = useState<OptimisticMessage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState(0);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [filesOpen, setFilesOpen] = useState(true);
+  const [drawerTab, setDrawerTab] = useState<"requests" | "files">("requests");
+  const [threadsOpen, setThreadsOpen] = useState(true);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [threadBusy, setThreadBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [, setStaleTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -247,8 +276,23 @@ export function SupplyOsContext({
   }, [load]);
 
   useEffect(() => {
-    if (window.matchMedia("(max-width: 900px)").matches) setFilesOpen(false);
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setFilesOpen(false);
+      setThreadsOpen(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!busy) {
+      setProcessingPhase(0);
+      return;
+    }
+    const timer = window.setInterval(
+      () => setProcessingPhase((phase) => Math.min(phase + 1, PROCESSING_PHASES.length - 1)),
+      2_400,
+    );
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => {
     const deadlines = (data?.prospectingActions ?? [])
@@ -266,11 +310,30 @@ export function SupplyOsContext({
     return () => window.clearTimeout(timer);
   }, [data?.prospectingActions]);
 
+  const threads = useMemo<Array<{ id: string | null; title: string }>>(
+    () => [{ id: null, title: "General" }, ...(data?.threads ?? []).map((thread) => ({ id: thread.id, title: thread.title }))],
+    [data?.threads],
+  );
+
   const messages = useMemo(() => {
-    if (!optimisticMessage) return data?.messages ?? [];
-    const persisted = data?.messages.some((entry) => entry.body === optimisticMessage.body && entry.role === messageRole);
-    return persisted ? data?.messages ?? [] : [...(data?.messages ?? []), optimisticMessage];
-  }, [data?.messages, messageRole, optimisticMessage]);
+    const threadMessages = (data?.messages ?? []).filter((entry) => (entry.threadId ?? null) === activeThreadId);
+    if (!optimisticMessage) return threadMessages;
+    const persisted = threadMessages.some((entry) => entry.body === optimisticMessage.body && entry.role === messageRole);
+    return persisted ? threadMessages : [...threadMessages, optimisticMessage];
+  }, [activeThreadId, data?.messages, messageRole, optimisticMessage]);
+
+  const openRequestCount = useMemo(() => {
+    const procurement = (data?.procurementActions ?? []).filter((action) => action.status !== "DISMISSED").length;
+    const prospecting = (data?.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED").length;
+    return procurement + prospecting;
+  }, [data?.procurementActions, data?.prospectingActions]);
+
+  const lastAgentMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === "AGENT") return messages[index].id;
+    }
+    return null;
+  }, [messages]);
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ block: "end" });
@@ -283,11 +346,11 @@ export function SupplyOsContext({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
   }, [message]);
 
-  async function submitMessage(event?: FormEvent) {
+  async function submitMessage(event?: FormEvent, preparedInstruction?: string) {
     event?.preventDefault();
-    if (!workspaceId || readOnly || !message.trim() || busy) return;
-    const instruction = message.trim();
-    setMessage("");
+    const instruction = (preparedInstruction ?? message).trim();
+    if (!workspaceId || readOnly || !instruction || busy) return;
+    if (!preparedInstruction) setMessage("");
     setError(null);
     setBusy(true);
     setOptimisticMessage({
@@ -295,6 +358,7 @@ export function SupplyOsContext({
       role: messageRole,
       body: instruction,
       citations: null,
+      threadId: activeThreadId,
       createdAt: new Date().toISOString(),
       pending: true,
     });
@@ -303,7 +367,7 @@ export function SupplyOsContext({
       const response = await fetch(`${contextApiBasePath}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instruction }),
+        body: JSON.stringify({ instruction, threadId: activeThreadId }),
       });
       const payload = await response.json().catch(() => null) as { error?: string; messageSaved?: boolean } | null;
       messageSaved = payload?.messageSaved === true;
@@ -313,7 +377,7 @@ export function SupplyOsContext({
     } catch (cause) {
       const refreshed = await load().catch(() => null);
       const persisted = messageSaved || refreshed?.messages.some((entry) => entry.role === messageRole && entry.body === instruction);
-      if (!persisted) setMessage(instruction);
+      if (!persisted && !preparedInstruction) setMessage(instruction);
       setOptimisticMessage(null);
       setError(cause instanceof Error ? cause.message : "The reply did not finish.");
     } finally {
@@ -411,6 +475,34 @@ export function SupplyOsContext({
     }
   }
 
+  async function createThread() {
+    if (!workspaceId || readOnly || threadBusy) return;
+    setThreadBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`${contextApiBasePath}/threads`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "New chat" }),
+      });
+      const payload = await response.json().catch(() => null) as { thread?: ContextThread; error?: string } | null;
+      if (!response.ok || !payload?.thread) throw new Error(payload?.error || "The chat could not be created.");
+      const thread = payload.thread;
+      setData((current) => current ? { ...current, threads: [...(current.threads ?? []), thread] } : current);
+      setActiveThreadId(thread.id);
+      textareaRef.current?.focus();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The chat could not be created.");
+    } finally {
+      setThreadBusy(false);
+    }
+  }
+
+  function answerQuestion(question: ContextQuestion, answer: string) {
+    if (busy) return;
+    void submitMessage(undefined, `${question.question} ${answer}`);
+  }
+
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
@@ -454,24 +546,65 @@ export function SupplyOsContext({
     <section
       className={`${styles.context} supply-os-workspace`}
       data-files-open={filesOpen}
+      data-threads-open={threadsOpen}
       aria-label="Context chat"
       onDragEnter={readOnly ? undefined : onDragEnter}
       onDragOver={readOnly ? undefined : (event) => event.preventDefault()}
       onDragLeave={readOnly ? undefined : onDragLeave}
       onDrop={readOnly ? undefined : onDrop}
     >
+      <aside className={threadsOpen ? styles.threadsRail : styles.threadsRailClosed} aria-label="Chats">
+        <header>
+          <strong>Chats</strong>
+          <button type="button" onClick={() => setThreadsOpen(false)} aria-label="Close chats"><X size={18} /></button>
+        </header>
+        {!readOnly ? (
+          <button
+            type="button"
+            className={styles.newThreadButton}
+            disabled={threadBusy}
+            onClick={() => void createThread()}
+          >
+            {threadBusy ? <LoaderCircle className={styles.spinner} size={16} /> : <MessageSquarePlus size={16} aria-hidden="true" />}
+            New chat
+          </button>
+        ) : null}
+        <div className={styles.threadList}>
+          {threads.map((thread) => (
+            <button
+              type="button"
+              key={thread.id ?? "general"}
+              className={styles.threadItem}
+              data-active={(thread.id ?? null) === activeThreadId}
+              onClick={() => setActiveThreadId(thread.id)}
+            >
+              <MessagesSquare size={15} aria-hidden="true" />
+              <span>{thread.title}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+
       <section className={styles.chatPane} aria-label={`${data.workspace.name} context conversation`}>
         <header className={styles.chatHeader}>
-          <strong>{data.workspace.name}</strong>
+          <span className={styles.chatHeaderTitle}>
+            {!threadsOpen ? (
+              <button type="button" onClick={() => setThreadsOpen(true)} aria-label="Open chats">
+                <MessagesSquare size={17} aria-hidden="true" />
+                <span>Chats</span>
+              </button>
+            ) : null}
+            <strong>{data.workspace.name} · {threads.find((thread) => (thread.id ?? null) === activeThreadId)?.title ?? "General"}</strong>
+          </span>
           {!filesOpen ? (
             <button
               type="button"
               onClick={() => setFilesOpen(true)}
-              aria-label={`Open files, ${data.documents.length} ${data.documents.length === 1 ? "file" : "files"}`}
+              aria-label={`Open requests and files, ${openRequestCount} ongoing ${openRequestCount === 1 ? "request" : "requests"}`}
             >
-              <Files size={17} aria-hidden="true" />
-              <span>Files</span>
-              {data.documents.length ? <i>{data.documents.length}</i> : null}
+              <ListTodo size={17} aria-hidden="true" />
+              <span>Requests</span>
+              {openRequestCount ? <i>{openRequestCount}</i> : null}
             </button>
           ) : null}
         </header>
@@ -493,9 +626,84 @@ export function SupplyOsContext({
                     {entry.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}
                   </div>
                 ) : null}
+                {entry.role === "AGENT" && Array.isArray(entry.questions) && entry.questions.length ? (
+                  <div className={styles.questionList} aria-label="Clarifying questions">
+                    {entry.questions.map((question, questionIndex) => (
+                      <div className={styles.questionBlock} key={`${entry.id}:${questionIndex}`}>
+                        <span className={styles.questionText}>{question.question}</span>
+                        <div className={styles.questionOptions}>
+                          {(question.kind === "yes_no" ? ["Yes", "No"] : question.options).map((option) => (
+                            <button
+                              type="button"
+                              key={option}
+                              className={styles.questionChip}
+                              disabled={readOnly || busy || entry.id !== lastAgentMessageId}
+                              onClick={() => answerQuestion(question, option)}
+                            >{option}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}
+          {busy ? (
+            <div className={styles.thinking} role="status">
+              <Sparkles className={styles.pulse} size={16} aria-hidden="true" />
+              <span key={processingPhase} className={styles.thinkingPhase}>{PROCESSING_PHASES[processingPhase]}</span>
+            </div>
+          ) : null}
+          <div ref={streamEndRef} />
+        </div>
+
+        {!readOnly ? <form className={styles.composerArea} onSubmit={submitMessage}>
+          <div className={styles.composer}>
+            <button className={styles.attachButton} type="button" onClick={() => fileRef.current?.click()} aria-label="Add files" title="Add files">
+              <Paperclip size={20} aria-hidden="true" />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_FILES}
+              onChange={(event) => void uploadFiles(Array.from(event.target.files ?? []))}
+            />
+            <textarea
+              ref={textareaRef}
+              aria-label="Message Derya"
+              rows={1}
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              onKeyDown={onComposerKeyDown}
+              placeholder="Ask Derya"
+            />
+            <button className={styles.sendButton} type="submit" disabled={busy || !message.trim()} aria-label="Send message">
+              {busy ? <LoaderCircle className={styles.spinner} size={18} /> : <ArrowUp size={20} aria-hidden="true" />}
+            </button>
+          </div>
+          {error ? <p className={styles.error} role="alert">{error}</p> : null}
+        </form> : error ? <p className={styles.error} role="alert">{error}</p> : null}
+      </section>
+
+      <aside className={filesOpen ? styles.fileDrawerOpen : styles.fileDrawerClosed} aria-label="Ongoing requests and files">
+        <header>
+          <div className={styles.drawerTabs} role="tablist" aria-label="Panel sections">
+            <button type="button" role="tab" aria-selected={drawerTab === "requests"} data-active={drawerTab === "requests"} onClick={() => setDrawerTab("requests")}>
+              Requests{openRequestCount ? <i>{openRequestCount}</i> : null}
+            </button>
+            <button type="button" role="tab" aria-selected={drawerTab === "files"} data-active={drawerTab === "files"} onClick={() => setDrawerTab("files")}>
+              Files{data.documents.length ? <i>{data.documents.length}</i> : null}
+            </button>
+          </div>
+          <button type="button" onClick={() => setFilesOpen(false)} aria-label="Close panel"><X size={20} /></button>
+        </header>
+        {drawerTab === "requests" ? (
+        <div className={styles.requestList}>
+          {!openRequestCount ? (
+            <div className={styles.filesEmpty}><span>No ongoing requests</span></div>
+          ) : null}
           {(data.procurementActions ?? []).filter((action) => action.status !== "DISMISSED").map((action) => (
             <article className={styles.procurementAction} data-status={action.status} key={action.id}>
               <header>
@@ -667,49 +875,8 @@ export function SupplyOsContext({
               )}
             </article>
           ))}
-          {busy ? (
-            <div className={styles.thinking} role="status">
-              <LoaderCircle className={styles.spinner} size={18} />
-              <span>Working</span>
-            </div>
-          ) : null}
-          <div ref={streamEndRef} />
         </div>
-
-        {!readOnly ? <form className={styles.composerArea} onSubmit={submitMessage}>
-          <div className={styles.composer}>
-            <button className={styles.attachButton} type="button" onClick={() => fileRef.current?.click()} aria-label="Add files" title="Add files">
-              <Paperclip size={20} aria-hidden="true" />
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept={ACCEPTED_FILES}
-              onChange={(event) => void uploadFiles(Array.from(event.target.files ?? []))}
-            />
-            <textarea
-              ref={textareaRef}
-              aria-label="Message Derya"
-              rows={1}
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={onComposerKeyDown}
-              placeholder="Ask Derya"
-            />
-            <button className={styles.sendButton} type="submit" disabled={busy || !message.trim()} aria-label="Send message">
-              {busy ? <LoaderCircle className={styles.spinner} size={18} /> : <ArrowUp size={20} aria-hidden="true" />}
-            </button>
-          </div>
-          {error ? <p className={styles.error} role="alert">{error}</p> : null}
-        </form> : error ? <p className={styles.error} role="alert">{error}</p> : null}
-      </section>
-
-      <aside className={filesOpen ? styles.fileDrawerOpen : styles.fileDrawerClosed} aria-label="Files in context">
-        <header>
-          <strong>Files in context</strong>
-          <button type="button" onClick={() => setFilesOpen(false)} aria-label="Close files"><X size={20} /></button>
-        </header>
+        ) : (
         <div className={styles.fileList}>
           {uploadingNames.map((name) => (
             <div className={styles.fileRow} key={`uploading:${name}`} data-uploading="true">
@@ -735,6 +902,7 @@ export function SupplyOsContext({
             <div className={styles.filesEmpty}><span>No files</span>{!readOnly ? <button type="button" onClick={() => fileRef.current?.click()}>Add files</button> : null}</div>
           ) : null}
         </div>
+        )}
       </aside>
 
       {dragActive && !readOnly ? (

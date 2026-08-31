@@ -1,5 +1,32 @@
 # AI Handoff
 
+## 2026-08-31: The context chat is a project workspace with an interactive intake agent
+
+- The Supply OS context chat now works like a project folder. Chat threads are
+  `CompanyContext` rows of kind `CHAT_THREAD`; messages carry a `threadId` in
+  their payload, and legacy messages without one belong to the General thread.
+  Documents stay shared across every thread, and
+  `assembleCompanyContextForAgent` filters only the message history to the
+  active thread. `POST .../context/threads` (internal and customer portal)
+  creates a thread.
+- The context agent is an interactive intake agent. Its structured output now
+  includes `clarifyingQuestions` (yes_no or options, at most 6), rendered as
+  one-click answer chips under the newest agent message. The prompt instructs
+  it to resolve part specs, quantity, lead time, delivery location, regions,
+  and certifications through short question rounds before drafting.
+- Duplicate protection: open procurement actions are summarized into the model
+  input as `openRequests`. The agent must ask before creating a near-duplicate,
+  and a draft may set `supersedesActionId` to replace a still pending action
+  (the pending action is dismissed before the replacement is stored). Requests
+  that are already CREATED are never silently replaced.
+- Layout: procurement and prospecting cards moved out of the message stream
+  into the right drawer, which now has Requests and Files tabs plus an ongoing
+  request count in the header. A left rail lists chats with a New chat button.
+  The busy indicator cycles through processing phases with reduced-motion-safe
+  animations.
+- Navigation: the Opportunities panel entry is hidden (the scenarios route
+  still resolves for old links) and the materials rail is titled Sales Agent.
+
 ## 2026-08-29: A sourcing wave carries a search phrase cursor across slices
 
 - Each category has 8 curated query phrases times 10 regions, consumed 2 per

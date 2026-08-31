@@ -25,9 +25,8 @@ type PanelDefinition = {
 type OfficeSwitchAction = (formData: FormData) => void | Promise<void>;
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Sourcing & prospecting" },
+  { id: "materials", shortLabel: "Sales Agent" },
   { id: "logistics", shortLabel: "Logistics" },
-  { id: "scenarios", shortLabel: "Opportunities", inactive: true },
   { id: "context", shortLabel: "Context" },
 ];
 

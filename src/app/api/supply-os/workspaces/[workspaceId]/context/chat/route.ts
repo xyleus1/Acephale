@@ -16,6 +16,7 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
       context: supplyAccessContext(session),
       workspaceId,
       instruction: body?.instruction,
+      threadId: body?.threadId,
     });
     return NextResponse.json({ result, messageSaved: true }, { headers: { "cache-control": "no-store" } });
   } catch (error) {

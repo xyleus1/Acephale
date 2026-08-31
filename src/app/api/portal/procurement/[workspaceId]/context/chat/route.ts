@@ -20,6 +20,7 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
       context: access,
       workspaceId,
       instruction: body?.instruction,
+      threadId: body?.threadId,
     });
     return NextResponse.json(
       {

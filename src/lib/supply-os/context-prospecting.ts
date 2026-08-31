@@ -74,6 +74,7 @@ type StoredProspectingAction = {
   requestMessageId: string;
   requestBody: string;
   requestCreatedAt: string;
+  threadId: string | null;
   runningStartedAt: string | null;
   stats: ProspectingStats;
   nextQueryOffset: number;
@@ -153,6 +154,7 @@ function decodeAction(payload: unknown) {
     requestMessageId,
     requestBody,
     requestCreatedAt,
+    threadId: text(value.threadId, 200) || null,
     runningStartedAt: text(value.runningStartedAt, 40) || null,
     stats: {
       queriesUsed: number(statsValue.queriesUsed),
@@ -198,6 +200,7 @@ export async function createCompanyContextProspectingActions(args: {
   requestMessageId: string;
   requestBody: string;
   requestCreatedAt: Date;
+  threadId?: string | null;
 }) {
   if (customerAccess(args.context)) return [];
   if (!args.items.length) return [];
@@ -211,6 +214,7 @@ export async function createCompanyContextProspectingActions(args: {
     requestMessageId: args.requestMessageId,
     requestBody: args.requestBody.slice(0, 4_000),
     requestCreatedAt: args.requestCreatedAt.toISOString(),
+    threadId: args.threadId ?? null,
     runningStartedAt: null,
     stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
     nextQueryOffset: 0,

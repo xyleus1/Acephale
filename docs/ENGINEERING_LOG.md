@@ -1,5 +1,24 @@
 # Engineering Log
 
+## 2026-08-31: Context chat threads, clarifying questions, request drawer
+
+- Added chat threads to the company context without a schema change: threads
+  are `CompanyContext` rows of kind `CHAT_THREAD`, message payloads carry
+  `threadId`, and null means the General thread. New routes
+  `POST /api/supply-os/workspaces/[id]/context/threads` and the portal twin
+  create threads with the usual office and visibility scoping.
+- Extended the context agent JSON schema with `clarifyingQuestions`
+  (`yes_no` or `options`) and `supersedesActionId` on procurement drafts, fed
+  the model an `openRequests` summary of open procurement actions, and stored
+  questions on the agent message payload so the UI can render answer chips.
+- Reworked `supply-os-context.tsx`: left thread rail, header thread title,
+  request and file tabs in the right drawer, action cards moved out of the
+  stream, phase-cycling busy indicator, message fade-in with
+  `prefers-reduced-motion` opt-out.
+- Verification: `npx tsc --noEmit` clean, `npm run lint` (only pre-existing
+  findings in untouched files), `npx tsx scripts/leadgen.test.ts`,
+  `npx tsx scripts/login-code.test.ts`, `npm run build`.
+
 ## 2026-08-29: A queued sourcing wave stopped after one slice
 
 - Production symptom: the 100 per category wave queued, the first slice ran, and

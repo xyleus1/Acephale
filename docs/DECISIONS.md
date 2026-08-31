@@ -1,5 +1,29 @@
 # Decisions
 
+## Chat threads live in CompanyContext rows, not a new table
+
+Date: 2026-08-31
+
+Multi-chat support for the context workspace stores each thread as a
+`CompanyContext` row with kind `CHAT_THREAD` and stamps `threadId` into message
+payloads. Messages without a `threadId` are the General thread, so every
+pre-existing conversation keeps working. This avoids a production schema
+migration, inherits the existing `officeId` and customer-visibility scoping,
+and keeps documents shared across all threads by design: threads scope the
+conversation, the company artifacts are project-level.
+
+## A procurement draft may supersede only a pending action
+
+Date: 2026-08-31
+
+The intake agent sees a summary of open procurement requests and must ask
+before creating a look-alike. A draft can carry `supersedesActionId`, which is
+honored only when it names an action that is still awaiting confirmation; the
+pending action is dismissed and the replacement takes its place. Actions that
+are already CREATED represent running work with side effects, so they are
+never replaced automatically; the agent must ask whether a genuinely new
+request is wanted.
+
 ## An unsent supplier draft is a PLANNED execution task
 
 Date: 2026-08-25

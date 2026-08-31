@@ -246,7 +246,7 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   defaultInspector: "object" | "optimization";
 }> = {
   materials: {
-    railTitle: "Sourcing & prospecting",
+    railTitle: "Sales Agent",
     railSummary: "Stock, demand, and supply options",
     objectKinds: ["supplier", "factory", "distribution"],
     defaultInspector: "object",
