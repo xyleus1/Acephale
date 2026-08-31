@@ -80,7 +80,7 @@ assert.match(files.downloadRoute, /DOWNLOAD_CHUNK_BYTES = 64 \* 1024/);
 assert.doesNotMatch(files.downloadRoute, /new NextResponse\(new Uint8Array\(document\.bytes\)/);
 assert.match(files.chatRoute, /chatWithCompanyContext/);
 assert.match(files.ui, /aria-label="Context chat"/);
-assert.match(files.ui, /Files in context/);
+assert.match(files.ui, /Ongoing requests and files/);
 assert.match(files.ui, /placeholder="Ask Derya"/);
 assert.match(files.ui, /\.md/);
 assert.match(files.ui, /UPLOAD_CHUNK_BYTES/);

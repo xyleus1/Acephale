@@ -7,14 +7,16 @@ import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+export async function GET(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { workspaceId } = await route.params;
+  const threadParam = new URL(request.url).searchParams.get("thread");
+  const threadId = threadParam === null ? undefined : threadParam === "general" ? null : threadParam;
   try {
     const access = supplyAccessContext(session);
     const [context, procurementActions, prospectingActions] = await Promise.all([
-      loadCompanyContext(access, workspaceId),
+      loadCompanyContext(access, workspaceId, { threadId }),
       listCompanyContextProcurementActions(access, workspaceId),
       listCompanyContextProspectingActions(access, workspaceId),
     ]);

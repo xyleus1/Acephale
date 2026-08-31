@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { readStoredDocument } from "@/lib/document-storage";
@@ -47,6 +48,7 @@ export type CompanyContextQuestion = {
 
 const CHAT_THREAD_KIND = "CHAT_THREAD";
 const MAX_CHAT_THREADS = 100;
+const MAX_AGENT_THREAD_MESSAGES = 200;
 const MAX_QUESTIONS = 6;
 const MAX_QUESTION_OPTIONS = 6;
 
@@ -348,44 +350,71 @@ async function reserveCustomerContextDocumentStorage(args: {
   });
 }
 
-export async function loadCompanyContext(context: CompanyContextAccess, workspaceId: string) {
+function companyContextThreadWhere(threadFilter: string | null | undefined): Prisma.CompanyContextWhereInput {
+  if (threadFilter === undefined) return {};
+  return threadFilter === null
+    ? { payload: { path: ["threadId"], equals: Prisma.AnyNull } }
+    : { payload: { path: ["threadId"], equals: threadFilter } };
+}
+
+export async function loadCompanyContext(
+  context: CompanyContextAccess,
+  workspaceId: string,
+  options?: { threadId?: string | null },
+) {
   const workspace = await contextWorkspace(context, workspaceId, "view");
-  const rows = await prisma.companyContext.findMany({
-    where: {
-      officeId: context.officeId,
-      companyId: workspace.companyId,
-      kind: { in: ["DOCUMENT", "MESSAGE", CHAT_THREAD_KIND] },
-      ...companyContextVisibilityWhere(context),
-    },
-    select: {
-      id: true,
-      itemId: true,
-      kind: true,
-      name: true,
-      description: true,
-      mimeType: true,
-      sizeBytes: true,
-      contentHash: true,
-      markdown: true,
-      processingState: true,
-      processingError: true,
-      payload: true,
-      createdByPortalUserId: true,
-      createdAt: true,
-      item: { select: { name: true } },
-    },
-    orderBy: { createdAt: "asc" },
-    take: 800,
+  const rowSelect = {
+    id: true,
+    itemId: true,
+    kind: true,
+    name: true,
+    description: true,
+    mimeType: true,
+    sizeBytes: true,
+    contentHash: true,
+    markdown: true,
+    processingState: true,
+    processingError: true,
+    payload: true,
+    createdByPortalUserId: true,
+    createdAt: true,
+    item: { select: { name: true } },
+  } as const;
+  const rowWhere = (kind: string) => ({
+    officeId: context.officeId,
+    companyId: workspace.companyId,
+    kind,
+    ...companyContextVisibilityWhere(context),
   });
+  const [threadRows, documentRows, messageRows] = await Promise.all([
+    prisma.companyContext.findMany({
+      where: rowWhere(CHAT_THREAD_KIND),
+      select: rowSelect,
+      orderBy: { createdAt: "asc" },
+      take: MAX_CHAT_THREADS,
+    }),
+    prisma.companyContext.findMany({
+      where: rowWhere("DOCUMENT"),
+      select: rowSelect,
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    }),
+    prisma.companyContext.findMany({
+      where: { ...rowWhere("MESSAGE"), ...companyContextThreadWhere(options?.threadId) },
+      select: rowSelect,
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    }),
+  ]);
 
   return {
     workspace: { id: workspace.id, name: workspace.name },
-    threads: rows.filter((row) => row.kind === CHAT_THREAD_KIND).map((row) => ({
+    threads: threadRows.map((row) => ({
       id: row.id,
       title: row.name,
       createdAt: row.createdAt,
     })),
-    documents: rows.filter((row) => row.kind === "DOCUMENT").reverse().map((row) => ({
+    documents: documentRows.map((row) => ({
       id: row.id,
       itemId: row.itemId,
       itemName: row.item?.name ?? null,
@@ -398,7 +427,7 @@ export async function loadCompanyContext(context: CompanyContextAccess, workspac
       processingError: row.processingError,
       createdAt: row.createdAt,
     })),
-    messages: rows.filter((row) => row.kind === "MESSAGE").map(parseMessage),
+    messages: messageRows.reverse().map(parseMessage),
   };
 }
 
@@ -812,32 +841,49 @@ export async function assembleCompanyContextForAgent(
   options?: { threadId?: string | null },
 ) {
   const workspace = await contextWorkspace(context, workspaceId, "view");
-  const rows = await prisma.companyContext.findMany({
-    where: {
-      officeId: context.officeId,
-      companyId: workspace.companyId,
-      kind: { in: ["DOCUMENT", "MESSAGE"] },
-      ...companyContextVisibilityWhere(context),
-    },
-    select: {
-      id: true,
-      itemId: true,
-      kind: true,
-      name: true,
-      description: true,
-      markdown: true,
-      processingState: true,
-      payload: true,
-      createdByPortalUserId: true,
-      createdAt: true,
-      item: { select: { name: true } },
-    },
-    orderBy: { createdAt: "asc" },
-    take: 200,
-  });
+  const agentSelect = {
+    id: true,
+    itemId: true,
+    kind: true,
+    name: true,
+    description: true,
+    markdown: true,
+    processingState: true,
+    payload: true,
+    createdByPortalUserId: true,
+    createdAt: true,
+    item: { select: { name: true } },
+  } as const;
+  const threadFilter = options?.threadId === undefined ? undefined : options.threadId;
+  const messageThreadWhere = companyContextThreadWhere(threadFilter);
+  const [documentRows, messageRows] = await Promise.all([
+    prisma.companyContext.findMany({
+      where: {
+        officeId: context.officeId,
+        companyId: workspace.companyId,
+        kind: "DOCUMENT",
+        ...companyContextVisibilityWhere(context),
+      },
+      select: agentSelect,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    prisma.companyContext.findMany({
+      where: {
+        officeId: context.officeId,
+        companyId: workspace.companyId,
+        kind: "MESSAGE",
+        ...companyContextVisibilityWhere(context),
+        ...messageThreadWhere,
+      },
+      select: agentSelect,
+      orderBy: { createdAt: "desc" },
+      take: MAX_AGENT_THREAD_MESSAGES,
+    }),
+  ]);
 
   let remaining = MAX_AGENT_DOCUMENT_CHARS;
-  const documents = rows.filter((row) => row.kind === "DOCUMENT").reverse().flatMap((row) => {
+  const documents = documentRows.flatMap((row) => {
     if (row.processingState !== "READY" || !row.markdown || remaining <= 0) return [];
     const markdown = row.markdown.slice(0, Math.min(MAX_AGENT_DOCUMENT_CHARS_PER_FILE, remaining));
     remaining -= markdown.length;
@@ -851,9 +897,9 @@ export async function assembleCompanyContextForAgent(
       processedAt: row.createdAt,
     }];
   });
-  const threadFilter = options?.threadId === undefined ? undefined : options.threadId;
-  const messages = rows.filter((row) => row.kind === "MESSAGE").map(parseMessage)
+  const messages = messageRows.map(parseMessage)
     .filter((message) => threadFilter === undefined || message.threadId === threadFilter)
+    .reverse()
     .map((message) => ({
       citationId: `message:${message.id}`,
       role: message.role,

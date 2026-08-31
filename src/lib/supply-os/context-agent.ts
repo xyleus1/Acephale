@@ -172,13 +172,21 @@ export async function chatWithCompanyContext(args: {
   // typed and never a model's reading of it. Customer portal users cannot start
   // one.
   if (!isCustomerContextAccess(args.context)) {
-    const queued = await queueSourcingCommandFromChat({
-      officeId: args.context.officeId,
-      customerId: procurementCustomerIdFromServerMetadata(args.context.officeId),
-      workspaceId: args.workspaceId,
-      instruction,
-      requestedByUserId: args.context.userId,
-    }).catch(() => null);
+    let procurementCustomerId: string | null;
+    try {
+      procurementCustomerId = procurementCustomerIdFromServerMetadata(args.context.officeId);
+    } catch {
+      procurementCustomerId = null;
+    }
+    const queued = procurementCustomerId === null
+      ? null
+      : await queueSourcingCommandFromChat({
+          officeId: args.context.officeId,
+          customerId: procurementCustomerId,
+          workspaceId: args.workspaceId,
+          instruction,
+          requestedByUserId: args.context.userId,
+        }).catch(() => null);
     if (queued) {
       const categories = queued.plan.map((entry) => entry.material).join(", ");
       const message = await appendCompanyContextMessage({
@@ -221,7 +229,9 @@ export async function chatWithCompanyContext(args: {
         deliveryLocation: action.draft.deliveryLocation,
         createdAt: action.createdAt.toISOString(),
       })))
-    .catch(() => []);
+    .catch(() => {
+      throw new ContextAgentError("Open procurement requests could not be checked. Try again.", "unavailable", true);
+    });
   const allowedCitations = new Map<string, CompanyContextCitation>();
   for (const document of packet.documents) {
     allowedCitations.set(document.citationId, { id: document.citationId, label: document.name });

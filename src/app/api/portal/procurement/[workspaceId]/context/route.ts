@@ -10,15 +10,17 @@ import { supplyErrorResponse } from "@/lib/supply-os/http";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+export async function GET(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
   const principal = await getCustomerPortalPrincipal();
   if (!principal) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { workspaceId } = await route.params;
+  const threadParam = new URL(request.url).searchParams.get("thread");
+  const threadId = threadParam === null ? undefined : threadParam === "general" ? null : threadParam;
   const access = await resolveCustomerContextAccessForWorkspace(principal, workspaceId);
   if (!access) return NextResponse.json({ error: "Context not found." }, { status: 404 });
   try {
     const [context, procurementActions] = await Promise.all([
-      loadCompanyContext(access, workspaceId),
+      loadCompanyContext(access, workspaceId, { threadId }),
       listCompanyContextProcurementActions(access, workspaceId),
     ]);
     return NextResponse.json(

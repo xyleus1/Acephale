@@ -258,17 +258,20 @@ export function SupplyOsContext({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamEndRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
+  const loadSeqRef = useRef(0);
   const contextApiBasePath = apiBasePath
     ?? `/api/supply-os/workspaces/${workspaceId ?? ""}/context`;
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
-    const response = await fetch(contextApiBasePath, { cache: "no-store" });
+    const seq = ++loadSeqRef.current;
+    const threadQuery = `?thread=${encodeURIComponent(activeThreadId ?? "general")}`;
+    const response = await fetch(`${contextApiBasePath}${threadQuery}`, { cache: "no-store" });
     const payload = await response.json().catch(() => null) as { context?: ContextPayload; error?: string } | null;
     if (!response.ok || !payload?.context) throw new Error(payload?.error || "Context could not be loaded.");
-    setData(payload.context);
+    if (seq === loadSeqRef.current) setData(payload.context);
     return payload.context;
-  }, [contextApiBasePath, workspaceId]);
+  }, [activeThreadId, contextApiBasePath, workspaceId]);
 
   useEffect(() => {
     setError(null);

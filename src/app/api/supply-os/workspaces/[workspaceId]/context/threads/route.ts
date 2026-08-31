@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { createCompanyContextChatThread } from "@/lib/company-context";
+import { CompanyContextLimitError, createCompanyContextChatThread } from "@/lib/company-context";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 
 export const runtime = "nodejs";
@@ -18,6 +18,9 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
     });
     return NextResponse.json({ thread }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
+    if (error instanceof CompanyContextLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 429 });
+    }
     return supplyErrorResponse(error);
   }
 }

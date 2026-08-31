@@ -1,5 +1,45 @@
 # Engineering Log
 
+## 2026-08-31: Context chat works for offices without a procurement mapping
+
+- `chatWithCompanyContext` resolved the procurement customer id synchronously
+  while building the `queueSourcingCommandFromChat` arguments, so an office
+  absent from `PROCUREMENT_CUSTOMER_MAP_JSON` threw before the surrounding
+  `.catch` and every chat request returned a raw 500. The customer id is now
+  resolved separately; unmapped offices skip the deterministic sourcing-command
+  path and chat normally. Found by recorded browser testing.
+- Verification: context and context-procurement contract tests,
+  `npx tsc --noEmit`.
+
+## 2026-08-31: Context load filters messages by the selected thread
+
+- `loadCompanyContext` accepts an optional `threadId` and applies the same
+  database-side thread predicate as the agent path (shared
+  `companyContextThreadWhere`, `Prisma.AnyNull` for General), and both context
+  GET routes read a `?thread=` query param (`general` for the null thread).
+  The UI requests the active thread and refetches on thread switch, so a
+  less-active chat no longer appears empty once 500 newer messages belong to
+  other chats.
+- Verification: context contract tests, `npx tsc --noEmit`.
+
+## 2026-08-31: Context chat review fixes (history bounds, fail-open duplicates, thread limit status)
+
+- `loadCompanyContext` and `assembleCompanyContextForAgent` now run separate
+  bounded queries per kind (threads, documents, messages) with newest-first
+  message pagination, so mature workspaces no longer lose recent threads or
+  the newest turns of the active chat behind a single ascending `take`.
+- The agent's `openRequests` duplicate-protection summary no longer swallows
+  read failures into an empty list; a failed read fails the chat request
+  instead of silently disabling duplicate detection.
+- Thread creation routes map `CompanyContextLimitError` to a 429 with the
+  limit message instead of a generic 500.
+- The context contract test now pins the new drawer label
+  `Ongoing requests and files` (the old `Files in context` copy was replaced
+  by the request drawer redesign), which fixes the `database-contracts` CI
+  failure on the previous merge.
+- Verification: context test suite, context-documents, supplier-email
+  provider tests, `npx tsc --noEmit`, lint clean on changed files.
+
 ## 2026-08-31: A sourcing wave starved its second category
 
 - Production symptom: across nine drains of the 100 per category wave, molded
