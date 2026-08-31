@@ -1,5 +1,15 @@
 # AI Handoff
 
+## 2026-08-31: The state recheck suite runs in CI
+
+- `npm run test:state-recheck` is now a step in the `database-contracts` job of
+  `.github/workflows/supply-os-tests.yml`, which already boots Postgres and
+  applies migrations, and `scripts/state-recheck.test.ts` is in the path filters
+  for that workflow. CI runs it at `STATE_RECHECK_REPEATS=2`, roughly 12 seconds,
+  since repeats only stabilise the latency figure and coverage is deterministic.
+- A new guarded action path that does not refuse work built on state that moved
+  now fails the pull request instead of going unnoticed.
+
 ## 2026-08-31: Stale state before an action is measured, not assumed
 
 - `scripts/state-recheck.test.ts` (`npm run test:state-recheck`) runs the real

@@ -8,6 +8,7 @@ on:
       - "package-lock.json"
       - "prisma/**"
       - "scripts/supply-os-*"
+      - "scripts/state-recheck.test.ts"
       - "scripts/fixtures/**"
       - "src/app/api/supply-os/**"
       - "src/app/dashboard/supply-os/**"
@@ -21,6 +22,7 @@ on:
       - "package-lock.json"
       - "prisma/**"
       - "scripts/supply-os-*"
+      - "scripts/state-recheck.test.ts"
       - "scripts/fixtures/**"
       - "src/app/api/supply-os/**"
       - "src/app/dashboard/supply-os/**"
@@ -83,6 +85,11 @@ jobs:
           npm run test:supply-os-planning-persistence
           npm run test:supply-os-execution
           npm run test:supply-os-context-db
+
+      - name: Run the state recheck suite
+        env:
+          STATE_RECHECK_REPEATS: "2"
+        run: npm run test:state-recheck
 
       - name: Run Context contracts
         run: |
