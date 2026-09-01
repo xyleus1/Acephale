@@ -1,5 +1,17 @@
 # AI Handoff
 
+## 2026-09-01: Chat thread deletion
+
+- Operators can delete a chat thread from the Chats rail (trash icon on
+  hover). `deleteCompanyContextChatThread` removes the `CHAT_THREAD` row and
+  its `MESSAGE` rows (matched by `payload.threadId`) in one transaction,
+  office and company scoped. Documents, memory notes, and procurement actions
+  are untouched.
+- The General chat (thread id null) has no delete control and cannot be
+  deleted. Deleting the active chat switches the UI back to General.
+- Exposed via `DELETE .../context/threads` with `{ threadId }`. The customer
+  portal passes `threadDeleteEnabled={false}`; deletion stays internal-only.
+
 ## 2026-09-01: Fewer clarifying-question rounds
 
 - The context agent now clarifies fast and acts: clarifyingQuestions are

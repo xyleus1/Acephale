@@ -1,5 +1,19 @@
 # Engineering Log
 
+## 2026-09-01: Delete chat threads
+
+- `deleteCompanyContextChatThread` in `src/lib/company-context.ts`: validates
+  the thread id, requires edit access, and in a transaction deletes the
+  office/company scoped `CHAT_THREAD` row plus its `MESSAGE` rows filtered on
+  `payload.threadId`. Missing or cross-tenant threads reject with not_found.
+- `DELETE` handler on `.../context/threads` (internal Supply OS route only).
+  UI: hover trash icon per chat row in the Chats rail, confirm dialog, active
+  thread falls back to General after deletion. Portal renders no delete
+  controls (`threadDeleteEnabled={false}`).
+- Verified: `scripts/supply-os-context.test.ts`,
+  `scripts/company-context-database.test.ts` (delete, cross-thread message
+  retention, foreign-office rejection), typecheck, build.
+
 ## 2026-09-01: Cap clarifying-question rounds at 2 per chat
 
 - Operator feedback: the intake agent spread nice-to-have questions over many

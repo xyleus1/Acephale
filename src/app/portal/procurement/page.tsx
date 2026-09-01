@@ -90,6 +90,7 @@ export default async function CustomerProcurementPage({
               messageRole="CUSTOMER"
               showOrderId={false}
               memoryEnabled={false}
+              threadDeleteEnabled={false}
             />
           </div>
         ) : (

@@ -281,6 +281,47 @@ export async function createCompanyContextChatThread(args: {
   return { id: row.id, title: row.name, createdAt: row.createdAt };
 }
 
+async function lockCompanyContextThread(tx: Prisma.TransactionClient, threadId: string) {
+  const lockKey = `company-context-thread:${threadId}`;
+  await tx.$queryRaw<Array<{ locked: number }>>`
+    SELECT 1::integer AS "locked"
+    FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+  `;
+}
+
+export async function deleteCompanyContextChatThread(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  threadId: unknown;
+}) {
+  if (typeof args.threadId !== "string" || !args.threadId) {
+    throw new SupplyPersistenceError("The chat thread is invalid.", "invalid_input");
+  }
+  const threadId = args.threadId;
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  await prisma.$transaction(async (tx) => {
+    await lockCompanyContextThread(tx, threadId);
+    const removed = await tx.companyContext.deleteMany({
+      where: {
+        id: threadId,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: CHAT_THREAD_KIND,
+        ...companyContextVisibilityWhere(args.context),
+      },
+    });
+    if (!removed.count) throw new SupplyPersistenceError("The chat thread was not found.", "not_found");
+    await tx.companyContext.deleteMany({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "MESSAGE",
+        payload: { path: ["threadId"], equals: threadId },
+      },
+    });
+  });
+}
+
 export async function renameDefaultCompanyContextChatThread(args: {
   context: CompanyContextAccess;
   workspaceId: string;
@@ -920,19 +961,35 @@ export async function appendCompanyContextMessage(args: {
   if (!body) throw new SupplyPersistenceError("Message is required.", "invalid_input");
   const citations = args.citations?.slice(0, 20) ?? [];
   const questions = args.role === "AGENT" ? (args.questions ?? []).slice(0, MAX_QUESTIONS) : [];
-  const row = await prisma.companyContext.create({
-    data: {
-      officeId: args.context.officeId,
-      companyId: workspace.companyId,
-      itemId: item?.id ?? null,
-      kind: "MESSAGE",
-      name: args.role === "AGENT" ? "Derya reply" : "Operator message",
-      markdown: body,
-      processingState: "READY",
-      payload: { role: args.role, citations, threadId: args.threadId ?? null, questions },
-      ...companyContextActorData(args.context),
-    },
-    select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
+  const threadId = typeof args.threadId === "string" && args.threadId ? args.threadId : null;
+  const row = await prisma.$transaction(async (tx) => {
+    if (threadId) {
+      await lockCompanyContextThread(tx, threadId);
+      const thread = await tx.companyContext.findFirst({
+        where: {
+          id: threadId,
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          kind: CHAT_THREAD_KIND,
+        },
+        select: { id: true },
+      });
+      if (!thread) throw new SupplyPersistenceError("The chat thread was not found.", "not_found");
+    }
+    return tx.companyContext.create({
+      data: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        itemId: item?.id ?? null,
+        kind: "MESSAGE",
+        name: args.role === "AGENT" ? "Derya reply" : "Operator message",
+        markdown: body,
+        processingState: "READY",
+        payload: { role: args.role, citations, threadId, questions },
+        ...companyContextActorData(args.context),
+      },
+      select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
+    });
   });
   return parseMessage(row);
 }
@@ -950,11 +1007,25 @@ export async function appendRateLimitedCustomerContextMessage(args: {
   if (!body) throw new SupplyPersistenceError("Message is required.", "invalid_input");
   const windowStart = new Date(Date.now() - args.windowMs);
   const lockKey = `customer-context-message:${args.context.officeId}:${workspace.companyId}:${args.context.portalUserId}`;
+  const threadId = typeof args.threadId === "string" && args.threadId ? args.threadId : null;
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ locked: number }>>`
       SELECT 1::integer AS "locked"
       FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
     `;
+    if (threadId) {
+      await lockCompanyContextThread(tx, threadId);
+      const thread = await tx.companyContext.findFirst({
+        where: {
+          id: threadId,
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          kind: CHAT_THREAD_KIND,
+        },
+        select: { id: true },
+      });
+      if (!thread) throw new SupplyPersistenceError("The chat thread was not found.", "not_found");
+    }
     const recentMessages = await tx.companyContext.count({
       where: {
         officeId: args.context.officeId,
@@ -977,7 +1048,7 @@ export async function appendRateLimitedCustomerContextMessage(args: {
         name: "Operator message",
         markdown: body,
         processingState: "READY",
-        payload: { role: "OPERATOR", citations: [], threadId: args.threadId ?? null, questions: [] },
+        payload: { role: "OPERATOR", citations: [], threadId, questions: [] },
         ...companyContextActorData(args.context),
       },
       select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },

@@ -1,5 +1,17 @@
 # Decisions
 
+## Chat deletion is a hard delete of the thread and its messages only
+
+Date: 2026-09-01
+
+Deleting a company chat thread permanently removes the `CHAT_THREAD` row and
+its `MESSAGE` rows, nothing else: documents, memory notes, and procurement
+actions created from that chat are company-level records and survive. No
+archive state was added; threads are cheap to recreate and an archive flag
+would complicate every thread query. The General chat is virtual (thread id
+null) and cannot be deleted. Deletion is internal-only; the customer portal
+does not expose it.
+
 ## Approved outreach campaigns send from pinned recipient snapshots
 
 Date: 2026-09-01

@@ -108,6 +108,44 @@
   scrollbar-color: #c7ceca transparent;
 }
 
+.threadRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.threadRow .threadItem {
+  min-width: 0;
+}
+
+.threadDelete {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9aa6a2;
+  cursor: pointer;
+}
+
+.threadRow:hover .threadDelete,
+.threadRow:focus-within .threadDelete {
+  color: #7c8a86;
+}
+
+.threadDelete:hover {
+  background: var(--chat-surface-hover);
+  color: #a33d2f;
+}
+
+.threadDelete:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
 .threadItem {
   min-height: 38px;
   display: flex;

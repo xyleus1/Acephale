@@ -247,6 +247,7 @@ export function SupplyOsContext({
   messageRole = "OPERATOR",
   showOrderId = true,
   memoryEnabled = true,
+  threadDeleteEnabled = true,
 }: {
   workspaceId: string | null;
   apiBasePath?: string;
@@ -254,6 +255,7 @@ export function SupplyOsContext({
   messageRole?: "OPERATOR" | "CUSTOMER";
   showOrderId?: boolean;
   memoryEnabled?: boolean;
+  threadDeleteEnabled?: boolean;
 }) {
   const [data, setData] = useState<ContextPayload | null>(null);
   const [message, setMessage] = useState("");
@@ -551,6 +553,34 @@ export function SupplyOsContext({
     }
   }
 
+  async function deleteThread(threadId: string, title: string) {
+    if (!workspaceId || readOnly || threadBusy) return;
+    if (!window.confirm(`Delete the chat "${title}"? Its messages are removed. Requests, files, and memory are kept.`)) return;
+    setThreadBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`${contextApiBasePath}/threads`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ threadId }),
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "The chat could not be deleted.");
+      setData((current) => current
+        ? {
+            ...current,
+            threads: (current.threads ?? []).filter((thread) => thread.id !== threadId),
+            messages: (current.messages ?? []).filter((entry) => (entry.threadId ?? null) !== threadId),
+          }
+        : current);
+      if (activeThreadId === threadId) setActiveThreadId(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The chat could not be deleted.");
+    } finally {
+      setThreadBusy(false);
+    }
+  }
+
   async function saveMemoryNote(event?: FormEvent) {
     event?.preventDefault();
     const note = memoryDraft.trim();
@@ -688,16 +718,28 @@ export function SupplyOsContext({
         ) : null}
         <div className={styles.threadList}>
           {threads.map((thread) => (
-            <button
-              type="button"
-              key={thread.id ?? "general"}
-              className={styles.threadItem}
-              data-active={(thread.id ?? null) === activeThreadId}
-              onClick={() => setActiveThreadId(thread.id)}
-            >
-              <MessagesSquare size={15} aria-hidden="true" />
-              <span>{thread.title}</span>
-            </button>
+            <div key={thread.id ?? "general"} className={styles.threadRow}>
+              <button
+                type="button"
+                className={styles.threadItem}
+                data-active={(thread.id ?? null) === activeThreadId}
+                onClick={() => setActiveThreadId(thread.id)}
+              >
+                <MessagesSquare size={15} aria-hidden="true" />
+                <span>{thread.title}</span>
+              </button>
+              {threadDeleteEnabled && !readOnly && thread.id ? (
+                <button
+                  type="button"
+                  className={styles.threadDelete}
+                  disabled={threadBusy}
+                  aria-label={`Delete chat ${thread.title}`}
+                  onClick={() => void deleteThread(thread.id!, thread.title)}
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
       </aside>

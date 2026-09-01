@@ -5,6 +5,7 @@ import {
   appendCompanyContextMessage,
   assembleCompanyContextForAgent,
   createCompanyContextChatThread,
+  deleteCompanyContextChatThread,
   deleteCompanyContextMemory,
   renameDefaultCompanyContextChatThread,
   saveCompanyContextMemory,
@@ -173,12 +174,63 @@ async function main() {
     const renamedThread = await prisma.companyContext.findUnique({ where: { id: defaultThread.id }, select: { name: true } });
     assert.equal(renamedThread?.name, "PC-ABS enclosure sourcing", "Rename applies once, only while the title is still New chat.");
 
+    const disposableThread = await createCompanyContextChatThread({ context, workspaceId: workspace.id, title: "Disposable" });
+    await appendCompanyContextMessage({
+      context,
+      workspaceId: workspace.id,
+      role: "OPERATOR",
+      body: "Message inside disposable thread.",
+      threadId: disposableThread.id,
+    });
+    const keptMessage = await appendCompanyContextMessage({
+      context,
+      workspaceId: workspace.id,
+      role: "OPERATOR",
+      body: "Message inside kept thread.",
+      threadId: defaultThread.id,
+    });
+    await deleteCompanyContextChatThread({ context, workspaceId: workspace.id, threadId: disposableThread.id });
+    const afterThreadDelete = await loadCompanyContext(context, workspace.id);
+    assert.ok(!afterThreadDelete.threads.some((thread) => thread.id === disposableThread.id), "Deleted thread must disappear.");
+    assert.ok(afterThreadDelete.threads.some((thread) => thread.id === defaultThread.id), "Other threads must remain.");
+    assert.ok(
+      !afterThreadDelete.messages.some((entry) => entry.threadId === disposableThread.id),
+      "Messages of a deleted thread must be removed.",
+    );
+    assert.ok(
+      afterThreadDelete.messages.some((entry) => entry.id === keptMessage.id),
+      "Messages in other threads must be kept.",
+    );
+    assert.equal(afterThreadDelete.documents.length, 1, "Deleting a chat must not delete documents.");
+    await assert.rejects(
+      () => deleteCompanyContextChatThread({ context, workspaceId: workspace.id, threadId: disposableThread.id }),
+      /not found/i,
+    );
+    await assert.rejects(
+      () => deleteCompanyContextChatThread({ context, workspaceId: workspace.id, threadId: "" }),
+      /invalid/i,
+    );
+    await assert.rejects(
+      () => appendCompanyContextMessage({
+        context,
+        workspaceId: workspace.id,
+        role: "OPERATOR",
+        body: "Late reply after deletion.",
+        threadId: disposableThread.id,
+      }),
+      /not found/i,
+      "A deleted thread must not accept new messages.",
+    );
+
+    const threadA = await createCompanyContextChatThread({ context, workspaceId: workspace.id, title: "Thread A" });
+    const threadB = await createCompanyContextChatThread({ context, workspaceId: workspace.id, title: "Thread B" });
+
     const firstQuestion = await appendCompanyContextMessage({
       context,
       workspaceId: workspace.id,
       role: "AGENT",
       body: "Which grade of PC-ABS?",
-      threadId: "thread-a",
+      threadId: threadA.id,
       questions: [{ question: "Which grade of PC-ABS?", kind: "options", options: ["FR40", "FR60"] }],
     });
     await appendCompanyContextMessage({
@@ -186,7 +238,7 @@ async function main() {
       workspaceId: workspace.id,
       role: "AGENT",
       body: "Which port should the foam ship from?",
-      threadId: "thread-b",
+      threadId: threadB.id,
       questions: [{ question: "Which port should the foam ship from?", kind: "yes_no", options: [] }],
     });
     assert.deepEqual(
@@ -215,7 +267,7 @@ async function main() {
       workspaceId: workspace.id,
       role: "OPERATOR",
       body: "FR60.",
-      threadId: "thread-a",
+      threadId: threadA.id,
     });
     const afterAnswer = await loadCompanyContextActivity(context, workspace.id);
     assert.equal(afterAnswer.openQuestions, 1, "Answering one thread must not clear the other thread's question.");
@@ -508,6 +560,10 @@ async function main() {
     );
     await assert.rejects(
       () => deleteCompanyContextMemory({ context: foreignContext, workspaceId: workspace.id, memoryId: keptMemory.saved[0].id }),
+      /not found/i,
+    );
+    await assert.rejects(
+      () => deleteCompanyContextChatThread({ context: foreignContext, workspaceId: workspace.id, threadId: defaultThread.id }),
       /not found/i,
     );
 

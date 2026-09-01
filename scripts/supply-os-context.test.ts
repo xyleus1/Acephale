@@ -16,6 +16,8 @@ const files = {
   downloadRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/documents/[documentId]/route.ts"), "utf8"),
   chatRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/chat/route.ts"), "utf8"),
   memoryRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/memory/route.ts"), "utf8"),
+  threadsRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/threads/route.ts"), "utf8"),
+  portalPage: readFileSync(resolve(root, "src/app/portal/procurement/page.tsx"), "utf8"),
   procurementRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/procurement/[actionId]/route.ts"), "utf8"),
   ui: readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-context.tsx"), "utf8"),
   uiStyles: readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-context.module.css"), "utf8"),
@@ -101,6 +103,14 @@ assert.match(files.persistence, /questionCount: message\.questions\?\.length \?\
 assert.match(files.memoryRoute, /saveCompanyContextMemory/);
 assert.match(files.memoryRoute, /deleteCompanyContextMemory/);
 assert.match(files.memoryRoute, /getSession/);
+assert.match(files.persistence, /deleteCompanyContextChatThread/);
+assert.match(files.threadsRoute, /export async function DELETE/);
+assert.match(files.threadsRoute, /deleteCompanyContextChatThread/);
+assert.match(files.threadsRoute, /getSession/);
+assert.match(files.ui, /threadDeleteEnabled/);
+assert.match(files.ui, /deleteThread/);
+assert.match(files.uiStyles, /\.threadDelete/);
+assert.match(files.portalPage, /threadDeleteEnabled=\{false\}/);
 assert.match(files.ui, /aria-label="Company chat"/);
 assert.match(files.ui, /Ongoing requests and files/);
 assert.match(files.ui, /placeholder="Ask Derya"/);
