@@ -7,7 +7,7 @@ import {
   PanelLeftOpen,
   Settings,
   Ship,
-  Handshake,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
@@ -31,7 +31,7 @@ type PanelDefinition = {
 type OfficeSwitchAction = (formData: FormData) => void | Promise<void>;
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Sales Agent", icon: Handshake },
+  { id: "materials", shortLabel: "Sales Agent", icon: UserRound },
   { id: "logistics", shortLabel: "Logistics", icon: Ship },
   { id: "context", shortLabel: "Chat", icon: MessagesSquare },
 ];
