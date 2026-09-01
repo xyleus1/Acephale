@@ -7,6 +7,7 @@ import {
   campaignProgress,
   campaignRowEligible,
   campaignSampleRecipients,
+  campaignSendCountsAsAttempt,
   renderCampaignEmail,
 } from "../src/lib/outreach-campaign-copy";
 
@@ -78,6 +79,10 @@ assert.equal(campaignRevisionMatches(revision, revision), true);
 assert.equal(campaignRevisionMatches(`${revision}-changed`, revision), false);
 assert.equal(campaignDefaultName("Outreach: Wens", new Set()), "Outreach: Wens");
 assert.equal(campaignDefaultName("Outreach: Wens", new Set(["Outreach: Wens", "Outreach: Wens (2)"])), "Outreach: Wens (3)");
+assert.equal(campaignSendCountsAsAttempt("QUEUED"), false);
+assert.equal(campaignSendCountsAsAttempt("SENT"), true);
+assert.equal(campaignSendCountsAsAttempt("REJECTED"), true);
+assert.equal(campaignSendCountsAsAttempt("UNKNOWN"), true);
 
 assert.deepEqual(campaignBlockers({
   eligible: 0,

@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   }
   const campaigns = await prisma.outreachCampaign.findMany({
     where: { status: "ACTIVE" },
-    orderBy: [{ lastRunAt: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ lastRunAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
     take: 5,
     select: { id: true, officeId: true, dailyCap: true },
   });

@@ -14,6 +14,7 @@ async function main() {
     outreachCampaignRfcMessageId,
     selectOutreachCampaignRows,
     outreachCampaignStatusAllowsSend,
+    outreachCampaignRunNowLimitValid,
     outreachCampaignUtcDayBounds,
     runOutreachCampaignBatch,
   } = await import("../src/lib/outreach-campaign-send");
@@ -38,6 +39,10 @@ async function main() {
   assert.equal(outreachCampaignReclaimBefore(new Date("2026-01-01T12:30:00Z")).toISOString(), "2026-01-01T12:00:00.000Z");
   assert.equal(outreachCampaignStatusAllowsSend("ACTIVE"), true);
   assert.equal(outreachCampaignStatusAllowsSend("PAUSED"), false);
+  for (const invalid of [-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(outreachCampaignRunNowLimitValid(invalid, 5), false);
+  }
+  assert.equal(outreachCampaignRunNowLimitValid(5, 5), true);
   const utcBounds = outreachCampaignUtcDayBounds(new Date("2026-01-02T01:00:00-08:00"));
   assert.equal(utcBounds.start.toISOString(), "2026-01-02T00:00:00.000Z");
   assert.equal(utcBounds.end.toISOString(), "2026-01-03T00:00:00.000Z");

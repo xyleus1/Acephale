@@ -8,6 +8,7 @@ import {
   campaignRevisionMatches,
   campaignRowEligible,
   campaignSampleRecipients,
+  campaignSendCountsAsAttempt,
   renderCampaignEmail,
   type CampaignStatus,
 } from "@/lib/outreach-campaign-copy";
@@ -76,6 +77,7 @@ export type CampaignPlan = {
   }>;
   subject: string;
   sampleBody: string;
+  renderedBody: string;
   senderEmail: string | null;
   blockers: string[];
 };
@@ -263,17 +265,16 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     : 0;
   const subject = input.subject ?? "";
   const bodyTemplate = input.bodyTemplate ?? "";
-  const sample = eligible[0]
-    ? renderCampaignEmail({
+  const renderedSample = renderCampaignEmail({
       subject,
       bodyTemplate,
-      row: renderRow(eligible[0].data as ResearchRecordData, {
+      row: eligible[0] ? renderRow(eligible[0].data as ResearchRecordData, {
         emailField,
         companyField: input.companyField,
         countryField: input.countryField,
-      }),
-    }).body.slice(0, 400)
-    : "";
+      }) : {},
+    });
+  const sample = eligible[0] ? renderedSample.body.slice(0, 400) : "";
   const dailyCap = input.dailyCap ?? 40;
   const sender = await senderDetails(input.senderAccountId ?? null);
   const revisionHash = campaignRevisionHash({
@@ -304,6 +305,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     dailyCap,
     subject: renderCampaignEmail({ subject, bodyTemplate, row: {} }).subject,
     sampleBody: sample,
+    renderedBody: renderedSample.body,
     senderEmail: sender.email,
     mailboxesAvailable: sender.mailboxesAvailable,
     emailField,
@@ -564,8 +566,8 @@ export async function completeCampaignIfDone(input: { officeId: string; campaign
   const { records } = await eligibleRecords(campaign, true);
   const attemptedIds = new Set((await prisma.outreachCampaignSend.findMany({
     where: { officeId: input.officeId, campaignId: input.campaignId },
-    select: { recordId: true },
-  })).map((row) => row.recordId));
+    select: { recordId: true, status: true },
+  })).filter((row) => campaignSendCountsAsAttempt(row.status)).map((row) => row.recordId));
   const unsentEligible = records.filter((record) => !attemptedIds.has(record.id));
   if (unsentEligible.length > 0) return { completed: false };
   await prisma.outreachCampaign.updateMany({

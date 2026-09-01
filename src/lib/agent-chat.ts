@@ -868,9 +868,13 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   }
   const greenlightMatch = userMessage.trim().match(/^(greenlight|green ?light|send it|approve it|go ahead)\b/i);
   if (greenlightMatch) {
+    if (session.accessKind === "customer" || session.role === "EMPLOYEE") {
+      return { reply: "Outreach campaign approval is available only to operator accounts." };
+    }
     const proposals = await prisma.agentProposal.findMany({
       where: {
         officeId: session.officeId,
+        userId: session.userId,
         status: "PENDING",
         kind: "OUTREACH_CAMPAIGN_START",
       },

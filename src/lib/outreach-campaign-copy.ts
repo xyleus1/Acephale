@@ -111,6 +111,10 @@ export function campaignDefaultName(base: string, takenNames: ReadonlySet<string
   return `${base} (${suffix})`;
 }
 
+export function campaignSendCountsAsAttempt(status: string) {
+  return status === "SENT" || status === "REJECTED" || status === "UNKNOWN";
+}
+
 export function campaignBlockers(input: {
   eligible: number;
   mailboxesAvailable: number;

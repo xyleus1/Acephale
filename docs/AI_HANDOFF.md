@@ -1,5 +1,20 @@
 # AI Handoff
 
+## 2026-09-01: Outreach campaign hardening
+
+- Production migration verification is a read-only catalog and privilege
+  check paired with `20260901000100_outreach_campaigns`.
+- Campaign completion counts only `SENT`, `REJECTED`, and `UNKNOWN` sends as
+  attempts. `QUEUED` rows remain outstanding.
+- Approval details include the full rendered body and the full eligible
+  recipient count. The displayed review rows are explicitly the first ten.
+- Greenlight is limited to operator sessions and pending proposals are scoped
+  to the office and approving user.
+- Cron ordering puts campaigns that have never run before campaigns with a
+  previous `lastRunAt`.
+- Run-now limits must be finite positive integers no greater than the
+  campaign daily cap.
+
 ## 2026-09-01: Outreach proposals pin content and audience
 
 - Outreach proposals carry the campaign revision hash. Activation refuses a

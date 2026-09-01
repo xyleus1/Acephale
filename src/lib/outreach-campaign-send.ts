@@ -93,6 +93,14 @@ export function outreachCampaignStatusAllowsSend(status: string | null | undefin
   return status === "ACTIVE";
 }
 
+export function outreachCampaignRunNowLimitValid(limit: unknown, dailyCap: number) {
+  return typeof limit === "number"
+    && Number.isFinite(limit)
+    && Number.isInteger(limit)
+    && limit >= 1
+    && limit <= dailyCap;
+}
+
 export function outreachCampaignIdempotencyKey(campaignId: string, recordId: string) {
   return `outreach-campaign:${campaignId}:${recordId}`;
 }

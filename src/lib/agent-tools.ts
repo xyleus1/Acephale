@@ -64,7 +64,7 @@ import {
   resumeCampaign,
   saveDraftCampaign,
 } from "@/lib/outreach-campaigns";
-import { runOutreachCampaignBatch } from "@/lib/outreach-campaign-send";
+import { outreachCampaignRunNowLimitValid, runOutreachCampaignBatch } from "@/lib/outreach-campaign-send";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 
 // Tool schemas use the app's provider-neutral input_schema shape. The shared
@@ -4253,6 +4253,8 @@ export async function dispatchTool(
               `Daily cap: ${plan.dailyCap}`,
               `Filters: ${JSON.stringify(plan.filters)}`,
               `Subject: ${plan.subject}`,
+              `Body (rendered from the first eligible row):\n${plan.renderedBody}`,
+              `Eligible recipients: ${plan.eligible}. The review items below are the first ${Math.min(plan.eligible, plan.sampleRecipients.length)} of ${plan.eligible} eligible recipients.`,
               "Sending starts on the next batch after approval.",
             ],
             reviewItems: plan.sampleRecipients.map((recipient) => ({
@@ -4301,10 +4303,21 @@ export async function dispatchTool(
       case "run_outreach_campaign_now": {
         const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";
         if (!campaignId) return { ok: false, error: "campaign_id required" };
+        const requestedLimit = input.limit;
+        if (requestedLimit !== undefined) {
+          const campaign = await prisma.outreachCampaign.findFirst({
+            where: { id: campaignId, officeId: ctx.officeId },
+            select: { dailyCap: true },
+          });
+          if (!campaign) return { ok: false, error: "Outreach campaign not found." };
+          if (!outreachCampaignRunNowLimitValid(requestedLimit, campaign.dailyCap)) {
+            return { ok: false, error: `limit must be a finite integer between 1 and the campaign daily cap (${campaign.dailyCap}).` };
+          }
+        }
         const batch = await runOutreachCampaignBatch({
           officeId: ctx.officeId,
           campaignId,
-          limit: typeof input.limit === "number" ? input.limit : undefined,
+          limit: typeof requestedLimit === "number" ? requestedLimit : undefined,
         });
         return { ok: true, result: batch };
       }

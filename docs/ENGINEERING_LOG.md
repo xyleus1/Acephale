@@ -1,5 +1,18 @@
 # Engineering Log
 
+## 2026-09-01: Outreach campaign hardening
+
+- Added read-only production verification for the outreach campaign migration,
+  including table, index, constraint, foreign key, and `derya_app` privilege
+  assertions.
+- Campaign completion now leaves preclaimed `QUEUED` rows outstanding until a
+  terminal delivery status is recorded.
+- Approval proposals show the full rendered body and eligible audience count,
+  with the first ten recipients retained as review items.
+- Greenlight now requires an operator session and a pending proposal owned by
+  the current office and user. Cron uses nulls-first `lastRunAt` ordering, and
+  run-now validates finite integer limits against the campaign daily cap.
+
 ## 2026-09-01: Outreach approval integrity
 
 - Campaign drafts now persist a revision hash and eligible audience id
