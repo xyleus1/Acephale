@@ -289,6 +289,14 @@ async function lockCompanyContextThread(tx: Prisma.TransactionClient, threadId: 
   `;
 }
 
+export async function lockCompanyContextAction(tx: Prisma.TransactionClient, actionId: string) {
+  const lockKey = `company-context-action:${actionId}`;
+  await tx.$queryRaw<Array<{ locked: number }>>`
+    SELECT 1::integer AS "locked"
+    FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+  `;
+}
+
 export async function deleteCompanyContextChatThread(args: {
   context: CompanyContextAccess;
   workspaceId: string;

@@ -18,6 +18,7 @@ import {
 } from "@/lib/customer-context-access";
 import {
   assembleCompanyContextForAgent,
+  lockCompanyContextAction,
   type CompanyContextCitation,
 } from "@/lib/company-context";
 import {
@@ -29,6 +30,7 @@ import {
 } from "@/lib/supply-os/persistence";
 
 const MAX_ACTIONS = 50;
+const MAX_ACTION_SCAN_ROWS = 500;
 const MAX_SPECIFIC_DOCUMENTS = 12;
 const MAX_SPECIFIC_DOCUMENT_CHARS = 24_000;
 const MAX_SPECIFIC_DOCUMENT_CHARS_PER_FILE = 8_000;
@@ -61,6 +63,7 @@ type StoredContextProcurementAction = {
   requestCreatedAt: string;
   threadId: string | null;
   confirmationStartedAt: string | null;
+  hiddenAt: string | null;
   order: null | {
     id: string;
     status: string;
@@ -200,6 +203,7 @@ function decodeAction(payload: unknown) {
       !(["PENDING", "CREATING", "CREATED", "DISMISSED"] as unknown[]).includes(status)
     ) return null;
     const confirmationStartedAt = cleanText(value.confirmationStartedAt, 40);
+    const hiddenAt = cleanText(value.hiddenAt, 40);
     const threadId = cleanText(value.threadId, 200) || null;
     const citations = Array.isArray(value.citations) ? value.citations.flatMap((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
@@ -224,6 +228,7 @@ function decodeAction(payload: unknown) {
       confirmationStartedAt: confirmationStartedAt && !Number.isNaN(new Date(confirmationStartedAt).valueOf())
         ? confirmationStartedAt
         : null,
+      hiddenAt: hiddenAt && !Number.isNaN(new Date(hiddenAt).valueOf()) ? hiddenAt : null,
       order: order && typeof order.id === "string" && typeof order.status === "string"
         ? {
             id: order.id,
@@ -255,18 +260,36 @@ export async function listCompanyContextProcurementActions(
   workspaceId: string,
 ) {
   const workspace = await companyWorkspace(context, workspaceId, "view");
-  const rows = await prisma.companyContext.findMany({
-    where: {
-      officeId: context.officeId,
-      companyId: workspace.companyId,
-      kind: "ACTION",
-      ...companyContextVisibilityWhere(context),
-    },
-    select: { id: true, payload: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-    take: MAX_ACTIONS,
-  });
-  return rows.reverse().flatMap((row) => actionFromRow(row) ?? []);
+  const actions: ContextProcurementAction[] = [];
+  let visibleCount = 0;
+  let scannedRows = 0;
+  let cursorId: string | null = null;
+  while (visibleCount < MAX_ACTIONS && scannedRows < MAX_ACTION_SCAN_ROWS) {
+    const rows: Array<{ id: string; payload: unknown; createdAt: Date }> = await prisma.companyContext.findMany({
+      where: {
+        officeId: context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        ...companyContextVisibilityWhere(context),
+      },
+      select: { id: true, payload: true, createdAt: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: MAX_ACTIONS,
+      ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+    });
+    if (!rows.length) break;
+    scannedRows += rows.length;
+    cursorId = rows[rows.length - 1].id;
+    for (const row of rows) {
+      const action = actionFromRow(row);
+      if (!action) continue;
+      actions.push(action);
+      if (action.status !== "DISMISSED" && (isCustomerContextAccess(context) || !action.hiddenAt)) visibleCount += 1;
+      if (visibleCount >= MAX_ACTIONS) break;
+    }
+    if (rows.length < MAX_ACTIONS) break;
+  }
+  return actions.reverse();
 }
 
 export async function createCompanyContextProcurementAction(args: {
@@ -314,6 +337,7 @@ export async function createCompanyContextProcurementActions(args: {
     requestCreatedAt: args.requestCreatedAt.toISOString(),
     threadId: args.threadId ?? null,
     confirmationStartedAt: null,
+    hiddenAt: null,
     order: null,
   }));
   const rows = await prisma.$transaction(storedItems.map((stored) => prisma.companyContext.create({
@@ -517,6 +541,7 @@ export async function confirmCompanyContextProcurementAction(args: {
       requestCreatedAt: action.requestCreatedAt,
       threadId: action.threadId,
       confirmationStartedAt: new Date().toISOString(),
+      hiddenAt: action.hiddenAt,
       order: null,
     };
     const claimed = await prisma.companyContext.updateMany({
@@ -597,6 +622,7 @@ export async function confirmCompanyContextProcurementAction(args: {
       requestCreatedAt: action.requestCreatedAt,
       threadId: action.threadId,
       confirmationStartedAt: action.confirmationStartedAt,
+      hiddenAt: action.hiddenAt,
       order: {
         id: order.orderId,
         status: order.status,
@@ -669,6 +695,7 @@ export async function dismissCompanyContextProcurementAction(args: {
     requestCreatedAt: action.requestCreatedAt,
     threadId: action.threadId,
     confirmationStartedAt: null,
+    hiddenAt: action.hiddenAt,
     order: action.order,
   };
   const updated = await prisma.companyContext.updateMany({
@@ -686,4 +713,71 @@ export async function dismissCompanyContextProcurementAction(args: {
     throw new SupplyPersistenceError("This procurement confirmation changed before it could be dismissed.", "conflict");
   }
   return { ...action, status: "DISMISSED" as const };
+}
+
+export async function hideCompanyContextProcurementAction(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  actionId: string;
+}) {
+  const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
+  const row = await prisma.companyContext.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      ...companyContextVisibilityWhere(args.context),
+    },
+    select: { id: true, payload: true, createdAt: true },
+  });
+  const found = row ? actionFromRow(row) : null;
+  if (!found) throw new SupplyPersistenceError("Procurement confirmation not found.", "not_found");
+  return prisma.$transaction(async (tx) => {
+    await lockCompanyContextAction(tx, found.id);
+    const lockedRow = await tx.companyContext.findFirst({
+      where: {
+        id: found.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        ...companyContextVisibilityWhere(args.context),
+      },
+      select: { id: true, payload: true, createdAt: true },
+    });
+    const action = lockedRow ? actionFromRow(lockedRow) : null;
+    if (!action) throw new SupplyPersistenceError("Procurement confirmation not found.", "not_found");
+    if (action.hiddenAt) return action;
+    if (action.status !== "CREATED") {
+      throw new SupplyPersistenceError("Only a created procurement request can be hidden. Dismiss it instead.", "conflict");
+    }
+    const stored: StoredContextProcurementAction = {
+      schemaVersion: 1,
+      status: action.status,
+      draft: action.draft,
+      citations: action.citations,
+      requestMessageId: action.requestMessageId,
+      requestBody: action.requestBody,
+      requestCreatedAt: action.requestCreatedAt,
+      threadId: action.threadId,
+      confirmationStartedAt: action.confirmationStartedAt,
+      hiddenAt: new Date().toISOString(),
+      order: action.order,
+    };
+    const updated = await tx.companyContext.updateMany({
+      where: {
+        id: action.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        processingState: action.status,
+        ...companyContextVisibilityWhere(args.context),
+      },
+      data: { payload: stored, processingState: stored.status },
+    });
+    if (updated.count !== 1) {
+      throw new SupplyPersistenceError("This procurement confirmation changed before it could be hidden.", "conflict");
+    }
+    return { ...action, hiddenAt: stored.hiddenAt };
+  });
 }

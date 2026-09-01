@@ -385,10 +385,44 @@
   gap: 12px;
 }
 
-.procurementAction > header > span:last-child {
+.procurementAction > header > span + span {
   min-width: 0;
+  flex: 1 1 auto;
   display: grid;
   gap: 3px;
+}
+
+.hideRequest {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  border: 1px solid #c7ceca;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7672;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.hideRequest:hover:not(:disabled),
+.hideRequest:focus-visible {
+  border-color: #9aa6a2;
+  color: #29485c;
+}
+
+.hideRequest:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hideRequest {
+    transition: none;
+  }
 }
 
 .procurementAction > header strong {

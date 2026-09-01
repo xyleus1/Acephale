@@ -4,6 +4,7 @@ import { ProcurementWorkflowError } from "@/lib/procurement-workflow";
 import {
   confirmCompanyContextProcurementAction,
   dismissCompanyContextProcurementAction,
+  hideCompanyContextProcurementAction,
 } from "@/lib/supply-os/context-procurement";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 
@@ -30,14 +31,16 @@ export async function POST(
   const { workspaceId, actionId } = await route.params;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const decision = body?.decision;
-  if (decision !== "confirm" && decision !== "dismiss") {
-    return NextResponse.json({ error: "Choose confirm or dismiss." }, { status: 400 });
+  if (decision !== "confirm" && decision !== "dismiss" && decision !== "hide") {
+    return NextResponse.json({ error: "Choose confirm, dismiss, or hide." }, { status: 400 });
   }
   try {
     const access = supplyAccessContext(session);
     const action = decision === "confirm"
       ? await confirmCompanyContextProcurementAction({ context: access, workspaceId, actionId })
-      : await dismissCompanyContextProcurementAction({ context: access, workspaceId, actionId });
+      : decision === "hide"
+        ? await hideCompanyContextProcurementAction({ context: access, workspaceId, actionId })
+        : await dismissCompanyContextProcurementAction({ context: access, workspaceId, actionId });
     return NextResponse.json({ action }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     if (error instanceof ProcurementWorkflowError) return procurementErrorResponse(error);

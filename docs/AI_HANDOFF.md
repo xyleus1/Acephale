@@ -1,5 +1,24 @@
 # AI Handoff
 
+## 2026-09-01: Hide finished request cards from the Requests panel
+
+- Request cards in the Requests panel gained a visible minus button that hides
+  a card once its work is underway or done: procurement actions with status
+  CREATED and prospecting actions with status COMPLETED. Hiding is display
+  only; the underlying supplier research or prospect list is untouched, and
+  the button title says so.
+- Pending, failed, or stale cards keep the existing Dismiss button, which
+  remains the way to cancel work that has not started. Hide requests for other
+  statuses reject with a conflict.
+- Persistence: `hiddenAt` (ISO timestamp or null) on the stored ACTION payload,
+  set by `hideCompanyContextProcurementAction` and
+  `hideCompanyContextProspectingAction` with the same office/company scoping
+  and optimistic `processingState` guard as dismissal. Hiding twice is
+  idempotent. The internal decision routes accept `decision: "hide"`; the
+  customer portal procurement route does not.
+- The UI filters cards and the Requests badge on
+  `status !== "DISMISSED" && !hiddenAt`.
+
 ## 2026-09-01: Chat thread deletion
 
 - Operators can delete a chat thread from the Chats rail (trash icon on

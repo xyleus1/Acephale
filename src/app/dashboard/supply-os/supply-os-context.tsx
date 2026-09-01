@@ -10,6 +10,7 @@ import {
   FileText,
   ListTodo,
   LoaderCircle,
+  Minus,
   MessageSquarePlus,
   MessagesSquare,
   Paperclip,
@@ -93,6 +94,7 @@ type ContextProcurementAction = {
     status: string;
     workflowWakeRequested?: boolean;
   };
+  hiddenAt?: string | null;
   createdAt: string;
 };
 
@@ -118,6 +120,7 @@ type ContextProspectingAction = {
   nextQueryOffset: number;
   exhausted: boolean;
   runningStartedAt: string | null;
+  hiddenAt?: string | null;
   createdAt: string;
 };
 
@@ -348,8 +351,8 @@ export function SupplyOsContext({
   }, [activeThreadId, data?.messages, messageRole, optimisticMessage]);
 
   const openRequestCount = useMemo(() => {
-    const procurement = (data?.procurementActions ?? []).filter((action) => action.status !== "DISMISSED").length;
-    const prospecting = (data?.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED").length;
+    const procurement = (data?.procurementActions ?? []).filter((action) => action.status !== "DISMISSED" && !action.hiddenAt).length;
+    const prospecting = (data?.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED" && !action.hiddenAt).length;
     return procurement + prospecting;
   }, [data?.procurementActions, data?.prospectingActions]);
 
@@ -484,7 +487,7 @@ export function SupplyOsContext({
     if (failures.length) setError(failures.join(" "));
   }
 
-  async function decideProcurementAction(actionId: string, decision: "confirm" | "dismiss") {
+  async function decideProcurementAction(actionId: string, decision: "confirm" | "dismiss" | "hide") {
     if (!workspaceId || readOnly || actionBusyId) return;
     setActionBusyId(actionId);
     setError(null);
@@ -507,7 +510,7 @@ export function SupplyOsContext({
     }
   }
 
-  async function decideProspectingAction(actionId: string, decision: "run" | "dismiss") {
+  async function decideProspectingAction(actionId: string, decision: "run" | "dismiss" | "hide") {
     if (!workspaceId || readOnly || actionBusyId) return;
     setActionBusyId(actionId);
     setError(null);
@@ -953,7 +956,7 @@ export function SupplyOsContext({
           {!openRequestCount ? (
             <div className={styles.filesEmpty}><span>No ongoing requests</span></div>
           ) : null}
-          {(data.procurementActions ?? []).filter((action) => action.status !== "DISMISSED").map((action) => (
+          {(data.procurementActions ?? []).filter((action) => action.status !== "DISMISSED" && !action.hiddenAt).map((action) => (
             <article className={styles.procurementAction} data-status={action.status} key={action.id}>
               <header>
                 <span className={styles.procurementActionIcon}><Search size={18} aria-hidden="true" /></span>
@@ -965,6 +968,18 @@ export function SupplyOsContext({
                       : "Start procurement?"}</strong>
                   <small>{action.draft.material}</small>
                 </span>
+                {!readOnly && action.status === "CREATED" ? (
+                  <button
+                    type="button"
+                    className={styles.hideRequest}
+                    aria-label={`Hide request ${action.draft.material}`}
+                    title="Hide from this panel. The supplier research keeps running."
+                    disabled={Boolean(actionBusyId)}
+                    onClick={() => void decideProcurementAction(action.id, "hide")}
+                  >
+                    {actionBusyId === action.id ? <LoaderCircle className={styles.spinner} size={16} /> : <Minus size={16} aria-hidden="true" />}
+                  </button>
+                ) : null}
               </header>
               <dl>
                 <div><dt>Quantity</dt><dd>{action.draft.quantity.toLocaleString("en-US")} {action.draft.unit}</dd></div>
@@ -1027,7 +1042,7 @@ export function SupplyOsContext({
               )}
             </article>
           ))}
-          {(data.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED").map((action) => (
+          {(data.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED" && !action.hiddenAt).map((action) => (
             <article className={styles.procurementAction} data-status={action.status} key={action.id}>
               <header>
                 <span className={styles.procurementActionIcon}><Search size={18} aria-hidden="true" /></span>
@@ -1041,6 +1056,18 @@ export function SupplyOsContext({
                         : "Start prospect research?"}</strong>
                   <small>{action.draft.objective}</small>
                 </span>
+                {!readOnly && action.status === "COMPLETED" ? (
+                  <button
+                    type="button"
+                    className={styles.hideRequest}
+                    aria-label={`Hide research ${action.draft.objective}`}
+                    title="Hide from this panel. Results stay available in the prospect list."
+                    disabled={Boolean(actionBusyId)}
+                    onClick={() => void decideProspectingAction(action.id, "hide")}
+                  >
+                    {actionBusyId === action.id ? <LoaderCircle className={styles.spinner} size={16} /> : <Minus size={16} aria-hidden="true" />}
+                  </button>
+                ) : null}
               </header>
               <dl>
                 <div><dt>Segments</dt><dd>{action.draft.segments.join(", ")}</dd></div>

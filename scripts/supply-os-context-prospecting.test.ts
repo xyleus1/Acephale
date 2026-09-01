@@ -14,6 +14,7 @@ import {
   createCompanyContextProspectingActions,
   dismissCompanyContextProspectingAction,
   groupProspectingResearchRows,
+  hideCompanyContextProspectingAction,
   listCompanyContextProspectingActions,
   runCompanyContextProspectingAction,
 } from "../src/lib/supply-os/context-prospecting";
@@ -384,6 +385,50 @@ async function main() {
       resolveMx,
     });
     assert.equal(staleRetry.status, "COMPLETED");
+    const hiddenRestartAction = (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: { ...lifecycleDraft, listSlug: `${lifecycleDraft.listSlug}-hidden-restart` }, citations: [] }],
+      requestMessageId: "message:test",
+      requestBody: "Find steel buyers.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const emptyBatch = async () => ({
+      candidates: [],
+      stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 0 },
+      nextQueryOffset: 1,
+      exhausted: false,
+    });
+    const firstRun = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: hiddenRestartAction.id,
+      runBatch: emptyBatch,
+      resolveMx,
+    });
+    assert.equal(firstRun.status, "COMPLETED");
+    const hiddenBeforeRestart = await hideCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: hiddenRestartAction.id,
+    });
+    assert(hiddenBeforeRestart.hiddenAt, "Hiding completed research must record hiddenAt.");
+    const restarted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: hiddenRestartAction.id,
+      runBatch: emptyBatch,
+      resolveMx,
+    });
+    assert.equal(restarted.status, "COMPLETED");
+    assert.equal(
+      restarted.hiddenAt,
+      hiddenBeforeRestart.hiddenAt,
+      "Restarting hidden research must preserve hiddenAt through RUNNING and COMPLETED.",
+    );
+    const reloadedHidden = (await listCompanyContextProspectingActions(context, workspace.id))
+      .find((entry) => entry.id === hiddenRestartAction.id);
+    assert.equal(reloadedHidden?.hiddenAt, hiddenBeforeRestart.hiddenAt, "Persisted hiddenAt must survive a restart.");
     const staleDismissedAction = (await createCompanyContextProspectingActions({
       context,
       workspaceId: workspace.id,

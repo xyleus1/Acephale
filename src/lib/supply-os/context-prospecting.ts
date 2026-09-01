@@ -31,11 +31,12 @@ import { defaultFetcher } from "@/lib/leadgen/harvest";
 import { createLeadGenRun, finishLeadGenRun, recordLeadDiscoveries } from "@/lib/leadgen/persist";
 import type { VerifyOptions } from "@/lib/leadgen/verify";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
-import type { CompanyContextCitation } from "@/lib/company-context";
+import { lockCompanyContextAction, type CompanyContextCitation } from "@/lib/company-context";
 import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
 export { STALE_RUN_MS };
 
 const MAX_ACTIONS = 50;
+const MAX_ACTION_SCAN_ROWS = 500;
 const ACTION_TYPE = "PROSPECTING";
 const LIST_FIELDS = [
   { key: "company_name", label: "Company", type: "text" },
@@ -76,6 +77,7 @@ type StoredProspectingAction = {
   requestCreatedAt: string;
   threadId: string | null;
   runningStartedAt: string | null;
+  hiddenAt: string | null;
   stats: ProspectingStats;
   nextQueryOffset: number;
   exhausted: boolean;
@@ -156,6 +158,10 @@ function decodeAction(payload: unknown) {
     requestCreatedAt,
     threadId: text(value.threadId, 200) || null,
     runningStartedAt: text(value.runningStartedAt, 40) || null,
+    hiddenAt: (() => {
+      const hiddenAt = text(value.hiddenAt, 40);
+      return hiddenAt && !Number.isNaN(new Date(hiddenAt).valueOf()) ? hiddenAt : null;
+    })(),
     stats: {
       queriesUsed: number(statsValue.queriesUsed),
       pagesFetched: number(statsValue.pagesFetched),
@@ -179,18 +185,36 @@ export async function listCompanyContextProspectingActions(
 ) {
   if (customerAccess(context)) return [];
   const workspace = await companyWorkspace(context, workspaceId, "view");
-  const rows = await prisma.companyContext.findMany({
-    where: {
-      officeId: context.officeId,
-      companyId: workspace.companyId,
-      kind: "ACTION",
-      ...companyContextVisibilityWhere(context),
-    },
-    select: { id: true, payload: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-    take: MAX_ACTIONS,
-  });
-  return rows.reverse().flatMap((row) => actionFromRow(row) ?? []);
+  const actions: ContextProspectingAction[] = [];
+  let visibleCount = 0;
+  let scannedRows = 0;
+  let cursorId: string | null = null;
+  while (visibleCount < MAX_ACTIONS && scannedRows < MAX_ACTION_SCAN_ROWS) {
+    const rows: Array<{ id: string; payload: unknown; createdAt: Date }> = await prisma.companyContext.findMany({
+      where: {
+        officeId: context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        ...companyContextVisibilityWhere(context),
+      },
+      select: { id: true, payload: true, createdAt: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: MAX_ACTIONS,
+      ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+    });
+    if (!rows.length) break;
+    scannedRows += rows.length;
+    cursorId = rows[rows.length - 1].id;
+    for (const row of rows) {
+      const action = actionFromRow(row);
+      if (!action) continue;
+      actions.push(action);
+      if (action.status !== "DISMISSED" && !action.hiddenAt) visibleCount += 1;
+      if (visibleCount >= MAX_ACTIONS) break;
+    }
+    if (rows.length < MAX_ACTIONS) break;
+  }
+  return actions.reverse();
 }
 
 export async function createCompanyContextProspectingActions(args: {
@@ -216,6 +240,7 @@ export async function createCompanyContextProspectingActions(args: {
     requestCreatedAt: args.requestCreatedAt.toISOString(),
     threadId: args.threadId ?? null,
     runningStartedAt: null,
+    hiddenAt: null,
     stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
     nextQueryOffset: 0,
     exhausted: false,
@@ -392,33 +417,52 @@ export async function runCompanyContextProspectingAction(args: {
     },
     select: { id: true, payload: true, createdAt: true },
   });
-  const found = row ? actionFromRow(row) : null;
-  if (!found) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
-  if (found.status === "DISMISSED") throw new SupplyPersistenceError("This prospecting action was dismissed.", "conflict");
-  if (found.status === "COMPLETED" && found.exhausted) return found;
-  if (found.status === "RUNNING") {
-    const started = found.runningStartedAt ? new Date(found.runningStartedAt).valueOf() : 0;
-    if (started && Date.now() - started < STALE_RUN_MS) {
-      throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
+  const initial = row ? actionFromRow(row) : null;
+  if (!initial) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
+  const claimed = await prisma.$transaction(async (tx) => {
+    await lockCompanyContextAction(tx, initial.id);
+    const lockedRow = await tx.companyContext.findFirst({
+      where: {
+        id: initial.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        ...companyContextVisibilityWhere(args.context),
+      },
+      select: { id: true, payload: true, createdAt: true },
+    });
+    const found = lockedRow ? actionFromRow(lockedRow) : null;
+    if (!found) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
+    if (found.status === "DISMISSED") throw new SupplyPersistenceError("This prospecting action was dismissed.", "conflict");
+    if (found.status === "COMPLETED" && found.exhausted) return { action: found, alreadyDone: true as const };
+    if (found.status === "RUNNING") {
+      const started = found.runningStartedAt ? new Date(found.runningStartedAt).valueOf() : 0;
+      if (started && Date.now() - started < STALE_RUN_MS) {
+        throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
+      }
     }
-  }
-  const running: StoredProspectingAction = {
-    ...found,
-    status: "RUNNING",
-    runningStartedAt: new Date().toISOString(),
-  };
-  const claim = await prisma.companyContext.updateMany({
-    where: {
-      id: found.id,
-      officeId: args.context.officeId,
-      companyId: workspace.companyId,
-      kind: "ACTION",
-      processingState: found.status,
-      ...companyContextVisibilityWhere(args.context),
-    },
-    data: { payload: running, processingState: running.status },
+    const claim: StoredProspectingAction & { id: string; createdAt: Date } = {
+      ...found,
+      status: "RUNNING",
+      runningStartedAt: new Date().toISOString(),
+    };
+    const { id: _claimId, createdAt: _claimCreatedAt, ...claimPayload } = claim;
+    const updated = await tx.companyContext.updateMany({
+      where: {
+        id: found.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        processingState: found.status,
+        ...companyContextVisibilityWhere(args.context),
+      },
+      data: { payload: claimPayload, processingState: claimPayload.status },
+    });
+    if (updated.count !== 1) throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
+    return { action: claim, alreadyDone: false as const };
   });
-  if (claim.count !== 1) throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
+  if (claimed.alreadyDone) return claimed.action;
+  const running = claimed.action;
 
   let leadGenRunId: string | null = null;
   let batchStats: ProspectingBatchStats | null = null;
@@ -479,7 +523,7 @@ export async function runCompanyContextProspectingAction(args: {
     };
     await prisma.companyContext.updateMany({
       where: {
-        id: found.id,
+        id: running.id,
         officeId: args.context.officeId,
         companyId: workspace.companyId,
         kind: "ACTION",
@@ -488,7 +532,7 @@ export async function runCompanyContextProspectingAction(args: {
       },
       data: { payload: completed, processingState: completed.status },
     });
-    return { id: found.id, createdAt: found.createdAt, ...completed };
+    return { id: running.id, createdAt: running.createdAt, ...completed };
   } catch (error) {
     if (leadGenRunId) {
       await finishLeadGenRun(prisma, {
@@ -516,7 +560,7 @@ export async function runCompanyContextProspectingAction(args: {
     };
     await prisma.companyContext.updateMany({
       where: {
-        id: found.id,
+        id: running.id,
         officeId: args.context.officeId,
         companyId: workspace.companyId,
         kind: "ACTION",
@@ -570,4 +614,58 @@ export async function dismissCompanyContextProspectingAction(args: {
   });
   if (updated.count !== 1) throw new SupplyPersistenceError("This prospecting action changed before it could be dismissed.", "conflict");
   return dismissed;
+}
+
+export async function hideCompanyContextProspectingAction(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  actionId: string;
+}) {
+  const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
+  const row = await prisma.companyContext.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      ...companyContextVisibilityWhere(args.context),
+    },
+    select: { id: true, payload: true, createdAt: true },
+  });
+  const found = row ? actionFromRow(row) : null;
+  if (!found) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
+  return prisma.$transaction(async (tx) => {
+    await lockCompanyContextAction(tx, found.id);
+    const lockedRow = await tx.companyContext.findFirst({
+      where: {
+        id: found.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        ...companyContextVisibilityWhere(args.context),
+      },
+      select: { id: true, payload: true, createdAt: true },
+    });
+    const action = lockedRow ? actionFromRow(lockedRow) : null;
+    if (!action) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
+    if (action.hiddenAt) return action;
+    if (action.status !== "COMPLETED") {
+      throw new SupplyPersistenceError("Only completed prospect research can be hidden. Dismiss it instead.", "conflict");
+    }
+    const { id: actionRowId, createdAt: actionCreatedAt, ...storedAction } = action;
+    const hidden: StoredProspectingAction = { ...storedAction, hiddenAt: new Date().toISOString() };
+    const updated = await tx.companyContext.updateMany({
+      where: {
+        id: actionRowId,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        processingState: action.status,
+        ...companyContextVisibilityWhere(args.context),
+      },
+      data: { payload: hidden, processingState: hidden.status },
+    });
+    if (updated.count !== 1) throw new SupplyPersistenceError("This prospecting action changed before it could be hidden.", "conflict");
+    return { id: actionRowId, createdAt: actionCreatedAt, ...hidden };
+  });
 }

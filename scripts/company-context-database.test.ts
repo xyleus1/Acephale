@@ -24,6 +24,7 @@ import {
   createCompanyContextProcurementAction,
   createCompanyContextProcurementActions,
   dismissCompanyContextProcurementAction,
+  hideCompanyContextProcurementAction,
   listCompanyContextProcurementActions,
 } from "../src/lib/supply-os/context-procurement";
 import { createSupplyWorkspace, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
@@ -433,6 +434,87 @@ async function main() {
       actionId: dismissibleAction.id,
     });
     assert.equal(dismissed.status, "DISMISSED");
+
+    await assert.rejects(
+      () => hideCompanyContextProcurementAction({
+        context,
+        workspaceId: workspace.id,
+        actionId: dismissibleAction.id,
+      }),
+      /Only a created procurement request can be hidden/i,
+    );
+    const hidden = await hideCompanyContextProcurementAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: procurementAction.id,
+    });
+    assert.equal(hidden.status, "CREATED");
+    assert(hidden.hiddenAt, "Hiding a created procurement request must record hiddenAt.");
+    const hiddenAgain = await hideCompanyContextProcurementAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: procurementAction.id,
+    });
+    assert.equal(hiddenAgain.hiddenAt, hidden.hiddenAt, "Hiding twice must be idempotent.");
+    const listedActions = await listCompanyContextProcurementActions(context, workspace.id);
+    const hiddenListed = listedActions.find((entry) => entry.id === procurementAction.id);
+    assert.equal(hiddenListed?.status, "CREATED", "A hidden request must stay listed with its status.");
+    assert(hiddenListed?.hiddenAt, "A hidden request must persist hiddenAt across reads.");
+
+    const concurrentHideAction = await createCompanyContextProcurementAction({
+      context,
+      workspaceId: workspace.id,
+      draft: { ...procurementAction.draft, material: "Concurrent hide request" },
+      citations: [{ id: `message:${operatorMessage.id}`, label: "Operator request" }],
+      requestMessageId: operatorMessage.id,
+      requestBody: operatorMessage.body,
+      requestCreatedAt: operatorMessage.createdAt,
+    });
+    await confirmCompanyContextProcurementAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: concurrentHideAction.id,
+    }, confirmationDependencies);
+    const concurrentHides = await Promise.all([
+      hideCompanyContextProcurementAction({ context, workspaceId: workspace.id, actionId: concurrentHideAction.id }),
+      hideCompanyContextProcurementAction({ context, workspaceId: workspace.id, actionId: concurrentHideAction.id }),
+    ]);
+    assert(concurrentHides[0].hiddenAt, "Concurrent hides must record hiddenAt.");
+    assert.equal(
+      concurrentHides[0].hiddenAt,
+      concurrentHides[1].hiddenAt,
+      "Concurrent hides must return one identical hiddenAt timestamp.",
+    );
+    const concurrentListed = await listCompanyContextProcurementActions(context, workspace.id);
+    assert.equal(
+      concurrentListed.find((entry) => entry.id === concurrentHideAction.id)?.hiddenAt,
+      concurrentHides[0].hiddenAt,
+      "Persistence must retain the single hiddenAt from concurrent hides.",
+    );
+
+    const newerDismissedActions = await createCompanyContextProcurementActions({
+      context,
+      workspaceId: workspace.id,
+      items: Array.from({ length: 55 }, (_, index) => ({
+        draft: { ...procurementAction.draft, material: `Bulk dismissed request ${index + 1}` },
+        citations: [{ id: `message:${operatorMessage.id}`, label: "Operator request" }],
+      })),
+      requestMessageId: operatorMessage.id,
+      requestBody: operatorMessage.body,
+      requestCreatedAt: operatorMessage.createdAt,
+    });
+    for (const bulkAction of newerDismissedActions) {
+      await dismissCompanyContextProcurementAction({
+        context,
+        workspaceId: workspace.id,
+        actionId: bulkAction.id,
+      });
+    }
+    const listAfterBulkDismiss = await listCompanyContextProcurementActions(context, workspace.id);
+    assert(
+      listAfterBulkDismiss.some((entry) => entry.id === separateActions[0]?.id),
+      "Older visible requests must stay listed when newer dismissed rows exceed the page size.",
+    );
 
     const original = await readCompanyContextDocument({ context, workspaceId: workspace.id, documentId: uploaded.id });
     assert.equal(original.bytes.toString("utf8"), "part,material\nboard,PC-ABS\n");

@@ -1,5 +1,38 @@
 # Engineering Log
 
+## 2026-09-01: Hide request cards in the Requests panel
+
+- Added `hiddenAt: string | null` to the stored procurement and prospecting
+  ACTION payloads (`context-procurement.ts`, `context-prospecting.ts`), with
+  decode validation and null defaults on creation.
+- `hideCompanyContextProcurementAction` (CREATED only) and
+  `hideCompanyContextProspectingAction` (COMPLETED only) stamp `hiddenAt`
+  behind the usual office/company scoping and a `processingState` guard;
+  other statuses reject with conflict so Dismiss stays the cancel path for
+  unstarted work. Idempotent when already hidden.
+- Internal decision routes (`.../context/procurement/[actionId]`,
+  `.../context/prospecting/[actionId]`) accept `decision: "hide"`. Portal
+  route unchanged.
+- UI: always-visible 42px minus button on CREATED procurement and COMPLETED
+  prospecting cards; list rendering and the Requests badge filter on
+  `status !== "DISMISSED" && !hiddenAt`.
+- Review hardening: hide helpers now take a per-action advisory lock
+  (`lockCompanyContextAction`) and re-read inside the transaction, so
+  concurrent hides return one identical `hiddenAt`. Action listing paginates
+  (cursor, up to 500 scanned rows) until 50 visible actions are collected, so
+  dismissed/hidden rows no longer crowd older visible requests out of the
+  panel. Database regression tests cover concurrent hides and 55 newer
+  dismissed rows ahead of older visible ones.
+- Second review pass: for customer access, hidden actions count toward the
+  50-card listing limit since the portal still displays them. The prospecting
+  run claim now shares the per-action advisory lock and re-reads inside the
+  transaction, so a restart racing a hide preserves the stored `hiddenAt`
+  through RUNNING and COMPLETED. Regression test covers hide-then-restart.
+- Verified: `scripts/supply-os-context.test.ts`,
+  `scripts/company-context-database.test.ts` (hide rejects on dismissed
+  action, stamps and persists hiddenAt, idempotent re-hide), typecheck,
+  build, lint (unrelated pre-existing findings only).
+
 ## 2026-09-01: Delete chat threads
 
 - `deleteCompanyContextChatThread` in `src/lib/company-context.ts`: validates
