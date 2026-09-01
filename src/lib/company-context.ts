@@ -159,39 +159,50 @@ export async function saveCompanyContextMemory(args: {
     .map((note) => cleanMarkdown(note, MAX_COMPANY_MEMORY_NOTE_CHARS))
     .filter(Boolean)
     .slice(0, 10);
-  if (!notes.length) return [];
-  const existing = await prisma.companyContext.findMany({
-    where: {
-      officeId: args.context.officeId,
-      companyId: workspace.companyId,
-      kind: COMPANY_MEMORY_KIND,
-    },
-    select: { markdown: true },
-    take: MAX_COMPANY_MEMORY_NOTES,
-  });
-  const known = new Set(existing.map((row) => (row.markdown ?? "").trim().toLowerCase()));
-  const saved: Array<{ id: string; note: string; createdAt: Date }> = [];
-  let room = MAX_COMPANY_MEMORY_NOTES - existing.length;
-  for (const note of notes) {
-    const key = note.toLowerCase();
-    if (known.has(key) || room <= 0) continue;
-    known.add(key);
-    room -= 1;
-    const row = await prisma.companyContext.create({
-      data: {
+  if (!notes.length) return { saved: [], skippedExisting: 0, droppedForCapacity: 0 };
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.companyContext.findMany({
+      where: {
         officeId: args.context.officeId,
         companyId: workspace.companyId,
         kind: COMPANY_MEMORY_KIND,
-        name: "Company memory",
-        markdown: note,
-        processingState: "READY",
-        ...companyContextActorData(args.context),
       },
-      select: { id: true, markdown: true, createdAt: true },
+      select: { markdown: true },
+      take: MAX_COMPANY_MEMORY_NOTES,
     });
-    saved.push({ id: row.id, note: row.markdown ?? "", createdAt: row.createdAt });
-  }
-  return saved;
+    const known = new Set(existing.map((row) => (row.markdown ?? "").trim().toLowerCase()));
+    const saved: Array<{ id: string; note: string; createdAt: Date }> = [];
+    let skippedExisting = 0;
+    let droppedForCapacity = 0;
+    let room = MAX_COMPANY_MEMORY_NOTES - existing.length;
+    for (const note of notes) {
+      const key = note.toLowerCase();
+      if (known.has(key)) {
+        skippedExisting += 1;
+        continue;
+      }
+      if (room <= 0) {
+        droppedForCapacity += 1;
+        continue;
+      }
+      known.add(key);
+      room -= 1;
+      const row = await tx.companyContext.create({
+        data: {
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          kind: COMPANY_MEMORY_KIND,
+          name: "Company memory",
+          markdown: note,
+          processingState: "READY",
+          ...companyContextActorData(args.context),
+        },
+        select: { id: true, markdown: true, createdAt: true },
+      });
+      saved.push({ id: row.id, note: row.markdown ?? "", createdAt: row.createdAt });
+    }
+    return { saved, skippedExisting, droppedForCapacity };
+  });
 }
 
 export async function deleteCompanyContextMemory(args: {
@@ -268,6 +279,28 @@ export async function createCompanyContextChatThread(args: {
     select: { id: true, name: true, createdAt: true },
   });
   return { id: row.id, title: row.name, createdAt: row.createdAt };
+}
+
+export async function renameDefaultCompanyContextChatThread(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  threadId: string;
+  title: unknown;
+}) {
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  const title = cleanMarkdown(args.title, 120);
+  if (!title) return;
+  await prisma.companyContext.updateMany({
+    where: {
+      id: args.threadId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: CHAT_THREAD_KIND,
+      name: "New chat",
+      ...companyContextVisibilityWhere(args.context),
+    },
+    data: { name: title },
+  });
 }
 
 async function contextWorkspace(context: CompanyContextAccess, workspaceId: string, mode: "view" | "edit") {

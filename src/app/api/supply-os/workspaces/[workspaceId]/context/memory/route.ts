@@ -11,12 +11,18 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
   const { workspaceId } = await route.params;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   try {
-    const saved = await saveCompanyContextMemory({
+    const result = await saveCompanyContextMemory({
       context: supplyAccessContext(session),
       workspaceId,
       notes: typeof body?.note === "string" ? [body.note] : body?.notes,
     });
-    return NextResponse.json({ memory: saved }, { headers: { "cache-control": "no-store" } });
+    if (!result.saved.length && result.droppedForCapacity > 0) {
+      return NextResponse.json({ error: "Company memory is full. Remove a note first." }, { status: 429 });
+    }
+    if (!result.saved.length && result.skippedExisting > 0) {
+      return NextResponse.json({ error: "This note is already saved." }, { status: 409 });
+    }
+    return NextResponse.json({ memory: result.saved }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return supplyErrorResponse(error);
   }

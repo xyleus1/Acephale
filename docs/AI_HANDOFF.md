@@ -1,5 +1,18 @@
 # AI Handoff
 
+## 2026-09-01: Chat auto-rename and memory hardening
+
+- New chats rename themselves after the first useful agent reply: the
+  structured reply carries a required `threadTitle`, applied through
+  `renameDefaultCompanyContextChatThread`, which only replaces the default
+  "New chat" title. A procurement draft's material is the fallback title.
+- `saveCompanyContextMemory` now reports `saved`, `skippedExisting`, and
+  `droppedForCapacity`. The agent appends a visible caveat when notes could
+  not be saved, and the memory route returns 409 for duplicates and 429 when
+  memory is full.
+- The customer portal does not render the Memory tab (`memoryEnabled={false}`),
+  since only the internal memory route exists.
+
 ## 2026-09-01: Shared company memory across chats
 
 - Company chats now read a shared memory list: `MEMORY_NOTE` rows in

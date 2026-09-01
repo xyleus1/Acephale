@@ -4,7 +4,9 @@ import { prisma } from "../src/lib/prisma";
 import {
   appendCompanyContextMessage,
   assembleCompanyContextForAgent,
+  createCompanyContextChatThread,
   deleteCompanyContextMemory,
+  renameDefaultCompanyContextChatThread,
   saveCompanyContextMemory,
   loadCompanyContext,
   loadCompanyContextActivity,
@@ -125,23 +127,26 @@ async function main() {
       workspaceId: workspace.id,
       notes: ["Prefers replies in Turkish.", "Prefers replies in Turkish.", "", 42],
     });
-    assert.equal(savedMemory.length, 1);
-    assert.equal(savedMemory[0].note, "Prefers replies in Turkish.");
+    assert.equal(savedMemory.saved.length, 1);
+    assert.equal(savedMemory.skippedExisting, 1);
+    assert.equal(savedMemory.droppedForCapacity, 0);
+    assert.equal(savedMemory.saved[0].note, "Prefers replies in Turkish.");
     const duplicateMemory = await saveCompanyContextMemory({
       context,
       workspaceId: workspace.id,
       notes: ["prefers replies in turkish."],
     });
-    assert.equal(duplicateMemory.length, 0);
+    assert.equal(duplicateMemory.saved.length, 0);
+    assert.equal(duplicateMemory.skippedExisting, 1);
     const memoryLoaded = await loadCompanyContext(context, workspace.id);
     assert.deepEqual(memoryLoaded.memory.map((entry) => entry.note), ["Prefers replies in Turkish."]);
     const memoryAssembled = await assembleCompanyContextForAgent(context, workspace.id);
     assert.deepEqual(memoryAssembled.memory.map((entry) => entry.note), ["Prefers replies in Turkish."]);
-    await deleteCompanyContextMemory({ context, workspaceId: workspace.id, memoryId: savedMemory[0].id });
+    await deleteCompanyContextMemory({ context, workspaceId: workspace.id, memoryId: savedMemory.saved[0].id });
     const memoryCleared = await loadCompanyContext(context, workspace.id);
     assert.equal(memoryCleared.memory.length, 0);
     await assert.rejects(
-      () => deleteCompanyContextMemory({ context, workspaceId: workspace.id, memoryId: savedMemory[0].id }),
+      () => deleteCompanyContextMemory({ context, workspaceId: workspace.id, memoryId: savedMemory.saved[0].id }),
       /not found/i,
     );
     const keptMemory = await saveCompanyContextMemory({
@@ -149,7 +154,24 @@ async function main() {
       workspaceId: workspace.id,
       notes: ["Ships only via sea freight."],
     });
-    assert.equal(keptMemory.length, 1);
+    assert.equal(keptMemory.saved.length, 1);
+
+    const defaultThread = await createCompanyContextChatThread({ context, workspaceId: workspace.id, title: "" });
+    assert.equal(defaultThread.title, "New chat");
+    await renameDefaultCompanyContextChatThread({
+      context,
+      workspaceId: workspace.id,
+      threadId: defaultThread.id,
+      title: "PC-ABS enclosure sourcing",
+    });
+    await renameDefaultCompanyContextChatThread({
+      context,
+      workspaceId: workspace.id,
+      threadId: defaultThread.id,
+      title: "Should not overwrite",
+    });
+    const renamedThread = await prisma.companyContext.findUnique({ where: { id: defaultThread.id }, select: { name: true } });
+    assert.equal(renamedThread?.name, "PC-ABS enclosure sourcing", "Rename applies once, only while the title is still New chat.");
 
     const firstQuestion = await appendCompanyContextMessage({
       context,
@@ -485,7 +507,7 @@ async function main() {
       /not found/i,
     );
     await assert.rejects(
-      () => deleteCompanyContextMemory({ context: foreignContext, workspaceId: workspace.id, memoryId: keptMemory[0].id }),
+      () => deleteCompanyContextMemory({ context: foreignContext, workspaceId: workspace.id, memoryId: keptMemory.saved[0].id }),
       /not found/i,
     );
 

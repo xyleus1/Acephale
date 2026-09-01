@@ -1,5 +1,23 @@
 # Engineering Log
 
+## 2026-09-01: Chat auto-rename and shared-memory review hardening
+
+- Added `renameDefaultCompanyContextChatThread` in `src/lib/company-context.ts`:
+  office and company scoped `updateMany` that renames a chat thread only while
+  its title is still "New chat". The context agent's structured reply gained a
+  required `threadTitle` field; after a reply the thread is renamed to that
+  title, or to "Sourcing <material>" from the first procurement draft.
+- `saveCompanyContextMemory` returns `{ saved, skippedExisting,
+  droppedForCapacity }`. The agent no longer swallows memory-save failures
+  silently: capacity or storage problems append a visible caveat to the answer.
+  The memory route returns 409 for an already-saved note and 429 at capacity.
+- The customer portal passes `memoryEnabled={false}` to `SupplyOsContext`, so
+  portal users no longer see memory controls that call a nonexistent portal
+  route.
+- Verified: `scripts/supply-os-context.test.ts`,
+  `scripts/company-context-database.test.ts` (rename-once, memory counters),
+  `scripts/product-copy-policy.test.ts`, typecheck, build.
+
 ## 2026-09-01: Shared company memory for the Sales Agent chats
 
 - Added `MEMORY_NOTE` rows to `CompanyContext`: short durable facts scoped by

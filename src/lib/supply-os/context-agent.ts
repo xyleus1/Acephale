@@ -11,6 +11,7 @@ import {
   appendRateLimitedCustomerContextMessage,
   assembleCompanyContextForAgent,
   normalizeCompanyContextQuestions,
+  renameDefaultCompanyContextChatThread,
   requireCompanyContextThread,
   saveCompanyContextMemory,
   CompanyContextLimitError,
@@ -33,9 +34,10 @@ import {
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["answer", "citationIds", "clarifyingQuestions", "memoryNotes", "procurementDrafts", "prospectingDrafts"],
+  required: ["answer", "citationIds", "clarifyingQuestions", "memoryNotes", "threadTitle", "procurementDrafts", "prospectingDrafts"],
   properties: {
     answer: { type: "string" },
+    threadTitle: { type: "string" },
     citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
     memoryNotes: { type: "array", items: { type: "string" }, maxItems: 5 },
     clarifyingQuestions: {
@@ -287,6 +289,7 @@ export async function chatWithCompanyContext(args: {
         "A prospecting draft requires the operator to provide target segments and regions. Ask for missing segments or regions with clarifyingQuestions instead of guessing.",
         "Public prospect research writes reviewable research-list rows only. It does not imply outreach or contact.",
         "Customer-access sessions must never create prospectingDrafts or prospecting actions.",
+        "threadTitle: return a short specific title of at most 6 words naming this chat's task, like PC-ABS enclosure sourcing or Germany packaging prospects. Base it on the task being worked on, not on greetings. Return an empty string only when the conversation has no clear task yet.",
         "Keep the answer direct and operational. When you ask clarifyingQuestions, keep the answer to a short summary of what you understood and why the questions matter.",
         "Do not use the em dash character.",
       ].join("\n"),
@@ -298,7 +301,7 @@ export async function chatWithCompanyContext(args: {
     throw new ContextAgentError("The context reply did not finish. Try again.", "unavailable", true);
   }
 
-  let parsed: { answer?: unknown; citationIds?: unknown; clarifyingQuestions?: unknown; memoryNotes?: unknown; procurementDrafts?: unknown; prospectingDrafts?: unknown } = {};
+  let parsed: { answer?: unknown; citationIds?: unknown; clarifyingQuestions?: unknown; memoryNotes?: unknown; threadTitle?: unknown; procurementDrafts?: unknown; prospectingDrafts?: unknown } = {};
   try {
     parsed = JSON.parse(response.output_text) as typeof parsed;
   } catch {}
@@ -329,13 +332,6 @@ export async function chatWithCompanyContext(args: {
         .map((note) => stripCitationTokens(cleanAnswer(note)))
         .filter(Boolean)
         .slice(0, 5)
-    : [];
-  const savedMemory = memoryNotes.length
-    ? await saveCompanyContextMemory({
-        context: args.context,
-        workspaceId: args.workspaceId,
-        notes: memoryNotes,
-      }).catch(() => [])
     : [];
   const requestCitationId = `message:${operatorMessage.id}`;
   const openActionIds = new Set(openRequests.filter((request) => request.pendingConfirmation).map((request) => request.actionId));
@@ -434,11 +430,43 @@ export async function chatWithCompanyContext(args: {
     requestCreatedAt: operatorMessage.createdAt,
     threadId,
   });
+  let savedMemory: Array<{ id: string; note: string; createdAt: Date }> = [];
+  let memoryCaveat: string | null = null;
+  if (memoryNotes.length) {
+    try {
+      const memoryResult = await saveCompanyContextMemory({
+        context: args.context,
+        workspaceId: args.workspaceId,
+        notes: memoryNotes,
+      });
+      savedMemory = memoryResult.saved;
+      if (memoryResult.droppedForCapacity > 0) {
+        memoryCaveat = "Note: shared company memory is full, so some notes were not saved. Remove old notes from the Memory panel first.";
+      }
+    } catch {
+      memoryCaveat = "Note: shared company memory could not be updated, so nothing new was saved this time.";
+    }
+  }
+  if (threadId) {
+    const modelTitle = stripCitationTokens(cleanAnswer(parsed.threadTitle)).slice(0, 120);
+    const draftTitle = uniqueDrafts.length && uniqueDrafts[0]!.draft.material
+      ? `Sourcing ${uniqueDrafts[0]!.draft.material}`.slice(0, 120)
+      : "";
+    const threadTitle = modelTitle || draftTitle;
+    if (threadTitle) {
+      await renameDefaultCompanyContextChatThread({
+        context: args.context,
+        workspaceId: args.workspaceId,
+        threadId,
+        title: threadTitle,
+      }).catch(() => undefined);
+    }
+  }
   const message = await appendCompanyContextMessage({
     context: args.context,
     workspaceId: args.workspaceId,
     role: "AGENT",
-    body: answer,
+    body: memoryCaveat ? `${answer}\n\n${memoryCaveat}` : answer,
     citations,
     threadId,
     questions,

@@ -89,6 +89,7 @@ export default async function CustomerProcurementPage({
               readOnly={!customerContextCanEditRole(membership.role)}
               messageRole="CUSTOMER"
               showOrderId={false}
+              memoryEnabled={false}
             />
           </div>
         ) : (

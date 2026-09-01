@@ -241,12 +241,14 @@ export function SupplyOsContext({
   readOnly = false,
   messageRole = "OPERATOR",
   showOrderId = true,
+  memoryEnabled = true,
 }: {
   workspaceId: string | null;
   apiBasePath?: string;
   readOnly?: boolean;
   messageRole?: "OPERATOR" | "CUSTOMER";
   showOrderId?: boolean;
+  memoryEnabled?: boolean;
 }) {
   const [data, setData] = useState<ContextPayload | null>(null);
   const [message, setMessage] = useState("");
@@ -851,13 +853,15 @@ export function SupplyOsContext({
             <button type="button" role="tab" aria-selected={drawerTab === "files"} data-active={drawerTab === "files"} onClick={() => setDrawerTab("files")}>
               Files{data.documents.length ? <i>{data.documents.length}</i> : null}
             </button>
-            <button type="button" role="tab" aria-selected={drawerTab === "memory"} data-active={drawerTab === "memory"} onClick={() => setDrawerTab("memory")}>
-              Memory{(data.memory ?? []).length ? <i>{(data.memory ?? []).length}</i> : null}
-            </button>
+            {memoryEnabled ? (
+              <button type="button" role="tab" aria-selected={drawerTab === "memory"} data-active={drawerTab === "memory"} onClick={() => setDrawerTab("memory")}>
+                Memory{(data.memory ?? []).length ? <i>{(data.memory ?? []).length}</i> : null}
+              </button>
+            ) : null}
           </div>
           <button type="button" onClick={() => setFilesOpen(false)} aria-label="Close panel"><X size={20} /></button>
         </header>
-        {drawerTab === "memory" ? (
+        {drawerTab === "memory" && memoryEnabled ? (
         <div className={styles.memoryList}>
           <p className={styles.memoryHint}>Shared company memory. Every chat for {data.workspace.name} reads these notes.</p>
           {!readOnly ? (
