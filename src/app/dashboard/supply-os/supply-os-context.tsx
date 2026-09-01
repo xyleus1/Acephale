@@ -3,6 +3,7 @@
 import {
   ArrowUp,
   Box,
+  Brain,
   FileArchive,
   FileImage,
   FileSpreadsheet,
@@ -14,6 +15,7 @@ import {
   Paperclip,
   Search,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,6 +43,12 @@ type ContextQuestion = {
 type ContextThread = {
   id: string;
   title: string;
+  createdAt: string;
+};
+
+type ContextMemory = {
+  id: string;
+  note: string;
   createdAt: string;
 };
 
@@ -116,6 +124,7 @@ type ContextProspectingAction = {
 type ContextPayload = {
   workspace: { id: string; name: string };
   threads?: ContextThread[];
+  memory?: ContextMemory[];
   messages: ContextMessage[];
   documents: ContextDocument[];
   procurementActions: ContextProcurementAction[];
@@ -247,7 +256,10 @@ export function SupplyOsContext({
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [filesOpen, setFilesOpen] = useState(true);
-  const [drawerTab, setDrawerTab] = useState<"requests" | "files">("requests");
+  const [drawerTab, setDrawerTab] = useState<"requests" | "files" | "memory">("requests");
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [memoryBusyId, setMemoryBusyId] = useState<string | null>(null);
   const [threadsOpen, setThreadsOpen] = useState(true);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
@@ -532,6 +544,49 @@ export function SupplyOsContext({
     }
   }
 
+  async function saveMemoryNote(event?: FormEvent) {
+    event?.preventDefault();
+    const note = memoryDraft.trim();
+    if (!workspaceId || readOnly || !note || memoryBusy) return;
+    setMemoryBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`${contextApiBasePath}/memory`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "The memory note could not be saved.");
+      setMemoryDraft("");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The memory note could not be saved.");
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
+
+  async function deleteMemoryNote(memoryId: string) {
+    if (!workspaceId || readOnly || memoryBusyId) return;
+    setMemoryBusyId(memoryId);
+    setError(null);
+    try {
+      const response = await fetch(`${contextApiBasePath}/memory`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memoryId }),
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "The memory note could not be removed.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The memory note could not be removed.");
+    } finally {
+      setMemoryBusyId(null);
+    }
+  }
+
   function toggleQuestionAnswer(questionIndex: number, answer: string) {
     if (busy) return;
     setQuestionAnswers((current) => {
@@ -796,10 +851,51 @@ export function SupplyOsContext({
             <button type="button" role="tab" aria-selected={drawerTab === "files"} data-active={drawerTab === "files"} onClick={() => setDrawerTab("files")}>
               Files{data.documents.length ? <i>{data.documents.length}</i> : null}
             </button>
+            <button type="button" role="tab" aria-selected={drawerTab === "memory"} data-active={drawerTab === "memory"} onClick={() => setDrawerTab("memory")}>
+              Memory{(data.memory ?? []).length ? <i>{(data.memory ?? []).length}</i> : null}
+            </button>
           </div>
           <button type="button" onClick={() => setFilesOpen(false)} aria-label="Close panel"><X size={20} /></button>
         </header>
-        {drawerTab === "requests" ? (
+        {drawerTab === "memory" ? (
+        <div className={styles.memoryList}>
+          <p className={styles.memoryHint}>Shared company memory. Every chat for {data.workspace.name} reads these notes.</p>
+          {!readOnly ? (
+            <form className={styles.memoryForm} onSubmit={saveMemoryNote}>
+              <input
+                type="text"
+                value={memoryDraft}
+                maxLength={500}
+                placeholder="Save a durable fact or preference"
+                aria-label="New memory note"
+                onChange={(event) => setMemoryDraft(event.target.value)}
+              />
+              <button type="submit" disabled={memoryBusy || !memoryDraft.trim()}>
+                {memoryBusy ? <LoaderCircle className={styles.spinner} size={16} /> : <Brain size={16} aria-hidden="true" />}
+                Save
+              </button>
+            </form>
+          ) : null}
+          {(data.memory ?? []).map((memory) => (
+            <div className={styles.memoryRow} key={memory.id}>
+              <span>{memory.note}</span>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  aria-label="Remove memory note"
+                  disabled={Boolean(memoryBusyId)}
+                  onClick={() => void deleteMemoryNote(memory.id)}
+                >
+                  {memoryBusyId === memory.id ? <LoaderCircle className={styles.spinner} size={16} /> : <Trash2 size={16} aria-hidden="true" />}
+                </button>
+              ) : null}
+            </div>
+          ))}
+          {!(data.memory ?? []).length ? (
+            <div className={styles.filesEmpty}><span>No saved memory yet</span></div>
+          ) : null}
+        </div>
+        ) : drawerTab === "requests" ? (
         <div className={styles.requestList}>
           {!openRequestCount ? (
             <div className={styles.filesEmpty}><span>No ongoing requests</span></div>

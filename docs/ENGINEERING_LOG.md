@@ -1,5 +1,27 @@
 # Engineering Log
 
+## 2026-09-01: Shared company memory for the Sales Agent chats
+
+- Added `MEMORY_NOTE` rows to `CompanyContext`: short durable facts scoped by
+  `officeId` plus `companyId`, shared by every chat thread of a company. New
+  helpers `saveCompanyContextMemory` (bounded to 80 notes of 500 chars,
+  case-insensitive dedupe) and `deleteCompanyContextMemory` in
+  `src/lib/company-context.ts`. `loadCompanyContext` and
+  `assembleCompanyContextForAgent` now return the notes, so the agent packet
+  carries them into every thread.
+- The context agent's structured reply gained a required `memoryNotes` array.
+  The prompt instructs the model to return only new or changed durable
+  company-level facts (and always when the operator explicitly asks to
+  remember something), never chat-specific task details. Returned notes are
+  citation-stripped and persisted after the reply.
+- New route `POST/DELETE .../context/memory` and a Memory tab in the chat
+  drawer let operators save and remove notes directly. Notes created by
+  operators are not customer visible (standard `companyContextActorData`).
+- Verified: `scripts/supply-os-context.test.ts`,
+  `scripts/company-context-database.test.ts` additions (persistence, dedupe,
+  agent packet, deletion, foreign-office rejection),
+  `scripts/product-copy-policy.test.ts`, typecheck, build.
+
 ## 2026-09-01: Outreach campaign hardening
 
 - Added read-only production verification for the outreach campaign migration,

@@ -4,6 +4,8 @@ import { prisma } from "../src/lib/prisma";
 import {
   appendCompanyContextMessage,
   assembleCompanyContextForAgent,
+  deleteCompanyContextMemory,
+  saveCompanyContextMemory,
   loadCompanyContext,
   loadCompanyContextActivity,
   readCompanyContextDocument,
@@ -117,6 +119,37 @@ async function main() {
     assert.equal(assembled.documents.length, 1);
     assert.match(assembled.documents[0].markdown, /PC-ABS/);
     assert.equal(assembled.messages.length, 2);
+
+    const savedMemory = await saveCompanyContextMemory({
+      context,
+      workspaceId: workspace.id,
+      notes: ["Prefers replies in Turkish.", "Prefers replies in Turkish.", "", 42],
+    });
+    assert.equal(savedMemory.length, 1);
+    assert.equal(savedMemory[0].note, "Prefers replies in Turkish.");
+    const duplicateMemory = await saveCompanyContextMemory({
+      context,
+      workspaceId: workspace.id,
+      notes: ["prefers replies in turkish."],
+    });
+    assert.equal(duplicateMemory.length, 0);
+    const memoryLoaded = await loadCompanyContext(context, workspace.id);
+    assert.deepEqual(memoryLoaded.memory.map((entry) => entry.note), ["Prefers replies in Turkish."]);
+    const memoryAssembled = await assembleCompanyContextForAgent(context, workspace.id);
+    assert.deepEqual(memoryAssembled.memory.map((entry) => entry.note), ["Prefers replies in Turkish."]);
+    await deleteCompanyContextMemory({ context, workspaceId: workspace.id, memoryId: savedMemory[0].id });
+    const memoryCleared = await loadCompanyContext(context, workspace.id);
+    assert.equal(memoryCleared.memory.length, 0);
+    await assert.rejects(
+      () => deleteCompanyContextMemory({ context, workspaceId: workspace.id, memoryId: savedMemory[0].id }),
+      /not found/i,
+    );
+    const keptMemory = await saveCompanyContextMemory({
+      context,
+      workspaceId: workspace.id,
+      notes: ["Ships only via sea freight."],
+    });
+    assert.equal(keptMemory.length, 1);
 
     const firstQuestion = await appendCompanyContextMessage({
       context,
@@ -447,6 +480,14 @@ async function main() {
     });
     await assert.rejects(() => loadCompanyContext(foreignContext, workspace.id), /not found/i);
     await assert.rejects(() => listCompanyContextProcurementActions(foreignContext, workspace.id), /not found/i);
+    await assert.rejects(
+      () => saveCompanyContextMemory({ context: foreignContext, workspaceId: workspace.id, notes: ["leak"] }),
+      /not found/i,
+    );
+    await assert.rejects(
+      () => deleteCompanyContextMemory({ context: foreignContext, workspaceId: workspace.id, memoryId: keptMemory[0].id }),
+      /not found/i,
+    );
 
     console.log("Company Context database checks passed.");
   } finally {

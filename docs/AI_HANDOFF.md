@@ -1,5 +1,19 @@
 # AI Handoff
 
+## 2026-09-01: Shared company memory across chats
+
+- Company chats now read a shared memory list: `MEMORY_NOTE` rows in
+  `CompanyContext`, company scoped, included in the agent packet for every
+  thread. The agent writes notes through the required `memoryNotes` field of
+  its structured reply; operators manage notes in the drawer's Memory tab or
+  via `POST/DELETE .../context/memory`.
+- Memory is explicit, not a transcript dump: the prompt limits notes to
+  durable company-level facts and standing instructions, and always saves when
+  the operator asks to remember something. Notes are bounded (80 x 500 chars,
+  deduped case-insensitively) and are deletable one by one.
+- Customer portal users do not see operator-saved notes
+  (`customerVisible: false` via `companyContextActorData`).
+
 ## 2026-09-01: Outreach campaign hardening
 
 - Production migration verification is a read-only catalog and privilege

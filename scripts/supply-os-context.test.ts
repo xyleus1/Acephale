@@ -15,6 +15,7 @@ const files = {
   uploadRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/documents/route.ts"), "utf8"),
   downloadRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/documents/[documentId]/route.ts"), "utf8"),
   chatRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/chat/route.ts"), "utf8"),
+  memoryRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/memory/route.ts"), "utf8"),
   procurementRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/procurement/[actionId]/route.ts"), "utf8"),
   ui: readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-context.tsx"), "utf8"),
 };
@@ -79,6 +80,17 @@ assert.match(files.downloadRoute, /new ReadableStream<Uint8Array>/);
 assert.match(files.downloadRoute, /DOWNLOAD_CHUNK_BYTES = 64 \* 1024/);
 assert.doesNotMatch(files.downloadRoute, /new NextResponse\(new Uint8Array\(document\.bytes\)/);
 assert.match(files.chatRoute, /chatWithCompanyContext/);
+assert.match(files.persistence, /COMPANY_MEMORY_KIND = "MEMORY_NOTE"/);
+assert.match(files.persistence, /saveCompanyContextMemory/);
+assert.match(files.persistence, /deleteCompanyContextMemory/);
+assert.match(files.persistence, /kind: COMPANY_MEMORY_KIND,\s*\n\s*\.\.\.companyContextVisibilityWhere/);
+assert.match(files.agent, /memoryNotes/);
+assert.match(files.agent, /memory: packet\.memory/);
+assert.match(files.agent, /saveCompanyContextMemory/);
+assert.match(files.agent, /shared company memory/i);
+assert.match(files.memoryRoute, /saveCompanyContextMemory/);
+assert.match(files.memoryRoute, /deleteCompanyContextMemory/);
+assert.match(files.memoryRoute, /getSession/);
 assert.match(files.ui, /aria-label="Company chat"/);
 assert.match(files.ui, /Ongoing requests and files/);
 assert.match(files.ui, /placeholder="Ask Derya"/);

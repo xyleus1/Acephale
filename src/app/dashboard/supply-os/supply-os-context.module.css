@@ -930,6 +930,94 @@
   color: #a76b45;
 }
 
+.memoryList {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px 12px 24px;
+  scrollbar-color: #c7ceca transparent;
+}
+
+.memoryHint {
+  margin: 0;
+  color: var(--chat-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.memoryForm {
+  display: flex;
+  gap: 8px;
+}
+
+.memoryForm input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid #c7ceca;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--chat-surface);
+  color: var(--chat-ink);
+  font-size: 13px;
+}
+
+.memoryForm button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #c7ceca;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--chat-surface);
+  color: var(--chat-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.memoryForm button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.memoryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid #dde3df;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--chat-surface);
+}
+
+.memoryRow > span {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.memoryRow > button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--chat-muted);
+  cursor: pointer;
+}
+
+.memoryRow > button:hover {
+  background: var(--chat-surface-hover);
+  color: var(--chat-ink);
+}
+
 .filesEmpty {
   min-height: 180px;
   display: flex;

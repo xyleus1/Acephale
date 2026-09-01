@@ -47,6 +47,9 @@ export type CompanyContextQuestion = {
 };
 
 const CHAT_THREAD_KIND = "CHAT_THREAD";
+const COMPANY_MEMORY_KIND = "MEMORY_NOTE";
+const MAX_COMPANY_MEMORY_NOTES = 80;
+const MAX_COMPANY_MEMORY_NOTE_CHARS = 500;
 const MAX_CHAT_THREADS = 100;
 const MAX_AGENT_THREAD_MESSAGES = 200;
 const MAX_QUESTIONS = 6;
@@ -144,6 +147,72 @@ function parseMessage(row: {
 
 export function normalizeCompanyContextQuestions(value: unknown): CompanyContextQuestion[] {
   return questionsFromPayload({ questions: Array.isArray(value) ? value : [] }) ?? [];
+}
+
+export async function saveCompanyContextMemory(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  notes: unknown;
+}) {
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  const notes = (Array.isArray(args.notes) ? args.notes : [])
+    .map((note) => cleanMarkdown(note, MAX_COMPANY_MEMORY_NOTE_CHARS))
+    .filter(Boolean)
+    .slice(0, 10);
+  if (!notes.length) return [];
+  const existing = await prisma.companyContext.findMany({
+    where: {
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: COMPANY_MEMORY_KIND,
+    },
+    select: { markdown: true },
+    take: MAX_COMPANY_MEMORY_NOTES,
+  });
+  const known = new Set(existing.map((row) => (row.markdown ?? "").trim().toLowerCase()));
+  const saved: Array<{ id: string; note: string; createdAt: Date }> = [];
+  let room = MAX_COMPANY_MEMORY_NOTES - existing.length;
+  for (const note of notes) {
+    const key = note.toLowerCase();
+    if (known.has(key) || room <= 0) continue;
+    known.add(key);
+    room -= 1;
+    const row = await prisma.companyContext.create({
+      data: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: COMPANY_MEMORY_KIND,
+        name: "Company memory",
+        markdown: note,
+        processingState: "READY",
+        ...companyContextActorData(args.context),
+      },
+      select: { id: true, markdown: true, createdAt: true },
+    });
+    saved.push({ id: row.id, note: row.markdown ?? "", createdAt: row.createdAt });
+  }
+  return saved;
+}
+
+export async function deleteCompanyContextMemory(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  memoryId: unknown;
+}) {
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  if (typeof args.memoryId !== "string" || !args.memoryId) {
+    throw new SupplyPersistenceError("The memory note is invalid.", "invalid_input");
+  }
+  const removed = await prisma.companyContext.deleteMany({
+    where: {
+      id: args.memoryId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: COMPANY_MEMORY_KIND,
+      ...companyContextVisibilityWhere(args.context),
+    },
+  });
+  if (!removed.count) throw new SupplyPersistenceError("The memory note was not found.", "not_found");
 }
 
 export async function requireCompanyContextThread(args: {
@@ -386,12 +455,18 @@ export async function loadCompanyContext(
     kind,
     ...companyContextVisibilityWhere(context),
   });
-  const [threadRows, documentRows, messageRows] = await Promise.all([
+  const [threadRows, memoryRows, documentRows, messageRows] = await Promise.all([
     prisma.companyContext.findMany({
       where: rowWhere(CHAT_THREAD_KIND),
       select: rowSelect,
       orderBy: { createdAt: "asc" },
       take: MAX_CHAT_THREADS,
+    }),
+    prisma.companyContext.findMany({
+      where: rowWhere(COMPANY_MEMORY_KIND),
+      select: rowSelect,
+      orderBy: { createdAt: "asc" },
+      take: MAX_COMPANY_MEMORY_NOTES,
     }),
     prisma.companyContext.findMany({
       where: rowWhere("DOCUMENT"),
@@ -412,6 +487,11 @@ export async function loadCompanyContext(
     threads: threadRows.map((row) => ({
       id: row.id,
       title: row.name,
+      createdAt: row.createdAt,
+    })),
+    memory: memoryRows.map((row) => ({
+      id: row.id,
+      note: row.markdown ?? "",
       createdAt: row.createdAt,
     })),
     documents: documentRows.map((row) => ({
@@ -894,7 +974,18 @@ export async function assembleCompanyContextForAgent(
   } as const;
   const threadFilter = options?.threadId === undefined ? undefined : options.threadId;
   const messageThreadWhere = companyContextThreadWhere(threadFilter);
-  const [documentRows, messageRows] = await Promise.all([
+  const [memoryRows, documentRows, messageRows] = await Promise.all([
+    prisma.companyContext.findMany({
+      where: {
+        officeId: context.officeId,
+        companyId: workspace.companyId,
+        kind: COMPANY_MEMORY_KIND,
+        ...companyContextVisibilityWhere(context),
+      },
+      select: { id: true, markdown: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+      take: MAX_COMPANY_MEMORY_NOTES,
+    }),
     prisma.companyContext.findMany({
       where: {
         officeId: context.officeId,
@@ -946,6 +1037,10 @@ export async function assembleCompanyContextForAgent(
     }));
   return {
     company: { id: workspace.companyId, name: workspace.name },
+    memory: memoryRows.map((row) => ({
+      note: row.markdown ?? "",
+      savedAt: row.createdAt,
+    })),
     documents,
     messages,
   };
