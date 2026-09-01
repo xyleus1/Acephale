@@ -153,6 +153,9 @@ export function buildFileDeliveryReplyBody(args: {
   documents: ProcurementRequestDocument[];
   attachments: ProcurementDraftAttachment[];
   variant?: ProcurementDraftVariant;
+  // Answers to the questions this supplier actually asked, so the reply speaks
+  // to their message instead of only restating the package.
+  answers?: readonly string[];
 }) {
   const { order, attachments } = args;
   const chase = args.variant === "CHASE";
@@ -193,6 +196,9 @@ export function buildFileDeliveryReplyBody(args: {
       `Quantity: ${quantityText(order)}`,
       ...(order.neededBy ? [`Needed by: ${String(order.neededBy).slice(0, 10)}`] : []),
     ].join("\n"),
+    ...(args.answers?.length
+      ? [["Answers to your questions:", ...[...new Set(args.answers)].slice(0, 10).map((answer) => `- ${answer}`)].join("\n")]
+      : []),
     ...documentSections,
     ...(specificationLines.length
       ? [["Also recorded on the request:", ...specificationLines].join("\n")]
@@ -279,6 +285,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
   // A chase repeats the same files on a thread the supplier left quiet, so it
   // opens differently and is delivered by the chase send path.
   variant?: ProcurementDraftVariant;
+  answers?: readonly string[];
 }): Promise<ProcurementFileDeliveryDraft> {
   const access = await currentAccessContext(args.context);
   const workspaceId = requestWorkspaceId(args.order);
@@ -318,6 +325,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
       documents,
       attachments,
       variant: args.variant,
+      answers: args.answers,
     })),
   };
   const sourceMessageId = requiredText(args.sourceMessageId, "Displayed supplier message", 512);

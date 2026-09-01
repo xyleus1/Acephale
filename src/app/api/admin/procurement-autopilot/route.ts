@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     orderId?: unknown;
     limit?: unknown;
     confirm?: unknown;
+    bestEffort?: unknown;
   };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
   const invalid = procurementOrderIdError(orderId);
@@ -25,7 +26,14 @@ export async function POST(req: NextRequest) {
     ? Math.min(AUTOPILOT_MAX_PER_RUN, Math.max(1, Math.trunc(payload.limit)))
     : AUTOPILOT_MAX_PER_RUN;
   try {
-    const result = await runProcurementAutopilot({ orderId, autoSend, limit });
+    const result = await runProcurementAutopilot({
+      orderId,
+      autoSend,
+      limit,
+      // Best effort keeps the pass moving on questions the request answers only
+      // partly. Price, terms, and legal questions still stop for the operator.
+      bestEffort: payload.bestEffort === true,
+    });
     if (!result) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
     return NextResponse.json(result);
   } catch (error) {

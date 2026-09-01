@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   const invalid = procurementOrderIdError(orderId);
   if (invalid) return badRequest(invalid);
   try {
-    const listed = await listProcurementFileDraftTargets(orderId);
+    const listed = await listProcurementFileDraftTargets(orderId, {
+      bestEffort: req.nextUrl.searchParams.get("bestEffort") === "true",
+    });
     if (!listed) return notFound();
     return NextResponse.json({
       orderId: listed.order.orderId,
@@ -54,6 +56,7 @@ export async function POST(req: NextRequest) {
     orderId?: unknown;
     limit?: unknown;
     redraft?: unknown;
+    bestEffort?: unknown;
   };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
   const invalid = procurementOrderIdError(orderId);
@@ -66,6 +69,9 @@ export async function POST(req: NextRequest) {
       orderId,
       limit,
       redraft: payload.redraft === true,
+      // Best effort answers questions the request covers only partly. Price,
+      // terms, and legal questions still stop for the operator.
+      bestEffort: payload.bestEffort === true,
     });
     if (!result) return notFound();
     return NextResponse.json(result);

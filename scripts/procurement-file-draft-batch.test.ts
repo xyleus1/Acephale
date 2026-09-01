@@ -27,6 +27,9 @@ const targets: FileDraftTarget[] = [
   target({ vendorId: "wants-files" }),
   target({ vendorId: "statement", inboundKind: "STATEMENT" }),
   target({ vendorId: "already-drafted", hasDraft: true }),
+  // The supplier wrote again after the draft was saved, so answering with that
+  // draft would answer the wrong message.
+  target({ vendorId: "stale-draft", hasDraft: true, staleDraft: true }),
   target({ vendorId: "bounced", inboundKind: "BOUNCE", skipReason: fileDraftSkipReason("BOUNCE") }),
   target({ vendorId: "away", inboundKind: "AUTO_REPLY", skipReason: fileDraftSkipReason("AUTO_REPLY") }),
   target({ vendorId: "wrong-desk", inboundKind: "WRONG_RECIPIENT", skipReason: fileDraftSkipReason("WRONG_RECIPIENT") }),
@@ -40,12 +43,12 @@ assert.match(fileDraftSkipReason("BOUNCE") ?? "", /is a delivery bounce/);
 
 assert.deepEqual(
   eligibleFileDraftTargets(targets).map((entry) => entry.vendorId),
-  ["wants-files", "statement"],
+  ["wants-files", "statement", "stale-draft"],
 );
 
 assert.deepEqual(
   eligibleFileDraftTargets(targets, { redraft: true }).map((entry) => entry.vendorId),
-  ["wants-files", "statement", "already-drafted"],
+  ["wants-files", "statement", "already-drafted", "stale-draft"],
 );
 
 console.log("Procurement file draft batch selection passed.");

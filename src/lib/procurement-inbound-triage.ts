@@ -39,6 +39,11 @@ export type UnansweredQuestion = {
   reason: string;
 };
 
+// Commercial and legal answers commit the buyer, so best effort never covers
+// them. Everything else can be answered from what the request holds, or with a
+// truthful statement of what is not settled yet.
+const OPERATOR_ONLY_TOPICS: ProcurementReplyTopic[] = ["PRICE", "TERMS", "LEGAL"];
+
 export type ProcurementInboundTriage = {
   kind: SupplierInboundKind;
   decision: "AUTO_ANSWER" | "NEEDS_HUMAN" | "NO_REPLY_NEEDED";
@@ -156,10 +161,43 @@ function factAnswer(
   }
 }
 
+// Best effort keeps a supplier moving when the request does not hold the fact
+// they asked for. Every line below is entailed by the request itself: it says
+// only that the detail is not recorded and asks for a conditional quote, so no
+// answer can put a requirement, a date, or a destination on the record that the
+// buyer never stated.
+function bestEffortAnswer(
+  topic: ProcurementReplyTopic,
+  facts: ProcurementReplyFacts,
+): string | null {
+  const known = facts.documentNames.length
+    ? `The files recorded on this request are ${facts.documentNames.join(", ")}.`
+    : "No file is recorded on this request.";
+  switch (topic) {
+    case "QUANTITY":
+      return `${known} No further volume is recorded, so please quote this build and your price breaks.`;
+    case "TIMELINE":
+      return `${known} No required date is recorded, so please quote your standard lead time from order confirmation.`;
+    case "MATERIAL":
+      return `${known} No material is recorded beyond that, so please quote what you would run and state the assumption.`;
+    case "SPECIFICATION":
+      return `${known} This detail is not recorded, so please quote your standard process and state the assumption you used.`;
+    case "DOCUMENTS":
+      return `${known} We hold nothing further to send today, so please quote from that and list exactly what else you would need.`;
+    case "DESTINATION":
+      return `${known} No delivery address is recorded, so please quote ex works and add freight as a separate line.`;
+    case "UNKNOWN":
+      return `${known} Please tell us the specific detail you need and quote against what is there.`;
+    default:
+      return null;
+  }
+}
+
 export function triageSupplierInbound(input: {
   subject: string | null;
   body: string;
   facts: ProcurementReplyFacts;
+  bestEffort?: boolean;
 }): ProcurementInboundTriage {
   const kind = supplierInboundKind(input.subject ?? "", input.body);
   if (kind === "BOUNCE") {
@@ -194,7 +232,20 @@ export function triageSupplierInbound(input: {
     };
   }
 
+  const bestEffort = input.bestEffort === true;
   const questions = supplierQuestions(input.body);
+  if (!questions.length && bestEffort) {
+    const answer = bestEffortAnswer("UNKNOWN", input.facts);
+    return {
+      kind,
+      decision: "AUTO_ANSWER",
+      headline: "The supplier asked nothing specific, so the reply restates what we hold.",
+      answered: answer
+        ? [{ question: "What else do you need to quote?", topic: "UNKNOWN", answer }]
+        : [],
+      unanswered: [],
+    };
+  }
   if (!questions.length) {
     return {
       kind,
@@ -216,9 +267,16 @@ export function triageSupplierInbound(input: {
       const resolved = factAnswer(topic, input.facts);
       if ("answer" in resolved) {
         answered.push({ question, topic, answer: resolved.answer });
-      } else {
-        unanswered.push({ question, topic, reason: resolved.reason });
+        continue;
       }
+      const fallback = bestEffort && !OPERATOR_ONLY_TOPICS.includes(topic)
+        ? bestEffortAnswer(topic, input.facts)
+        : null;
+      if (fallback) {
+        answered.push({ question, topic, answer: fallback });
+        continue;
+      }
+      unanswered.push({ question, topic, reason: resolved.reason });
     }
   }
 

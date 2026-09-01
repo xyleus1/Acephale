@@ -88,6 +88,9 @@ async function vendorStates(args: {
   officeId: string;
   customerId: string;
   order: ProcurementOrderDetail;
+  // Best effort answers every question the request can speak to, so only price,
+  // terms, and legal questions are left for the operator.
+  bestEffort?: boolean;
 }): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor> }> {
   const facts = procurementReplyFacts({
     material: args.order.material,
@@ -117,7 +120,12 @@ async function vendorStates(args: {
       });
     }
     const triage = inbound
-      ? triageSupplierInbound({ subject: inbound.subject ?? null, body: inbound.body, facts })
+      ? triageSupplierInbound({
+        subject: inbound.subject ?? null,
+        body: inbound.body,
+        facts,
+        bestEffort: args.bestEffort,
+      })
       : null;
     const draft = await getProcurementFileDeliveryDraft({
       officeId: args.officeId,
@@ -183,13 +191,18 @@ async function draftChases(args: {
 export async function runProcurementAutopilot(args: {
   orderId: string;
   autoSend?: boolean;
+  bestEffort?: boolean;
   limit?: number;
 }): Promise<AutopilotRunResult | null> {
   const summary = await loadBulkRfqOrder(args.orderId);
   if (!summary) return null;
   const limit = Math.min(AUTOPILOT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? AUTOPILOT_MAX_PER_RUN)));
   const autoSend = args.autoSend === true;
-  const draftRun = await runProcurementFileDraftBatch({ orderId: args.orderId, limit });
+  const draftRun = await runProcurementFileDraftBatch({
+    orderId: args.orderId,
+    limit,
+    bestEffort: args.bestEffort,
+  });
   if (!draftRun) return null;
   const order = await getProcurementRequest(summary.customerId, args.orderId);
   if (!order) return null;
@@ -197,6 +210,7 @@ export async function runProcurementAutopilot(args: {
     officeId: summary.officeId,
     customerId: summary.customerId,
     order,
+    bestEffort: args.bestEffort,
   });
   const plan = states.map((state) => ({
     vendorId: state.vendorId,

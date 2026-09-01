@@ -122,6 +122,63 @@ function autoAnswer() {
   assert.ok(!body.includes("\u2014"), "generated supplier text never uses an em dash");
 }
 
+function bestEffort() {
+  // Best effort answers around a missing fact instead of parking the thread.
+  const missingFact = triageSupplierInbound({
+    subject: "Re: RFQ",
+    body: "When do you need delivery?",
+    facts: { ...FACTS, neededBy: null },
+    bestEffort: true,
+  });
+  assert.equal(missingFact.decision, "AUTO_ANSWER", "a missing date is answered as not settled yet");
+  assert.equal(missingFact.unanswered.length, 0);
+  assert.ok(
+    missingFact.answered.some((entry) => entry.answer.includes("standard lead time")),
+    "the answer says what is true rather than inventing a date",
+  );
+
+  // A fallback may only restate the request. It can never put a destination, a
+  // date, or a requirement on the record that the buyer never gave.
+  const empty = triageSupplierInbound({
+    subject: "Re: RFQ",
+    body: "Where should we ship the parts, what material, and what tolerance?",
+    facts: {
+      material: null,
+      quantity: null,
+      unit: null,
+      neededBy: null,
+      specification: null,
+      destination: null,
+      documentNames: [],
+    },
+    bestEffort: true,
+  });
+  assert.equal(empty.decision, "AUTO_ANSWER");
+  for (const answer of empty.answered.map((entry) => entry.answer)) {
+    assert.ok(!/United States|domestic|being prepared|open to/i.test(answer), `unsupported claim: ${answer}`);
+    assert.ok(/not recorded|no file is recorded/i.test(answer), `answer states what is recorded: ${answer}`);
+  }
+
+  const statement = triageSupplierInbound({
+    subject: "Re: RFQ",
+    body: "Thanks, we received your request and will review it.",
+    facts: FACTS,
+    bestEffort: true,
+  });
+  assert.equal(statement.decision, "AUTO_ANSWER", "a message without a question still gets a reply");
+
+  // Commercial and legal answers commit the buyer, so they stay with the operator
+  // even in best effort.
+  for (const body of [
+    "What is your target price for this build?",
+    "What are your payment terms?",
+    "Can you sign our NDA first?",
+  ]) {
+    const triage = triageSupplierInbound({ subject: "Re: RFQ", body, facts: FACTS, bestEffort: true });
+    assert.equal(triage.decision, "NEEDS_HUMAN", `best effort never answers: ${body}`);
+  }
+}
+
 function needsHuman() {
   const price = triageSupplierInbound({
     subject: "Re: RFQ",
@@ -247,6 +304,7 @@ function main() {
   classification();
   questionExtraction();
   autoAnswer();
+  bestEffort();
   needsHuman();
   factsFromOrder();
   surfaces();

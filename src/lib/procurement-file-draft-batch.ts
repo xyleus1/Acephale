@@ -11,7 +11,12 @@ import {
   fileDraftSkipReason,
   type FileDraftTarget,
 } from "@/lib/procurement-file-draft-selection";
-import { supplierInboundKind } from "@/lib/procurement-inbound-triage";
+import {
+  procurementReplyFacts,
+  supplierInboundKind,
+  triageSupplierInbound,
+} from "@/lib/procurement-inbound-triage";
+import { stripEmDashes } from "@/lib/no-em-dash";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { getProcurementRequest, type ProcurementOrderDetail } from "@/lib/procurement-workflow";
 
@@ -56,7 +61,8 @@ async function vendorTarget(args: {
   order: ProcurementOrderDetail;
   vendorId: string;
   vendorName: string;
-}): Promise<FileDraftTarget | null> {
+  bestEffort: boolean;
+}): Promise<(FileDraftTarget & { answers: string[] }) | null> {
   const conversation = await procurementVendorConversation({
     officeId: args.officeId,
     customerId: args.customerId,
@@ -66,11 +72,28 @@ async function vendorTarget(args: {
   const latest = conversation.messages.at(-1);
   if (!latest || latest.direction !== "INBOUND") return null;
   const inboundKind = supplierInboundKind(latest.subject ?? "", latest.body);
+  // Under best effort a question the request answers only partly still gets an
+  // answer, so the reply carries it. The caller chooses that mode; a plain run
+  // answers only what the request actually records.
+  const triage = triageSupplierInbound({
+    subject: latest.subject ?? null,
+    body: latest.body,
+    facts: procurementReplyFacts(args.order),
+    bestEffort: args.bestEffort,
+  });
   const existing = await getProcurementFileDeliveryDraft({
     officeId: args.officeId,
     order: args.order,
     vendorId: args.vendorId,
   });
+  const answers = triage.answered.map((entry) => entry.answer);
+  // A draft saved before these answers existed would go out without them, so it
+  // counts as stale even on the same supplier message. The saved body is em dash
+  // stripped and length capped, so the comparison runs on the same canonical
+  // text and ignores answers the cap would have cut anyway.
+  const savedBody = stripEmDashes(existing?.body ?? "");
+  const missesAnswers = answers.length > 0
+    && !answers.every((answer) => savedBody.includes(stripEmDashes(answer)));
   return {
     vendorId: args.vendorId,
     vendorName: args.vendorName,
@@ -79,12 +102,17 @@ async function vendorTarget(args: {
     conversationSubject: latest.subject ?? null,
     inboundKind,
     hasDraft: Boolean(existing),
+    staleDraft: Boolean(existing) && (existing?.sourceMessageId !== latest.id || missesAnswers),
     skipReason: fileDraftSkipReason(inboundKind),
+    answers,
   };
 }
 
-async function draftTargets(context: NonNullable<Awaited<ReturnType<typeof loadContext>>>) {
-  const targets: FileDraftTarget[] = [];
+async function draftTargets(
+  context: NonNullable<Awaited<ReturnType<typeof loadContext>>>,
+  bestEffort: boolean,
+) {
+  const targets: Array<FileDraftTarget & { answers: string[] }> = [];
   for (const vendor of context.order.vendors) {
     const target = await vendorTarget({
       officeId: context.summary.officeId,
@@ -92,26 +120,28 @@ async function draftTargets(context: NonNullable<Awaited<ReturnType<typeof loadC
       order: context.order,
       vendorId: vendor.id,
       vendorName: vendor.name,
+      bestEffort,
     });
     if (target) targets.push(target);
   }
   return targets;
 }
 
-export async function listProcurementFileDraftTargets(orderId: string) {
+export async function listProcurementFileDraftTargets(orderId: string, options: { bestEffort?: boolean } = {}) {
   const context = await loadContext(orderId);
   if (!context) return null;
-  return { order: context.summary, targets: await draftTargets(context) };
+  return { order: context.summary, targets: await draftTargets(context, options.bestEffort === true) };
 }
 
 export async function runProcurementFileDraftBatch(args: {
   orderId: string;
   limit?: number;
   redraft?: boolean;
+  bestEffort?: boolean;
 }): Promise<FileDraftRunResult | null> {
   const context = await loadContext(args.orderId);
   if (!context) return null;
-  const targets = await draftTargets(context);
+  const targets = await draftTargets(context, args.bestEffort === true);
   const access = await procurementOperatorAccess(context.summary.officeId);
   const limit = Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? FILE_DRAFT_MAX_PER_RUN)));
   const eligible = eligibleFileDraftTargets(targets, { redraft: args.redraft });
@@ -129,6 +159,7 @@ export async function runProcurementFileDraftBatch(args: {
         sourceMessageId: target.sourceMessageId,
         recipient: target.recipient,
         conversationSubject: target.conversationSubject,
+        answers: target.answers,
       });
       outcomes.push({
         vendorId: target.vendorId,
