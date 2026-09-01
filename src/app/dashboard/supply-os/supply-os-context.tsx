@@ -251,6 +251,7 @@ export function SupplyOsContext({
   const [threadsOpen, setThreadsOpen] = useState(true);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
   const [dragActive, setDragActive] = useState(false);
   const [, setStaleTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -337,6 +338,10 @@ export function SupplyOsContext({
     }
     return null;
   }, [messages]);
+
+  useEffect(() => {
+    setQuestionAnswers({});
+  }, [lastAgentMessageId, activeThreadId]);
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ block: "end" });
@@ -501,9 +506,30 @@ export function SupplyOsContext({
     }
   }
 
-  function answerQuestion(question: ContextQuestion, answer: string) {
+  function toggleQuestionAnswer(questionIndex: number, answer: string) {
     if (busy) return;
-    void submitMessage(undefined, `${question.question} ${answer}`);
+    setQuestionAnswers((current) => {
+      const next = { ...current };
+      if (next[questionIndex] === answer) {
+        delete next[questionIndex];
+      } else {
+        next[questionIndex] = answer;
+      }
+      return next;
+    });
+  }
+
+  function sendQuestionAnswers(questions: ContextQuestion[]) {
+    if (busy) return;
+    const combined = questions
+      .map((question, questionIndex) => {
+        const answer = questionAnswers[questionIndex];
+        return answer ? `${question.question} ${answer}` : null;
+      })
+      .filter((line): line is string => line !== null)
+      .join("\n");
+    if (!combined) return;
+    void submitMessage(undefined, combined);
   }
 
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -640,13 +666,27 @@ export function SupplyOsContext({
                               type="button"
                               key={option}
                               className={styles.questionChip}
+                              data-selected={entry.id === lastAgentMessageId && questionAnswers[questionIndex] === option}
+                              aria-pressed={entry.id === lastAgentMessageId && questionAnswers[questionIndex] === option}
                               disabled={readOnly || busy || entry.id !== lastAgentMessageId}
-                              onClick={() => answerQuestion(question, option)}
+                              onClick={() => toggleQuestionAnswer(questionIndex, option)}
                             >{option}</button>
                           ))}
                         </div>
                       </div>
                     ))}
+                    {entry.id === lastAgentMessageId && !readOnly ? (
+                      <button
+                        type="button"
+                        className={styles.sendAnswersButton}
+                        disabled={busy || !Object.keys(questionAnswers).length}
+                        onClick={() => sendQuestionAnswers(entry.questions ?? [])}
+                      >
+                        {Object.keys(questionAnswers).length > 1
+                          ? `Send ${Object.keys(questionAnswers).length} answers`
+                          : "Send answer"}
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

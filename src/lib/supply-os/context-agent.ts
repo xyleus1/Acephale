@@ -125,6 +125,14 @@ function cleanAnswer(value: unknown) {
     : "";
 }
 
+export function stripCitationTokens(value: string) {
+  return value
+    .replace(/\[\s*(?:document|message):[^\]]*\]/gi, "")
+    .replace(/[^\S\n]{2,}/g, " ")
+    .replace(/[^\S\n]+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 export async function chatWithCompanyContext(args: {
   context: CompanyContextAccess;
   workspaceId: string;
@@ -263,6 +271,8 @@ export async function chatWithCompanyContext(args: {
         "Create one procurement draft per distinct sourcing item. Never combine unrelated products, parts, materials, or manufacturing processes into one draft.",
         "Each procurement draft requires a supported material or part, positive quantity, and unit. If any are missing, return no draft for that item and ask for the missing fields.",
         "Use manufacturer, part number, specifications, delivery location, needed-by date, and notes when the supplied evidence supports them. Use null when unknown.",
+        "neededBy must be an exact calendar date in YYYY-MM-DD format or null. When the operator gives relative timing such as within 8 weeks, convert it to a concrete date using the today value in the packet, or keep the timing wording in notes and set neededBy to null if the exact date is uncertain.",
+        "Citation tokens like [document:id] or [message:id] belong only in citationIds. Never write them inside the answer text or question text.",
         "For each procurement draft, return its own citationIds containing only the operator request and files directly relevant to that procurement need.",
         "The openRequests list contains this company's existing procurement requests. Before drafting a new item, compare it against openRequests. If the new need looks like an existing open request, do not silently create a duplicate: ask a yes_no clarifying question naming the existing request and whether this is the same need. If the operator confirms it replaces an existing request that is still pendingConfirmation, return the new draft with supersedesActionId set to that actionId. If the existing request is already CREATED, say that it is already running and ask whether a separate new request is really wanted. Otherwise keep supersedesActionId null.",
         "Preparing procurementDrafts does not create orders or contact suppliers. Tell the operator that separate confirmation is required for each item.",
@@ -275,7 +285,7 @@ export async function chatWithCompanyContext(args: {
         "Keep the answer direct and operational. When you ask clarifyingQuestions, keep the answer to a short summary of what you understood and why the questions matter.",
         "Do not use the em dash character.",
       ].join("\n"),
-      input: JSON.stringify({ instruction, company: packet.company, documents: packet.documents, messages: packet.messages, openRequests }),
+      input: JSON.stringify({ instruction, today: new Date().toISOString().slice(0, 10), company: packet.company, documents: packet.documents, messages: packet.messages, openRequests }),
       text: { format: { type: "json_schema", name: "company_context_reply", strict: true, schema: CONTEXT_REPLY_SCHEMA } },
       store: false,
     });
@@ -287,7 +297,7 @@ export async function chatWithCompanyContext(args: {
   try {
     parsed = JSON.parse(response.output_text) as typeof parsed;
   } catch {}
-  const answer = cleanAnswer(parsed.answer);
+  const answer = stripCitationTokens(cleanAnswer(parsed.answer));
   if (!answer) throw new ContextAgentError("The context reply could not be read.", "invalid_response", true);
   const citationIds = Array.isArray(parsed.citationIds)
     ? parsed.citationIds.filter((value): value is string => typeof value === "string" && allowedCitations.has(value)).slice(0, 20)
@@ -300,7 +310,14 @@ export async function chatWithCompanyContext(args: {
     );
   }
   const citations = citationIds.map((id) => allowedCitations.get(id)!);
-  const questions: CompanyContextQuestion[] = normalizeCompanyContextQuestions(parsed.clarifyingQuestions);
+  const questions: CompanyContextQuestion[] = normalizeCompanyContextQuestions(parsed.clarifyingQuestions)
+    .flatMap((question) => {
+      const text = stripCitationTokens(question.question);
+      const options = [...new Set(question.options.map(stripCitationTokens).filter(Boolean))];
+      if (!text) return [];
+      if (question.kind === "options" && options.length < 2) return [];
+      return [{ ...question, question: text, options }];
+    });
   const requestCitationId = `message:${operatorMessage.id}`;
   const openActionIds = new Set(openRequests.filter((request) => request.pendingConfirmation).map((request) => request.actionId));
   const rawDrafts = Array.isArray(parsed.procurementDrafts) ? parsed.procurementDrafts.slice(0, 8) : [];

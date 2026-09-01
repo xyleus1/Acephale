@@ -160,14 +160,14 @@ export function normalizeContextProcurementDraft(value: unknown): ContextProcure
   const material = cleanText(input.material, 500);
   const quantity = Number(input.quantity);
   const unit = cleanText(input.unit, 80);
-  const neededByInput = optionalText(input.neededBy, 10);
+  const neededByInput = optionalText(input.neededBy, 100);
+  const neededBy = neededByInput && validDate(neededByInput) ? neededByInput : null;
   if (
     !material ||
     !Number.isFinite(quantity) ||
     quantity <= 0 ||
     quantity > 1_000_000_000 ||
-    !unit ||
-    (neededByInput && !validDate(neededByInput))
+    !unit
   ) return null;
   return {
     material,
@@ -176,7 +176,7 @@ export function normalizeContextProcurementDraft(value: unknown): ContextProcure
     partNumber: optionalText(input.partNumber, 300),
     quantity,
     unit,
-    neededBy: neededByInput,
+    neededBy,
     deliveryLocation: optionalText(input.deliveryLocation, 500),
     notes: optionalText(input.notes, 4_000),
   };

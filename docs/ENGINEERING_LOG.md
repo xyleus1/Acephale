@@ -1,5 +1,24 @@
 # Engineering Log
 
+## 2026-08-31: Context intake handles relative dates, citation tokens, and multi-question answers
+
+- `normalizeContextProcurementDraft` no longer rejects a whole draft over an
+  invalid `neededBy`: any value that is not a real `YYYY-MM-DD` date becomes
+  null. The agent prompt now carries the current date in the packet as `today`
+  and instructs the model to convert relative timing like "within 8 weeks" to
+  a concrete date or leave `neededBy` null with the wording in notes. Found by
+  recorded browser testing where relative timing caused a retryable 503.
+- Visible agent answers are passed through `stripCitationTokens`, which removes
+  raw `[document:...]` and `[message:...]` tokens the model sometimes writes
+  into the answer text. Structured `citationIds` provenance is unchanged.
+- Clarifying-question chips now select instead of submit. Answers accumulate
+  per question on the latest agent message and a single "Send answers" button
+  submits them together, so answering one question no longer skips the rest of
+  the round. Selections reset when a new agent message arrives or the thread
+  changes.
+- Verification: context and context-procurement contract tests, product copy
+  policy, `npx tsc --noEmit`.
+
 ## 2026-08-31: A coverage number for the stale action guard
 
 - Context: the guards existed (`scopeHash`, immutable task input, gate

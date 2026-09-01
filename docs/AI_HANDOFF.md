@@ -47,9 +47,16 @@
   creates a thread.
 - The context agent is an interactive intake agent. Its structured output now
   includes `clarifyingQuestions` (yes_no or options, at most 6), rendered as
-  one-click answer chips under the newest agent message. The prompt instructs
-  it to resolve part specs, quantity, lead time, delivery location, regions,
-  and certifications through short question rounds before drafting.
+  answer chips under the newest agent message. Chips select rather than submit:
+  the operator can answer every question in the round and a single Send answers
+  button submits them together. The prompt instructs it to resolve part specs,
+  quantity, lead time, delivery location, regions, and certifications through
+  short question rounds before drafting.
+- Draft hygiene: `neededBy` values that are not real `YYYY-MM-DD` dates are
+  dropped to null instead of failing the draft, the packet carries `today` so
+  the model can convert relative timing, and `stripCitationTokens` removes raw
+  `[document:...]`/`[message:...]` tokens from visible answer text while
+  structured citations stay intact.
 - Duplicate protection: open procurement actions are summarized into the model
   input as `openRequests`. The agent must ask before creating a near-duplicate,
   and a draft may set `supersedesActionId` to replace a still pending action

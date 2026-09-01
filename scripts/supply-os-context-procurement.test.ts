@@ -4,6 +4,7 @@ import {
   buildProcurementRequestSpecificContextSnapshot,
   normalizeContextProcurementDraft,
 } from "../src/lib/supply-os/context-procurement";
+import { stripCitationTokens } from "../src/lib/supply-os/context-agent";
 
 const draft = normalizeContextProcurementDraft({
   material: "HD-ENC-01 enclosure",
@@ -18,7 +19,19 @@ const draft = normalizeContextProcurementDraft({
 });
 assert(draft);
 assert.equal(normalizeContextProcurementDraft({ ...draft, quantity: 0 }), null);
-assert.equal(normalizeContextProcurementDraft({ ...draft, neededBy: "09/15/2026" }), null);
+assert.equal(normalizeContextProcurementDraft({ ...draft, neededBy: "09/15/2026" })?.neededBy, null);
+assert.equal(normalizeContextProcurementDraft({ ...draft, neededBy: "within 8 weeks" })?.neededBy, null);
+assert.equal(normalizeContextProcurementDraft({ ...draft, neededBy: "2026-02-30" })?.neededBy, null);
+assert.equal(normalizeContextProcurementDraft({ ...draft, neededBy: "2026-09-15 or later" })?.neededBy, null);
+
+assert.equal(
+  stripCitationTokens("Confirmed. [document:0ecd2b93-1] [message:37b81baf-2] The spec covers it."),
+  "Confirmed. The spec covers it.",
+);
+assert.equal(
+  stripCitationTokens("Is PC-ABS [document:abc] required?"),
+  "Is PC-ABS required?",
+);
 assert.equal(
   normalizeContextProcurementDraft({ ...draft, specification: "PC-ABS \u2014 black" })?.specification,
   "PC-ABS - black",
