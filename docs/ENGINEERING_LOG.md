@@ -1,5 +1,26 @@
 # Engineering Log
 
+## 2026-09-01: Outreach approval integrity
+
+- Campaign drafts now persist a revision hash and eligible audience id
+  snapshot. Applying a stale proposal refuses activation, and later batches
+  use the approved snapshot rather than expanding to newly imported rows.
+- Batch claims reserve campaign daily capacity transactionally, reclaim stale
+  queued claims after 30 minutes, recheck campaign status before each send,
+  and reconcile uncertain provider deliveries before selecting new rows.
+
+## 2026-09-01: Outreach campaign chat controls and dashboard banner
+
+- Added sender-mailbox discovery, office-scoped research-list and campaign
+  tools, deterministic planning, and direct pause, resume, cancel, and run-now
+  controls. A clear plan creates the existing pending proposal shape only when
+  no blockers remain.
+- Added the `START_OUTREACH_CAMPAIGN` proposal apply branch and greenlight
+  command. Applying activates only; sends remain in the campaign batch runner.
+- Added the active campaign banner and server actions. Summaries use stored
+  audience totals and aggregate send and reply counts, with a safe empty
+  fallback while the migration is pending.
+
 ## 2026-08-31: Sourcing state, panel alerts, and a quieter Supply OS shell
 
 - The customer sourcing panel now names its own state instead of showing a bare

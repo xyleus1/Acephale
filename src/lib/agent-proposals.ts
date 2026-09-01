@@ -10,6 +10,7 @@ import { filterScopedProposalFields } from "@/lib/agent-proposal-scope";
 import { buildReviewedFieldChanges, type ReviewedFieldChange } from "@/lib/agent-proposal-review";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { CLOSED_INQUIRY_STATUSES } from "@/lib/inquiry-status";
+import { activateCampaign } from "@/lib/outreach-campaigns";
 
 export type AgentProposalApplyResult = {
   ok: boolean;
@@ -37,7 +38,8 @@ type JobActionProposalType =
 type BulkActionProposalType =
   | "HIDE_THREADS"
   | "DEDUP_INQUIRIES"
-  | "MERGE_INQUIRIES_INTO_ONE";
+  | "MERGE_INQUIRIES_INTO_ONE"
+  | "START_OUTREACH_CAMPAIGN";
 
 // Open = anything not closed; custom statuses added on the RFQ sheet stay open.
 function isOpenInquiryStatus(status: string): boolean {
@@ -693,6 +695,24 @@ async function applyPendingBulkActionProposal(input: ApplyJobProposalInput, prop
     if (!result.ok) return { ok: false, proposalId: proposal.id, message: result.message };
     affectedRecords = result.affectedInquiryIds.map((id) => `inquiry:${id}`);
     note = `Consolidated ${result.mergedCount} inquir${result.mergedCount === 1 ? "y" : "ies"} into one reviewed deal.`;
+  } else if (action === "START_OUTREACH_CAMPAIGN") {
+    const campaignId = typeof actionInput.campaignId === "string" ? actionInput.campaignId : "";
+    if (!campaignId) return { ok: false, proposalId: proposal.id, message: "Outreach campaign proposal has no campaign id. Nothing changed." };
+    const activation = await activateCampaign({
+      officeId: input.officeId,
+      campaignId,
+      userId: input.userId ?? null,
+      expectedRevisionHash: typeof actionInput.revisionHash === "string" ? actionInput.revisionHash : undefined,
+    });
+    if (!activation.activated) {
+      return {
+        ok: false,
+        proposalId: proposal.id,
+        message: `Outreach campaign remains blocked: ${activation.blockers.join(" ")}`,
+      };
+    }
+    affectedRecords = [`campaign:${campaignId}`];
+    note = `Activated outreach campaign ${campaignId.slice(0, 8)}. Sending starts on the next batch.`;
   } else {
     return { ok: false, proposalId: proposal.id, message: `Unsupported bulk proposal "${action}". Nothing changed.` };
   }

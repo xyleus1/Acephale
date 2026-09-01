@@ -843,9 +843,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { reply: "Agent unavailable - OPENAI_API_KEY is not configured." };
-  }
 
   // Diagnostic: "/debug" reports schema and env state without invoking AI.
   if (userMessage.trim().toLowerCase() === "/debug") {
@@ -868,6 +865,30 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   const applyMatch = userMessage.trim().match(/^apply(?:\s+update)?\s+([a-z0-9]+)/i);
   if (applyMatch) {
     return applyAgentProposal(session.officeId, session.userId, applyMatch[1]);
+  }
+  const greenlightMatch = userMessage.trim().match(/^(greenlight|green ?light|send it|approve it|go ahead)\b/i);
+  if (greenlightMatch) {
+    const proposals = await prisma.agentProposal.findMany({
+      where: {
+        officeId: session.officeId,
+        status: "PENDING",
+        kind: "OUTREACH_CAMPAIGN_START",
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (proposals.length > 0) {
+      if (proposals.length > 1) {
+        return {
+          reply: `More than one outreach campaign is pending. Apply one by id: ${proposals.map((proposal) => proposal.id.slice(0, 8)).join(", ")}.`,
+        };
+      }
+      return applyAgentProposal(session.officeId, session.userId, proposals[0].id);
+    }
+  }
+
+  if (!apiKey) {
+    return { reply: "Agent unavailable - OPENAI_API_KEY is not configured." };
   }
 
   // Branch 1: pasted RFQ → ingest as Inquiry (kept as a special case because
@@ -1347,6 +1368,9 @@ Do not create or update an RFQ from text entered on this page.`
   if (effectiveScopeJobId && shouldPreflightCommercialBrain(userMessage)) {
     const brain = await dispatchTool("inspect_brain", { job_id: effectiveScopeJobId }, {
       officeId: session.officeId,
+      userId: session.userId,
+      role: session.role,
+      accessKind: session.accessKind,
       scopeJobId: effectiveScopeJobId,
       scopeCompanyId: scopeCompanyId ?? undefined,
     });
@@ -1420,6 +1444,9 @@ Do not create or update an RFQ from text entered on this page.`
       const toolResults = await Promise.all(toolUseBlocks.map(async (tu) => {
         const r = await dispatchTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, {
           officeId: session.officeId,
+          userId: session.userId,
+          role: session.role,
+          accessKind: session.accessKind,
           scopeJobId: effectiveScopeJobId ?? undefined,
           scopeCompanyId: scopeCompanyId ?? undefined,
         });

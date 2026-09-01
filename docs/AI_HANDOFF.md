@@ -1,5 +1,25 @@
 # AI Handoff
 
+## 2026-09-01: Outreach proposals pin content and audience
+
+- Outreach proposals carry the campaign revision hash. Activation refuses a
+  changed draft with a plan-again message.
+- Activation snapshots the approved record ids. Batch runs claim daily
+  capacity, stop after a pause or cancellation, and reconcile UNKNOWN
+  deliveries without retrying their records.
+
+## 2026-09-01: Chat outreach campaigns require a pinned shared mailbox
+
+- Outreach campaign planning now lists shared sender mailboxes and accepts a
+  mailbox email or account id. A campaign cannot activate without a pinned
+  sender because the sender pool is shared across offices.
+- Chat tools cover research-list discovery, campaign planning, campaign
+  summaries, pause, resume, cancel, and run-now. Planning creates an
+  `AgentProposal` only when blockers are clear; greenlight or `apply <id>`
+  activates the campaign, and the batch runner remains the only send path.
+- The dashboard banner uses aggregate campaign counts and renders nothing
+  when the additive campaign migration is not yet available.
+
 ## 2026-08-31: Supply OS states what it is doing, and the sidebar blips
 
 - Sourcing state is explicit. The customer sourcing panel labels not started,

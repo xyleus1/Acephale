@@ -10,7 +10,7 @@ import { draftReplyToMessage, draftCounterOffer } from "./sourcing-award";
 import { extractSourcingOffersForInquiry } from "./sourcing-offers";
 import { findStuckJobs } from "./stuck-jobs";
 import { analyzeJobDocument, askAboutDocument } from "./doc-analyze";
-import { createPendingBulkHideThreadsProposal, createPendingJobActionProposal, createPendingJobUpdateProposal } from "./agent-proposals";
+import { createPendingBulkActionProposal, createPendingBulkHideThreadsProposal, createPendingJobActionProposal, createPendingJobUpdateProposal } from "./agent-proposals";
 import { qualifyRfq } from "./rfq-qualification";
 import { openInquiryStatusFilter } from "./inquiry-status";
 import { loadLeadBoard } from "./lead-board-query";
@@ -56,6 +56,16 @@ import {
 } from "@/lib/intel/server";
 import type { StrategyEvidenceCheck } from "./commercial-strategy";
 import { operatorMetricLabel } from "./operator-action-labels";
+import {
+  cancelCampaign,
+  listCampaignSummaries,
+  pauseCampaign,
+  planOutreachCampaign,
+  resumeCampaign,
+  saveDraftCampaign,
+} from "@/lib/outreach-campaigns";
+import { runOutreachCampaignBatch } from "@/lib/outreach-campaign-send";
+import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 
 // Tool schemas use the app's provider-neutral input_schema shape. The shared
 // GPT-5.6 adapter converts these to Responses API function tools.
@@ -911,6 +921,81 @@ export const TOOLS = [
       required: ["confirm"],
     },
   },
+  {
+    name: "list_sender_mailboxes",
+    description: "List shared sender mailboxes, providers, daily limits, and today's sent counts.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_research_lists",
+    description: "List research lists in the current office with row counts by status.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "plan_outreach_campaign",
+    description: "Plan an office-scoped campaign and create a review proposal only when no blockers remain.",
+    input_schema: {
+      type: "object",
+      properties: {
+        list: { type: "string", description: "Research list slug or name" },
+        statuses: { type: "array", items: { type: "string" } },
+        countries: { type: "array", items: { type: "string" } },
+        segments: { type: "array", items: { type: "string" } },
+        daily_cap: { type: "number" },
+        subject: { type: "string" },
+        body: { type: "string" },
+        campaign_name: { type: "string" },
+        sender_mailbox: { type: "string", description: "Sender mailbox email address or account id" },
+      },
+      required: ["list"],
+    },
+  },
+  {
+    name: "list_outreach_campaigns",
+    description: "List active and paused outreach campaigns with delivery counts and replies.",
+    input_schema: {
+      type: "object",
+      properties: {
+        statuses: { type: "array", items: { type: "string", enum: ["ACTIVE", "PAUSED"] } },
+      },
+    },
+  },
+  {
+    name: "pause_outreach_campaign",
+    description: "Pause an active outreach campaign.",
+    input_schema: {
+      type: "object",
+      properties: { campaign_id: { type: "string" } },
+      required: ["campaign_id"],
+    },
+  },
+  {
+    name: "resume_outreach_campaign",
+    description: "Resume an approved paused outreach campaign.",
+    input_schema: {
+      type: "object",
+      properties: { campaign_id: { type: "string" } },
+      required: ["campaign_id"],
+    },
+  },
+  {
+    name: "cancel_outreach_campaign",
+    description: "Cancel a draft, active, or paused outreach campaign.",
+    input_schema: {
+      type: "object",
+      properties: { campaign_id: { type: "string" } },
+      required: ["campaign_id"],
+    },
+  },
+  {
+    name: "run_outreach_campaign_now",
+    description: "Run the next capped batch for an active outreach campaign.",
+    input_schema: {
+      type: "object",
+      properties: { campaign_id: { type: "string" }, limit: { type: "number" } },
+      required: ["campaign_id"],
+    },
+  },
 ] as const;
 
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
@@ -918,6 +1003,8 @@ export const TOOLS = [
 export type ToolContext = {
   officeId: string;
   userId?: string;
+  role?: string;
+  accessKind?: "operator" | "customer";
   scopeJobId?: string;
   scopeCompanyId?: string;
 };
@@ -2226,6 +2313,19 @@ export async function dispatchTool(
   input: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
+  const campaignTools = new Set([
+    "list_sender_mailboxes",
+    "list_research_lists",
+    "plan_outreach_campaign",
+    "list_outreach_campaigns",
+    "pause_outreach_campaign",
+    "resume_outreach_campaign",
+    "cancel_outreach_campaign",
+    "run_outreach_campaign_now",
+  ]);
+  if (campaignTools.has(name) && (ctx.accessKind === "customer" || ctx.role === "EMPLOYEE")) {
+    return { ok: false, error: "Outreach campaign tools are available only to operator accounts." };
+  }
   // Resolve job_id helper. Models often pass the human-facing reference
   // (JOB-2025-008) even when the database lookup expects the internal id.
   // Accept both, then fall back to the focused job.
@@ -4073,6 +4173,140 @@ export async function dispatchTool(
         if (!documentId) return { ok: false, error: "document_id required" };
         const r = await analyzeJobDocument({ documentId, force: input.force === true });
         return "error" in r ? { ok: false, error: r.error } : { ok: true, result: r };
+      }
+      case "list_sender_mailboxes": {
+        const mailboxes = await listEmailSenderPoolAccounts();
+        return {
+          ok: true,
+          result: mailboxes.map((mailbox) => ({
+            id: mailbox.id,
+            email: mailbox.email,
+            display_name: mailbox.displayName,
+            provider: mailbox.provider,
+            daily_limit: mailbox.dailySendLimit,
+            sent_today: mailbox.sentToday,
+          })),
+        };
+      }
+      case "list_research_lists": {
+        const lists = await prisma.researchList.findMany({
+          where: { officeId: ctx.officeId },
+          select: { id: true, slug: true, name: true },
+          orderBy: { name: "asc" },
+        });
+        const counts = await prisma.researchRecord.groupBy({
+          by: ["listId", "status"],
+          where: { officeId: ctx.officeId, listId: { in: lists.map((list) => list.id) } },
+          _count: { _all: true },
+        });
+        return {
+          ok: true,
+          result: lists.map((list) => ({
+            slug: list.slug,
+            name: list.name,
+            row_counts: Object.fromEntries(
+              counts.filter((count) => count.listId === list.id).map((count) => [count.status, count._count._all]),
+            ),
+          })),
+        };
+      }
+      case "plan_outreach_campaign": {
+        const requestedSender = typeof input.sender_mailbox === "string" ? input.sender_mailbox.trim() : "";
+        const mailboxes = await listEmailSenderPoolAccounts();
+        const sender = requestedSender
+          ? mailboxes.find((mailbox) => mailbox.id === requestedSender || mailbox.email.toLowerCase() === requestedSender.toLowerCase())
+          : null;
+        if (requestedSender && !sender) {
+          return { ok: false, error: "Sender mailbox was not found in the shared sending pool." };
+        }
+        const statuses = Array.isArray(input.statuses) ? input.statuses.filter((item): item is string => typeof item === "string") : undefined;
+        const countries = Array.isArray(input.countries) ? input.countries.filter((item): item is string => typeof item === "string") : undefined;
+        const segments = Array.isArray(input.segments) ? input.segments.filter((item): item is string => typeof item === "string") : undefined;
+        const subject = typeof input.subject === "string" ? input.subject : "";
+        const body = typeof input.body === "string" ? input.body : "";
+        const campaignInput = {
+          officeId: ctx.officeId,
+          list: String(input.list ?? ""),
+          statuses,
+          countries,
+          segments,
+          dailyCap: typeof input.daily_cap === "number" ? input.daily_cap : undefined,
+          subject,
+          bodyTemplate: body,
+          campaignName: typeof input.campaign_name === "string" ? input.campaign_name : undefined,
+          senderAccountId: sender?.id ?? null,
+        };
+        const plan = await planOutreachCampaign(campaignInput);
+        const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
+        const campaignId = campaign.id;
+        let proposalId: string | null = null;
+        if (plan.blockers.length === 0) {
+          const proposal = await createPendingBulkActionProposal({
+            officeId: ctx.officeId,
+            userId: ctx.userId,
+            kind: "OUTREACH_CAMPAIGN_START",
+            action: "START_OUTREACH_CAMPAIGN",
+            actionInput: { campaignId, revisionHash: campaign.revisionHash },
+            actionLabel: `Start outreach campaign for ${plan.list.name}, ${plan.eligible} recipients`,
+            actionDetails: [
+              `Sender mailbox: ${plan.senderEmail ?? "no mailbox connected"}`,
+              `Daily cap: ${plan.dailyCap}`,
+              `Filters: ${JSON.stringify(plan.filters)}`,
+              `Subject: ${plan.subject}`,
+              "Sending starts on the next batch after approval.",
+            ],
+            reviewItems: plan.sampleRecipients.map((recipient) => ({
+              id: recipient.id,
+              title: recipient.email,
+              meta: [recipient.company, recipient.country].filter(Boolean).join(" · "),
+              detail: "Eligible research-list row.",
+            })),
+            sourceType: "AGENT_TOOL",
+            sourcePreview: `Plan outreach campaign for ${plan.list.name}.`,
+            toolTrace: { toolName: name, input },
+          });
+          if (proposal.ok) proposalId = proposal.proposalId;
+        }
+        return {
+          ok: true,
+          result: {
+            ...plan,
+            campaign_id: campaignId,
+            proposal_id: proposalId,
+            sender_mailbox: plan.senderEmail,
+          },
+        };
+      }
+      case "list_outreach_campaigns": {
+        const requestedStatuses = Array.isArray(input.statuses)
+          ? input.statuses.filter((status): status is "ACTIVE" | "PAUSED" => status === "ACTIVE" || status === "PAUSED")
+          : undefined;
+        return { ok: true, result: await listCampaignSummaries(ctx.officeId, requestedStatuses) };
+      }
+      case "pause_outreach_campaign": {
+        const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";
+        if (!campaignId) return { ok: false, error: "campaign_id required" };
+        return { ok: true, result: await pauseCampaign({ officeId: ctx.officeId, campaignId }) };
+      }
+      case "resume_outreach_campaign": {
+        const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";
+        if (!campaignId) return { ok: false, error: "campaign_id required" };
+        return { ok: true, result: await resumeCampaign({ officeId: ctx.officeId, campaignId }) };
+      }
+      case "cancel_outreach_campaign": {
+        const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";
+        if (!campaignId) return { ok: false, error: "campaign_id required" };
+        return { ok: true, result: await cancelCampaign({ officeId: ctx.officeId, campaignId }) };
+      }
+      case "run_outreach_campaign_now": {
+        const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";
+        if (!campaignId) return { ok: false, error: "campaign_id required" };
+        const batch = await runOutreachCampaignBatch({
+          officeId: ctx.officeId,
+          campaignId,
+          limit: typeof input.limit === "number" ? input.limit : undefined,
+        });
+        return { ok: true, result: batch };
       }
       case "delete_job": {
         if (!jobId) return { ok: false, error: "No job_id" };

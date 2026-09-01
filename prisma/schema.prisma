@@ -180,6 +180,8 @@ model Office {
   supplyApprovals           SupplyApproval[]
   supplyExecutionTasks      SupplyExecutionTask[]
   supplyExecutionEvents     SupplyExecutionEvent[]
+  outreachCampaigns         OutreachCampaign[]
+  outreachCampaignSends     OutreachCampaignSend[]
 
   @@unique([name])
 }
@@ -3283,6 +3285,7 @@ model ResearchList {
 
   office  Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
   records ResearchRecord[]
+  outreachCampaigns OutreachCampaign[]
 
   @@unique([officeId, slug])
   @@unique([id, officeId])
@@ -3306,4 +3309,66 @@ model ResearchRecord {
   @@unique([listId, dedupeKey])
   @@index([officeId, listId])
   @@index([listId, status])
+}
+
+model OutreachCampaign {
+  id               String   @id @default(cuid())
+  officeId         String
+  name             String
+  listId           String
+  status           String   @default("DRAFT")
+  subject          String
+  bodyTemplate     String
+  emailField       String
+  companyField     String?
+  countryField     String?
+  rowStatuses      Json
+  filters          Json?
+  senderAccountId  String?
+  audienceTotal    Int      @default(0)
+  audienceRecordIds Json?
+  revisionHash     String?
+  dailyCap         Int      @default(40)
+  createdByUserId  String?
+  approvedByUserId String?
+  approvedAt       DateTime?
+  startedAt        DateTime?
+  pausedAt         DateTime?
+  completedAt      DateTime?
+  lastRunAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  office Office                 @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  list   ResearchList           @relation(fields: [listId, officeId], references: [id, officeId], onDelete: Cascade)
+  sends  OutreachCampaignSend[]
+
+  @@unique([officeId, name])
+  @@unique([id, officeId])
+  @@index([officeId, status])
+}
+
+model OutreachCampaignSend {
+  id                String   @id @default(cuid())
+  officeId          String
+  campaignId        String
+  recordId          String
+  recipient         String
+  status            String   @default("QUEUED")
+  senderEmail       String?
+  reservationId     String?
+  providerMessageId String?
+  providerThreadId  String?
+  localThreadId     String?
+  error             String?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  office   Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  campaign OutreachCampaign @relation(fields: [campaignId, officeId], references: [id, officeId], onDelete: Cascade)
+
+  @@unique([campaignId, recordId])
+  @@index([officeId, campaignId, status])
+  @@index([officeId, sentAt])
 }

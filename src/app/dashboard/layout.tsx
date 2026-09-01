@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth";
 import { LogoutButton } from "@/components/logout-button";
 import { LiveEventToast } from "@/components/live-event-toast";
 import { LogoMark } from "@/components/logo-mark";
+import { ActiveCampaignBanner } from "@/components/active-campaign-banner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -34,6 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </header>
 
         <div className="page-container">
+          <ActiveCampaignBanner />
           {children}
         </div>
       </section>

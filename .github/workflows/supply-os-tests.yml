@@ -9,11 +9,14 @@ on:
       - "prisma/**"
       - "scripts/supply-os-*"
       - "scripts/state-recheck.test.ts"
+      - "scripts/outreach-campaign-*.test.ts"
       - "scripts/fixtures/**"
       - "src/app/api/supply-os/**"
       - "src/app/dashboard/supply-os/**"
       - "src/lib/company-context.ts"
+      - "src/lib/outreach-campaign-*.ts"
       - "src/lib/supply-os/**"
+      - "src/app/api/cron/outreach-campaigns/**"
   push:
     branches: [main]
     paths:
@@ -23,11 +26,14 @@ on:
       - "prisma/**"
       - "scripts/supply-os-*"
       - "scripts/state-recheck.test.ts"
+      - "scripts/outreach-campaign-*.test.ts"
       - "scripts/fixtures/**"
       - "src/app/api/supply-os/**"
       - "src/app/dashboard/supply-os/**"
       - "src/lib/company-context.ts"
+      - "src/lib/outreach-campaign-*.ts"
       - "src/lib/supply-os/**"
+      - "src/app/api/cron/outreach-campaigns/**"
 
 permissions:
   contents: read
@@ -112,6 +118,8 @@ jobs:
           npm run test:supply-os-continuous-sourcing
           npm run test:supply-os-atlas-sourcing
           npm run test:supply-os-saved-research-retry
+          npm run test:outreach-campaign-copy
+          npm run test:outreach-campaign-send
           npm run test:supply-os-supplier-research-failures
           npm run test:supply-os-supply-intelligence
           npm run test:supply-os-exa-retrieval

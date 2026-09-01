@@ -1,5 +1,19 @@
 # Decisions
 
+## Outreach campaign approval reuses AgentProposal and pins a shared mailbox
+
+Date: 2026-09-01
+
+Chat campaign planning reuses the existing `AgentProposal` bulk action shape
+and the `apply <id>` path instead of introducing a second approval system.
+The greenlight phrase applies the single pending campaign proposal for the
+current office and user; applying it activates the campaign but never sends.
+
+Every campaign must pin its sender mailbox before activation. `EmailAccount`
+is a shared cross-office sender pool, so allowing the pool to choose a mailbox
+could send one office's campaign from another office's mailbox. Mailbox
+selection is explicit in chat and visible in the proposal details.
+
 ## Supply OS panel alerts are derived client side, not stored
 
 Sidebar attention blips are computed from data the workspace already loads
@@ -4532,3 +4546,16 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Human boundary: The in-app `New office` action remains the primary route for
   human operators, with the direct script and GitHub Actions paths retained as
   fallbacks.
+
+## 2026-09-01: Outreach approval pins audience and campaign revision
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Campaign approval reuses `AgentProposal` and `apply <id>`, while
+  each proposal carries a revision hash over the reviewed message, filters,
+  sender, cap, and audience id set.
+- Approval boundary: The campaign stores the approved audience record ids at
+  activation. Later imports or edits cannot silently expand the approved
+  recipient set, and a changed draft must be planned again.
+- Sender boundary: Every campaign pins one sender account because the sender
+  mailbox pool is shared across offices.
