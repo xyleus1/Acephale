@@ -52,6 +52,29 @@ using the reserved customer login identity. The in-app form refuses an office
 name that already exists. The direct script and GitHub Actions workflow remain
 idempotent and reuse existing records.
 
+### Shell operations fallback
+
+When no browser session or local database URL is available, an operator can
+call the deployed app:
+
+- `POST /api/ops/offices` creates an office. It requires an allowlisted operator
+  email and accepts office, optional customer login, company, and workspace
+  inputs.
+- `POST /api/ops/research/import` creates a research list when needed and
+  imports rows for an existing office resolved by office name. Existing list
+  definitions are left unchanged. Every import must include a `dedupeField`
+  matching a list field so retries do not create duplicates.
+
+Both endpoints require the `Authorization: Bearer <OPS_PROVISIONING_SECRET>`
+header. Configure `OPS_PROVISIONING_SECRET` with at least 32 characters in the
+Vercel Production environment. Keep the token out of shell history, logs, and
+repository files. The in-app `New office` button remains the primary route for
+human operators. The office endpoint limits office names to 80 characters,
+operator emails to 200, company and workspace names to 160, and workspace
+external keys to 120. Research imports limit office names to 80, list names to
+160, slugs to 80, descriptions to 1000, dedupe fields to 80, and request
+payloads to 4,000,000 bytes.
+
 ### Direct script fallback
 
 ```bash

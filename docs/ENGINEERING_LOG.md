@@ -8040,6 +8040,19 @@ Use this file for chronological implementation notes that future agents should s
   its environment contract and JSON output. The GitHub Actions fallback keeps
   invoking that script.
 
+### 2026-08-31 - Token-authenticated ops provisioning
+
+- Added dedicated shell endpoints for office provisioning and research-list
+  import. They authenticate only with the `OPS_PROVISIONING_SECRET` bearer
+  token, which must be at least 32 characters and configured in Vercel
+  Production.
+- The office endpoint resolves an allowlisted active operator and delegates to
+  the shared provisioning transaction. The research endpoint resolves an
+  office by name, creates a missing list without changing existing definitions,
+  and imports rows through the office-scoped research library.
+- The browser `New office` action remains the primary human path. Existing
+  direct script and GitHub Actions fallbacks remain available.
+
 ### 2026-08-28 - A sourcing slice fits inside one invocation
 
 - Capped every external call inside the supplier sourcing wave (discovery,

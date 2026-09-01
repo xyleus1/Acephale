@@ -3,6 +3,8 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import { safeHttpUrl } from "@/lib/leads-directory";
+import { normalizeDedupeValue } from "@/lib/research-dedupe";
+export { normalizeDedupeValue } from "@/lib/research-dedupe";
 
 export const RESEARCH_PAGE_SIZE = 50;
 export const RESEARCH_MAX_FIELDS = 40;
@@ -251,16 +253,6 @@ export function coerceResearchValue(value: unknown, field: ResearchField): strin
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
-}
-
-export function normalizeDedupeValue(value: unknown): string | null {
-  const normalized = cleanText(value).toLowerCase();
-  if (!normalized) return null;
-  return normalized
-    .replace(/^[a-z][a-z\d+.-]*:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/\/+$/, "")
-    .trim() || null;
 }
 
 function normalizeRow(row: ResearchInputRow, fields: ResearchField[]) {

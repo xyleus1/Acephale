@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   canProvisionOffice,
+  OfficeAlreadyExistsError,
   provisionOffice,
   type OfficeProvisioningClient,
   type OfficeProvisioningTransaction,
@@ -234,6 +235,32 @@ assert.equal(fake.users.length, 1);
 assert.equal(fake.companies.length, 1);
 assert.equal(fake.workspaces.length, 1);
 assert.equal(fake.members.length, 1);
+
+const createOnly = fakeClient();
+await provisionOffice(createOnly.client, {
+  officeName: "Existing office",
+  admins: [{ email: "mert@usederya.com", fullName: "Mert", passwordHash: "hash-1" }],
+});
+const existingCounts = [
+  createOnly.users.length,
+  createOnly.companies.length,
+  createOnly.workspaces.length,
+  createOnly.members.length,
+];
+await assert.rejects(
+  () => provisionOffice(createOnly.client, {
+    officeName: "Existing office",
+    admins: [{ email: "other@usederya.com", fullName: "Other", passwordHash: "hash-2" }],
+    requireNewOffice: true,
+  }),
+  OfficeAlreadyExistsError,
+);
+assert.deepEqual([
+  createOnly.users.length,
+  createOnly.companies.length,
+  createOnly.workspaces.length,
+  createOnly.members.length,
+], existingCounts);
 
 const multi = fakeClient();
 const multipleAdmins = await provisionOffice(multi.client, {

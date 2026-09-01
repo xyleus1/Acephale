@@ -4506,3 +4506,19 @@ Use this log for durable product and engineering decisions. Do not put every imp
   username identities.
 - Tenant boundary: Office, user, company, workspace, and membership writes
   remain scoped by `officeId` where the schema supports the relationship.
+
+## 2026-08-31: Dedicated token-authenticated ops surface
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Add a dedicated token-authenticated ops surface for office
+  provisioning and research-list import so shell operators can use the
+  deployed app without a browser session.
+- Authentication boundary: Both routes accept only the
+  `OPS_PROVISIONING_SECRET` bearer token, with a minimum length of 32
+  characters. Procurement and cron secrets are not accepted.
+- Tenant boundary: Office resolution by name is followed by office-scoped
+  provisioning or research-list operations using `officeId`.
+- Human boundary: The in-app `New office` action remains the primary route for
+  human operators, with the direct script and GitHub Actions paths retained as
+  fallbacks.

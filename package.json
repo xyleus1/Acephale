@@ -28,6 +28,8 @@
     "test:supply-os-company-navigation": "tsx scripts/supply-os-company-navigation.test.ts",
     "test:supply-os-company-create": "tsx scripts/supply-os-company-create.test.ts",
     "test:office-provisioning": "tsx scripts/office-provisioning.test.ts",
+    "test:ops-secret": "tsx scripts/ops-secret.test.ts",
+    "test:ops-input": "tsx scripts/ops-input.test.ts",
     "test:supply-os-continuous-layout": "tsx scripts/supply-os-continuous-layout.test.ts",
     "test:supply-os-fixed-map-grid": "tsx scripts/supply-os-fixed-map-grid.test.ts",
     "test:supply-os-map-dominance": "tsx scripts/supply-os-map-dominance.test.ts",

@@ -11180,3 +11180,15 @@ Verification caveat:
   response with the bounded result and error marker.
 - The cycle defaults to a drain limit of two and leaves the legacy supplier
   research cron unchanged.
+
+## 2026-08-31: Token-authenticated ops provisioning
+
+- Added `POST /api/ops/offices` and `POST /api/ops/research/import` for shell
+  operations against the deployed app without a browser session or local
+  production database URL.
+- Both routes require the dedicated `OPS_PROVISIONING_SECRET` through an
+  `Authorization: Bearer` header. The secret must be at least 32 characters
+  and configured in the Vercel Production environment.
+- Office provisioning still uses the shared service and requires an
+  allowlisted operator email. Research imports resolve the office by name and
+  keep list and record operations scoped by `officeId`.

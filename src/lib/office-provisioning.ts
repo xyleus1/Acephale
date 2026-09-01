@@ -14,7 +14,18 @@ export type ProvisionOfficeInput = {
   companyName?: string;
   workspaceName?: string;
   workspaceExternalKey?: string;
+  requireNewOffice?: boolean;
 };
+
+export class OfficeAlreadyExistsError extends Error {
+  readonly officeName: string;
+
+  constructor(officeName: string) {
+    super(`An office named "${officeName}" already exists.`);
+    this.name = "OfficeAlreadyExistsError";
+    this.officeName = officeName;
+  }
+}
 
 type OfficeRecord = {
   id: string;
@@ -182,6 +193,9 @@ export async function provisionOffice(
       where: { name: officeName },
       select: { id: true, name: true, createdAt: true },
     });
+    if (input.requireNewOffice && existingOffice) {
+      throw new OfficeAlreadyExistsError(officeName);
+    }
     const office = existingOffice ?? await tx.office.create({
       data: { name: officeName },
       select: { id: true, name: true, createdAt: true },

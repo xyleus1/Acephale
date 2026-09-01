@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
-import { canProvisionOffice, provisionOffice } from "@/lib/office-provisioning";
+import { canProvisionOffice, OfficeAlreadyExistsError, provisionOffice } from "@/lib/office-provisioning";
 import { isUsernameIdentifier, usernameLoginEmail } from "@/lib/login-code";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -18,6 +19,15 @@ type OfficeRequestBody = {
 
 function optionalText(value: unknown) {
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+function isOfficeNameConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    return false;
+  }
+  const target = error.meta?.target;
+  if (Array.isArray(target)) return target.length === 1 && String(target[0]).toLowerCase() === "name";
+  return typeof target === "string" && target.toLowerCase() === "name";
 }
 
 export async function POST(request: NextRequest) {
@@ -85,13 +95,27 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const result = await provisionOffice(prisma, {
-    officeName,
-    admins,
-    companyName: optionalText(body?.companyName),
-    workspaceName: optionalText(body?.workspaceName),
-    workspaceExternalKey: optionalText(body?.workspaceExternalKey),
-  });
+  let result;
+  try {
+    result = await provisionOffice(prisma, {
+      officeName,
+      admins,
+      companyName: optionalText(body?.companyName),
+      workspaceName: optionalText(body?.workspaceName),
+      workspaceExternalKey: optionalText(body?.workspaceExternalKey),
+      requireNewOffice: true,
+    });
+  } catch (error) {
+    if (error instanceof OfficeAlreadyExistsError) {
+      return NextResponse.json({
+        error: error.message,
+      }, { status: 409 });
+    }
+    if (!isOfficeNameConflict(error)) throw error;
+    return NextResponse.json({
+      error: `An office named "${officeName}" already exists.`,
+    }, { status: 409 });
+  }
 
   return NextResponse.json({
     office: result.office,
