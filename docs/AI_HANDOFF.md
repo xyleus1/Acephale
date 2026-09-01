@@ -1,5 +1,19 @@
 # AI Handoff
 
+## 2026-09-01: Fewer clarifying-question rounds
+
+- The context agent now clarifies fast and acts: clarifyingQuestions are
+  reserved for details that block drafting at all (item or material, quantity
+  and unit). Optional refinements (tolerances, finish, certifications,
+  delivery date and location, tooling, budget) are captured only when
+  volunteered; otherwise the draft is prepared with assumptions recorded in
+  its notes.
+- Hard cap of 2 question rounds per chat, enforced deterministically:
+  `assembleCompanyContextForAgent` reports `questionCount` per agent message,
+  the prompt tells the model how many rounds remain, and once exhausted the
+  reply's questions are trimmed to at most 1 (kept for duplicate-of-open-request
+  confirmation).
+
 ## 2026-09-01: Chat auto-rename and memory hardening
 
 - New chats rename themselves after the first useful agent reply: the

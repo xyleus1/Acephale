@@ -1066,6 +1066,7 @@ export async function assembleCompanyContextForAgent(
       citationId: `message:${message.id}`,
       role: message.role,
       body: message.body,
+      questionCount: message.questions?.length ?? 0,
       createdAt: message.createdAt,
     }));
   return {

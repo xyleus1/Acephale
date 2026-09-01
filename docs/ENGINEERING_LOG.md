@@ -1,5 +1,22 @@
 # Engineering Log
 
+## 2026-09-01: Cap clarifying-question rounds at 2 per chat
+
+- Operator feedback: the intake agent spread nice-to-have questions over many
+  rounds and refused to draft. The prompt now restricts clarifyingQuestions to
+  drafting blockers (item or material, quantity, unit), bundles them into one
+  round with at most one high-impact preference, and instructs the model to
+  draft with assumptions recorded in the draft notes instead of asking for
+  optional details.
+- Deterministic enforcement in `src/lib/supply-os/context-agent.ts`:
+  `MAX_QUESTION_ROUNDS = 2`. `assembleCompanyContextForAgent` exposes
+  `questionCount` on each packet message; prior agent messages with questions
+  count as used rounds, the prompt states the remaining budget, and once it is
+  0 the parsed reply's questions are sliced to at most 1 (reserved for
+  confirming a suspected duplicate of an open request).
+- Verified: `scripts/supply-os-context.test.ts`,
+  `scripts/company-context-database.test.ts`, typecheck, build.
+
 ## 2026-09-01: Chat auto-rename and shared-memory review hardening
 
 - Added `renameDefaultCompanyContextChatThread` in `src/lib/company-context.ts`:

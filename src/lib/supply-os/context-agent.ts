@@ -31,6 +31,8 @@ import {
   normalizeProspectingDraft,
 } from "@/lib/supply-os/context-prospecting";
 
+const MAX_QUESTION_ROUNDS = 2;
+
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -244,6 +246,8 @@ export async function chatWithCompanyContext(args: {
     .catch(() => {
       throw new ContextAgentError("Open procurement requests could not be checked. Try again.", "unavailable", true);
     });
+  const priorQuestionRounds = packet.messages.filter((message) => message.role === "AGENT" && message.questionCount > 0).length;
+  const questionRoundsLeft = Math.max(0, MAX_QUESTION_ROUNDS - priorQuestionRounds);
   const allowedCitations = new Map<string, CompanyContextCitation>();
   for (const document of packet.documents) {
     allowedCitations.set(document.citationId, { id: document.citationId, label: document.name });
@@ -271,10 +275,11 @@ export async function chatWithCompanyContext(args: {
         "Prior Derya replies are conversation only, not evidence.",
         "Do not invent missing facts. Say what is missing or uncertain.",
         "Return citationIds for every material claim, using only citationId values in the packet.",
-        "Be strongly interactive. When the operator describes a sourcing or sales need that is missing details that would change supplier selection, quoting, or search scope, ask clarifyingQuestions before preparing drafts. Cover the most important unknowns first: exact part or material specification, quantity and unit, tolerances or grade, surface finish or color, lead time or needed-by date, delivery location, target regions, certifications, and budget or price sensitivity.",
-        "Ask at most 4 clarifyingQuestions per reply. Prefer yes_no questions and short option lists over open questions so the operator can answer with one click. Every options question needs 2 to 6 short, mutually exclusive options. Put any open-ended asks in the answer text instead.",
-        "Ask one focused round at a time and build on prior answers. When the operator has answered enough to fully specify the item, stop asking and prepare the draft. Do not re-ask anything already answered in this conversation or clearly stated in the files.",
-        "If and only if the operator explicitly asks to create, start, add, or run procurement or supplier searches, prepare procurementDrafts for human confirmation. If key fields are missing, ask clarifyingQuestions instead of drafting a vague search.",
+        "Clarify fast, then act. Ask clarifyingQuestions only for details that block creating the task at all: the exact item or material, and the quantity and unit. Everything else, such as tolerances, grade, finish, certifications, delivery date, delivery location, tooling, or budget, is optional refinement: use it when the operator already stated it, otherwise proceed without asking and record the open points and your assumptions in the draft notes for the operator to correct.",
+        "Hard limit: a chat gets at most 2 rounds of clarifyingQuestions in total, and most tasks should need only 1. A reply may contain up to 4 questions, so bundle the blocking essentials plus at most one high-impact preference into a single round instead of spreading them over many replies. Prefer yes_no questions and short option lists over open questions so the operator can answer with one click. Every options question needs 2 to 6 short, mutually exclusive options. Put any open-ended asks in the answer text instead.",
+        `You have ${questionRoundsLeft} clarifying-question rounds left in this chat. When 0 remain, or when the operator asks you to proceed or search, return an empty clarifyingQuestions array and prepare the draft now with what you have, stating unknowns and assumptions in the draft notes. The only exceptions are one question to confirm a suspected duplicate of an open request, or asking in the answer text for a still-missing quantity or unit.`,
+        "Do not re-ask anything already answered in this conversation or clearly stated in the files. When the item, quantity, and unit are known, stop asking and prepare the draft.",
+        "If and only if the operator explicitly asks to create, start, add, or run procurement or supplier searches, prepare procurementDrafts for human confirmation. Only the item, quantity, and unit may block drafting; never delay a requested search for optional details.",
         "Create one procurement draft per distinct sourcing item. Never combine unrelated products, parts, materials, or manufacturing processes into one draft.",
         "Each procurement draft requires a supported material or part, positive quantity, and unit. If any are missing, return no draft for that item and ask for the missing fields.",
         "Use manufacturer, part number, specifications, delivery location, needed-by date, and notes when the supplied evidence supports them. Use null when unknown.",
@@ -325,7 +330,8 @@ export async function chatWithCompanyContext(args: {
       if (!text) return [];
       if (question.kind === "options" && options.length < 2) return [];
       return [{ ...question, question: text, options }];
-    });
+    })
+    .slice(0, questionRoundsLeft > 0 ? undefined : 1);
   const memoryNotes = Array.isArray(parsed.memoryNotes)
     ? parsed.memoryNotes
         .filter((note): note is string => typeof note === "string")
