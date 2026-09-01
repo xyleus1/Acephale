@@ -1,5 +1,18 @@
 # Decisions
 
+## Approved outreach campaigns send from pinned recipient snapshots
+
+Date: 2026-09-01
+
+Campaign activation captures the approved audience's exact email, company,
+and country values in an office-scoped personalization snapshot. Batch sends
+must render from those pinned values instead of live research-list data, and
+records without a pinned value are skipped. Later status changes can remove a
+recipient from the approved audience, but imports cannot add one. Empty or
+unreadable snapshots block execution rather than completing the campaign. The
+personalization snapshot is part of the revision hash, so editing a research
+row after planning requires the campaign to be planned and approved again.
+
 ## Outreach campaign approval reuses AgentProposal and pins a shared mailbox
 
 Date: 2026-09-01

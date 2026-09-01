@@ -57,6 +57,23 @@
   agent packet, deletion, foreign-office rejection),
   `scripts/product-copy-policy.test.ts`, typecheck, build.
 
+## 2026-09-01: Outreach recipient pinning and runtime grants
+
+- Added migration `20260901000300_outreach_campaign_pinning` and paired
+  production verification for per-recipient personalization storage. Runtime
+  grants come from `20260901000200_leadgen_outreach_app_grants`.
+- Activation captures the exact email, company, and country values used for
+  each approved row. Batch selection skips rows without a pinned snapshot or
+  later-ineligible statuses and renders from pinned values rather than current
+  research data. The approved audience can shrink but never grow.
+- Empty or unreadable active audience snapshots return `NO_AUDIENCE` without
+  completing the campaign.
+- Personalization now participates in the stale-approval revision hash.
+  Every attempted batch records `lastRunAt`, which the campaign banner labels
+  as the last attempt. `apply <id>` gates only outreach campaign proposals for
+  customer and employee sessions, using the same office and user scope as
+  proposal application.
+
 ## 2026-09-01: Outreach campaign hardening
 
 - Added read-only production verification for the outreach campaign migration,

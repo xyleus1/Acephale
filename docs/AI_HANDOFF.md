@@ -41,6 +41,25 @@
 - Customer portal users do not see operator-saved notes
   (`customerVisible: false` via `companyContextActorData`).
 
+## 2026-09-01: Outreach campaigns pin recipient personalization
+
+- Migration `20260901000200_leadgen_outreach_app_grants` grants `derya_app`
+  the four runtime privileges on both campaign tables. Migration
+  `20260901000300_outreach_campaign_pinning` adds nullable
+  `audiencePersonalization` JSON.
+- Approval stores the exact email, company, and country values for every
+  approved audience record. Batch rendering and recipient selection use that
+  snapshot. Later research-list status changes may shrink the audience, and
+  records without pinned personalization are skipped.
+- An active campaign with an empty or unreadable approved audience snapshot is
+  blocked as `NO_AUDIENCE` and is not marked completed.
+- Personalization is included in the campaign revision hash, so edits to
+  research rows after planning invalidate a pending approval.
+- Every attempted batch updates `lastRunAt`, including blocked and
+  zero-success runs. The banner labels this timestamp as the last attempt.
+  Applying an outreach campaign proposal is operator-only while unrelated
+  proposal kinds retain their existing access behavior.
+
 ## 2026-09-01: Outreach campaign hardening
 
 - Production migration verification is a read-only catalog and privilege

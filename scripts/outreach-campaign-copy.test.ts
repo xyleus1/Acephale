@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import {
   campaignBlockers,
   campaignDefaultName,
+  campaignPersonalizationMap,
   campaignRevisionHash,
   campaignRevisionMatches,
   campaignProgress,
   campaignRowEligible,
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
+  campaignSnapshotOutstandingRecordIds,
   renderCampaignEmail,
 } from "../src/lib/outreach-campaign-copy";
 
@@ -73,10 +75,54 @@ const revisionInput = {
   dailyCap: 40,
   senderAccountId: "account-1",
   audienceRecordIds: ["record-1", "record-2"],
+  audiencePersonalization: {
+    "record-1": { email: "one@example.com", company: "One", country: "UK" },
+    "record-2": { email: "two@example.com", company: null, country: "DE" },
+  },
 };
 const revision = campaignRevisionHash(revisionInput);
 assert.equal(campaignRevisionMatches(revision, revision), true);
 assert.equal(campaignRevisionMatches(`${revision}-changed`, revision), false);
+assert.notEqual(campaignRevisionHash({
+  ...revisionInput,
+  audiencePersonalization: {
+    ...revisionInput.audiencePersonalization,
+    "record-1": { ...revisionInput.audiencePersonalization["record-1"], email: "changed@example.com" },
+  },
+}), revision);
+assert.deepEqual(campaignPersonalizationMap({
+  rows: [{
+    id: "record-1",
+    data: { email_address: "one@example.com", company_name: "One", country_name: "UK" },
+  }],
+  emailField: "email_address",
+  companyField: "company_name",
+  countryField: "country_name",
+}), {
+  "record-1": { email: "one@example.com", company: "One", country: "UK" },
+});
+assert.doesNotThrow(() => campaignRevisionHash({
+  ...revisionInput,
+  audiencePersonalization: null,
+}));
+assert.deepEqual(campaignSnapshotOutstandingRecordIds({
+  rows: [{ id: "rejected", status: "rejected" }],
+  audienceRecordIds: ["rejected"],
+  audiencePersonalization: {
+    rejected: { email: "rejected@example.com" },
+  },
+  statuses: ["new"],
+  attemptedRecordIds: new Set(),
+}), []);
+assert.deepEqual(campaignSnapshotOutstandingRecordIds({
+  rows: [{ id: "queued", status: "new" }],
+  audienceRecordIds: ["queued"],
+  audiencePersonalization: {
+    queued: { email: "queued@example.com" },
+  },
+  statuses: ["new"],
+  attemptedRecordIds: new Set(),
+}), ["queued"]);
 assert.equal(campaignDefaultName("Outreach: Wens", new Set()), "Outreach: Wens");
 assert.equal(campaignDefaultName("Outreach: Wens", new Set(["Outreach: Wens", "Outreach: Wens (2)"])), "Outreach: Wens (3)");
 assert.equal(campaignSendCountsAsAttempt("QUEUED"), false);

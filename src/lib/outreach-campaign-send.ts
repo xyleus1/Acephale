@@ -4,7 +4,9 @@ import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   campaignRowEligible,
+  campaignSnapshotRowSendable,
   renderCampaignEmail,
+  type CampaignPersonalization,
 } from "@/lib/outreach-campaign-copy";
 import {
   completeCampaignIfDone,
@@ -49,7 +51,7 @@ export type CampaignBatchResult = {
   rejected: number;
   unknown: number;
   poolExhausted: boolean;
-  blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER";
+  blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER" | "NO_AUDIENCE";
   outcomes: CampaignBatchSend[];
 };
 
@@ -86,6 +88,45 @@ export function selectOutreachCampaignRows(input: {
       countryField: input.countryField,
       segmentField: input.segmentField,
     }))
+    .slice(0, input.limit);
+}
+
+export function selectOutreachCampaignSnapshotRows(input: {
+  rows: readonly CampaignBatchRow[];
+  audienceRecordIds: readonly string[];
+  audiencePersonalization: Readonly<Record<string, CampaignPersonalization>>;
+  sentRecordIds?: ReadonlySet<string>;
+  statuses: readonly string[];
+  emailField: string;
+  companyField?: string | null;
+  countryField?: string | null;
+  limit: number;
+}) {
+  const rowsById = new Map(input.rows.map((row) => [row.id, row]));
+  return input.audienceRecordIds
+    .map((recordId) => {
+      const row = rowsById.get(recordId);
+      const personalization = input.audiencePersonalization[recordId];
+      if (!row || !personalization) return null;
+      return {
+        ...row,
+        data: {
+          email: personalization.email,
+          company: personalization.company,
+          country: personalization.country,
+          [input.emailField]: personalization.email,
+          ...(input.companyField ? { [input.companyField]: personalization.company } : {}),
+          ...(input.countryField ? { [input.countryField]: personalization.country } : {}),
+        },
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    .filter((row) => campaignSnapshotRowSendable({
+      row,
+      statuses: input.statuses,
+      personalization: input.audiencePersonalization[row.id],
+    }))
+    .filter((row) => !input.sentRecordIds?.has(row.id))
     .slice(0, input.limit);
 }
 
@@ -171,21 +212,26 @@ type LoadedCampaign = {
   listId: string;
   companyField: string | null;
   audienceRecordIds: Prisma.JsonValue | null;
+  audiencePersonalization: Prisma.JsonValue | null;
   revisionHash: string | null;
 };
-
-function jsonObject(value: Prisma.JsonValue | null) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
 
 function jsonStrings(value: Prisma.JsonValue) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function stringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
+function jsonPersonalization(value: Prisma.JsonValue | null): Record<string, CampaignPersonalization> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([id, item]) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const object = item as Record<string, unknown>;
+    if (typeof object.email !== "string") return [];
+    return [[id, {
+      email: object.email,
+      company: typeof object.company === "string" ? object.company : null,
+      country: typeof object.country === "string" ? object.country : null,
+    }]];
+  }));
 }
 
 async function recordSent(
@@ -384,26 +430,19 @@ async function reconcileUnknownCampaignSends(
       rfcMessageId: outreachCampaignRfcMessageId(campaign.id, send.recordId),
     });
     if (receipt.state !== "SENT") continue;
-    const record = await db.researchRecord.findFirst({
-      where: { id: send.recordId, officeId: campaign.officeId, listId: campaign.listId },
-      select: { id: true, data: true },
-    });
-    if (!record) continue;
-    const data = record.data as Record<string, unknown>;
+    const personalization = jsonPersonalization(campaign.audiencePersonalization)[send.recordId];
+    if (!personalization) continue;
+    const recipient = personalization.email.trim().toLowerCase();
     const email = renderCampaignEmail({
       subject: campaign.subject,
       bodyTemplate: campaign.bodyTemplate,
-      row: {
-        company: campaign.companyField ? data[campaign.companyField] : data.company,
-        country: campaign.countryField ? data[campaign.countryField] : data.country,
-        email: data[campaign.emailField],
-      },
+      row: personalization,
     });
     await recordSent(db, {
       officeId: campaign.officeId,
       campaignId: campaign.id,
       recordId: send.recordId,
-      recipient: send.recipient,
+      recipient,
       senderEmail: send.senderEmail,
       accountId: reservation.accountId,
       reservationId: send.reservationId,
@@ -499,13 +538,23 @@ export async function runOutreachCampaignBatch(input: {
       dailyCap: true,
       listId: true,
       audienceRecordIds: true,
+      audiencePersonalization: true,
       revisionHash: true,
     },
   }) as LoadedCampaign | null;
   if (!campaign) throw new Error("Outreach campaign not found.");
   const output = result(campaign.id);
-  if (!outreachCampaignStatusAllowsSend(campaign.status)) return { ...output, blocked: "NOT_ACTIVE" };
   const now = input.now ?? new Date();
+  await db.outreachCampaign.updateMany({
+    where: { id: input.campaignId, officeId: input.officeId },
+    data: { lastRunAt: now },
+  });
+  if (!outreachCampaignStatusAllowsSend(campaign.status)) return { ...output, blocked: "NOT_ACTIVE" };
+  const audienceRecordIds = jsonStrings(campaign.audienceRecordIds);
+  const audiencePersonalization = jsonPersonalization(campaign.audiencePersonalization);
+  if (!audienceRecordIds.length || !Object.keys(audiencePersonalization).length) {
+    return { ...output, blocked: "NO_AUDIENCE" };
+  }
   if (!campaign.senderAccountId) return { ...output, blocked: "NO_SENDER" };
   const sendProvider = input.provider ?? gmailSupplierEmailProvider;
   await reconcileUnknownCampaignSends(db, campaign, sendProvider, now);
@@ -513,21 +562,21 @@ export async function runOutreachCampaignBatch(input: {
     where: {
       officeId: input.officeId,
       listId: campaign.listId,
-      ...(jsonStrings(campaign.audienceRecordIds).length
-        ? { id: { in: jsonStrings(campaign.audienceRecordIds) } }
+      ...(audienceRecordIds.length
+        ? { id: { in: audienceRecordIds } }
         : {}),
     },
     select: { id: true, status: true, data: true, createdAt: true },
   }) as CampaignBatchRow[];
-  const filters = jsonObject(campaign.filters);
-  const rows = selectOutreachCampaignRows({
+  const rows = selectOutreachCampaignSnapshotRows({
     rows: records,
+    audienceRecordIds,
+    audiencePersonalization,
+    sentRecordIds: undefined,
     statuses: jsonStrings(campaign.rowStatuses),
-    countries: stringArray(filters.countries),
-    segments: stringArray(filters.segments),
     emailField: campaign.emailField,
-    countryField: campaign.countryField ?? undefined,
-    segmentField: typeof filters.segmentField === "string" ? filters.segmentField : undefined,
+    companyField: campaign.companyField,
+    countryField: campaign.countryField,
     limit: input.limit ?? campaign.dailyCap,
   });
   const claimedRows = await claimOutreachCampaignRows(db, campaign, rows, input.limit, now);

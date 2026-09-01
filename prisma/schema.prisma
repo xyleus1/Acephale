@@ -3327,6 +3327,7 @@ model OutreachCampaign {
   senderAccountId  String?
   audienceTotal    Int      @default(0)
   audienceRecordIds Json?
+  audiencePersonalization Json?
   revisionHash     String?
   dailyCap         Int      @default(40)
   createdByUserId  String?

@@ -13,11 +13,13 @@ async function main() {
     outreachCampaignReservationOutcome,
     outreachCampaignRfcMessageId,
     selectOutreachCampaignRows,
+    selectOutreachCampaignSnapshotRows,
     outreachCampaignStatusAllowsSend,
     outreachCampaignRunNowLimitValid,
     outreachCampaignUtcDayBounds,
     runOutreachCampaignBatch,
   } = await import("../src/lib/outreach-campaign-send");
+  const { renderCampaignEmail } = await import("../src/lib/outreach-campaign-copy");
   const rows = [
     { id: "late", status: "new", data: { email: "late@example.com" }, createdAt: new Date("2026-01-02") },
     { id: "early", status: "new", data: { email: "early@example.com" }, createdAt: new Date("2026-01-01") },
@@ -34,6 +36,65 @@ async function main() {
     emailField: "email",
     limit: 10,
   }).map((row) => row.id), ["early"]);
+const pinnedRows = selectOutreachCampaignSnapshotRows({
+    rows: [{
+      id: "record-1",
+      status: "new",
+      data: { email: "changed@example.com", company: "Changed Co", country: "FR" },
+      createdAt: new Date("2026-01-01"),
+    }, {
+      id: "record-2",
+      status: "new",
+      data: { email: "other@example.com" },
+      createdAt: new Date("2026-01-02"),
+    }],
+    audienceRecordIds: ["record-1", "missing", "record-2"],
+    audiencePersonalization: {
+      "record-1": { email: "pinned@example.com", company: "Pinned Co", country: "GB" },
+      "record-2": { email: "other-pinned@example.com", company: null, country: null },
+    },
+    statuses: ["new"],
+    emailField: "email",
+    limit: 10,
+  });
+  assert.deepEqual(pinnedRows.map((row) => row.data), [{
+    email: "pinned@example.com",
+    company: "Pinned Co",
+    country: "GB",
+  }, {
+    email: "other-pinned@example.com",
+    company: null,
+    country: null,
+  }]);
+  assert.deepEqual(renderCampaignEmail({
+    subject: "Hello {{company}}",
+    bodyTemplate: "We serve {{country}}. Reply STOP to opt out.",
+    row: { data: pinnedRows[0].data },
+  }), {
+    subject: "Hello Pinned Co",
+    body: "We serve GB. Reply STOP to opt out.",
+  });
+  assert.deepEqual(selectOutreachCampaignSnapshotRows({
+    rows: [{
+      id: "record-1",
+      status: "new",
+      data: { email: "changed@example.com" },
+      createdAt: new Date("2026-01-01"),
+    }, {
+      id: "record-2",
+      status: "rejected",
+      data: { email: "rejected@example.com" },
+      createdAt: new Date("2026-01-02"),
+    }],
+    audienceRecordIds: ["record-1", "record-2"],
+    audiencePersonalization: {
+      "record-1": { email: "pinned@example.com", company: null, country: null },
+      "record-2": { email: "rejected-pinned@example.com", company: null, country: null },
+    },
+    statuses: ["new"],
+    emailField: "email",
+    limit: 10,
+  }).map((row) => row.id), ["record-1"]);
   assert.equal(outreachCampaignClaimLimit(10, 40, 12, 8), 10);
   assert.equal(outreachCampaignClaimLimit(50, 40, 35, 5), 0);
   assert.equal(outreachCampaignReclaimBefore(new Date("2026-01-01T12:30:00Z")).toISOString(), "2026-01-01T12:00:00.000Z");
@@ -82,7 +143,7 @@ async function main() {
     poolExhausted: true,
   });
 
-  function fakeDatabase() {
+  function fakeDatabase(campaignOverrides: Record<string, unknown> = {}) {
     const send = {
       count: async () => 0,
       findMany: async () => [],
@@ -107,6 +168,11 @@ async function main() {
           senderAccountId: "account-1",
           dailyCap: 5,
           listId: "list-1",
+          audienceRecordIds: ["record-1"],
+          audiencePersonalization: {
+            "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
+          },
+          ...campaignOverrides,
         }),
         updateMany: async () => undefined,
       },
@@ -192,6 +258,10 @@ async function main() {
     senderAccountId: null,
     dailyCap: 5,
     listId: "list-1",
+    audienceRecordIds: ["record-1"],
+    audiencePersonalization: {
+      "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
+    },
   });
   const noSenderRun = await runOutreachCampaignBatch({
     officeId: "office-1",
@@ -201,6 +271,19 @@ async function main() {
     pauseMs: 0,
   });
   assert.equal(noSenderRun.blocked, "NO_SENDER");
+  let completionCalled = false;
+  const noAudienceRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: fakeDatabase({ audienceRecordIds: [], audiencePersonalization: {} }) as never,
+    complete: async () => {
+      completionCalled = true;
+      return { completed: false };
+    },
+    pauseMs: 0,
+  });
+  assert.equal(noAudienceRun.blocked, "NO_AUDIENCE");
+  assert.equal(completionCalled, false);
   const sentRun = await runOutreachCampaignBatch({
     officeId: "office-1",
     campaignId: "campaign-1",

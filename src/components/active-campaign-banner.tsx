@@ -40,7 +40,7 @@ export async function ActiveCampaignBanner() {
               <br />
               rejected {campaign.rejected}, replies {campaign.replies}
               <br />
-              last run {campaign.lastRunAt ? campaign.lastRunAt.toLocaleString() : "not run"}
+              last attempt {campaign.lastRunAt ? campaign.lastRunAt.toLocaleString() : "not attempted"}
             </div>
             <ActiveCampaignControls
               campaignId={campaign.id}

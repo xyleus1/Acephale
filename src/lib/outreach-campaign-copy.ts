@@ -9,6 +9,12 @@ type CampaignRow = Record<string, unknown> & {
   status?: unknown;
 };
 
+export type CampaignPersonalization = {
+  email: string;
+  company: string | null;
+  country: string | null;
+};
+
 function rowData(row: CampaignRow) {
   return row.data && typeof row.data === "object" && !Array.isArray(row.data) ? row.data : row;
 }
@@ -78,6 +84,73 @@ export function campaignSampleRecipients(input: {
   }));
 }
 
+export function campaignPersonalization(input: {
+  data: Record<string, unknown>;
+  emailField: string;
+  companyField?: string;
+  countryField?: string;
+}): CampaignPersonalization {
+  const value = (key: string | undefined) => {
+    const text = key ? String(input.data[key] ?? "").trim() : "";
+    return text || null;
+  };
+  return {
+    email: value(input.emailField) ?? "",
+    company: value(input.companyField ?? "company"),
+    country: value(input.countryField ?? "country"),
+  };
+}
+
+export function campaignPersonalizationMap(input: {
+  rows: readonly { id: string; data: Record<string, unknown> }[];
+  emailField: string;
+  companyField?: string;
+  countryField?: string;
+}) {
+  return Object.fromEntries(
+    input.rows
+      .map((row) => [row.id, campaignPersonalization({
+        data: row.data,
+        emailField: input.emailField,
+        companyField: input.companyField,
+        countryField: input.countryField,
+      })] as const)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+export function campaignSnapshotRowSendable(input: {
+  row: { status?: unknown } | null | undefined;
+  statuses: readonly string[];
+  personalization: unknown;
+}) {
+  if (!input.row) return false;
+  const status = textValue(input.row.status).toLowerCase();
+  if (!input.statuses.some((value) => value.toLowerCase() === status)) return false;
+  if (!input.personalization || typeof input.personalization !== "object" || Array.isArray(input.personalization)) {
+    return false;
+  }
+  return typeof (input.personalization as Record<string, unknown>).email === "string";
+}
+
+export function campaignSnapshotOutstandingRecordIds(input: {
+  rows: readonly { id: string; status?: unknown }[];
+  audienceRecordIds: readonly string[];
+  audiencePersonalization: Readonly<Record<string, unknown>>;
+  statuses: readonly string[];
+  attemptedRecordIds: ReadonlySet<string>;
+}) {
+  const rowsById = new Map(input.rows.map((row) => [row.id, row]));
+  return input.audienceRecordIds.filter((recordId) => {
+    const row = rowsById.get(recordId);
+    return campaignSnapshotRowSendable({
+      row,
+      statuses: input.statuses,
+      personalization: input.audiencePersonalization[recordId],
+    }) && !input.attemptedRecordIds.has(recordId);
+  });
+}
+
 export function campaignRevisionHash(input: {
   subject: string;
   bodyTemplate: string;
@@ -87,7 +160,16 @@ export function campaignRevisionHash(input: {
   dailyCap: number;
   senderAccountId: string | null;
   audienceRecordIds: readonly string[];
+  audiencePersonalization?: Record<string, CampaignPersonalization> | null;
 }) {
+  const personalization = input.audiencePersonalization
+    && typeof input.audiencePersonalization === "object"
+    && !Array.isArray(input.audiencePersonalization)
+    ? input.audiencePersonalization
+    : {};
+  const sortedPersonalization = Object.fromEntries(
+    Object.entries(personalization).sort(([left], [right]) => left.localeCompare(right)),
+  );
   return createHash("sha256").update(JSON.stringify({
     subject: input.subject,
     bodyTemplate: input.bodyTemplate,
@@ -97,6 +179,7 @@ export function campaignRevisionHash(input: {
     dailyCap: input.dailyCap,
     senderAccountId: input.senderAccountId,
     audienceRecordIds: [...input.audienceRecordIds].sort(),
+    audiencePersonalization: sortedPersonalization,
   })).digest("hex");
 }
 
