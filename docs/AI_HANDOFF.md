@@ -62,6 +62,35 @@
 - The dashboard banner uses aggregate campaign counts and renders nothing
   when the additive campaign migration is not yet available.
 
+## 2026-08-31: Run research failed because production is three migrations behind
+
+- Root cause: production had applied 38 of the 41 committed migrations (the last
+  one recorded is `20260823000200_email_sender_pool`), so `LeadGenRun` and
+  `LeadDiscovery` do not exist. `runCompanyContextProspectingAction` creates a
+  lead gen run first, Prisma raised P2021, and the route flattened it into
+  `Supply OS request failed.`
+- The production migration workflow only accepts the lexicographically latest
+  migration directory on main, so the dispatch id is
+  `20260901000200_leadgen_outreach_app_grants`. Applying it also applies
+  `20260825000300`, `20260825000400`, `20260826000100`, and
+  `20260901000100_outreach_campaigns`.
+- Prisma creates tables as the migration owner and grants nothing, and the
+  workflow never reruns `scripts/sql/derya-app-role.sql`, so
+  `20260901000200_leadgen_outreach_app_grants` grants `derya_app` the four new
+  lead gen and outreach tables the same way `20260825000200` did for research
+  lists. Its verification script checks the lead gen schema and the grants.
+  Dispatch `.github/workflows/production-database-migration.yml` from `main` to
+  unblock prospecting. It has not been dispatched yet.
+- `supplyErrorResponse` now logs unexpected failures and answers 503 with a
+  migration message for P2021 and P2022, so a schema drift never looks like a
+  generic Supply OS failure again.
+- `SERPER_API_KEY` was missing from the Vercel project and is now set for
+  production and preview; before that, prospecting could only scrape HTML search
+  engines and would have found close to nothing even with the tables present.
+- Only document citations render now. Chat message citations ("Operator
+  request", "Operator message", "Customer request") were noise next to the
+  message bubbles that already show authorship, so the UI filters citations to
+  the `document:` prefix. Every citation is still stored on the payload.
 ## 2026-08-31: Supply OS states what it is doing, and the sidebar blips
 
 - Sourcing state is explicit. The customer sourcing panel labels not started,

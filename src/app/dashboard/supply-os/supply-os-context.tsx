@@ -198,6 +198,11 @@ function prospectingRunIsStale(action: ContextProspectingAction, now: number) {
   return !Number.isFinite(started) || now - started >= STALE_RUN_MS;
 }
 
+function documentCitations(citations: Array<{ id: string; label: string }> | null | undefined) {
+  if (!Array.isArray(citations)) return [];
+  return citations.filter((citation) => citation.id.startsWith("document:"));
+}
+
 function MessageBody({ body }: { body: string }) {
   const lines = body.replace(/\r\n?/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
@@ -764,9 +769,11 @@ export function SupplyOsContext({
                 {"pending" in entry && entry.pending === true ? (
                   <span className={styles.messageStatus}>Sending</span>
                 ) : null}
-                {Array.isArray(entry.citations) && entry.citations.length ? (
+                {documentCitations(entry.citations).length ? (
                   <div className={styles.citations} aria-label="Sources">
-                    {entry.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}
+                    {documentCitations(entry.citations).map((citation) => (
+                      <span key={citation.id}>{citation.label}</span>
+                    ))}
                   </div>
                 ) : null}
                 {entry.role === "AGENT" && Array.isArray(entry.questions) && entry.questions.length ? (
@@ -925,9 +932,11 @@ export function SupplyOsContext({
                 {action.draft.deliveryLocation ? <div><dt>Deliver to</dt><dd>{action.draft.deliveryLocation}</dd></div> : null}
               </dl>
               {action.draft.specification ? <p className={styles.procurementSpecification}>{action.draft.specification}</p> : null}
-              {action.citations.length ? (
+              {documentCitations(action.citations).length ? (
                 <div className={styles.citations} aria-label="Procurement sources">
-                  {action.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}
+                  {documentCitations(action.citations).map((citation) => (
+                    <span key={citation.id}>{citation.label}</span>
+                  ))}
                 </div>
               ) : null}
               {action.status === "CREATED" && action.order ? (
@@ -1004,9 +1013,11 @@ export function SupplyOsContext({
                 <div><dt>Rows created</dt><dd>{action.stats.rowsCreated}</dd></div>
                 <div><dt>Rows updated</dt><dd>{action.stats.rowsUpdated}</dd></div>
               </dl>
-              {action.citations.length ? (
+              {documentCitations(action.citations).length ? (
                 <div className={styles.citations} aria-label="Prospecting sources">
-                  {action.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}
+                  {documentCitations(action.citations).map((citation) => (
+                    <span key={citation.id}>{citation.label}</span>
+                  ))}
                 </div>
               ) : null}
               <p className={styles.approvalBoundary}>Reads public pages only. Writes rows for review. It does not contact anyone.</p>

@@ -18,6 +18,8 @@ const files = {
   memoryRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/memory/route.ts"), "utf8"),
   procurementRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/procurement/[actionId]/route.ts"), "utf8"),
   ui: readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-context.tsx"), "utf8"),
+  uiStyles: readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-context.module.css"), "utf8"),
+  http: readFileSync(resolve(root, "src/lib/supply-os/http.ts"), "utf8"),
 };
 
 const contextModels = [
@@ -104,6 +106,10 @@ assert.match(files.ui, /Start procurement\?/);
 assert.match(files.ui, /Start procurement/);
 assert.match(files.ui, /It does not contact or select a supplier/);
 assert.doesNotMatch(files.ui, /selectedNodeId|context\/nodes|visibility/);
+assert.match(files.ui, /citation\.id\.startsWith\("document:"\)/);
+assert.doesNotMatch(files.ui, /\{action\.citations\.map|\{entry\.citations\.map/);
+assert.match(files.http, /code === "P2021" \|\| code === "P2022"/);
+assert.match(files.http, /missing a database migration/);
 
 for (const source of Object.values(files)) {
   assert.equal(source.includes("\u2014"), false, "changed Context files must not contain the forbidden character");

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import type { SupplyAccessContext } from "./persistence";
 import { SupplyPersistenceError } from "./persistence";
 import { SupplyConnectorError } from "./connector-contract";
@@ -14,6 +15,11 @@ export function supplyAccessContext(session: SupplyAccessContext): SupplyAccessC
     accessKind: session.accessKind,
     restrictedWorkspaceIds: session.restrictedWorkspaceIds,
   };
+}
+
+export function isMissingSchemaError(error: unknown) {
+  const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : "";
+  return code === "P2021" || code === "P2022";
 }
 
 export function supplyErrorResponse(error: unknown) {
@@ -30,6 +36,14 @@ export function supplyErrorResponse(error: unknown) {
     return NextResponse.json({ error: error.message, code: error.code, retryable: error.retryable }, { status });
   }
   if (!(error instanceof SupplyPersistenceError)) {
+    if (isMissingSchemaError(error)) {
+      console.error("[supply-os] database schema is behind the deployed code", error);
+      return NextResponse.json(
+        { error: "This environment is missing a database migration, so the request could not be stored." },
+        { status: 503 },
+      );
+    }
+    console.error("[supply-os] unhandled request failure", error);
     return NextResponse.json({ error: "Supply OS request failed." }, { status: 500 });
   }
   const status = error.code === "forbidden"

@@ -74,6 +74,32 @@
   audience totals and aggregate send and reply counts, with a safe empty
   fallback while the migration is pending.
 
+## 2026-08-31: Prospecting failed on missing lead gen tables
+
+- A read-only query against the production database showed 38 of 41 committed
+  migrations applied, with `LeadGenRun` and `LeadDiscovery` absent, which is why
+  Run research returned `Supply OS request failed.` The route caught a Prisma
+  P2021 and had no branch for it.
+- The workflow rejects anything but the latest migration directory on main, so
+  the fix is a new tail migration rather than a verification file for an older
+  one. `20260901000200_leadgen_outreach_app_grants` grants `derya_app` select,
+  insert, update, and delete on `LeadGenRun`, `LeadDiscovery`,
+  `OutreachCampaign`, and `OutreachCampaignSend`, since Prisma creates tables
+  as the owner with no grants and the workflow never reruns the role script.
+  This follows `20260825000200_research_lists_app_grants`.
+- Its verification script asserts the five pending migrations are recorded,
+  both lead gen tables exist with their tenant and run constraints,
+  `LeadDiscovery.usableContact` is non null without a default, and `derya_app`
+  has exactly the expected privileges on the four tables, then reports run,
+  discovery, orphan, cross office, and outreach counts.
+- `supplyErrorResponse` maps P2021 and P2022 to 503 with a migration message and
+  logs otherwise unhandled failures, so an environment behind on schema is
+  diagnosable from the response and the logs.
+- Chat message citations no longer render. `documentCitations` filters the
+  rendered chips to the `document:` prefix, so an answer or an action card still
+  names the uploaded file it drew on, while "Operator message" style chips are
+  gone in favour of the message bubbles that already show authorship. Stored
+  citations are untouched.
 ## 2026-08-31: Sourcing state, panel alerts, and a quieter Supply OS shell
 
 - The customer sourcing panel now names its own state instead of showing a bare
