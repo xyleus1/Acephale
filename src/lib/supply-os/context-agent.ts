@@ -48,11 +48,12 @@ const CONTEXT_REPLY_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["question", "kind", "options"],
+        required: ["question", "kind", "options", "duplicateOfActionId"],
         properties: {
           question: { type: "string" },
           kind: { type: "string", enum: ["yes_no", "options"] },
           options: { type: "array", items: { type: "string" }, maxItems: 6 },
+          duplicateOfActionId: { type: ["string", "null"] },
         },
       },
     },
@@ -286,7 +287,7 @@ export async function chatWithCompanyContext(args: {
         "neededBy must be an exact calendar date in YYYY-MM-DD format or null. When the operator gives relative timing such as within 8 weeks, convert it to a concrete date using the today value in the packet, or keep the timing wording in notes and set neededBy to null if the exact date is uncertain.",
         "Citation tokens like [document:id] or [message:id] belong only in citationIds. Never write them inside the answer text or question text.",
         "For each procurement draft, return its own citationIds containing only the operator request and files directly relevant to that procurement need.",
-        "The openRequests list contains this company's existing procurement requests. Before drafting a new item, compare it against openRequests. If the new need looks like an existing open request, do not silently create a duplicate: ask a yes_no clarifying question naming the existing request and whether this is the same need. If the operator confirms it replaces an existing request that is still pendingConfirmation, return the new draft with supersedesActionId set to that actionId. If the existing request is already CREATED, say that it is already running and ask whether a separate new request is really wanted. Otherwise keep supersedesActionId null.",
+        "The openRequests list contains this company's existing procurement requests. Before drafting a new item, compare it against openRequests. If the new need looks like an existing open request, do not silently create a duplicate: ask a yes_no clarifying question naming the existing request and whether this is the same need, and set that question's duplicateOfActionId to the existing request's actionId. Every other question must have duplicateOfActionId null. If the operator confirms it replaces an existing request that is still pendingConfirmation, return the new draft with supersedesActionId set to that actionId. If the existing request is already CREATED, say that it is already running and ask whether a separate new request is really wanted. Otherwise keep supersedesActionId null.",
         "Preparing procurementDrafts does not create orders or contact suppliers. Tell the operator that separate confirmation is required for each item.",
         "Do not perform or claim any supplier, forwarder, booking, customs, purchasing, or spending action.",
         "If and only if the operator explicitly asks to find buyers, prospects, customers, or a target list, prepare prospectingDrafts for human confirmation.",
@@ -323,15 +324,30 @@ export async function chatWithCompanyContext(args: {
     );
   }
   const citations = citationIds.map((id) => allowedCitations.get(id)!);
-  const questions: CompanyContextQuestion[] = normalizeCompanyContextQuestions(parsed.clarifyingQuestions)
+  const allQuestions: CompanyContextQuestion[] = normalizeCompanyContextQuestions(parsed.clarifyingQuestions)
     .flatMap((question) => {
       const text = stripCitationTokens(question.question);
       const options = [...new Set(question.options.map(stripCitationTokens).filter(Boolean))];
       if (!text) return [];
       if (question.kind === "options" && options.length < 2) return [];
       return [{ ...question, question: text, options }];
-    })
-    .slice(0, questionRoundsLeft > 0 ? undefined : 1);
+    });
+  const openRequestIds = new Set(openRequests.map((request) => request.actionId));
+  const duplicateQuestionTexts = new Set(
+    (Array.isArray(parsed.clarifyingQuestions) ? parsed.clarifyingQuestions : []).flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const record = entry as Record<string, unknown>;
+      return typeof record.duplicateOfActionId === "string" &&
+        openRequestIds.has(record.duplicateOfActionId) &&
+        typeof record.question === "string"
+        ? [stripCitationTokens(record.question)]
+        : [];
+    }),
+  );
+  const duplicateConfirmation = allQuestions.find(
+    (question) => question.kind === "yes_no" && duplicateQuestionTexts.has(question.question),
+  );
+  const questions = questionRoundsLeft > 0 ? allQuestions : duplicateConfirmation ? [duplicateConfirmation] : [];
   const memoryNotes = Array.isArray(parsed.memoryNotes)
     ? parsed.memoryNotes
         .filter((note): note is string => typeof note === "string")
