@@ -694,11 +694,19 @@ export function SupplyOsContext({
               ) : null}
             </div>
           ) : messages.map((entry) => (
-            <article key={entry.id} className={styles.message} data-role={entry.role}>
+            <article
+              key={entry.id}
+              className={styles.message}
+              data-role={entry.role}
+              data-pending={"pending" in entry && entry.pending === true ? "true" : undefined}
+            >
               <div className={styles.messageInner}>
                 {entry.role === "AGENT" ? <strong className={styles.messageAuthor}>Derya</strong> : null}
                 {entry.role === "CUSTOMER" ? <strong className={styles.messageAuthor}>Customer</strong> : null}
                 <MessageBody body={entry.body} />
+                {"pending" in entry && entry.pending === true ? (
+                  <span className={styles.messageStatus}>Sending</span>
+                ) : null}
                 {Array.isArray(entry.citations) && entry.citations.length ? (
                   <div className={styles.citations} aria-label="Sources">
                     {entry.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}

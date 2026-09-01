@@ -2,6 +2,8 @@
   --chat-canvas: #ffffff;
   --chat-surface: #ffffff;
   --chat-surface-hover: #f1f3f2;
+  --chat-sent: #eef1ef;
+  --chat-sent-line: #d7ddda;
   --chat-line: #e0e4e2;
   --chat-ink: #1b1d1c;
   --chat-muted: #747c78;
@@ -248,8 +250,22 @@
   max-width: min(72%, 680px);
   margin-right: 0;
   padding: 10px 16px;
+  border: 1px solid var(--chat-sent-line);
   border-radius: 12px;
-  background: var(--chat-surface);
+  background: var(--chat-sent);
+}
+
+.message[data-pending="true"] .messageInner {
+  opacity: 0.72;
+}
+
+.messageStatus {
+  display: block;
+  margin-top: 6px;
+  color: var(--chat-muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 .messageAuthor {
