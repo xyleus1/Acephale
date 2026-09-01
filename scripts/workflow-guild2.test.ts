@@ -38,7 +38,7 @@ assert.match(guidedWorkspace, /Procure<\/span>/);
 assert.doesNotMatch(guidedWorkspace, /Bourne|Neon|Gmail/);
 assert.match(guidedWorkspace, /customerProcurementAttentionReason\(detail\.progress\)/);
 assert.match(guidedWorkspace, /customerProcurementAttentionHints\(item\.specification\)/);
-assert.match(guidedWorkspace, /Open Context/);
+assert.match(guidedWorkspace, /Open Chat/);
 assert.match(guidedWorkspace, /detail\.status === "needs_attention" \? \(/);
 assert.match(dashboard, /onOpenContext=\{onOpenContext\}/);
 assert.match(operatingShell, /onOpenContext=\{\(\) => selectPanel\("context"\)\}/);

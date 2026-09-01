@@ -276,7 +276,7 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
     defaultInspector: "object",
   },
   context: {
-    railTitle: "Context",
+    railTitle: "Chat",
     railSummary: "Company records and discussion",
     objectKinds: [],
     defaultInspector: "object",
@@ -337,6 +337,7 @@ export function SupplyOsDashboardWorkspace({
     companyName: string;
     logoUrl: string | null;
     facilityLabel: string | null;
+    facilityVerified: boolean;
     locationCount: number;
   }) => void;
 }) {
@@ -353,6 +354,7 @@ export function SupplyOsDashboardWorkspace({
   const [manualProfileError, setManualProfileError] = useState<string | null>(null);
   const [logisticsSettings, setLogisticsSettings] = useState<WorkspaceManagementSettings | null>(null);
   const [logisticsSettingsState, setLogisticsSettingsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const verifiedFacilityRef = useRef<string | null>(null);
 
   useEffect(() => {
     setManualProfileOpen(false);
@@ -363,6 +365,7 @@ export function SupplyOsDashboardWorkspace({
     setManualProfileIndustry("");
     setManualProfileInputs("");
     setManualProfileError(null);
+    verifiedFacilityRef.current = null;
   }, [workspaceId, workspaceName]);
 
   async function submitManualProfile(event: FormEvent<HTMLFormElement>) {
@@ -416,7 +419,9 @@ export function SupplyOsDashboardWorkspace({
       onWorkspaceProfile?.({
         companyName: research.company.name.value,
         logoUrl: null,
-        facilityLabel: research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
+        facilityLabel: verifiedFacilityRef.current
+          ?? research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
+        facilityVerified: Boolean(verifiedFacilityRef.current),
         locationCount: research.company.locations.length,
       });
       setManualProfileOpen(false);
@@ -442,8 +447,9 @@ export function SupplyOsDashboardWorkspace({
 
     void (async () => {
       let currentLogisticsSettings: WorkspaceManagementSettings | null = null;
-      if (activePanel === "logistics") {
-        setLogisticsSettingsState("loading");
+      const onLogistics = activePanel === "logistics";
+      if (onLogistics) setLogisticsSettingsState("loading");
+      try {
         const settingsResponse = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/management`, {
           cache: "no-store",
           headers: { accept: "application/json" },
@@ -453,12 +459,21 @@ export function SupplyOsDashboardWorkspace({
         if (!settingsResponse.ok || !settingsBody.settings) throw new Error("Logistics setup could not be loaded.");
         currentLogisticsSettings = settingsBody.settings;
         logisticsSetupLoaded = true;
+        verifiedFacilityRef.current = currentLogisticsSettings.base
+          ? formatCustomerBase(currentLogisticsSettings.base)
+          : null;
+      } catch (error) {
+        if (onLogistics || (error instanceof DOMException && error.name === "AbortError")) throw error;
+        verifiedFacilityRef.current = null;
+      }
+      if (currentLogisticsSettings && onLogistics) {
         setLogisticsSettings(currentLogisticsSettings);
         setLogisticsSettingsState("ready");
         onWorkspaceProfile?.({
           companyName: currentLogisticsSettings.companyName,
           logoUrl: null,
-          facilityLabel: currentLogisticsSettings.base ? formatCustomerBase(currentLogisticsSettings.base) : null,
+          facilityLabel: verifiedFacilityRef.current,
+          facilityVerified: Boolean(currentLogisticsSettings.base),
           locationCount: currentLogisticsSettings.base ? 1 : 0,
         });
         if (!currentLogisticsSettings.logisticsReady) {
@@ -496,8 +511,9 @@ export function SupplyOsDashboardWorkspace({
         companyName: research.company.name.value,
         logoUrl: research.company.logoUrl,
         facilityLabel: currentLogisticsSettings?.base
-          ? formatCustomerBase(currentLogisticsSettings.base)
+          ? verifiedFacilityRef.current
           : research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
+        facilityVerified: Boolean(currentLogisticsSettings?.base),
         locationCount: currentLogisticsSettings?.base ? 1 : research.company.locations.length,
       });
       setProfileState("ready");

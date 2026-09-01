@@ -4072,6 +4072,12 @@
   background: var(--navy);
 }
 
+.procurementResearch > footer > button[data-primary="false"] {
+  color: var(--ink-soft);
+  border-color: var(--line-strong);
+  background: var(--panel);
+}
+
 .procurementComparison {
   min-width: 0;
   min-height: 0;
@@ -6505,4 +6511,24 @@
 }
 .pageFrame {
   min-width: 0;
+}
+
+.procurementComparisonWithStages {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.procurementSourceLogCompact {
+  width: 100%;
+  padding: 6px 22px 10px;
+  border-bottom: 1px solid var(--line);
+  overflow-y: visible;
+}
+
+.procurementSourceLogCompact > li {
+  min-height: 44px;
+  padding: 6px 0;
+}
+
+.procurementSourceLogCompact > li:last-child {
+  border-bottom: 0;
 }

@@ -5,6 +5,7 @@ import {
   appendCompanyContextMessage,
   assembleCompanyContextForAgent,
   loadCompanyContext,
+  loadCompanyContextActivity,
   readCompanyContextDocument,
   uploadCompanyContextDocument,
   uploadCompanyContextDocumentChunk,
@@ -116,6 +117,54 @@ async function main() {
     assert.equal(assembled.documents.length, 1);
     assert.match(assembled.documents[0].markdown, /PC-ABS/);
     assert.equal(assembled.messages.length, 2);
+
+    const firstQuestion = await appendCompanyContextMessage({
+      context,
+      workspaceId: workspace.id,
+      role: "AGENT",
+      body: "Which grade of PC-ABS?",
+      threadId: "thread-a",
+      questions: [{ question: "Which grade of PC-ABS?", kind: "options", options: ["FR40", "FR60"] }],
+    });
+    await appendCompanyContextMessage({
+      context,
+      workspaceId: workspace.id,
+      role: "AGENT",
+      body: "Which port should the foam ship from?",
+      threadId: "thread-b",
+      questions: [{ question: "Which port should the foam ship from?", kind: "yes_no", options: [] }],
+    });
+    assert.deepEqual(
+      await loadCompanyContextActivity(context, workspace.id).then((activity) => activity.openQuestions),
+      2,
+      "An unanswered question in an older thread must still count.",
+    );
+    await prisma.companyContext.createMany({
+      data: Array.from({ length: 210 }, (_, index) => ({
+        officeId,
+        companyId: company.id,
+        kind: "MESSAGE",
+        name: `Chat message ${index}`,
+        markdown: `Noise ${index}`,
+        payload: { role: "OPERATOR", citations: [], threadId: "thread-c", questions: [] },
+        createdByUserId: admin.id,
+      })),
+    });
+    assert.deepEqual(
+      await loadCompanyContextActivity(context, workspace.id).then((activity) => activity.openQuestions),
+      2,
+      "Newer traffic in another thread must not push older questions out of the count.",
+    );
+    await appendCompanyContextMessage({
+      context,
+      workspaceId: workspace.id,
+      role: "OPERATOR",
+      body: "FR60.",
+      threadId: "thread-a",
+    });
+    const afterAnswer = await loadCompanyContextActivity(context, workspace.id);
+    assert.equal(afterAnswer.openQuestions, 1, "Answering one thread must not clear the other thread's question.");
+    assert.ok(afterAnswer.lastAgentMessageAt && afterAnswer.lastAgentMessageAt >= firstQuestion.createdAt);
 
     const procurementAction = await createCompanyContextProcurementAction({
       context,

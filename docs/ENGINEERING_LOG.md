@@ -1,5 +1,39 @@
 # Engineering Log
 
+## 2026-08-31: Sourcing state, panel alerts, and a quieter Supply OS shell
+
+- The customer sourcing panel now names its own state instead of showing a bare
+  `Start requested` control: not started, start requested with the local request
+  time, researching, blocked, awaiting approval, or ordered. The five stages
+  (request received, sourcing start, supplier search, supplier outreach,
+  evidence review) print the concrete numbers behind them (quantity, needed by,
+  owning worker, supplier names, contacted, replies, quotes, unqualified
+  candidates) so an operator can see what the system did, not just that it ran.
+- Sidebar alerts: `src/lib/supply-os/panel-alerts.ts` derives a chat alert from
+  the newest agent message plus open clarifying questions and pending suggested
+  actions, and a sourcing alert from request updates ranked blocked, approval
+  ready, supplier replies, then generic updates. `use-supply-os-panel-alerts.ts`
+  polls the sourcing list and the new
+  `GET .../context/activity` route every 30s and stores per browser seen
+  timestamps in `localStorage`. No notification tables, no schema change.
+- Facility state is actionable. The shell header shows the verified operating
+  base when logistics has one and otherwise a button that opens Logistics to set
+  or verify it, so a research derived location is never presented as verified.
+- Visual cleanup toward `DESIGN.md`: the company avatar chip is gone, the chat
+  drawer header no longer overlaps at narrow widths (no wrap tabs, fixed size
+  close button, truncating title), radii were pulled back to the 8/10/12 scale,
+  and IBM Plex Mono was removed from procurement metadata labels.
+- Browser testing of this pass found two gaps, both fixed here: the numeric
+  stage lines were unreachable because the five stage list only rendered in the
+  `researching` phase, which requires zero supplier candidates, so the list now
+  also renders (compact) in the compare and procure phases; and a wake that
+  failed (503 with no workflow webhook) still read as `Start requested`, so a
+  failed start is now its own state (`Start request failed`) carrying the API
+  message in a `startError` that the 7s status poll cannot clear.
+- The empty chat renders four starter prompt cards that either prefill the
+  composer or submit through the existing `submitMessage` path. Visible Context
+  copy is now Chat.
+
 ## 2026-08-31: Context intake handles relative dates, citation tokens, and multi-question answers
 
 - `normalizeContextProcurementDraft` no longer rejects a whole draft over an
@@ -18,7 +52,6 @@
   changes.
 - Verification: context and context-procurement contract tests, product copy
   policy, `npx tsc --noEmit`.
-
 ## 2026-08-31: A coverage number for the stale action guard
 
 - Context: the guards existed (`scopeHash`, immutable task input, gate
@@ -39,7 +72,6 @@
   a local database.
 - Verification: `npm run test:state-recheck`, `npx tsc --noEmit`, `npm run lint`
   (only pre-existing findings in unrelated files).
-
 ## 2026-08-31: Context chat works for offices without a procurement mapping
 
 - `chatWithCompanyContext` resolved the procurement customer id synchronously

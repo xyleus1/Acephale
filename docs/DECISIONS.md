@@ -1,5 +1,16 @@
 # Decisions
 
+## Supply OS panel alerts are derived client side, not stored
+
+Sidebar attention blips are computed from data the workspace already loads
+(the sourcing request list) plus one read-only activity route for the chat
+(newest agent message, open clarifying questions, pending suggested actions).
+"Seen" is a per browser `localStorage` timestamp per workspace and panel,
+cleared when the panel is opened. There is no notification table, no read
+receipt column, and no websocket. If alerts must follow an operator across
+devices, or must cover per message read state, that is the point to introduce
+persistence; until then this keeps the blip truthful without schema surface.
+
 ## Stale state in tests is produced by moving the clock, not by rewriting provenance
 
 Date: 2026-08-31
@@ -13,7 +24,6 @@ so an expired qualification, an expired quote, a passed delivery date, a lapsed
 quality plan, and an expired purchase authorization all arise the way they arise
 in production. Future state or freshness tests should follow this and keep
 provenance mutation for asserting that the database refuses tampering.
-
 ## Chat threads live in CompanyContext rows, not a new table
 
 Date: 2026-08-31

@@ -269,14 +269,14 @@ export function SupplyOsContext({
     const threadQuery = `?thread=${encodeURIComponent(activeThreadId ?? "general")}`;
     const response = await fetch(`${contextApiBasePath}${threadQuery}`, { cache: "no-store" });
     const payload = await response.json().catch(() => null) as { context?: ContextPayload; error?: string } | null;
-    if (!response.ok || !payload?.context) throw new Error(payload?.error || "Context could not be loaded.");
+    if (!response.ok || !payload?.context) throw new Error(payload?.error || "Chat could not be loaded.");
     if (seq === loadSeqRef.current) setData(payload.context);
     return payload.context;
   }, [activeThreadId, contextApiBasePath, workspaceId]);
 
   useEffect(() => {
     setError(null);
-    void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Context could not be loaded."));
+    void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Chat could not be loaded."));
   }, [load]);
 
   useEffect(() => {
@@ -331,6 +331,32 @@ export function SupplyOsContext({
     const prospecting = (data?.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED").length;
     return procurement + prospecting;
   }, [data?.procurementActions, data?.prospectingActions]);
+
+  const starterPrompts = useMemo(() => {
+    const company = data?.workspace.name ?? "this company";
+    return [
+      {
+        label: "Source a material",
+        hint: "Quantity, material and delivery date go in the message",
+        prefill: "Source 10 tons of ",
+      },
+      {
+        label: `What do you know about ${company}?`,
+        hint: "Profile, locations and saved files",
+        prefill: null,
+      },
+      {
+        label: "Where does each open request stand?",
+        hint: `${openRequestCount} ongoing ${openRequestCount === 1 ? "request" : "requests"}`,
+        prefill: null,
+      },
+      {
+        label: "Find buyers for a product",
+        hint: "Name the product and the target market",
+        prefill: "Find buyers for ",
+      },
+    ];
+  }, [data?.workspace.name, openRequestCount]);
 
   const lastAgentMessageId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -562,13 +588,13 @@ export function SupplyOsContext({
   }
 
   if (!workspaceId) {
-    return <div className={styles.unavailable}><strong>Open a company</strong><span>Context belongs to a saved company workspace.</span></div>;
+    return <div className={styles.unavailable}><strong>Open a company</strong><span>Chat belongs to a saved company workspace.</span></div>;
   }
   if (!data && !error) {
     return <div className={styles.unavailable}><LoaderCircle className={styles.spinner} size={21} /><span>Loading context</span></div>;
   }
   if (!data) {
-    return <div className={styles.unavailable}><strong>Context unavailable</strong><span>{error}</span><button type="button" onClick={() => void load()}>Retry</button></div>;
+    return <div className={styles.unavailable}><strong>Chat unavailable</strong><span>{error}</span><button type="button" onClick={() => void load()}>Retry</button></div>;
   }
 
   return (
@@ -576,7 +602,7 @@ export function SupplyOsContext({
       className={`${styles.context} supply-os-workspace`}
       data-files-open={filesOpen}
       data-threads-open={threadsOpen}
-      aria-label="Context chat"
+      aria-label="Company chat"
       onDragEnter={readOnly ? undefined : onDragEnter}
       onDragOver={readOnly ? undefined : (event) => event.preventDefault()}
       onDragLeave={readOnly ? undefined : onDragLeave}
@@ -614,7 +640,7 @@ export function SupplyOsContext({
         </div>
       </aside>
 
-      <section className={styles.chatPane} aria-label={`${data.workspace.name} context conversation`}>
+      <section className={styles.chatPane} aria-label={`${data.workspace.name} chat conversation`}>
         <header className={styles.chatHeader}>
           <span className={styles.chatHeaderTitle}>
             {!threadsOpen ? (
@@ -641,8 +667,31 @@ export function SupplyOsContext({
         <div className={styles.stream} aria-live="polite">
           {!messages.length ? (
             <div className={styles.empty}>
-              <strong>No messages</strong>
-              <span>Add files or ask a question.</span>
+              <strong>Ask Derya about {data.workspace.name}</strong>
+              <span>Pick a starting point, or type your own question.</span>
+              {!readOnly ? (
+                <div className={styles.starters}>
+                  {starterPrompts.map((starter) => (
+                    <button
+                      type="button"
+                      key={starter.label}
+                      className={styles.starter}
+                      disabled={busy}
+                      onClick={() => {
+                        if (starter.prefill) {
+                          setMessage(starter.prefill);
+                          textareaRef.current?.focus();
+                          return;
+                        }
+                        void submitMessage(undefined, starter.label);
+                      }}
+                    >
+                      <strong>{starter.label}</strong>
+                      <span>{starter.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : messages.map((entry) => (
             <article key={entry.id} className={styles.message} data-role={entry.role}>

@@ -2,32 +2,38 @@
 
 import {
   ArrowLeft,
+  MessagesSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  Ship,
+  Boxes,
+  type LucideIcon,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LogoMark } from "@/components/logo-mark";
 import type { SwitchableOffice } from "@/lib/office-switch";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import { normalizeSupplyOsPanel, supplyOsPanelHref, type SupplyOsPanel } from "@/lib/supply-os/panel-routing";
+import { useSupplyOsPanelAlerts } from "./use-supply-os-panel-alerts";
 import styles from "./supply-os-operating-shell.module.css";
 
 type PanelDefinition = {
   id: SupplyOsPanel;
   shortLabel: string;
+  icon: LucideIcon;
   inactive?: boolean;
 };
 
 type OfficeSwitchAction = (formData: FormData) => void | Promise<void>;
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Sales Agent" },
-  { id: "logistics", shortLabel: "Logistics" },
-  { id: "context", shortLabel: "Context" },
+  { id: "materials", shortLabel: "Sales Agent", icon: Boxes },
+  { id: "logistics", shortLabel: "Logistics", icon: Ship },
+  { id: "context", shortLabel: "Chat", icon: MessagesSquare },
 ];
 
 function panelFromCurrentUrl() {
@@ -86,6 +92,7 @@ export function SupplyOsOperatingShell({
     companyName: string;
     logoUrl: string | null;
     facilityLabel: string | null;
+    facilityVerified: boolean;
     locationCount: number;
   } | null>(null);
   const panelNavRef = useRef<HTMLElement>(null);
@@ -113,13 +120,6 @@ export function SupplyOsOperatingShell({
   const companyName = workspaceProfile?.companyName
     ?? workspaceSelection?.workspaceName
     ?? "Company";
-  const companyLogoUrl = workspaceProfile?.logoUrl
-    ?? workspaceSelection?.logoUrl
-    ?? null;
-  const companyInitials = useMemo(
-    () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
-    [companyName],
-  );
   const settingsHref = previewMode
     ? `/dashboard/settings?preview=customer${workspaceSelection?.workspaceId ? `&workspaceId=${encodeURIComponent(workspaceSelection.workspaceId)}` : ""}`
     : `/dashboard/settings${workspaceSelection?.workspaceId ? `?workspaceId=${encodeURIComponent(workspaceSelection.workspaceId)}` : ""}`;
@@ -156,6 +156,13 @@ export function SupplyOsOperatingShell({
     setCompanyIndexOpen(!workspaceSelection);
   }, [workspaceSelection]);
 
+  const panelAlerts = useSupplyOsPanelAlerts({
+    storageScope,
+    workspaceId: companyIndexOpen ? null : workspaceSelection?.workspaceId ?? null,
+    activePanel,
+    contextEnabled,
+  });
+
   return (
     <MotionConfig reducedMotion="user" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
       <main
@@ -188,13 +195,14 @@ export function SupplyOsOperatingShell({
             </button>
           </div>
           <nav id="supply-os-panel-navigation" ref={panelNavRef} className={styles.panelNav} aria-label="Workspace sections">
-            {PANELS.filter((panel) => panel.id !== "context" || contextEnabled).map((panel, index) => {
+            {PANELS.filter((panel) => panel.id !== "context" || contextEnabled).map((panel) => {
               const active = panel.id === activePanel;
+              const alert = panel.id === "context" ? panelAlerts.context : panel.id === "materials" ? panelAlerts.materials : null;
               return (
                 <motion.button
                   key={panel.id}
                   type="button"
-                  aria-label={`${String(index + 1).padStart(2, "0")} ${panel.shortLabel}${panel.inactive ? " inactive preview" : ""}`}
+                  aria-label={`${panel.shortLabel}${panel.inactive ? ", inactive preview" : ""}${alert ? `, ${alert.label}` : ""}`}
                   aria-pressed={active}
                   data-active={active}
                   data-availability={panel.inactive ? "inactive" : "active"}
@@ -204,10 +212,17 @@ export function SupplyOsOperatingShell({
                   whileTap={{ scale: 0.985 }}
                 >
                   {active ? <motion.span className={styles.activeRail} layoutId="supply-os-active-panel" /> : null}
-                  <span className={styles.navIndex}>{String(index + 1).padStart(2, "0")}</span>
+                  <span className={styles.navIcon}>
+                    <panel.icon size={17} aria-hidden="true" />
+                  </span>
                   <span className={styles.navCopy}>
                     <strong>{panel.shortLabel}</strong>
                   </span>
+                  {alert ? (
+                    <span className={styles.navAlert} title={alert.label}>
+                      {alert.count > 1 ? alert.count : null}
+                    </span>
+                  ) : null}
                   {panel.inactive ? <span className={styles.inactiveLabel}>Inactive</span> : null}
                 </motion.button>
               );
@@ -235,44 +250,36 @@ export function SupplyOsOperatingShell({
           ) : null}
           <header className={styles.commandHeader}>
             <div className={styles.identity}>
-              <span className={styles.companyAvatar} aria-hidden="true">
-                {companyIndexOpen ? "CO" : companyInitials}
-                {!companyIndexOpen && companyLogoUrl ? (
-                  <img src={companyLogoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
-                ) : null}
-              </span>
-              <div>
-                <h1>{companyIndexOpen ? "Companies" : companyName}</h1>
-              </div>
-            </div>
-            <div className={styles.workspaceControls}>
-              <dl>
-                <div>
-                  <dt>Facility</dt>
-                  <dd>
-                    {companyIndexOpen
-                      ? "None selected"
-                      : workspaceProfile?.facilityLabel ?? "No verified location"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Data</dt>
-                  <dd>
+              <h1>{companyIndexOpen ? "Companies" : companyName}</h1>
+              {!companyIndexOpen ? (
+                <p className={styles.identityMeta}>
+                  {workspaceProfile?.facilityVerified && workspaceProfile.facilityLabel ? (
+                    <span>{workspaceProfile.facilityLabel}</span>
+                  ) : (
+                    <button type="button" onClick={() => selectPanel("logistics")}>
+                      {workspaceProfile?.facilityLabel
+                        ? `Verify facility: ${workspaceProfile.facilityLabel}`
+                        : "Set operating facility"}
+                    </button>
+                  )}
+                  <span aria-hidden="true">/</span>
+                  <span>
                     {workspaceSelection?.snapshotVersion
                       ? `Snapshot v${workspaceSelection.snapshotVersion}`
                       : workspaceProfile ? "Company profile" : "No inventory"}
-                  </dd>
-                </div>
-              </dl>
-              <motion.button
-                type="button"
-                onClick={() => setCompanyIndexOpen(true)}
-                whileTap={{ scale: 0.98 }}
-                disabled={companyIndexOpen}
-              >
-                <ArrowLeft size={15} /> Companies
-              </motion.button>
+                  </span>
+                </p>
+              ) : null}
             </div>
+            <motion.button
+              className={styles.companiesButton}
+              type="button"
+              onClick={() => setCompanyIndexOpen(true)}
+              whileTap={{ scale: 0.98 }}
+              disabled={companyIndexOpen}
+            >
+              <ArrowLeft size={15} /> Companies
+            </motion.button>
           </header>
 
           <div className={styles.panelStage}>

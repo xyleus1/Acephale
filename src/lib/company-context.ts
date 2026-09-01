@@ -431,6 +431,44 @@ export async function loadCompanyContext(
   };
 }
 
+export async function loadCompanyContextActivity(
+  context: CompanyContextAccess,
+  workspaceId: string,
+) {
+  const workspace = await contextWorkspace(context, workspaceId, "view");
+  const messageWhere = {
+    officeId: context.officeId,
+    companyId: workspace.companyId,
+    kind: "MESSAGE" as const,
+    ...companyContextVisibilityWhere(context),
+  };
+  const agentRow = await prisma.companyContext.findFirst({
+    where: { ...messageWhere, payload: { path: ["role"], equals: "AGENT" } },
+    select: { id: true, payload: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!agentRow) return { lastAgentMessageAt: null, openQuestions: 0 };
+  // One row per chat thread, so an unanswered question stays counted however
+  // much newer traffic other threads carry. The empty key is the legacy
+  // conversation that predates thread ids.
+  const latestPerThread = await prisma.$queryRaw<{ payload: unknown }[]>(Prisma.sql`
+    SELECT DISTINCT ON (COALESCE(payload->>'threadId', ''))
+      payload
+    FROM "CompanyContext"
+    WHERE "officeId" = ${context.officeId}
+      AND "companyId" = ${workspace.companyId}
+      AND "kind" = 'MESSAGE'
+      ${isCustomerContextAccess(context) ? Prisma.sql`AND "customerVisible" = true` : Prisma.empty}
+    ORDER BY COALESCE(payload->>'threadId', ''), "createdAt" DESC, "id" DESC
+  `);
+  let openQuestions = 0;
+  for (const row of latestPerThread) {
+    if (!isObject(row.payload) || row.payload.role !== "AGENT") continue;
+    openQuestions += questionsFromPayload(row.payload)?.length ?? 0;
+  }
+  return { lastAgentMessageAt: agentRow.createdAt, openQuestions };
+}
+
 export async function uploadCompanyContextDocument(args: {
   context: CompanyContextAccess;
   workspaceId: string;

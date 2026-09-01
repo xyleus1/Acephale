@@ -103,6 +103,7 @@ jobs:
           npm run test:supply-os-csv-import
           npm run test:supply-os-bom-acceptance
           npm run test:supply-os-sourcing-projection
+          npm run test:supply-os-panel-alerts
           npm run test:supply-os-research-route-lifecycle
           npm run test:supply-os-research-worker-lifecycle
           npm run test:supply-os-supplier-research-polling

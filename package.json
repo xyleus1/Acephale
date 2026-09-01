@@ -51,6 +51,7 @@
     "test:supply-os-product-twin": "tsx scripts/supply-os-product-twin.test.ts",
     "test:supply-os-snapshot-twin": "tsx scripts/supply-os-snapshot-twin.test.ts",
     "test:supply-os-sourcing-projection": "node --import tsx scripts/supply-os-sourcing-projection.test.ts",
+    "test:supply-os-panel-alerts": "tsx scripts/supply-os-panel-alerts.test.ts",
     "test:supply-os-atlas-sourcing": "node --import tsx scripts/supply-os-atlas-sourcing.test.ts",
     "test:leadgen": "tsx scripts/leadgen.test.ts",
     "test:supply-os-context-prospecting": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-context-prospecting.test.ts",

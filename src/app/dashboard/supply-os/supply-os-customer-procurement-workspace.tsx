@@ -6,10 +6,10 @@ import {
   CheckCircle2,
   ExternalLink,
   LoaderCircle,
+  Play,
   RefreshCw,
   Search,
   ShieldCheck,
-  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -39,6 +39,20 @@ import styles from "./supply-os-logistics.module.css";
 
 function vendorStatusLabel(status: string) {
   return PROCUREMENT_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
+}
+
+function clockLabel(value: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return null;
+  return parsed.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+function supplierNameLine(vendors: CustomerProcurementRequestDetail["vendors"]) {
+  if (!vendors.length) return null;
+  const names = vendors.slice(0, 3).map((vendor) => vendor.name);
+  const remaining = vendors.length - names.length;
+  return remaining > 0 ? `${names.join(", ")} and ${remaining} more` : names.join(", ");
 }
 
 function detailFromInitialState(
@@ -89,6 +103,8 @@ export function CustomerProcurementWorkspace({
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const refreshPromiseRef = useRef<Promise<CustomerProcurementRequestDetail> | null>(null);
   const automaticStartRetryRef = useRef(false);
+  const [startRequestedAt, setStartRequestedAt] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const phase = customerProcurementPhase(detail.status, detail.vendors.length);
   const approvalRequired = PROCUREMENT_APPROVAL_STATUSES.has(detail.status);
 
@@ -128,11 +144,14 @@ export function CustomerProcurementWorkspace({
         headers: { accept: "application/json" },
       });
       await responseJson<{ workflowWakeRequested: boolean; message?: string }>(response);
+      setStartRequestedAt(new Date().toISOString());
+      setStartError(null);
       await refresh();
       setStartRetryState("requested");
     } catch (error) {
       setStartRetryState("error");
-      setRefreshError(error instanceof Error ? error.message : "Sourcing could not be restarted.");
+      setStartRequestedAt(null);
+      setStartError(error instanceof Error ? error.message : "Sourcing could not be restarted.");
     }
   }, [detail.status, orderId, refresh, startRetryState]);
 
@@ -165,21 +184,103 @@ export function CustomerProcurementWorkspace({
     return () => window.clearTimeout(timer);
   }, [detail.status, detail.updatedAt, retryStart]);
 
+  const notStarted = detail.status === "new";
+  const startPending = notStarted
+    && startRetryState !== "error"
+    && (startRetryState === "running"
+      || startRetryState === "requested"
+      || Boolean(startRequestedAt)
+      || initialOrder.workflowWakeRequested === true);
+
   const researchSteps = useMemo(() => {
     const claimed = detail.status !== "new";
     const suppliersFound = customerProcurementResearchComplete(detail.status, detail.vendors.length);
+    const contacted = detail.vendors.filter((vendor) => vendor.contacted).length;
+    const replied = detail.vendors.filter((vendor) => vendor.responseCount > 0).length;
+    const quoted = detail.vendors.filter((vendor) => Boolean(vendor.quote)).length;
+    const requestedAt = clockLabel(startRequestedAt);
+    const names = supplierNameLine(detail.vendors);
     return [
-      { label: "Request received", detail: `${detail.quantity.toLocaleString("en-US")} ${detail.unit} confirmed`, complete: true, active: false },
-      { label: "Processing start", detail: detail.status === "new" ? "Waiting to begin" : "Supplier research is active", complete: claimed, active: !claimed },
-      { label: "Supplier search", detail: suppliersFound ? `${detail.vendors.length} supplier candidate${detail.vendors.length === 1 ? "" : "s"} found` : "Searching and verifying supplier candidates", complete: suppliersFound, active: claimed && !suppliersFound },
-      { label: "Evidence review", detail: suppliersFound ? "Supplier evidence is ready for review" : "Starts after supplier candidates are found", complete: suppliersFound, active: false },
+      {
+        label: "Request received",
+        detail: `${detail.quantity.toLocaleString("en-US")} ${detail.unit} of ${detail.material}`,
+        note: detail.neededBy ? `Needed by ${new Date(detail.neededBy).toLocaleDateString("en-US")}` : "No delivery date set",
+        complete: true,
+        active: false,
+      },
+      {
+        label: "Sourcing start",
+        detail: claimed
+          ? "Started. The sourcing worker owns this request."
+          : startError
+            ? "The start request was not accepted. Nothing is sourcing yet."
+            : startPending
+              ? `Start requested${requestedAt ? ` at ${requestedAt}` : ""}. Waiting for the sourcing worker to pick it up.`
+              : "Not started. It starts on its own, or press Start sourcing to hand it over now.",
+        note: claimed ? null : startError,
+        complete: claimed,
+        active: !claimed && startPending,
+      },
+      {
+        label: "Supplier search",
+        detail: suppliersFound
+          ? `${detail.vendors.length} supplier candidate${detail.vendors.length === 1 ? "" : "s"} found`
+          : claimed
+            ? detail.progress?.trim() || "Searching public sources for supplier candidates"
+            : "Starts once sourcing begins",
+        note: names,
+        complete: suppliersFound,
+        active: claimed && !suppliersFound,
+      },
+      {
+        label: "Supplier outreach",
+        detail: contacted
+          ? `${contacted} of ${detail.vendors.length} contacted, ${replied} replied`
+          : suppliersFound
+            ? "No supplier contacted yet"
+            : "Starts after supplier candidates are found",
+        note: null,
+        complete: Boolean(contacted) && contacted === detail.vendors.length,
+        active: suppliersFound && !contacted,
+      },
+      {
+        label: "Evidence review",
+        detail: suppliersFound
+          ? `${quoted} quote${quoted === 1 ? "" : "s"} saved. All ${detail.vendors.length} candidate${detail.vendors.length === 1 ? "" : "s"} stay unqualified until you review them.`
+          : "Starts after supplier candidates are found",
+        note: null,
+        complete: false,
+        active: suppliersFound,
+      },
     ];
-  }, [detail]);
+  }, [detail, startError, startPending, startRequestedAt]);
+
 
   const currentStatus = customerProcurementStatusLabel(detail.status);
+  const startStateLabel = notStarted
+    ? startError
+      ? "Start request failed"
+      : startPending
+        ? "Start requested, not picked up yet"
+        : "Not sourcing yet"
+    : currentStatus;
   const visibleProgress = customerProcurementProgress(detail.status, detail.vendors.length, detail.progress);
   const attentionReason = customerProcurementAttentionReason(detail.progress);
   const attentionHints = customerProcurementAttentionHints(item.specification);
+  const renderStageList = (compact: boolean) => (
+    <ol className={compact ? `${styles.procurementSourceLog} ${styles.procurementSourceLogCompact}` : styles.procurementSourceLog}>
+      {researchSteps.map((step) => (
+        <li key={step.label} data-complete={step.complete} data-active={step.active}>
+          <span>{step.complete ? <Check size={15} /> : step.active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
+          <div>
+            <strong>{step.label}</strong>
+            <small>{step.detail}</small>
+            {step.note ? <small>{step.note}</small> : null}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
   return (
     <motion.section
       className={`${styles.procurementWorkspace} ${styles.customerProcurementWorkspace}`}
@@ -213,25 +314,32 @@ export function CustomerProcurementWorkspace({
             transition={{ duration: 0.16 }}
           >
             <section className={styles.procurementResearchLead}>
-              <span className={styles.procurementResearchIcon}><Sparkles size={22} /></span>
-              <small>{currentStatus}</small>
+              <small>{startStateLabel}</small>
               <h3>{detail.material}</h3>
-              <p>{refreshError ?? visibleProgress}</p>
+              <p>
+                {refreshError
+                  ?? (notStarted
+                    ? startError
+                      ? `${startError} Nothing is sourcing yet.`
+                      : startPending
+                        ? "Sourcing has been requested. The worker picks the request up within about a minute, and this page updates on its own."
+                        : "No supplier work is running yet. The worker starts this request on its own, or press Start sourcing to hand it over now."
+                    : visibleProgress)}
+              </p>
             </section>
-            <ol className={styles.procurementSourceLog}>
-              {researchSteps.map((step) => (
-                <li key={step.label} data-complete={step.complete} data-active={step.active}>
-                  <span>{step.complete ? <Check size={15} /> : step.active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
-                  <div><strong>{step.label}</strong><small>{step.detail}</small></div>
-                </li>
-              ))}
-            </ol>
+            {renderStageList(false)}
             <footer>
               <span><ShieldCheck size={14} /> Supplier candidates remain unqualified until reviewed.</span>
-              {detail.status === "new" ? (
-                <button type="button" onClick={() => void retryStart()} disabled={startRetryState === "running"}>
-                  {startRetryState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />}
-                  {startRetryState === "requested" ? "Start requested" : startRetryState === "error" ? "Retry start" : "Start sourcing"}
+              {notStarted ? (
+                <button type="button" data-primary={!startPending} onClick={() => void retryStart()} disabled={startRetryState === "running"}>
+                  {startRetryState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : startPending ? <RefreshCw size={14} /> : <Play size={14} />}
+                  {startRetryState === "running"
+                    ? "Starting"
+                    : startRetryState === "error"
+                      ? "Try starting again"
+                      : startPending
+                        ? "Start again"
+                        : "Start sourcing"}
                 </button>
               ) : (
                 <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />} Refresh now</button>
@@ -258,7 +366,7 @@ export function CustomerProcurementWorkspace({
             ) : null}
             <div className={styles.procurementUnknownActions}>
               {detail.status === "needs_attention" ? (
-                <button type="button" data-primary="true" onClick={onOpenContext}>Open Context</button>
+                <button type="button" data-primary="true" onClick={onOpenContext}>Open Chat</button>
               ) : null}
               <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={14} /> Refresh status</button>
             </div>
@@ -266,7 +374,7 @@ export function CustomerProcurementWorkspace({
         ) : phase === "compare" ? (
           <motion.div
             key="compare"
-            className={styles.procurementComparison}
+            className={`${styles.procurementComparison} ${styles.procurementComparisonWithStages}`}
             initial={reduceMotion ? false : { opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={reduceMotion ? undefined : { opacity: 0, x: -10 }}
@@ -281,6 +389,7 @@ export function CustomerProcurementWorkspace({
               </span>
               <strong>{currentStatus}</strong>
             </section>
+            {renderStageList(true)}
             <div className={styles.procurementOptionTableRegion}>
               <table className={styles.procurementOptionTable}>
                 <thead><tr><th>Supplier</th><th>Contact</th><th>Evidence</th><th>Quote</th><th>Source</th></tr></thead>
@@ -325,6 +434,7 @@ export function CustomerProcurementWorkspace({
             {detail.status === "ordered" ? <CheckCircle2 size={28} /> : <ShieldCheck size={28} />}
             <h3>{detail.status === "ordered" ? "Order completed" : "Order under review"}</h3>
             <p>{visibleProgress}</p>
+            {renderStageList(true)}
             <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={14} /> Refresh status</button>
           </motion.div>
         )}

@@ -1,5 +1,29 @@
 # AI Handoff
 
+## 2026-08-31: Supply OS states what it is doing, and the sidebar blips
+
+- Sourcing state is explicit. The customer sourcing panel labels not started,
+  start requested (with the local request time), researching, needs attention,
+  awaiting approval, and ordered, and the five stages show the underlying
+  numbers instead of generic phase names. The `/wake` API and polling are
+  unchanged; the wake button is secondary while a start is pending.
+- Sidebar alerts come from data already loaded plus one new read-only route,
+  `GET /api/supply-os/workspaces/[workspaceId]/context/activity` (newest agent
+  message, open clarifying questions, pending suggested actions). Ranking lives
+  in `src/lib/supply-os/panel-alerts.ts` (unit tested by
+  `npm run test:supply-os-panel-alerts`), and seen state is per browser
+  `localStorage`, cleared when the panel is opened. There is no dedicated sales
+  feed yet: sales-side activity surfaces under the Sales Agent panel alert.
+- Facility verification is a header action, not a passive label. Verified means
+  a logistics base is configured; a research derived location renders as
+  `Verify facility: <label>` and opens Logistics.
+- Context is called Chat in every visible label and accessible name, and the
+  empty chat offers four starter cards (prefill or direct submit through
+  `submitMessage`). Read-only mode hides the cards.
+- Caveat: `scripts/supply-os-{collapsible-navigation,sidebar-map,shell-routing,operations-ui}.test.ts`
+  assert shell markup that predates the Sales Agent navigation and already fail
+  on `main`. They were left alone rather than rewritten in this pass.
+
 ## 2026-08-31: The state recheck suite runs in CI
 
 - `npm run test:state-recheck` is now a step in the `database-contracts` job of
@@ -9,7 +33,6 @@
   since repeats only stabilise the latency figure and coverage is deterministic.
 - A new guarded action path that does not refuse work built on state that moved
   now fails the pull request instead of going unnoticed.
-
 ## 2026-08-31: Stale state before an action is measured, not assumed
 
 - `scripts/state-recheck.test.ts` (`npm run test:state-recheck`) runs the real
@@ -35,7 +58,6 @@
 - Coverage per action: `saveSupplierQuoteRequest`, `recordSupplierQuoteRelease`,
   `decideProcurementApproval`, `savePurchaseOrderDraft`, and
   `decidePurchaseActionApproval`.
-
 ## 2026-08-31: The context chat is a project workspace with an interactive intake agent
 
 - The Supply OS context chat now works like a project folder. Chat threads are
