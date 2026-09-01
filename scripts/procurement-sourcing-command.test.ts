@@ -323,10 +323,10 @@ async function main() {
       rfq,
     },
   });
-  assert.match(
-    unexpected.categories[0]!.errorReason ?? "",
-    /Timed out fetching a new connection/,
-    "an unexpected wave failure reports why it failed",
+  assert.equal(
+    unexpected.categories[0]!.errorReason,
+    "the database connection failed",
+    "an unexpected wave failure reports its class, not the driver text",
   );
   assert.equal(
     unexpected.categories[0]!.error,
@@ -659,6 +659,85 @@ async function main() {
     /^pcba: /,
     "the continuation carries why the last slice failed, since status is all the operator sees",
   );
+
+  // A slice that qualified suppliers and could not store them keeps its count
+  // and its cursor, instead of spending fresh phrases on unsaved work.
+  enqueued.length = 0;
+  const recorded: Array<{ lastFailure: string }> = [];
+  const record = async (input: { lastFailure: string }) => {
+    recorded.push(input);
+  };
+  const saveOutage = async (retries: number, added = 0) => {
+    enqueued.length = 0;
+    recorded.length = 0;
+    await runQueuedSourcingWaveJob({
+      officeId: "office-1",
+      jobId: "job-running",
+      payload: {
+        customerId: "customer-1",
+        workspaceId: "workspace-1",
+        perCategory: 40,
+        category: "pcba",
+        send: false,
+        confirmed: false,
+        providerRetries: retries,
+        startRounds: { pcba: 6 },
+      },
+      dependencies: {
+        run: async () => ({
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "m",
+            wave: {
+              added,
+              discoveryExhausted: false,
+              timedOut: false,
+              nextRound: 6,
+              providerFailures: [],
+              persistenceFailures: ["hughes.example"],
+            } as never,
+            send: null,
+            error: null,
+            errorRetryable: false,
+            errorReason: null,
+          }],
+          added,
+          sent: 0,
+          skipped: [],
+        }),
+        enqueue: enqueue as never,
+        record: record as never,
+      },
+    });
+  };
+  await saveOutage(0);
+  assert.equal(enqueued.length, 1, "a database outage is retried instead of ending the wave");
+  assert.equal(enqueued[0]!.perCategory, 40, "the outage retry keeps the whole count");
+  assert.deepEqual(enqueued[0]!.startRounds, { pcba: 6 }, "the retry searches the same phrases again");
+  assert.match(
+    String(enqueued[0]!.lastFailure ?? ""),
+    /could not be saved/,
+    "the retry carries why the slice made no progress",
+  );
+  await saveOutage(SOURCING_OUTAGE_RETRIES);
+  assert.equal(enqueued.length, 0, "a database that stays down stops the wave once the retries are spent");
+  assert.equal(recorded.length, 1, "the terminal reason is written where the status can read it");
+  assert.match(recorded[0]!.lastFailure, /pcba: qualified suppliers could not be saved/);
+
+  // A database that fails partway through a slice leaves suppliers stored, and
+  // the retry must be charged for them or the wave would overshoot the target.
+  await saveOutage(0, 4);
+  assert.equal(enqueued.length, 1, "the partial slice is still retried");
+  assert.equal(enqueued[0]!.perCategory, 36, "the suppliers stored before the outage are credited");
+  assert.deepEqual(
+    enqueued[0]!.remaining,
+    { pcba: 36 },
+    "the retry owes the target minus what was actually stored",
+  );
+  assert.deepEqual(enqueued[0]!.startRounds, { pcba: 6 }, "the retry still holds its cursor");
 
   // A scoped job whose only category throws still owes its whole count, so the
   // failure is retried on a delay a bounded number of times.

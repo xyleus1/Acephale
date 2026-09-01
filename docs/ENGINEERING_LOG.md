@@ -8076,6 +8076,21 @@ Use this file for chronological implementation notes that future agents should s
   opaque message, and the queued continuation carries it as `lastFailure` so the
   status endpoint explains an unattended wave that keeps failing.
 
+### 2026-08-31 - A sourcing wave tells a broken database from a bad row
+
+- `failureReason` now reports a fixed class ("the database connection failed",
+  "the database rejected the row") instead of the driver message, so no schema,
+  host, or role detail reaches an API result, a queued payload, or a log line.
+- A save failure that is about the shared database stops the slice, is reported
+  as `persistenceFailures`, and leaves `nextRound` where the slice started. The
+  queued job treats that as an outage: the count and the search cursor survive
+  and the work is retried, rather than turning qualified suppliers into
+  rejections while the continuation spends fresh phrases. A row level failure
+  (value too long, duplicate) stays a per-supplier rejection.
+- The reason a chain stops is written onto the finished job payload, and the
+  status reads the last finished job when nothing is queued, so a wave that
+  ended on a failure still explains itself.
+
 ### 2026-08-31 - Procurement research cron drains queued runs
 
 - The procurement research cron now runs the enqueue backstop first and then

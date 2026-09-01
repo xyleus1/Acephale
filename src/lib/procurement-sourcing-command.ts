@@ -243,6 +243,25 @@ function queuedRemainingByCategory(
   return counts;
 }
 
+/**
+ * Keep the reason a wave chain stopped. A slice failure is handled inside the
+ * job, so the job completes and drops out of the queued view with nothing to
+ * explain it. The reason is written onto the job payload, and the status reads
+ * the last finished job as well as the active ones.
+ */
+async function recordSourcingWaveFailure(args: {
+  jobId: string | null;
+  officeId: string;
+  payload: Record<string, unknown>;
+  lastFailure: string;
+}) {
+  if (!args.jobId) return;
+  await prisma.backgroundJob.updateMany({
+    where: { id: args.jobId, officeId: args.officeId },
+    data: { payload: { ...args.payload, lastFailure: args.lastFailure } },
+  });
+}
+
 export async function runQueuedSourcingWaveJob(args: {
   officeId: string;
   // The running job holds the wave dedupe key, so its own continuation has to
@@ -252,6 +271,7 @@ export async function runQueuedSourcingWaveJob(args: {
   dependencies?: {
     run?: typeof runSourcingCommand;
     enqueue?: typeof enqueueBackgroundJob;
+    record?: typeof recordSourcingWaveFailure;
   };
 }) {
   const payload = args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
@@ -318,8 +338,14 @@ export async function runQueuedSourcingWaveJob(args: {
     if (entry.category !== "pcba" && entry.category !== "molded-foam") continue;
     const owed = nextOwed[entry.category] ?? remaining;
     // A category whose sourcing threw never searched, so it is charged nothing.
+    // A slice stopped by a failing database is charged exactly what it stored,
+    // with no floor, because it is about to be retried from the same cursor and
+    // the floor exists only to keep ordinary continuations finite.
+    const unsaved = (entry.wave?.persistenceFailures?.length ?? 0) > 0;
     const progressed = entry.wave
-      ? Math.min(slice, Math.max(1, entry.wave.added))
+      ? unsaved
+        ? Math.min(slice, entry.wave.added)
+        : Math.min(slice, Math.max(1, entry.wave.added))
       : 0;
     // A category that ran out of curated phrases is owed nothing more, but a
     // barren round where the providers themselves failed is an outage, not an
@@ -344,19 +370,44 @@ export async function runQueuedSourcingWaveJob(args: {
   // time, so treat it as a transient outage: retry the same count a few times on
   // a delay instead of abandoning the wave, and stop retrying once the attempts
   // are spent so the chain stays finite.
-  const outage = !stillFinding
-    && result.categories.some((entry) => (entry.wave?.providerFailures?.length ?? 0) > 0
-      || (!entry.wave && entry.errorRetryable))
-    && result.categories.every((entry) => (entry.wave?.added ?? 0) === 0);
+  // A slice that qualified suppliers and could not store them is an outage even
+  // though its phrases are not spent, because continuing would search new
+  // phrases while the suppliers it already found were never saved.
+  const saveOutage = result.categories.some(
+    (entry) => (entry.wave?.persistenceFailures?.length ?? 0) > 0,
+  );
+  const outage = saveOutage
+    || (!stillFinding
+      && result.categories.some((entry) => (entry.wave?.providerFailures?.length ?? 0) > 0
+        || (!entry.wave && entry.errorRetryable))
+      && result.categories.every((entry) => (entry.wave?.added ?? 0) === 0));
   const retriesUsed = typeof payload.providerRetries === "number" ? Math.trunc(payload.providerRetries) : 0;
   // Carry why the last slice failed, because a queued wave runs unattended for
   // an hour and the operator only ever sees its status, not the slice result.
   const failed = result.categories.find((entry) => entry.error);
+  const unsavedCategory = result.categories.find(
+    (entry) => (entry.wave?.persistenceFailures?.length ?? 0) > 0,
+  );
   const lastFailure = failed
     ? `${failed.category}: ${failed.errorReason ?? failed.error}`.slice(0, 300)
-    : null;
+    : unsavedCategory
+      ? `${unsavedCategory.category}: qualified suppliers could not be saved`
+      : null;
   const retryOutage = outage && retriesUsed < SOURCING_OUTAGE_RETRIES;
-  if (left > 0 && (stillFinding || retryOutage)) {
+  // An outage retry keeps the count and the cursor, so it takes precedence over
+  // a normal continuation that would move the cursor past unsaved work.
+  const continues = left > 0 && (retryOutage || (stillFinding && !saveOutage));
+  if (!continues && lastFailure) {
+    // The chain stops here, and a job that stops is filtered out of the queue
+    // view, so the reason is written where the status can still read it.
+    await (args.dependencies?.record ?? recordSourcingWaveFailure)({
+      jobId: args.jobId ?? null,
+      officeId: args.officeId,
+      payload,
+      lastFailure,
+    });
+  }
+  if (continues) {
     await (args.dependencies?.enqueue ?? enqueueBackgroundJob)({
       officeId: args.officeId,
       type: "PROCUREMENT_SOURCING_WAVE",
@@ -365,7 +416,11 @@ export async function runQueuedSourcingWaveJob(args: {
       payload: retryOutage
         ? {
           ...payload,
-          perCategory: remaining,
+          // A save outage can follow suppliers that were stored before the
+          // database failed, so those are credited. A provider outage stored
+          // nobody and keeps its whole count.
+          perCategory: saveOutage ? left : remaining,
+          ...(saveOutage ? { remaining: nextOwed } : {}),
           providerRetries: retriesUsed + 1,
           startRounds,
           lastFailure,
@@ -581,17 +636,34 @@ async function supplierContactCounts(args: { orderId: string; officeId: string }
   };
 }
 
-function queuedSourcingWaveJobs(args: { officeId: string; workspaceId: string }) {
-  return prisma.backgroundJob.findMany({
-    where: {
-      officeId: args.officeId,
-      type: "PROCUREMENT_SOURCING_WAVE",
-      status: { in: ["QUEUED", "RUNNING"] },
-      dedupeKey: { startsWith: `procurement-sourcing-wave:${args.workspaceId}` },
-    },
+const SOURCING_JOB_FIELDS = {
+  id: true,
+  status: true,
+  payload: true,
+  runAfter: true,
+  lastError: true,
+} as const;
+
+async function queuedSourcingWaveJobs(args: { officeId: string; workspaceId: string }) {
+  const where = {
+    officeId: args.officeId,
+    type: "PROCUREMENT_SOURCING_WAVE",
+    dedupeKey: { startsWith: `procurement-sourcing-wave:${args.workspaceId}` },
+  };
+  const active = await prisma.backgroundJob.findMany({
+    where: { ...where, status: { in: ["QUEUED", "RUNNING"] } },
     orderBy: { runAfter: "asc" },
     take: 10,
-    select: { id: true, status: true, payload: true, runAfter: true, lastError: true },
+    select: SOURCING_JOB_FIELDS,
+  });
+  if (active.length) return active;
+  // With nothing queued the operator needs to know whether the wave finished or
+  // stopped on a failure, and a finished job is the only record of that.
+  return prisma.backgroundJob.findMany({
+    where: { ...where, status: { in: ["DONE", "FAILED"] } },
+    orderBy: { updatedAt: "desc" },
+    take: 1,
+    select: SOURCING_JOB_FIELDS,
   });
 }
 

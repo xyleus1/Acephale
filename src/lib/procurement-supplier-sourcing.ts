@@ -110,6 +110,10 @@ export type SourcingWaveResult = {
   timedOut: boolean;
   // Discovery providers that failed during this wave, kept for the audit trail.
   providerFailures: string[];
+  // Suppliers that qualified but could not be stored because the database
+  // itself was failing. The slice stops on the first one, so the caller retries
+  // the same work instead of counting qualified suppliers as rejected.
+  persistenceFailures: string[];
 };
 
 export type SupplierSourcingErrorCode = "not_found" | "unsupported_category" | "discovery_unavailable";
@@ -124,15 +128,51 @@ export class SupplierSourcingError extends Error {
   }
 }
 
+// What kinds of failure a wave can report. The wording is fixed, because a
+// driver message carries schema, host, role, and connection detail that an
+// operator does not need and an API result should never repeat.
+const FAILURE_CLASSES = [
+  { test: /connection pool|too many connections|connection terminated|connection closed|econnreset|econnrefused|etimedout|socket|server has closed/i, reason: "the database connection failed", transient: true },
+  { test: /permission denied|not authorized|insufficient privilege|must be owner/i, reason: "the database refused the write", transient: true },
+  { test: /rate limit|429|quota/i, reason: "a provider limit was reached", transient: true },
+  { test: /timed out|timeout|aborted/i, reason: "the call ran out of time", transient: true },
+  // A schema mismatch is about the deployment, not about this supplier, so it
+  // must stop the slice rather than reject every supplier the wave qualified.
+  { test: /does not exist|undefined column|undefined table|unknown column|no such (?:column|table)/i, reason: "the database schema did not match", transient: true },
+  { test: /duplicate key|unique constraint/i, reason: "the supplier is already stored", transient: false },
+  // Only failures that depend on the values this supplier supplied.
+  { test: /value too long|invalid input syntax|out of range|numeric field overflow|violates check constraint|violates foreign key constraint|violates not-null constraint/i, reason: "the database rejected the row", transient: false },
+] as const;
+
+function classifyFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return FAILURE_CLASSES.find((entry) => entry.test.test(message)) ?? null;
+}
+
 /**
- * A short, quotable reason for an unexpected failure, for the audit trail and
- * for the operator command. Database drivers put table and column names in
- * their messages, so the text is trimmed to one line and clipped, and nothing
- * else about the error is repeated.
+ * A short, fixed reason for an unexpected failure, for the audit trail and for
+ * the operator command. Only the class of failure is reported, never the
+ * driver text, so nothing about the schema or the connection leaks into an API
+ * result, a queued payload, or a log line.
  */
 export function failureReason(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return stripEmDashes(message).replace(/\s+/g, " ").trim().slice(0, 200) || "no reason was reported";
+  const classified = classifyFailure(error);
+  if (classified) return classified.reason;
+  const name = error instanceof Error ? stripEmDashes(error.name).replace(/[^A-Za-z]/g, "").slice(0, 40) : "";
+  return name ? `an unexpected ${name}` : "an unexpected failure";
+}
+
+/**
+ * Whether a failure is about the database or a provider rather than about this
+ * one row. A shared dependency will fail the same way for every supplier in the
+ * slice, so the wave stops and the work is retried instead of turning each
+ * qualified supplier into a rejection and burning the search phrases.
+ */
+export function failureIsTransient(error: unknown) {
+  const classified = classifyFailure(error);
+  // An unrecognized failure is treated as transient, because abandoning
+  // qualified suppliers is the more expensive mistake.
+  return classified ? classified.transient : true;
 }
 
 // Reads the failure reason off a sourcing error by shape rather than by class,
@@ -381,6 +421,7 @@ export async function runProcurementSupplierSourcingWave(input: {
     nextRound: 0,
     timedOut: false,
     providerFailures: [],
+    persistenceFailures: [],
   };
 
   const outOfTime = () => typeof input.deadlineAt === "number" && Date.now() >= input.deadlineAt;
@@ -539,10 +580,21 @@ export async function runProcurementSupplierSourcingWave(input: {
           discoveredVia: via,
         });
       } catch (error) {
+        const reason = failureReason(error);
         result.rejected.push({
           domain: site.domain,
-          reason: `the supplier could not be saved: ${failureReason(error)}`,
+          reason: `the supplier could not be saved: ${reason}`,
         });
+        // A row the database will never accept belongs to that supplier alone.
+        // A database that is down belongs to every supplier in the slice, so
+        // the wave stops, keeps its cursor where the slice started, and says so,
+        // otherwise the continuation would spend fresh search phrases on
+        // suppliers this slice had already qualified and never saved.
+        if (failureIsTransient(error)) {
+          result.persistenceFailures.push(site.domain);
+          result.nextRound = startRound;
+          return result;
+        }
         continue;
       }
       if (!vendorId) {

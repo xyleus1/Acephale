@@ -169,8 +169,60 @@ async function main() {
   assert.ok(
     unsaved.rejected.some((entry) =>
       entry.domain === "polymerlabs.example"
-      && /could not be saved: Timed out fetching/.test(entry.reason)),
-    "the wave survives the write failure and records why the supplier was lost",
+      && entry.reason === "the supplier could not be saved: the database connection failed"),
+    "the failure class is recorded, without the driver text",
+  );
+  assert.deepEqual(
+    unsaved.persistenceFailures,
+    ["polymerlabs.example"],
+    "a database that is down is reported as an outage, not as a rejected supplier",
+  );
+  assert.equal(
+    unsaved.nextRound,
+    unsaved.startRound,
+    "the cursor stays put, so the retry searches the phrases whose suppliers were never saved",
+  );
+
+  // A row this supplier will never pass is that supplier's problem, so the wave
+  // rejects it and keeps crawling the rest of the round.
+  const rejectedRow = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 10,
+    proposers: proposers as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: (async () => {
+      throw new Error("value too long for type character varying(120)");
+    }) as never,
+  });
+  assert.deepEqual(rejectedRow.persistenceFailures, [], "a row level failure is not an outage");
+
+  // A schema mismatch is about the deployment, so it stops the slice instead of
+  // rejecting every supplier the wave qualified.
+  const schemaGone = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 10,
+    proposers: proposers as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => order) as never,
+    loadExistingKeys: (async () => ({ domains: new Set<string>(), emails: new Set<string>() })) as never,
+    insertVendor: (async () => {
+      throw new Error('The column `Vendor.discoveredVia` does not exist in the current database.');
+    }) as never,
+  });
+  assert.equal(schemaGone.persistenceFailures.length, 1, "a schema mismatch stops the slice");
+  assert.ok(
+    schemaGone.rejected.some((entry) =>
+      entry.reason === "the supplier could not be saved: the database schema did not match"),
+    "the schema mismatch is reported as its own class",
+  );
+  assert.ok(
+    rejectedRow.rejected.some((entry) =>
+      entry.reason === "the supplier could not be saved: the database rejected the row"),
+    "the row is rejected with its class and the wave continues",
   );
 
   // A wave stops on its time budget instead of being killed by the platform.
