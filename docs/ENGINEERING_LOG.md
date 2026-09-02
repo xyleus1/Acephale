@@ -8749,6 +8749,24 @@ Use this file for chronological implementation notes that future agents should s
   cannot hide the priced replies behind them from every later pass. A failed
   write ends the sweep, because the cursor rewound to that retry.
 
+## 2026-09-03: Retractions, cost breakdowns, and currency words in quote reading
+
+- A refusal reaches back over the whole message, not only over older messages. A
+  supplier who writes "our price is $10 each, lead time 3 weeks, we cannot honor
+  that price" leaves no price standing, so the reading drops the earlier amount
+  when the retraction is read, while a replacement written after the refusal is
+  read normally and stands.
+- Question detection is shared with triage through `supplierQuestionSentence`,
+  so an interrogative without a question mark ("would 20 days delivery work for
+  you") states no lead time either.
+- One line of a cost breakdown is not the order total. "PCB cost is 132usd,
+  assembly cost is 456usd, components cost is 3520usd" priced the order at 132
+  before, which would have made a request purchase ready for a fraction of its
+  cost, so a bare lot price is only read when a single clause in the sentence
+  carries a priced amount.
+- A currency code is a whole word: the "TL" inside "STL 2" no longer prices two
+  Turkish lira, which is what a molder's file list read as before.
+
 ## 2026-08-31: Send time state recheck for supplier file replies
 
 - Before this change the only server side stale state refusals lived in the

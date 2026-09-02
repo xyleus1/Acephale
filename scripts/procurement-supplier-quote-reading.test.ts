@@ -161,6 +161,17 @@ function questionsAreNotQuotes() {
   );
   assert.equal(disclaimedFirst.complete, false);
 
+  const unpunctuated = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "Unit price is $9 per board. Would 20 days delivery work for you",
+  });
+  assert.equal(
+    unpunctuated.leadTimeDays,
+    null,
+    "A question without a question mark is still a question, not a lead time.",
+  );
+  assert.equal(unpunctuated.complete, false);
+
   const counterOffer = readSupplierQuote({
     subject: "Re: RFQ",
     body: "Your budget of $4.50 per unit is below our cost, our price is $6.20 per unit. Lead time is 3 weeks.",
@@ -774,6 +785,94 @@ function refusedPricesAreNotQuotes() {
     "A refusal binds its own clause, so the replacement price in the same sentence still counts.",
   );
   assert.equal(counterOffer.complete, true);
+
+  const retractedLater = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "Our price is $10 each. Lead time is 3 weeks. We cannot honor that price.",
+  });
+  assert.equal(
+    retractedLater.unitPrice,
+    null,
+    "A price the supplier takes back later in the message no longer stands.",
+  );
+  assert.equal(
+    retractedLater.complete,
+    false,
+    "A retracted price plus a lead time never reports a request as purchase ready.",
+  );
+
+  const replacedLater = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "Our price is $10 each. Lead time is 3 weeks. We cannot honor that price, our price is now $12.50 each.",
+  });
+  assert.deepEqual(
+    replacedLater.unitPrice,
+    { amount: 12.5, currency: "USD" },
+    "A replacement stated after the retraction is the price that stands.",
+  );
+  assert.equal(replacedLater.complete, true);
+
+  const namedRefusalLater = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "Our price is $10 per unit. Lead time is 3 weeks. We cannot do $10 per unit at this volume.",
+  });
+  assert.equal(
+    namedRefusalLater.unitPrice,
+    null,
+    "An amount refused by name is dropped even when it was stated earlier in the same message.",
+  );
+}
+
+function costBreakdownsAreNotTotals() {
+  const breakdown = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "For 100pcs, the estimated PCB cost is 132usd, PCB assembly cost is 456usd, the components cost is 3520usd. Lead time is 3 weeks.",
+  });
+  assert.equal(
+    breakdown.totalPrice,
+    null,
+    "One line of a component breakdown understates the order, so it is not the total.",
+  );
+  assert.equal(
+    breakdown.complete,
+    false,
+    "A breakdown with no stated total never reports a request as purchase ready.",
+  );
+
+  const statedLot = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "For 100 units the price is 4108usd. Lead time is 3 weeks.",
+  });
+  assert.deepEqual(
+    statedLot.totalPrice,
+    { amount: 4108, currency: "USD" },
+    "A single priced clause against a stated quantity is still a lot price.",
+  );
+  assert.equal(statedLot.quantity, 100);
+  assert.equal(statedLot.complete, true);
+}
+
+function currencyCodesAreWholeWords() {
+  const stl = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "We can mold 100 units of STL 2 and 100 units of STL 4, 200 parts total. Lead time is 3 weeks.",
+  });
+  assert.equal(
+    stl.totalPrice,
+    null,
+    "The letters inside STL are not a currency, so a file name prices nothing.",
+  );
+  assert.equal(stl.complete, false);
+
+  const lira = readSupplierQuote({
+    subject: "Re: RFQ",
+    body: "Unit price is 240 TL each. Lead time is 3 weeks.",
+  });
+  assert.deepEqual(
+    lira.unitPrice,
+    { amount: 240, currency: "TRY" },
+    "A currency code standing as its own word is still read.",
+  );
 }
 
 function refusedPricesStayRefusedAcrossMessages() {
@@ -1052,6 +1151,8 @@ function main() {
   labelledChargesAreNotPrices();
   refusedPricesAreNotQuotes();
   refusedPricesStayRefusedAcrossMessages();
+  costBreakdownsAreNotTotals();
+  currencyCodesAreWholeWords();
   factsKeepTheMessageTheyCameFrom();
   everyRespondentIsEventuallyRead();
   onePassWalksPastTheFirstPage();

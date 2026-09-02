@@ -1,4 +1,4 @@
-import { supplierReplyText } from "@/lib/procurement-inbound-triage";
+import { supplierQuestionSentence, supplierReplyText } from "@/lib/procurement-inbound-triage";
 
 // A supplier answer only becomes a quote when it carries commercial facts we
 // can act on. Reading is deterministic and quotes the supplier's own sentence
@@ -62,8 +62,10 @@ const CURRENCY_CODES: Record<string, string> = {
   "\u00a5": "JPY",
 };
 
-const CURRENCY_BEFORE = "(?:us\\$|\\$|\\u20ac|\\u00a3|\\u20ba|\\u20b9|\\u00a5|usd|eur|gbp|try|tl|cad|aud|chf|cny|rmb|inr|jpy|sek|pln)";
-const CURRENCY_AFTER = "(?:usd|eur|gbp|try|tl|cad|aud|chf|cny|rmb|inr|jpy|sek|pln|dollars?|euros?|pounds?)";
+// A currency code is a word of its own, so the letters may not be borrowed from
+// a longer word: the "TL" inside "STL 2" prices nothing.
+const CURRENCY_BEFORE = "(?<![A-Za-z])(?:us\\$|\\$|\\u20ac|\\u00a3|\\u20ba|\\u20b9|\\u00a5|usd|eur|gbp|try|tl|cad|aud|chf|cny|rmb|inr|jpy|sek|pln)";
+const CURRENCY_AFTER = "(?:usd|eur|gbp|try|tl|cad|aud|chf|cny|rmb|inr|jpy|sek|pln|dollars?|euros?|pounds?)(?![A-Za-z])";
 // Grouped thousands need at least one group of three, otherwise the plain form
 // reads the whole number. Without that, 1250 would be truncated to 125.
 const AMOUNT = "\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,4})?";
@@ -239,14 +241,17 @@ function priceClausesOf(sentence: string) {
 // A bare amount is only the lot price when its own clause calls it a price and
 // names no add on charge, so "for 100 units, freight is $80" stays priceless.
 function bareLotPrice(sentence: string): SupplierQuoteMoney | null {
-  for (const clause of priceClausesOf(sentence)) {
-    if (!PRICE_WORD.test(clause)) continue;
-    const money = moneyIn(clause);
-    if (!money.length) continue;
-    const dearest = money.reduce((high, entry) => (entry.amount > high.amount ? entry : high), money[0]);
-    return { amount: dearest.amount, currency: dearest.currency };
-  }
-  return null;
+  const priced = priceClausesOf(sentence)
+    .map((clause) => (PRICE_WORD.test(clause) ? moneyIn(clause) : []))
+    .filter((money) => money.length > 0);
+  // A supplier who prices several named components in one breath, "PCB cost is
+  // 132usd, assembly cost is 456usd, components cost is 3520usd", has given a
+  // breakdown rather than a lot price, and any single line of it understates
+  // what the order costs, so nothing is read as the total.
+  if (priced.length !== 1) return null;
+  const money = priced[0];
+  const dearest = money.reduce((high, entry) => (entry.amount > high.amount ? entry : high), money[0]);
+  return { amount: dearest.amount, currency: dearest.currency };
 }
 
 // A duration a supplier attaches to a warranty, a price validity, or payment
@@ -381,6 +386,19 @@ function readRefusals(sentence: string, reading: SupplierQuoteReading) {
   }
 }
 
+function dropStandingPrices(reading: SupplierQuoteReading) {
+  reading.unitPrice = null;
+  reading.totalPrice = null;
+}
+
+function dropRefusedPrice(reading: SupplierQuoteReading, refused: string) {
+  const key = (price: SupplierQuoteMoney | null) => (
+    price ? `${price.currency} ${price.amount}` : null
+  );
+  if (key(reading.unitPrice) === refused) reading.unitPrice = null;
+  if (key(reading.totalPrice) === refused) reading.totalPrice = null;
+}
+
 // A supplier who states a fact twice in one message means the later one, the
 // same way a later message supersedes an earlier one, so a correction written
 // further down replaces what it corrects.
@@ -389,11 +407,21 @@ function readSentenceFacts(
   reading: SupplierQuoteReading,
   evidence: Set<string>,
 ) {
+  const retractedBefore = reading.retractsPrice;
+  const refusedBefore = reading.refusedPrices.length;
   readRefusals(sentence, reading);
+  // A refusal reaches back over the whole message, not only over older ones, so
+  // a price this sentence takes back stops standing even when the supplier
+  // wrote it a sentence earlier. A replacement stated after the refusal is read
+  // below and stands on its own.
+  if (reading.retractsPrice && !retractedBefore) dropStandingPrices(reading);
+  for (const refused of reading.refusedPrices.slice(refusedBefore)) {
+    dropRefusedPrice(reading, refused);
+  }
   // A question states nothing, so it carries neither a promise nor an offer:
-  // "can you accept delivery in three weeks?" is not a lead time any more than
-  // it is a price.
-  if (sentence.endsWith("?")) return;
+  // "can you accept delivery in three weeks" is not a lead time any more than
+  // it is a price, question mark or not.
+  if (supplierQuestionSentence(sentence)) return;
   const leadTimeDays = leadTimeDaysIn(sentence);
   if (leadTimeDays !== null) {
     reading.leadTimeDays = leadTimeDays;

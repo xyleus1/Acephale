@@ -58,6 +58,15 @@ const WRONG_RECIPIENT = /wrong (email|address|person|department)|not the right (
 
 const QUESTION_LEAD = /^(what|which|when|where|who|how|can|could|would|will|do|does|did|is|are|may|should|please (confirm|advise|share|send|let)|kindly (confirm|advise|share|send))\b/i;
 
+// A supplier asks as often without a question mark as with one, so an opening
+// interrogative counts too. This is the single test for whether a sentence asks
+// something, shared with quote reading so a question can never be read as a
+// commercial promise.
+export function supplierQuestionSentence(sentence: string): boolean {
+  const trimmed = sentence.trim();
+  return trimmed.endsWith("?") || QUESTION_LEAD.test(trimmed);
+}
+
 const TOPIC_PATTERNS: Array<{ topic: ProcurementReplyTopic; pattern: RegExp }> = [
   { topic: "PRICE", pattern: /\b(target price|budget|price range|cost target|how much (are you|can you) pay|pricing expectation)\b/i },
   { topic: "TERMS", pattern: /\b(payment|net 30|net 60|incoterm|deposit|purchase order|po number|contract|credit|tariff|duty)\b/i },
@@ -112,9 +121,7 @@ export function supplierQuestions(body: string): string[] {
     .split(/\n|(?<=[.?!])[ \t]+/)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0 && sentence.length <= 400);
-  const questions = sentences.filter((sentence) => (
-    sentence.endsWith("?") || QUESTION_LEAD.test(sentence)
-  ));
+  const questions = sentences.filter(supplierQuestionSentence);
   return questions.slice(0, 12);
 }
 
