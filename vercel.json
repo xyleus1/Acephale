@@ -17,6 +17,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/context-prospecting",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/procurement-workflow",
       "schedule": "*/5 * * * *"
     },

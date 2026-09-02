@@ -1,5 +1,16 @@
 # AI Handoff
 
+## 2026-09-02: Server-owned Context prospecting
+
+- Operator-started prospecting actions now carry durable continuation state and
+  are advanced by `/api/cron/context-prospecting` every five minutes until the
+  row target or query plan is exhausted. Each tick is office-scoped, bounded,
+  retry-limited, and returns only counters.
+- The existing browser batch chain remains for immediate feedback. Background
+  research writes reviewable rows only and does not contact suppliers or
+  customers. Action progress commits before LeadGen bookkeeping, so tail
+  bookkeeping failures do not lose rows or query offsets.
+
 ## 2026-09-02: Prospecting signal precision
 
 - Metal markers use normalized exact-token matching plus deliberate stems, so
@@ -46,6 +57,10 @@
   remain below the target, counting unique created rows and stopping on
   exhaustion, a non-completed response, an error, unmount, workspace change,
   or the named 20-batch cap. Progress is shown as rows against the target.
+- The cron worker pages through up to 500 candidate rows so terminal actions
+  cannot starve newer work. It retires terminal payloads, uses a per-claim
+  token for transition writes, and skips actions whose creator is inactive or
+  missing from the office.
 - Verification: leadgen and Context prospecting tests passed, and the
   requested lint passed with the repository's existing unused-variable
   warnings. `npx tsc --noEmit` reports only the unrelated typed route error in

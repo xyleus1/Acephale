@@ -1,5 +1,20 @@
 # Decisions
 
+## Context research jobs are server-owned and cron-continued
+
+Date: 2026-09-02
+
+An operator-confirmed Context prospecting action opts into server-owned
+continuation. A five-minute cron tick claims eligible actions across offices,
+resolves the office-scoped workspace, runs bounded research batches, retries
+bounded failures, and stops at the requested unique row target or exhausted
+query plan. Candidate scans page in deterministic updatedAt and id order with
+a hard 500-row cap, terminal payloads retire themselves, claim tokens protect
+transition writes from stale workers, and creator activity is rechecked before
+each batch. The browser chain remains only as a fast-feedback path while the
+tab is open. Research writes reviewable rows and never sends or queues
+outreach.
+
 ## Chat deletion is a hard delete of the thread and its messages only
 
 Date: 2026-09-01

@@ -9,7 +9,9 @@ import {
   runProspectingBatch,
   searchProspectingQuery,
 } from "../src/lib/leadgen/run";
+import { finishLeadGenRun } from "../src/lib/leadgen/persist";
 import type { FetchedPage } from "../src/lib/leadgen/harvest";
+import { clampAgentRowTarget } from "../src/lib/supply-os/context-agent";
 import {
   createCompanyContextProspectingActions,
   dismissCompanyContextProspectingAction,
@@ -17,7 +19,11 @@ import {
   hideCompanyContextProspectingAction,
   listCompanyContextProspectingActions,
   normalizeProspectingDraft,
+  runProspectingBackgroundTick,
   runCompanyContextProspectingAction,
+  shouldContinueProspectingInBackground,
+  STALE_RUN_MS,
+  type StoredProspectingAction,
 } from "../src/lib/supply-os/context-prospecting";
 import { createSupplyWorkspace, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import type { ProspectingBatchCandidate } from "../src/lib/leadgen/run";
@@ -32,6 +38,72 @@ const draft = {
   rowTarget: 500,
 };
 const profile = profileFromProspectingDraft(draft);
+assert.equal(clampAgentRowTarget(undefined), 500);
+assert.equal(clampAgentRowTarget(20), 500);
+assert.equal(clampAgentRowTarget(1200), 1200);
+assert.equal(clampAgentRowTarget(99999), 5000);
+assert.equal(clampAgentRowTarget("abc"), 500);
+const backgroundNow = Date.parse("2026-09-02T00:00:00.000Z");
+const backgroundAction: StoredProspectingAction = {
+  schemaVersion: 1,
+  type: "PROSPECTING",
+  status: "COMPLETED",
+  draft,
+  citations: [],
+  requestMessageId: "message:test",
+  requestBody: "Find steel buyers.",
+  requestCreatedAt: new Date(backgroundNow).toISOString(),
+  threadId: null,
+  runningStartedAt: null,
+  hiddenAt: null,
+  stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
+  nextQueryOffset: 0,
+  exhausted: false,
+  autoContinue: true,
+  workspaceId: null,
+  claimToken: null,
+  attempts: 0,
+  lastError: null,
+  lastBackgroundRunAt: null,
+};
+
+async function waitFor<T>(read: () => Promise<T | null>, label: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const value = await read();
+    if (value !== null) return value;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${label}.`);
+}
+assert.equal(shouldContinueProspectingInBackground({ ...backgroundAction, exhausted: true }, { now: backgroundNow }), false);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  stats: { ...backgroundAction.stats, rowsCreated: draft.rowTarget },
+}, { now: backgroundNow }), false);
+assert.equal(shouldContinueProspectingInBackground(backgroundAction, { now: backgroundNow }), true);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  status: "FAILED",
+  attempts: 2,
+}, { now: backgroundNow }), true);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  status: "FAILED",
+  attempts: 3,
+}, { now: backgroundNow }), false);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  status: "RUNNING",
+  runningStartedAt: new Date(backgroundNow - STALE_RUN_MS + 1).toISOString(),
+}, { now: backgroundNow }), false);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  status: "RUNNING",
+  runningStartedAt: new Date(backgroundNow - STALE_RUN_MS - 1).toISOString(),
+}, { now: backgroundNow }), true);
+assert.equal(shouldContinueProspectingInBackground({ ...backgroundAction, autoContinue: false }, { now: backgroundNow }), false);
+assert.equal(shouldContinueProspectingInBackground({ ...backgroundAction, status: "PENDING" }, { now: backgroundNow }), false);
+assert.equal(shouldContinueProspectingInBackground({ ...backgroundAction, status: "DISMISSED" }, { now: backgroundNow }), false);
 assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: undefined })?.rowTarget, 500);
 assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: "invalid" })?.rowTarget, 500);
 assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: 10 })?.rowTarget, 50);
@@ -167,10 +239,30 @@ async function main() {
   assert.match(contextUi, /payload\?\.action/);
   assert.match(contextUi, /action\.draft\.rowTarget/);
   assert.match(contextUi, /action\.stats\.rowsCreated\} of \{action\.draft\.rowTarget/);
+  assert.match(contextUi, /action\.stats\.rowsCreated >= action\.draft\.rowTarget/);
+  assert.doesNotMatch(contextUi, /action\.stats\.rowsCreated \+ action\.stats\.rowsUpdated/);
+  assert.match(contextUi, /action\.autoContinue && action\.status === "COMPLETED"/);
   assert.match(contextUi, /prospectingGenerationRef/);
   assert.match(contextUi, /generation !== prospectingGenerationRef\.current/);
+  assert.match(prospectingSource, /claimToken: randomUUID\(\)/);
+  assert.match(prospectingSource, /BACKGROUND_SCAN_CAP/);
+  assert.match(prospectingSource, /orderBy: \[\{ updatedAt: "asc" \}, \{ id: "asc" \}\]/);
+  assert.match(prospectingSource, /lostClaims/);
+  assert.match(prospectingSource, /revoked/);
+  assert.match(prospectingSource, /isActive: true/);
+  assert.match(prospectingSource, /args\.background && !shouldContinueProspectingInBackground/);
+  assert.match(prospectingSource, /autoContinue: args\.background \? found\.autoContinue : true/);
+  assert.match(prospectingSource, /progressCommitted/);
   const route = readFileSync(resolve(process.cwd(), "src/app/api/supply-os/workspaces/[workspaceId]/context/prospecting/[actionId]/route.ts"), "utf8");
   assert.match(route, /session\.accessKind === "customer"/);
+  const cronRoute = readFileSync(resolve(process.cwd(), "src/app/api/cron/context-prospecting/route.ts"), "utf8");
+  assert.match(cronRoute, /process\.env\.CRON_SECRET/);
+  assert.match(cronRoute, /status: 503/);
+  assert.match(cronRoute, /status: 401/);
+  assert.match(cronRoute, /authorization/);
+  assert.match(cronRoute, /x-cron-secret/);
+  const vercel = readFileSync(resolve(process.cwd(), "vercel.json"), "utf8");
+  assert.match(vercel, /"path": "\/api\/cron\/context-prospecting"/);
 
   const suffix = randomUUID().slice(0, 8);
   const office = await prisma.office.create({
@@ -198,6 +290,31 @@ async function main() {
     };
     const workspace = await createSupplyWorkspace(context, { name: company.name, companyId: company.id });
     const lifecycleDraft = { ...draft, listSlug: `prospecting-test-${suffix}` };
+    const createBackgroundAction = async (listSlug: string) => (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: { ...lifecycleDraft, listSlug }, citations: [] }],
+      requestMessageId: `message:${listSlug}`,
+      requestBody: "Find steel buyers.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const setActionPayload = async (
+      actionId: string,
+      patch: Record<string, unknown>,
+      processingState: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED",
+    ) => {
+      const row = await prisma.companyContext.findUniqueOrThrow({
+        where: { id: actionId },
+        select: { payload: true },
+      });
+      await prisma.companyContext.update({
+        where: { id: actionId },
+        data: {
+          payload: { ...(row.payload as Record<string, unknown>), ...patch },
+          processingState,
+        },
+      });
+    };
     const [action] = await createCompanyContextProspectingActions({
       context,
       workspaceId: workspace.id,
@@ -316,6 +433,7 @@ async function main() {
       }),
     });
     assert.equal(directoryCompleted.stats.rowsCreated, 1);
+    assert.equal(directoryCompleted.autoContinue, false);
     const directoryList = await prisma.researchList.findFirst({
       where: { officeId: office.id, slug: `${lifecycleDraft.listSlug}-directory` },
       include: { records: true },
@@ -411,6 +529,312 @@ async function main() {
       nextQueryOffset: 1,
       exhausted: false,
     });
+    const exhaustingBatch = async () => ({
+      candidates: [],
+      stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 0 },
+      nextQueryOffset: 1,
+      exhausted: true,
+    });
+    const terminalActions = [];
+    for (let index = 0; index < 5; index += 1) {
+      const terminalAction = await createBackgroundAction(`background-terminal-${suffix}-${index}`);
+      terminalActions.push(terminalAction);
+      await setActionPayload(terminalAction.id, {
+        status: "COMPLETED",
+        autoContinue: true,
+        exhausted: true,
+      }, "COMPLETED");
+    }
+    const pagedAction = await createBackgroundAction(`background-paged-${suffix}`);
+    await setActionPayload(pagedAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    const pagedTick = await runProspectingBackgroundTick({
+      maxJobs: 1,
+      budgetMs: 50_000,
+      batchBudgetMs: 1_000,
+      runBatch: exhaustingBatch,
+    });
+    assert.equal(pagedTick.ran, 1);
+    assert.equal(pagedTick.completed, 1);
+    assert.ok(pagedTick.scanned >= terminalActions.length + 1);
+    const pagedPayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: pagedAction.id },
+      select: { payload: true },
+    });
+    assert.equal((pagedPayload.payload as Record<string, unknown>).autoContinue, false);
+
+    await setActionPayload(hiddenRestartAction.id, {
+      status: "COMPLETED",
+      autoContinue: false,
+    }, "COMPLETED");
+    const ineligibleListSlug = `background-ineligible-${suffix}`;
+    const ineligibleAction = await createBackgroundAction(ineligibleListSlug);
+    await setActionPayload(ineligibleAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    let ineligibleSelected = false;
+    const ineligibleTick = await runProspectingBackgroundTick({
+      maxJobs: 1,
+      budgetMs: 50_000,
+      batchBudgetMs: 1_000,
+      beforeClaim: async (selected) => {
+        if (selected.draft.listSlug !== ineligibleListSlug) return;
+        ineligibleSelected = true;
+        await setActionPayload(ineligibleAction.id, {
+          autoContinue: false,
+        }, "COMPLETED");
+      },
+      runBatch: async () => {
+        throw new Error("Ineligible action must not run.");
+      },
+    });
+    assert.equal(ineligibleSelected, true);
+    assert.equal(ineligibleTick.ran, 0);
+    assert.equal(ineligibleTick.skipped, 1);
+    const ineligiblePayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: ineligibleAction.id },
+      select: { payload: true, processingState: true },
+    });
+    assert.equal(ineligiblePayload.processingState, "COMPLETED");
+    assert.equal((ineligiblePayload.payload as Record<string, unknown>).autoContinue, false);
+    assert.equal((ineligiblePayload.payload as Record<string, unknown>).claimToken, null);
+
+    const manualClaimAction = await createBackgroundAction(`background-manual-claim-${suffix}`);
+    await setActionPayload(manualClaimAction.id, {
+      status: "COMPLETED",
+      autoContinue: false,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    const manualClaimed = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: manualClaimAction.id,
+      runBatch: emptyBatch,
+    });
+    assert.equal(manualClaimed.status, "COMPLETED");
+    assert.equal(manualClaimed.autoContinue, true);
+    await setActionPayload(manualClaimAction.id, {
+      autoContinue: false,
+    }, "COMPLETED");
+
+    const tailListSlug = `background-tail-${suffix}`;
+    const tailAction = await createBackgroundAction(tailListSlug);
+    await setActionPayload(tailAction.id, {
+      status: "PENDING",
+      autoContinue: false,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "PENDING");
+    const tailCompleted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: tailAction.id,
+      runBatch: async () => ({
+        candidates: [candidate],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
+        nextQueryOffset: 42,
+        exhausted: false,
+      }),
+      bookkeeping: {
+        recordLeadDiscoveries: async () => {
+          throw new Error("fixture bookkeeping failure");
+        },
+        finishLeadGenRun,
+      },
+    });
+    assert.equal(tailCompleted.status, "COMPLETED");
+    assert.equal(tailCompleted.stats.rowsCreated, 1);
+    assert.equal(tailCompleted.nextQueryOffset, 42);
+    const tailPayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: tailAction.id },
+      select: { payload: true, processingState: true },
+    });
+    assert.equal(tailPayload.processingState, "COMPLETED");
+    assert.equal((tailPayload.payload as Record<string, unknown>).status, "COMPLETED");
+    assert.equal((tailPayload.payload as Record<string, unknown>).nextQueryOffset, 42);
+    assert.equal((tailPayload.payload as Record<string, unknown>).stats
+      && ((tailPayload.payload as Record<string, unknown>).stats as Record<string, unknown>).rowsCreated, 1);
+    const tailRun = await prisma.leadGenRun.findFirst({
+      where: { officeId: office.id, workspaceId: workspace.id, campaignTag: tailListSlug },
+      orderBy: { startedAt: "desc" },
+    });
+    assert(tailRun);
+    assert.equal(tailRun.status, "FAILED");
+    assert.match(tailRun.error ?? "", /fixture bookkeeping failure/);
+    assert.equal(await prisma.leadDiscovery.count({ where: { officeId: office.id, runId: tailRun.id } }), 0);
+    await setActionPayload(tailAction.id, {
+      autoContinue: false,
+    }, "COMPLETED");
+    const prePersistenceListSlug = `background-pre-persistence-${suffix}`;
+    const prePersistenceAction = await createBackgroundAction(prePersistenceListSlug);
+    await assert.rejects(
+      () => runCompanyContextProspectingAction({
+        context,
+        workspaceId: workspace.id,
+        actionId: prePersistenceAction.id,
+        runBatch: async () => {
+          throw new Error("fixture pre-persistence failure");
+        },
+      }),
+      /fixture pre-persistence failure/,
+    );
+    const prePersistencePayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: prePersistenceAction.id },
+      select: { payload: true, processingState: true },
+    });
+    assert.equal(prePersistencePayload.processingState, "FAILED");
+    assert.equal((prePersistencePayload.payload as Record<string, unknown>).status, "FAILED");
+    const prePersistenceRun = await prisma.leadGenRun.findFirst({
+      where: { officeId: office.id, workspaceId: workspace.id, campaignTag: prePersistenceListSlug },
+      orderBy: { startedAt: "desc" },
+    });
+    assert(prePersistenceRun);
+    assert.equal(prePersistenceRun.status, "FAILED");
+    assert.equal(await prisma.leadDiscovery.count({
+      where: { officeId: office.id, runId: prePersistenceRun.id },
+    }), 0);
+    await setActionPayload(prePersistenceAction.id, {
+      autoContinue: false,
+    }, "FAILED");
+
+    const targetAction = await createBackgroundAction(`background-target-${suffix}`);
+    await setActionPayload(targetAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+      stats: { ...backgroundAction.stats, rowsCreated: lifecycleDraft.rowTarget },
+    }, "COMPLETED");
+    const targetCompleted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: targetAction.id,
+      runBatch: emptyBatch,
+    });
+    assert.equal(targetCompleted.autoContinue, false);
+
+    const failingAction = await createBackgroundAction(`background-failing-${suffix}`);
+    await setActionPayload(failingAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    const failingBatch = async () => {
+      throw new Error("fixture background failure");
+    };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const failedTick = await runProspectingBackgroundTick({
+        maxJobs: 1,
+        budgetMs: 50_000,
+        batchBudgetMs: 1_000,
+        runBatch: failingBatch,
+      });
+      assert.equal(failedTick.failed, 1);
+    }
+    const failedPayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: failingAction.id },
+      select: { payload: true },
+    });
+    assert.equal((failedPayload.payload as Record<string, unknown>).attempts, 3);
+    assert.equal((failedPayload.payload as Record<string, unknown>).autoContinue, false);
+
+    const staleAction = await createBackgroundAction(`background-stale-${suffix}`);
+    await setActionPayload(staleAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    let releaseA: (() => void) | null = null;
+    const workerA = runProspectingBackgroundTick({
+      maxJobs: 1,
+      budgetMs: 50_000,
+      batchBudgetMs: 1_000,
+      runBatch: async () => {
+        await new Promise<void>((resolve) => {
+          releaseA = resolve;
+        });
+        return emptyBatch();
+      },
+    });
+    const claimedPayload = await waitFor(async () => {
+      const row = await prisma.companyContext.findUnique({
+        where: { id: staleAction.id },
+        select: { payload: true },
+      });
+      const payload = row?.payload;
+      return payload && typeof payload === "object" && !Array.isArray(payload)
+        && (payload as Record<string, unknown>).status === "RUNNING"
+        && typeof (payload as Record<string, unknown>).claimToken === "string"
+        ? payload as Record<string, unknown>
+        : null;
+    }, "background claim");
+    await setActionPayload(staleAction.id, {
+      ...claimedPayload,
+      runningStartedAt: new Date(Date.now() - STALE_RUN_MS - 1).toISOString(),
+    }, "RUNNING");
+    const workerB = await runProspectingBackgroundTick({
+      maxJobs: 1,
+      budgetMs: 50_000,
+      batchBudgetMs: 1_000,
+      runBatch: exhaustingBatch,
+    });
+    assert.equal(workerB.completed, 1);
+    assert(releaseA);
+    releaseA();
+    const workerAResult = await workerA;
+    assert.equal(workerAResult.lostClaims, 1);
+
+    const inactiveAction = await createBackgroundAction(`background-inactive-${suffix}`);
+    await setActionPayload(inactiveAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    await prisma.user.update({ where: { id: admin.id }, data: { isActive: false } });
+    const inactiveTick = await runProspectingBackgroundTick({
+      maxJobs: 1,
+      budgetMs: 50_000,
+      batchBudgetMs: 1_000,
+      runBatch: exhaustingBatch,
+    });
+    assert.equal(inactiveTick.revoked, 1);
+    await prisma.user.update({ where: { id: admin.id }, data: { isActive: true } });
+    const inactivePayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: inactiveAction.id },
+      select: { payload: true },
+    });
+    assert.equal((inactivePayload.payload as Record<string, unknown>).autoContinue, false);
+
+    const missingCreatorAction = await createBackgroundAction(`background-missing-creator-${suffix}`);
+    await setActionPayload(missingCreatorAction.id, {
+      status: "COMPLETED",
+      autoContinue: true,
+      exhausted: false,
+      workspaceId: workspace.id,
+    }, "COMPLETED");
+    await prisma.companyContext.update({
+      where: { id: missingCreatorAction.id },
+      data: { createdByUserId: null },
+    });
+    const missingCreatorTick = await runProspectingBackgroundTick({
+      maxJobs: 1,
+      budgetMs: 50_000,
+      batchBudgetMs: 1_000,
+      runBatch: exhaustingBatch,
+    });
+    assert.equal(missingCreatorTick.revoked, 1);
+
     const firstRun = await runCompanyContextProspectingAction({
       context,
       workspaceId: workspace.id,

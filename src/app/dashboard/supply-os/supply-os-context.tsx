@@ -120,6 +120,7 @@ type ContextProspectingAction = {
   };
   nextQueryOffset: number;
   exhausted: boolean;
+  autoContinue: boolean;
   runningStartedAt: string | null;
   hiddenAt?: string | null;
   createdAt: string;
@@ -563,7 +564,7 @@ export function SupplyOsContext({
         if (
           action.status !== "COMPLETED"
           || action.exhausted
-          || action.stats.rowsCreated + action.stats.rowsUpdated >= action.draft.rowTarget
+          || action.stats.rowsCreated >= action.draft.rowTarget
         ) break;
       }
     } catch (cause) {
@@ -1140,6 +1141,9 @@ export function SupplyOsContext({
                     </Link>
                   </strong>
                 </div>
+              ) : null}
+              {action.autoContinue && action.status === "COMPLETED" && !action.exhausted && action.stats.rowsCreated < action.draft.rowTarget ? (
+                <p className={styles.approvalBoundary}>Run continues in the background. Rows keep arriving.</p>
               ) : null}
               {readOnly ? (
                 <p className={styles.approvalBoundary}>View-only access.</p>

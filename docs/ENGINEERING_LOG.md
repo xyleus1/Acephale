@@ -1,5 +1,15 @@
 # Engineering Log
 
+## 2026-09-02: Context research runs continue server-side
+
+- Context prospecting actions now opt into durable continuation when an operator
+  starts them. A five-minute cron tick claims eligible office-scoped actions,
+  runs bounded batches, retries failures, and stops at the row target or the
+  end of the query plan.
+- The browser chain remains as a fast feedback path while the tab is open.
+  Background work writes reviewable research rows only and never sends
+  outreach.
+
 ## 2026-09-02: Prospecting signal precision
 
 - Metal-domain detection now matches normalized word tokens by exact match or
@@ -97,6 +107,12 @@
   defaulting legacy drafts to 500. The Context panel counts unique created
   rows, continues completed batches until that target, and cancels stale loops
   when the workspace changes.
+- Background continuation now pages past terminal actions, retires exhausted
+  and permanently failed payloads, and caps each scan at 500 rows. Claim
+  tokens prevent stale workers from overwriting newer progress, while inactive
+  or missing action creators lose background authority. Action progress commits
+  before LeadGen bookkeeping, so tail bookkeeping failures do not lose rows or
+  query offsets.
 
 ## 2026-09-01: Dedicated outreach campaign desk
 

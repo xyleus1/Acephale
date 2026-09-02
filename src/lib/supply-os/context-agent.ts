@@ -33,6 +33,12 @@ import {
 
 const MAX_QUESTION_ROUNDS = 2;
 
+export function clampAgentRowTarget(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(5_000, Math.max(500, Math.floor(value)))
+    : 500;
+}
+
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -97,7 +103,7 @@ const CONTEXT_REPLY_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["citationIds", "objective", "segments", "regions", "productFocus", "listSlug", "notes"],
+        required: ["citationIds", "objective", "segments", "regions", "productFocus", "listSlug", "notes", "rowTarget"],
         properties: {
           citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
           objective: { type: "string" },
@@ -106,6 +112,7 @@ const CONTEXT_REPLY_SCHEMA = {
           productFocus: { type: "string" },
           listSlug: { type: "string" },
           notes: { type: "string" },
+          rowTarget: { type: "number" },
         },
       },
     },
@@ -293,6 +300,7 @@ export async function chatWithCompanyContext(args: {
         "If and only if the operator explicitly asks to find buyers, prospects, customers, or a target list, prepare prospectingDrafts for human confirmation.",
         "Preparing prospectingDrafts does not run research or contact anyone. Separate confirmation is required before public-page research starts.",
         "A prospecting draft requires the operator to provide target segments and regions. Ask for missing segments or regions with clarifyingQuestions instead of guessing.",
+        "Set rowTarget to the volume the job deserves: 500 for a normal single-country segment ask, up to 2000 for a broad multi-country corridor sweep, and never a token number like 20 or 50.",
         "Public prospect research writes reviewable research-list rows only. It does not imply outreach or contact.",
         "Customer-access sessions must never create prospectingDrafts or prospecting actions.",
         "threadTitle: return a short specific title of at most 6 words naming this chat's task, like PC-ABS enclosure sourcing or Germany packaging prospects. Base it on the task being worked on, not on greetings. Return an empty string only when the conversation has no clear task yet.",
@@ -387,8 +395,12 @@ export async function chatWithCompanyContext(args: {
     const record = value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown>
       : null;
-    const draft = normalizeProspectingDraft(record);
-    if (!record || !draft) return null;
+    if (!record) return null;
+    const draft = normalizeProspectingDraft({
+      ...record,
+      rowTarget: clampAgentRowTarget(record.rowTarget),
+    });
+    if (!draft) return null;
     const draftCitationIds = Array.isArray(record.citationIds)
       ? record.citationIds.filter((id): id is string => typeof id === "string" && allowedCitations.has(id)).slice(0, 20)
       : [];
