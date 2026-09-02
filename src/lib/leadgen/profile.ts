@@ -2,6 +2,8 @@
 // scoring. Profiles stay deterministic and reviewable so an operator can see
 // exactly which keywords produced a target list.
 
+import { normalizeTurkish } from "./extract";
+
 export type LeadGenProfile = {
   slug: string;
   customerName: string;
@@ -69,6 +71,90 @@ export const GENERIC_STEEL_ORE_NEGATIVE_SIGNALS = [
   "kripto",
   "bahis",
 ] as const;
+
+export const MULTILINGUAL_INDUSTRIAL_SIGNALS = [
+  "steel", "iron", "metal", "mill", "foundry", "smelter", "billet", "slab", "bloom",
+  "pig iron", "sponge iron", "hot rolled", "cold rolled", "wire rod", "rebar", "coil",
+  "plate", "pipe", "casting", "forging", "fabrication", "manufacturing",
+  "manufacturer", "industries", "industrial", "metallurg", "metallurgy", "metalurgia",
+  "alloy", "ferro", "ferroalloy", "machinery", "smelting",
+  "acero", "siderurg", "siderurgica", "fundicion", "fundicao", "laminado", "metalurg", "maquinaria",
+  "celik", "demir", "sanayi", "imalat", "uretim", "fabrika", "dokum", "konstruksiyon",
+  "metall", "chugun", "prokat", "zavod",
+  "acciaio", "stahl", "stahlwerk", "walzwerk", "giesserei", "acier", "fonderie", "turnatorie",
+] as const;
+
+export const GENERIC_NON_INDUSTRIAL_SIGNALS = [
+  "real estate", "hotel", "tourism", "restaurant", "casino", "insurance",
+  "recruitment", "travel agency", "law firm", "pharmacy",
+] as const;
+
+export const GENERIC_INDUSTRIAL_SIGNALS = [
+  "manufactur", "factory", "industrial", "industries", "supplier",
+  "fabrica", "fabrika", "sanayi", "imalat", "uretim", "usine", "werk",
+  "zavod", "planta",
+] as const;
+
+const METAL_DOMAIN_MARKERS = [
+  "steel", "iron", "ore", "metal", "celik", "demir", "cevher", "acero",
+  "aco", "siderurg", "billet", "slab", "scrap", "ferro", "alloy",
+] as const;
+
+const PRODUCT_FOCUS_STOPWORDS = new Set([
+  "and",
+  "the",
+  "with",
+  "from",
+  "that",
+  "only",
+  "such",
+  "other",
+  "focused",
+  "companies",
+  "company",
+  "exclude",
+  "including",
+  "relevant",
+  "products",
+  "product",
+  "basic",
+  "semi",
+  "finished",
+  "small",
+  "large",
+  "supplied",
+  "capability",
+  "meaningful",
+  "export",
+  "sector",
+  "iron",
+  "steel",
+]);
+
+export function signalsFromProductFocus(input: {
+  productFocus: string;
+  segments: readonly string[];
+}): { positive: readonly string[]; negative: readonly string[] } {
+  const normalizedFocus = normalizeTurkish([input.productFocus, ...input.segments].join(" "));
+  const hasMetalFocus = METAL_DOMAIN_MARKERS.some((marker) =>
+    normalizedFocus.includes(normalizeTurkish(marker)),
+  );
+  const derived = [input.productFocus, ...input.segments]
+    .flatMap((value) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(/\s+/))
+    .filter((token) => token.length >= 4 && !PRODUCT_FOCUS_STOPWORDS.has(token))
+    .filter((token, index, tokens) => tokens.indexOf(token) === index)
+    .slice(0, 40);
+  const baseSignals = hasMetalFocus
+    ? MULTILINGUAL_INDUSTRIAL_SIGNALS
+    : GENERIC_INDUSTRIAL_SIGNALS;
+  const positive = [...new Set([...baseSignals, ...derived])];
+  const positiveSet = new Set(positive);
+  const negative = [...new Set([
+    ...GENERIC_STEEL_ORE_NEGATIVE_SIGNALS,
+    ...GENERIC_NON_INDUSTRIAL_SIGNALS,
+  ])].filter((signal) => !positiveSet.has(signal));
+  return { positive, negative };
+}
 
 export const MANEKS_PROFILE: LeadGenProfile = {
   slug: "maneks",

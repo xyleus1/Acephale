@@ -16,6 +16,7 @@ import {
   groupProspectingResearchRows,
   hideCompanyContextProspectingAction,
   listCompanyContextProspectingActions,
+  normalizeProspectingDraft,
   runCompanyContextProspectingAction,
 } from "../src/lib/supply-os/context-prospecting";
 import { createSupplyWorkspace, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
@@ -28,8 +29,13 @@ const draft = {
   productFocus: "Non-bulk steel and ore",
   listSlug: "steel-buyers",
   notes: "",
+  rowTarget: 500,
 };
 const profile = profileFromProspectingDraft(draft);
+assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: undefined })?.rowTarget, 500);
+assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: "invalid" })?.rowTarget, 500);
+assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: 10 })?.rowTarget, 50);
+assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: 99999 })?.rowTarget, 5000);
 assert.equal(profileFromProspectingDraft({ ...draft, segments: [] }).segments.length, 0);
 assert.deepEqual(profile.regions, draft.regions);
 assert.equal(profile.offering, draft.productFocus);
@@ -157,6 +163,12 @@ async function main() {
   assert.match(contextUi, /runningStartedAt/);
   assert.match(contextUi, /STALE_RUN_MS/);
   assert.match(contextUi, /previous research run was interrupted/);
+  assert.match(contextUi, /MAX_PROSPECTING_BATCHES = 20/);
+  assert.match(contextUi, /payload\?\.action/);
+  assert.match(contextUi, /action\.draft\.rowTarget/);
+  assert.match(contextUi, /action\.stats\.rowsCreated\} of \{action\.draft\.rowTarget/);
+  assert.match(contextUi, /prospectingGenerationRef/);
+  assert.match(contextUi, /generation !== prospectingGenerationRef\.current/);
   const route = readFileSync(resolve(process.cwd(), "src/app/api/supply-os/workspaces/[workspaceId]/context/prospecting/[actionId]/route.ts"), "utf8");
   assert.match(route, /session\.accessKind === "customer"/);
 

@@ -103,8 +103,11 @@ export function normalizeProspectingDraft(value: unknown): ProspectingDraft | nu
   const productFocus = text(input.productFocus, 500);
   const listSlug = slugify(text(input.listSlug, 80) || objective);
   const notes = text(input.notes, 2_000);
+  const rowTarget = typeof input.rowTarget === "number" && Number.isFinite(input.rowTarget)
+    ? Math.min(5_000, Math.max(50, Math.floor(input.rowTarget)))
+    : 500;
   if (!objective || !segments.length || !regions.length || !productFocus || !listSlug) return null;
-  return { objective, segments, regions, productFocus, listSlug, notes };
+  return { objective, segments, regions, productFocus, listSlug, notes, rowTarget };
 }
 
 function customerAccess(context: CompanyContextAccess) {

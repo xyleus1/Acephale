@@ -5,7 +5,11 @@ import {
   LOCALIZED_URL_TOKENS,
   type QueryLocale,
 } from "../src/lib/leadgen/query-plan";
-import { MANEKS_CORRIDOR_PROFILE, MANEKS_PROFILE } from "../src/lib/leadgen/profile";
+import {
+  MANEKS_CORRIDOR_PROFILE,
+  MANEKS_PROFILE,
+  signalsFromProductFocus,
+} from "../src/lib/leadgen/profile";
 import { WENS_PROFILE } from "../src/lib/leadgen/profile-wens";
 import { resolveLeadGenProfile } from "../src/lib/leadgen/registry";
 import {
@@ -29,7 +33,7 @@ import {
 import { scoreLead } from "../src/lib/leadgen/score";
 import { verifyEmail } from "../src/lib/leadgen/verify";
 import { extractDirectoryTargets, harvestSite, scoreEmailUsefulness, type FetchedPage } from "../src/lib/leadgen/harvest";
-import { runProspectingBatch } from "../src/lib/leadgen/run";
+import { profileFromProspectingDraft, runProspectingBatch } from "../src/lib/leadgen/run";
 import { checkPublicUrl, guardedRequest, isPrivateAddress } from "../src/lib/leadgen/fetch-guard";
 import { createServer } from "node:http";
 
@@ -127,6 +131,71 @@ const legacyKeywordPlan = buildQueryPlan({
   segments: [{ key: "legacy", label: "Legacy", keywords: ["legacy buyer"], weight: 1 }],
 }, { shapes: ["member_list"] });
 assert.ok(legacyKeywordPlan.some((entry) => entry.query.includes("legacy buyer")), "segments without localized keywords must use keywords");
+
+const multilingualDraft = {
+  objective: "Find large primary steel producers",
+  segments: ["Large primary steel producers"],
+  regions: ["India", "Vietnam"],
+  productFocus: "Raw materials, semi-finished steel, and basic iron and steel products supplied to Turkiye's iron and steel sector, including relevant slab, billet, bloom, pig iron, DRI or HBI, hot-rolled coil, plate, wire rod, rebar",
+  listSlug: "india-vietnam-steel-producers",
+  notes: "",
+  rowTarget: 500,
+};
+const multilingualSignals = signalsFromProductFocus({
+  productFocus: multilingualDraft.productFocus,
+  segments: multilingualDraft.segments,
+});
+assert.ok(multilingualSignals.positive.includes("steel"));
+assert.ok(multilingualSignals.positive.includes("billet"));
+assert.ok(multilingualSignals.positive.includes("producers"));
+assert.equal(
+  multilingualSignals.negative.some((signal) => multilingualSignals.positive.includes(signal)),
+  false,
+);
+const multilingualFit = scoreLead(profileFromProspectingDraft(multilingualDraft), {
+  companyName: "Tata Steel Limited",
+  domain: "tata.com",
+  pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+});
+assert.notEqual(multilingualFit.tier, "reject");
+const nonIndustrialFit = scoreLead(profileFromProspectingDraft(multilingualDraft), {
+  companyName: "Grand Palace Hotel",
+  domain: "grandpalace.example",
+  pageText: "Grand Palace Hotel offers rooms, a restaurant and a travel agency desk in Mumbai",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+});
+assert.equal(nonIndustrialFit.tier, "reject");
+const nonMetalDraft = {
+  ...multilingualDraft,
+  objective: "Find corrugated packaging manufacturers",
+  segments: ["Corrugated box manufacturers"],
+  productFocus: "Corrugated packaging and folding cartons for food exporters",
+  listSlug: "corrugated-packaging-manufacturers",
+};
+const nonMetalProfile = profileFromProspectingDraft(nonMetalDraft);
+const nonMetalSteelFit = scoreLead(nonMetalProfile, {
+  companyName: "Tata Steel Limited",
+  domain: "tata.com",
+  pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+});
+assert.equal(nonMetalSteelFit.tier, "reject");
+const packagingFit = scoreLead(nonMetalProfile, {
+  companyName: "Anadolu Karton",
+  domain: "anadolukarton.example",
+  pageText: "Anadolu Karton is a corrugated packaging manufacturer producing folding cartons",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+});
+assert.notEqual(packagingFit.tier, "reject");
 
 // Search result parsing
 

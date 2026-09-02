@@ -1,5 +1,22 @@
 # Engineering Log
 
+## 2026-09-01: Context prospecting targets and multilingual fit
+
+- Context prospecting profiles now derive deterministic fit signals from the
+  approved product focus and segments, combining normalized multilingual
+  industrial terms with the existing non-industrial exclusions.
+- Removed broad multilingual tokens that caused substring false positives and
+  replaced them with more specific metallurgy terms. Added regression coverage
+  to keep hotel pages in the reject tier.
+- The multilingual vocabulary is now selected only when the approved draft
+  contains a metal-domain marker. Other drafts use product-neutral industrial
+  terms, with regression coverage for packaging versus steel pages.
+- Prospecting batches allow up to 60 queries and 300 page fetches within the
+  existing 240-second budget. Drafts normalize a row target from 50 to 5,000,
+  defaulting legacy drafts to 500. The Context panel counts unique created
+  rows, continues completed batches until that target, and cancels stale loops
+  when the workspace changes.
+
 ## 2026-09-01: Hide request cards in the Requests panel
 
 - Added `hiddenAt: string | null` to the stored procurement and prospecting

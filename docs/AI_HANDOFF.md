@@ -1,5 +1,27 @@
 # AI Handoff
 
+## 2026-09-01: Context prospecting multilingual signals and row targets
+
+- Draft-derived Context prospecting profiles now use deterministic multilingual
+  industrial signals plus product-focus and segment tokens, while preserving
+  the existing Maneks profile signals.
+- Broad signal tokens that matched unrelated pages were removed and replaced
+  with specific metallurgy terms. A hotel-page regression assertion now
+  ensures non-industrial text remains rejected.
+- Metal vocabulary is gated by deterministic markers in the draft. Non-metal
+  drafts use product-neutral industrial terms and do not accept steel pages.
+- Per-batch limits increased to 60 queries and 300 pages with the 240-second
+  budget unchanged. Stored drafts normalize `rowTarget` to 50..5,000 and
+  default missing or invalid values to 500.
+- The Context research action now repeats completed batches while rows created
+  remain below the target, counting unique created rows and stopping on
+  exhaustion, a non-completed response, an error, unmount, workspace change,
+  or the named 20-batch cap. Progress is shown as rows against the target.
+- Verification: leadgen and Context prospecting tests passed, and the
+  requested lint passed with the repository's existing unused-variable
+  warnings. `npx tsc --noEmit` reports only the unrelated typed route error in
+  `src/app/dashboard/admin/page.tsx`.
+
 ## 2026-09-01: Hide finished request cards from the Requests panel
 
 - Request cards in the Requests panel gained a visible minus button that hides

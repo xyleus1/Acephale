@@ -12,13 +12,12 @@ import type { DirectoryRow } from "./directory";
 import { scoreLead } from "./score";
 import { verifyEmails, type EmailVerification, type VerifyOptions } from "./verify";
 import {
-  GENERIC_STEEL_ORE_NEGATIVE_SIGNALS,
-  GENERIC_STEEL_ORE_POSITIVE_SIGNALS,
+  signalsFromProductFocus,
   type LeadGenProfile,
 } from "./profile";
 
-const DEFAULT_MAX_QUERIES = 24;
-const DEFAULT_MAX_PAGES = 60;
+const DEFAULT_MAX_QUERIES = 60;
+const DEFAULT_MAX_PAGES = 300;
 const DEFAULT_BUDGET_MS = 240_000;
 
 export type ProspectingDraft = {
@@ -28,6 +27,7 @@ export type ProspectingDraft = {
   productFocus: string;
   listSlug: string;
   notes: string;
+  rowTarget: number;
 };
 
 export type ProspectingSearchResult = {
@@ -69,6 +69,10 @@ export type ProspectingBatchResult = {
 };
 
 export function profileFromProspectingDraft(draft: ProspectingDraft): LeadGenProfile {
+  const signals = signalsFromProductFocus({
+    productFocus: draft.productFocus,
+    segments: draft.segments,
+  });
   const segments = draft.segments
     .map((segment) => segment.trim())
     .filter(Boolean)
@@ -85,8 +89,8 @@ export function profileFromProspectingDraft(draft: ProspectingDraft): LeadGenPro
     segments,
     regions: draft.regions.map((region) => region.trim()).filter(Boolean),
     directorySeeds: [],
-    positiveSignals: GENERIC_STEEL_ORE_POSITIVE_SIGNALS,
-    negativeSignals: GENERIC_STEEL_ORE_NEGATIVE_SIGNALS,
+    positiveSignals: signals.positive,
+    negativeSignals: signals.negative,
   };
 }
 

@@ -108,6 +108,7 @@ type ContextProspectingAction = {
     productFocus: string;
     listSlug: string;
     notes: string;
+    rowTarget: number;
   };
   citations: Array<{ id: string; label: string }>;
   stats: {
@@ -139,6 +140,7 @@ type OptimisticMessage = ContextMessage & { pending: true };
 const ACCEPTED_FILES = ".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip,.stl";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
+const MAX_PROSPECTING_BATCHES = 20;
 const PROCESSING_PHASES = [
   "Digesting company context",
   "Checking files and open requests",
@@ -284,8 +286,22 @@ export function SupplyOsContext({
   const streamEndRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
   const loadSeqRef = useRef(0);
+  const mountedRef = useRef(true);
+  const prospectingGenerationRef = useRef(0);
   const contextApiBasePath = apiBasePath
     ?? `/api/supply-os/workspaces/${workspaceId ?? ""}/context`;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    prospectingGenerationRef.current += 1;
+    setActionBusyId(null);
+  }, [workspaceId]);
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
@@ -512,24 +528,50 @@ export function SupplyOsContext({
 
   async function decideProspectingAction(actionId: string, decision: "run" | "dismiss" | "hide") {
     if (!workspaceId || readOnly || actionBusyId) return;
+    const generation = prospectingGenerationRef.current;
     setActionBusyId(actionId);
     setError(null);
     try {
-      const response = await fetch(
-        `${contextApiBasePath}/prospecting/${encodeURIComponent(actionId)}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ decision }),
-        },
-      );
-      const payload = await response.json().catch(() => null) as { error?: string } | null;
-      if (!response.ok) throw new Error(payload?.error || "The prospecting run did not finish.");
-      await load();
+      let batchCount = 0;
+      while (
+        mountedRef.current
+        && generation === prospectingGenerationRef.current
+        && (decision === "run" ? batchCount < MAX_PROSPECTING_BATCHES : batchCount === 0)
+      ) {
+        const response = await fetch(
+          `${contextApiBasePath}/prospecting/${encodeURIComponent(actionId)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ decision }),
+          },
+        );
+        if (!mountedRef.current || generation !== prospectingGenerationRef.current) return;
+        const payload = await response.json().catch(() => null) as {
+          action?: ContextProspectingAction;
+          error?: string;
+        } | null;
+        if (!mountedRef.current || generation !== prospectingGenerationRef.current) return;
+        if (!response.ok || !payload?.action) {
+          throw new Error(payload?.error || "The prospecting run did not finish.");
+        }
+        batchCount += 1;
+        await load();
+        if (!mountedRef.current || generation !== prospectingGenerationRef.current) return;
+        if (decision !== "run") break;
+        const action = payload.action;
+        if (
+          action.status !== "COMPLETED"
+          || action.exhausted
+          || action.stats.rowsCreated + action.stats.rowsUpdated >= action.draft.rowTarget
+        ) break;
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The prospecting run did not finish.");
+      if (mountedRef.current && generation === prospectingGenerationRef.current) {
+        setError(cause instanceof Error ? cause.message : "The prospecting run did not finish.");
+      }
     } finally {
-      setActionBusyId(null);
+      if (mountedRef.current && generation === prospectingGenerationRef.current) setActionBusyId(null);
     }
   }
 
@@ -1079,8 +1121,7 @@ export function SupplyOsContext({
                 <div><dt>Queries used</dt><dd>{action.stats.queriesUsed}</dd></div>
                 <div><dt>Pages fetched</dt><dd>{action.stats.pagesFetched}</dd></div>
                 <div><dt>Candidates found</dt><dd>{action.stats.candidatesFound}</dd></div>
-                <div><dt>Rows created</dt><dd>{action.stats.rowsCreated}</dd></div>
-                <div><dt>Rows updated</dt><dd>{action.stats.rowsUpdated}</dd></div>
+                <div><dt>Rows</dt><dd>{action.stats.rowsCreated} of {action.draft.rowTarget}</dd></div>
               </dl>
               {documentCitations(action.citations).length ? (
                 <div className={styles.citations} aria-label="Prospecting sources">
