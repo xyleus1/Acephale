@@ -1,5 +1,25 @@
 # Decisions
 
+## Supplier quotes are written through a tenant scoped database function
+
+Date: 2026-09-02
+
+Recorded supplier quotes are written by the procurement workflow client, which
+authenticates as `dashboard_api`, a role shared by every tenant. A column level
+update grant was not enough: any statement issued by that role could have
+reached another customer's supplier row, so tenant scope would have lived only
+in application code. The role therefore holds no update privilege on
+`order_vendors` at all. It may only execute
+`record_order_vendor_quote(customer_id, order_id, vendor_id, quote)` in
+`scripts/sql/procurement-dashboard-api.sql`, a security definer function with a
+fixed search path that writes the quote column alone, only when the order
+belongs to the calling customer, and only where no quote object is stored, so an
+operator recorded quote is never overwritten and a rerun is idempotent. It
+refuses an empty quote. Cross tenant rejection is proven against a migrated
+database in `scripts/procurement-workflow-database.test.ts`. Any future supplier
+write for this role goes through a function with the same customer check, never
+through a column grant.
+
 ## Context research jobs are server-owned and cron-continued
 
 Date: 2026-09-02

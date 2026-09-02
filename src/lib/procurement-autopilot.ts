@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   autopilotEscalations,
+  autopilotFailures,
   autopilotRequestStage,
   planAutopilotVendorAction,
   type AutopilotAction,
@@ -20,6 +21,7 @@ import {
   listSupplierNudgeTargets,
   runProcurementSupplierNudges,
 } from "@/lib/procurement-supplier-nudge";
+import { sweepSupplierQuoteCapture } from "@/lib/procurement-supplier-quote";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
 import { procurementReplyFacts, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
@@ -75,6 +77,9 @@ export type AutopilotRunResult = {
   // reply path, so those follow ups are counted separately.
   nudgeCandidates: number;
   nudged: number;
+  // Quotes read out of supplier replies during this pass, so a request can
+  // reach a purchase order without an operator retyping a price.
+  quotesRecorded: number;
   sent: number;
   alreadySent: number;
   failed: number;
@@ -206,6 +211,17 @@ export async function runProcurementAutopilot(args: {
   if (!summary) return null;
   const limit = Math.min(AUTOPILOT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? AUTOPILOT_MAX_PER_RUN)));
   const autoSend = args.autoSend === true;
+  // A priced answer is worth nothing until it is recorded against the supplier,
+  // because the request reads its quotes, not its inbox. Recording mails nobody,
+  // so it runs in draft only passes too and only writes supplier stated facts.
+  // The send limit does not bound reading, so a pass looks at every respondent
+  // it can afford rather than rereading the same first few every time. It runs
+  // before the plan so a supplier whose newest reply is a quote is read as
+  // quoted in this same pass and is neither chased nor answered.
+  // The sweep carries its own cursor across pages, so a request whose first
+  // pages of respondents stay unquoted cannot hide the priced replies behind
+  // them from every later pass.
+  const quoteRun = await sweepSupplierQuoteCapture({ orderId: args.orderId });
   const draftRun = await runProcurementFileDraftBatch({
     orderId: args.orderId,
     limit,
@@ -251,6 +267,8 @@ export async function runProcurementAutopilot(args: {
   const sendRun = autoSend && deliverable.length
     ? await runProcurementFileDraftSendBatch({ orderId: args.orderId, limit, vendorIds: deliverable })
     : null;
+  // Quotes recorded earlier in this pass are already on the vendor rows the
+  // plan was built from, so counting the states counts them once.
   const quotes = states.filter((state) => state.hasQuote).length;
   return {
     orderId: summary.orderId,
@@ -262,30 +280,21 @@ export async function runProcurementAutopilot(args: {
     chased: chaseRun.drafted.length,
     nudgeCandidates: nudgeRun?.candidates ?? nudgePlan?.targets.length ?? 0,
     nudged: nudgeRun?.sent ?? 0,
+    quotesRecorded: quoteRun?.recorded ?? 0,
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
     // Both delivery paths count toward one failure total, so a run where every
     // follow up failed cannot report zero.
-    failed: (sendRun?.failed ?? 0) + (nudgeRun?.failed ?? 0),
+    failed: (sendRun?.failed ?? 0) + (nudgeRun?.failed ?? 0) + (quoteRun?.failed ?? 0),
     // A delivery that fails needs an operator, so it is reported next to the
-    // escalations instead of being reduced to a count.
-    failures: [
-      ...chaseRun.failures,
-      ...(nudgeRun?.outcomes ?? [])
-        .filter((outcome) => outcome.state !== "SENT" && outcome.state !== "ALREADY_SENT")
-        .map((outcome) => ({
-          vendorId: outcome.vendorId,
-          vendorName: outcome.vendorName,
-          error: outcome.error ?? "The supplier follow up failed.",
-        })),
-      ...(sendRun?.outcomes ?? [])
-        .filter((outcome) => outcome.state === "FAILED")
-        .map((outcome) => ({
-          vendorId: outcome.vendorId,
-          vendorName: outcome.vendorName,
-          error: outcome.error ?? "The supplier send failed.",
-        })),
-    ],
+    // escalations instead of being reduced to a count. A quote that cannot be
+    // written counts too, since it leaves a priced reply invisible.
+    failures: autopilotFailures({
+      chase: chaseRun.failures,
+      nudge: nudgeRun?.outcomes,
+      send: sendRun?.outcomes,
+      quote: quoteRun?.outcomes,
+    }),
     autoSend,
     escalations: autopilotEscalations(plan),
     plan,

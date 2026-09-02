@@ -77,6 +77,12 @@ const TOPIC_PATTERNS: Array<{ topic: ProcurementReplyTopic; pattern: RegExp }> =
   { topic: "DESTINATION", pattern: /\b(ship to|shipping address|destination|deliver to|where .* (ship|deliver)|freight|delivery (address|location))\b/i },
 ];
 
+// The supplier's own words only, with the quoted history of our thread cut
+// away, so nothing we wrote is read back as if the supplier had said it.
+export function supplierReplyText(body: string) {
+  return normalizeBody(body);
+}
+
 function normalizeBody(body: string) {
   const withoutQuote = body
     .replace(/\r\n?/g, "\n")

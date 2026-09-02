@@ -108,6 +108,57 @@ REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
 ON customers, bill_of_materials, orders, order_vendors
 FROM dashboard_api;
 
+-- A supplier reply that carries a price and a lead time has to land on the row
+-- the request reads its quotes from, otherwise outreach never becomes a
+-- purchase order. The dashboard role is given no update privilege on the table
+-- at all: it may only call this function, which is the database boundary that
+-- proves the row belongs to the calling customer, touches the quote column
+-- alone, and refuses a row that already holds a quote. A caller that passes
+-- another customer's order changes nothing.
+CREATE OR REPLACE FUNCTION record_order_vendor_quote(
+  p_customer_id uuid,
+  p_order_id uuid,
+  p_vendor_id uuid,
+  p_quote jsonb
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  written integer;
+BEGIN
+  IF p_customer_id IS NULL OR p_order_id IS NULL OR p_vendor_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF jsonb_typeof(p_quote) <> 'object' OR p_quote = '{}'::jsonb THEN
+    RAISE EXCEPTION 'a recorded quote must be a non empty object';
+  END IF;
+
+  UPDATE order_vendors
+  SET quote = p_quote, updated_at = now()
+  WHERE order_vendors.id = p_vendor_id
+    AND order_vendors.order_id = p_order_id
+    AND EXISTS (
+      SELECT 1
+      FROM orders
+      WHERE orders.id = p_order_id
+        AND orders.customer_id = p_customer_id
+    )
+    AND (
+      coalesce(jsonb_typeof(to_jsonb(order_vendors)->'quote'), 'null') <> 'object'
+      OR to_jsonb(order_vendors)->'quote' = '{}'::jsonb
+    );
+
+  GET DIAGNOSTICS written = ROW_COUNT;
+  RETURN written = 1;
+END
+$$;
+
+REVOKE ALL ON FUNCTION record_order_vendor_quote(uuid, uuid, uuid, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION record_order_vendor_quote(uuid, uuid, uuid, jsonb) TO dashboard_api;
+
 REVOKE DELETE, TRUNCATE, REFERENCES, TRIGGER
 ON procurement_api_idempotency
 FROM dashboard_api;
@@ -124,7 +175,16 @@ BEGIN
     OR has_table_privilege('dashboard_api', 'orders', 'DELETE')
     OR has_table_privilege('dashboard_api', 'orders', 'TRUNCATE')
     OR has_table_privilege('dashboard_api', 'order_vendors', 'INSERT')
-    OR has_table_privilege('dashboard_api', 'order_vendors', 'UPDATE')
+    OR has_column_privilege('dashboard_api', 'order_vendors', 'name', 'UPDATE')
+    OR has_column_privilege('dashboard_api', 'order_vendors', 'status', 'UPDATE')
+    OR has_column_privilege('dashboard_api', 'order_vendors', 'contact_email', 'UPDATE')
+    OR has_column_privilege('dashboard_api', 'order_vendors', 'research', 'UPDATE')
+    OR has_column_privilege('dashboard_api', 'order_vendors', 'quote', 'UPDATE')
+    OR NOT has_function_privilege(
+      'dashboard_api',
+      'record_order_vendor_quote(uuid, uuid, uuid, jsonb)',
+      'EXECUTE'
+    )
     OR has_table_privilege('dashboard_api', 'order_vendors', 'DELETE')
     OR has_table_privilege('dashboard_api', 'order_vendors', 'TRUNCATE')
     OR has_table_privilege('dashboard_api', 'procurement_api_idempotency', 'DELETE')

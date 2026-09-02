@@ -560,7 +560,34 @@ assert(communicationLedgerSql.includes("has_schema_privilege('bourne_supply_chai
 assert(!/GRANT\s+(?:INSERT|UPDATE|DELETE|TRUNCATE)[^;]*ON\s+(?:public\.)?procurement_communication_messages\s+TO\s+dashboard_api/i.test(communicationLedgerSql));
 assert(!/GRANT\s+(?:CREATE|UPDATE|DELETE|TRUNCATE)[^;]*TO\s+bourne_supply_chain/i.test(communicationLedgerSql));
 assert(!/GRANT\s+UPDATE(?:\s*\([^)]*\))?\s+ON\s+orders\b/i.test(provisioningSql));
-assert(!/GRANT\s+(?:[^;]*,\s*)?UPDATE(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));
+// A recorded supplier quote has to land on the supplier row, but the shared
+// dashboard role gets no update privilege on that table, because a column grant
+// alone would let one tenant price another tenant's supplier. The write is a
+// security definer function that checks the order belongs to the calling
+// customer, so the tenant boundary is enforced by the database.
+assert(
+  !/GRANT\s+(?:[^;]*,\s*)?UPDATE(?:\s*\([^)]*\))?\s+ON\s+(?:public\.)?order_vendors\b/i.test(provisioningSql),
+  "The dashboard role never gains a direct update privilege on a supplier row.",
+);
+assert(provisioningSql.includes(
+  "GRANT EXECUTE ON FUNCTION record_order_vendor_quote(uuid, uuid, uuid, jsonb) TO dashboard_api",
+));
+assert(provisioningSql.includes(
+  "REVOKE ALL ON FUNCTION record_order_vendor_quote(uuid, uuid, uuid, jsonb) FROM PUBLIC",
+));
+assert(
+  /SECURITY DEFINER/.test(provisioningSql) && /SET search_path = public/.test(provisioningSql),
+  "The quote function runs as its owner with a fixed search path, so it cannot be hijacked by the caller.",
+);
+assert(
+  /AND orders\.customer_id = p_customer_id/.test(provisioningSql),
+  "The quote write only lands on a supplier row whose order belongs to the calling customer.",
+);
+assert(provisioningSql.includes("has_column_privilege('dashboard_api', 'order_vendors', 'quote', 'UPDATE')"));
+assert(provisioningSql.includes(
+  "NOT has_function_privilege(",
+));
+assert(provisioningSql.includes("has_column_privilege('dashboard_api', 'order_vendors', 'name', 'UPDATE')"));
 assert(!/GRANT\s+INSERT(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));
 
 console.log("Procurement workflow contract passed.");

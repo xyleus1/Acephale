@@ -670,8 +670,69 @@ async function main() {
       "UPDATE orders SET progress = 'tampered', lease_owner = 'browser', decision_snapshot = '{}'::jsonb, gmail_thread_id = 'browser' WHERE id = $1::uuid",
       created.orderId,
     ));
+    // Recording what a supplier priced is the one supplier write the dashboard
+    // role may perform, and it may only land on a row that holds no quote yet,
+    // so a rerun and an operator entered quote both survive it.
+    const quoteVendorRows = await owner.$queryRawUnsafe<Array<{ id: string }>>(
+      "INSERT INTO order_vendors (order_id, name, status) VALUES ($1::uuid, $2, $3) RETURNING id::text AS id",
+      created.orderId,
+      "Quoting supplier",
+      "shortlisted",
+    );
+    const quoteVendorId = quoteVendorRows[0]?.id;
+    assert(quoteVendorId);
+    // The dashboard role cannot update the table at all, so a quote is recorded
+    // only through the tenant scoped function, and the customer the function is
+    // called for is checked by the database rather than by the caller.
+    const quoteWrite = "SELECT record_order_vendor_quote($1::uuid, $2::uuid, $3::uuid, $4::jsonb) AS recorded";
+    const recordQuote = async (customerId: string, quote: unknown) => {
+      const rows = await dashboard.$queryRawUnsafe<Array<{ recorded: boolean | null }>>(
+        quoteWrite,
+        customerId,
+        created.orderId,
+        quoteVendorId,
+        JSON.stringify(quote),
+      );
+      return rows[0]?.recorded;
+    };
     await permissionDenied(() => dashboard.$executeRawUnsafe(
-      "UPDATE order_vendors SET quote = '{}'::jsonb WHERE order_id = $1::uuid",
+      "UPDATE order_vendors SET quote = '{}'::jsonb WHERE id = $1::uuid",
+      quoteVendorId,
+    ));
+    assert.equal(
+      await recordQuote(customerB, { unitPrice: { amount: 1, currency: "USD" }, leadTimeDays: 1 }),
+      false,
+      "A quote written for another customer changes nothing, so one tenant can never price another tenant's supplier.",
+    );
+    const foreignAttempt = await owner.$queryRawUnsafe<Array<{ quote: string | null }>>(
+      "SELECT quote::text AS quote FROM order_vendors WHERE id = $1::uuid",
+      quoteVendorId,
+    );
+    assert.ok(
+      foreignAttempt[0]?.quote === null || foreignAttempt[0]?.quote === "{}",
+      "The refused cross tenant write leaves the supplier row as it was.",
+    );
+    assert.equal(
+      await recordQuote(customerA, { unitPrice: { amount: 12.4, currency: "USD" }, leadTimeDays: 21 }),
+      true,
+      "The owning customer can record a supplier stated quote, otherwise outreach never becomes a purchase order.",
+    );
+    assert.equal(
+      await recordQuote(customerA, { unitPrice: { amount: 99, currency: "USD" }, leadTimeDays: 5 }),
+      false,
+      "A row that already holds a quote is never overwritten.",
+    );
+    await assert.rejects(
+      () => recordQuote(customerA, {}),
+      "An empty quote is refused, so a recorded quote always carries supplier stated facts.",
+    );
+    const storedQuote = await owner.$queryRawUnsafe<Array<{ amount: string | null }>>(
+      "SELECT quote->'unitPrice'->>'amount' AS amount FROM order_vendors WHERE id = $1::uuid",
+      quoteVendorId,
+    );
+    assert.equal(storedQuote[0]?.amount, "12.4", "The first recorded quote stays as it was written.");
+    await permissionDenied(() => dashboard.$executeRawUnsafe(
+      "UPDATE order_vendors SET quote = '{}'::jsonb, name = 'Renamed' WHERE order_id = $1::uuid",
       created.orderId,
     ));
     await permissionDenied(() => dashboard.$executeRawUnsafe(

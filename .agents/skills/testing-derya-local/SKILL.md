@@ -98,6 +98,35 @@ description: How to bring up derya-crm locally (app DB, workflow DB, login allow
   below roughly 1000px the Subject column is clipped with no way to scroll to it. Check this at 900px and
   600px on any change to that table.
 
+## Cold supplier follow ups and reconciliation (procurement-supplier-nudges)
+
+- Endpoint `/api/admin/procurement-supplier-nudges` uses the operator secret. `GET ?orderId=` plans only,
+  `POST {orderId, confirm: "SEND SUPPLIER FILES"}` sends, `POST {orderId, action: "reconcile"}` resolves
+  uncertain reservations and needs no confirmation phrase. Pass the secret as a header, not `?secret=`,
+  because the Next dev access log records the full query string.
+- A follow up round is derived from the count of `RESERVED`/`RECORDED` `procurement-rfq-nudge:<order>:<round>:<vendor>`
+  reservations, so seeding or deleting those rows is the fastest way to move a vendor between rounds.
+  Deleting the recorded `EmailMessage` while leaving the reservation `RECORDED` does not reproduce
+  `ALREADY_SENT`; that state is a defensive concurrency branch (an existing RECORDED reservation for the
+  round being claimed) and is not reachable from a single sequential run.
+- Duplicate protection is easy to prove for real: fire two confirmed POSTs at the same eligible vendor at
+  once. One returns `SENT`, the other `BLOCKED` with "This pooled delivery is already in progress...",
+  and exactly one message plus one captured `.eml` exists afterwards.
+- Reconciliation only picks reservations whose `updatedAt` is older than 10 minutes and orders by
+  `updatedAt ASC`. Prisma `@updatedAt` overwrites any value you set through the client, so backdate with
+  raw SQL. An uncertain outcome increments `attemptCount`, which refreshes `updatedAt` and rotates the
+  reservation to the back of the queue, so an immediate second reconcile call legitimately reports
+  `reconciled: 0` while `remaining` still counts the slot.
+- Local provider interception that works: map `smtp.gmail.com`/`imap.gmail.com` to 127.0.0.1 in
+  `/etc/hosts`, run a STARTTLS SMTP sink on 587 and a fake IMAP server on 993 with a locally issued cert
+  (SANs for both host names) and `NODE_EXTRA_CA_CERTS` pointing at the CA. Encode outcomes in addresses:
+  a rejecting sender mailbox gives REJECTED, a recipient prefix returning 451 gives UNKNOWN, and a
+  recipient prefix that holds DATA for 20 s opens a mid-run window for send-time recheck tests. Reconcile
+  returns SENT only when a matching `Message-ID` file exists in the fake `\Sent` store, otherwise NOT_FOUND.
+- Workflow fixtures: `order_vendors` is a view and cannot be updated directly (`permission denied for view`);
+  update the underlying `"OrderSupplier"` table. `EmailMessage` has no `updatedAt` column, and
+  `EmailThread` has no `accountId` (join through `EmailMessage.accountId`).
+
 ## Supply OS UI walkthroughs and audits
 
 - Two independent supplier surfaces exist for the same request: the sourcing request detail (Compare) and

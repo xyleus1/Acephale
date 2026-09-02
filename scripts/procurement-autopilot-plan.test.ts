@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   autopilotEscalations,
+  autopilotFailures,
   autopilotRequestStage,
   planAutopilotVendorAction,
   type AutopilotVendorState,
@@ -151,6 +154,64 @@ assert.equal(
   ]),
   0,
   "A newer supplier reply resets the follow up count.",
+);
+
+// A quote the workflow database refuses to write leaves a priced reply unusable
+// to the request, so the pass names the supplier it happened to instead of
+// reporting a clean run.
+assert.deepEqual(
+  autopilotFailures({
+    chase: [],
+    quote: [
+      {
+        vendorId: "vendor-7",
+        vendorName: "Saturn Electronics",
+        state: "FAILED",
+        error: "The supplier quote could not be recorded.",
+      },
+      { vendorId: "vendor-8", vendorName: "Telan Circuits", state: "RECORDED", error: null },
+    ],
+  }),
+  [
+    {
+      vendorId: "vendor-7",
+      vendorName: "Saturn Electronics",
+      error: "The supplier quote could not be recorded.",
+    },
+  ],
+  "A failed quote write reaches the operator with the supplier it belongs to.",
+);
+
+assert.deepEqual(
+  autopilotFailures({
+    chase: [],
+    quote: [{ vendorId: "vendor-9", vendorName: "Bay Area Circuits", state: "FAILED" }],
+  }),
+  [{ vendorId: "vendor-9", vendorName: "Bay Area Circuits", error: "The supplier quote could not be recorded." }],
+  "A failure carrying no message still reports an opaque reason rather than nothing.",
+);
+
+assert.deepEqual(
+  autopilotFailures({
+    chase: [{ vendorId: "vendor-1", vendorName: "Arctic Circuits", error: "The supplier chase failed." }],
+    nudge: [{ vendorId: "vendor-2", vendorName: "Xpress", state: "SENT", error: null }],
+    send: [{ vendorId: "vendor-3", vendorName: "ubersmt", state: "SENT", error: null }],
+    quote: [{ vendorId: "vendor-4", vendorName: "Polymer Laboratories", state: "ALREADY_RECORDED", error: null }],
+  }),
+  [{ vendorId: "vendor-1", vendorName: "Arctic Circuits", error: "The supplier chase failed." }],
+  "Work that succeeded is never reported as a failure.",
+);
+
+// The capture pass is the only writer of a supplier quote, so the loop has to
+// hand its failures on rather than counting them and dropping them.
+const autopilotSource = readFileSync(resolve(__dirname, "../src/lib/procurement-autopilot.ts"), "utf8");
+assert.ok(
+  /quote:\s*quoteRun\?\.outcomes/.test(autopilotSource),
+  "The loop passes quote capture outcomes into its failure report.",
+);
+assert.ok(
+  /quoteRun\?\.failed \?\? 0/.test(autopilotSource),
+  "A failed quote write counts toward the failure total of the pass.",
 );
 
 console.log("procurement autopilot plan checks passed");

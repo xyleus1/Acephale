@@ -1,5 +1,93 @@
 # Engineering Log
 
+## 2026-09-02: Quote write tenant boundary and per message provenance
+
+- The shared `dashboard_api` role lost its update privilege on `order_vendors`.
+  Quotes are recorded by executing `record_order_vendor_quote`, a security
+  definer function with a fixed search path that writes the quote column only,
+  requires the order to belong to the calling customer, refuses an empty quote,
+  and refuses a row that already holds a quote. The migrated database test
+  proves a direct update is denied, a foreign customer's call changes nothing,
+  the owning customer's call lands, and a second call is refused.
+- `mergeSupplierQuoteThread` records the message each fact came from and the
+  evidence each contributing reply supplied, and the capture path stores both,
+  so provenance survives a merge across replies.
+- A refusal binds its own clause, so a refused amount is not read as a price
+  while a replacement price elsewhere in the sentence still is.
+- Labelled unit and total cues run through the same ancillary charge filter as
+  bare amounts, so a tooling total or a per unit freight charge is not a price.
+- An adversative turn is read for direction: a refusal before an amount refuses
+  that amount, a refusal after one takes it back, and a new amount after a
+  refusal is a counter offer. So "we cannot meet $10 but we can do $12.50"
+  records $12.50, "$10 per unit, but we cannot commit to that price" records
+  nothing, and "but we cannot cover freight" leaves the price standing.
+- A withdrawal now binds inside its own message too: facts stated before it are
+  cleared and the withdrawal sentence itself is not read, so "unit price $7.50,
+  lead time 12 days. That quotation is withdrawn" records nothing while a
+  replacement stated after the withdrawal still records.
+- A refusal reaches back through the thread merge, not only through its own
+  reading: the amounts a newer reply refuses may not be restored from an older
+  reply, and a supplier refusing their own price with no replacement leaves no
+  older price standing, while a refusal about freight or another term leaves it
+  alone and a price stated with the refusal still records.
+- A reply subject counts as supplier evidence only when the supplier wrote it.
+  The capture passes the outbound subjects of the thread into the reading, and a
+  heading matching one of them once reply prefixes are stripped is our own RFQ
+  line quoted back, so an RFQ naming a target price cannot complete a reply that
+  states nothing but a lead time. A heading the supplier rewrote is read for
+  facts, and a subject of unknown provenance is treated as ours.
+- A question about our target binds its own clause, so "your budget of $4.50 is
+  below our cost, our price is $6.20 per unit" records $6.20, while a disclaimer
+  such as "indicative only" or "ballpark" governs every amount in its sentence
+  whatever clause each one sits in.
+- Quote capture runs before the autopilot plan, so a supplier whose newest
+  reply carries a quote is read as quoted in the same pass and is neither
+  chased nor answered.
+- Repeated separators of one kind are grouping, since a number holds a single
+  decimal point, so "$1,234,567" and "EUR 1.234.567" both read as the million
+  they name instead of being dropped.
+- Candidate selection overlays the office email records on the projected
+  response count, because a reply this app delivered may never appear in the
+  workflow ledger. Without it a locally synced priced reply was never read.
+- A later statement inside one reply supersedes the earlier one, the same rule
+  the thread merge applies across replies, so "unit price $7.50 ... correction:
+  unit price $7.80" records $7.80 for price, total, quantity, MOQ, and lead
+  time alike.
+- Three digits after a single separator are thousands only when the integer
+  part is one to three digits and does not lead with a zero, so "$0.125" and
+  "EUR 0,125" read as fractions of a unit while "$1,240" still reads whole.
+- A write that failed no longer sits behind the page cursor:
+  `quoteCursorBeforeFailures` stops the returned cursor before the earliest
+  failed supplier, so a database outage costs a retry and not a lost quote.
+
+## 2026-09-02: Quote capture hardening
+
+- Quote writes go through the workflow role, so the role contract now grants
+  `UPDATE (quote, updated_at) ON order_vendors` to `dashboard_api` and keeps
+  every other column denied. A migrated database test proves the first write
+  lands, a second is refused by the no-overwrite predicate, and an update of
+  unrelated columns is denied.
+- Commercial facts are matched inside their own clause, so a nearby freight,
+  setup, tax, or warranty amount cannot pass as a price and a validity or
+  payment period cannot pass as a lead time.
+- A withdrawal or expiry in a newer message ends the merge instead of falling
+  back to the price it retracted.
+- Respondents are paged by vendor id with a returned cursor, so consecutive
+  bounded passes cover every reply rather than the same first forty.
+
+## 2026-08-31: Supplier quote capture
+
+- A supplier reply is read into commercial facts deterministically, with the
+  supplier sentence kept as evidence, so a recorded price is auditable and no
+  model invents one.
+- A purchase order needs a price and a date, so only a reading holding both is
+  recorded. A price with no lead time, a lead time with no price, a budget
+  question, a ballpark, and a disclaimed figure are reported and left alone.
+- The write targets only supplier rows holding no quote, so a rerun records
+  nothing twice and an operator recorded quote survives.
+- The capture reads conversations only for suppliers that answered, which keeps
+  a request of several hundred silent suppliers inside the route budget.
+
 ## 2026-09-02: Outreach campaigns page through the whole audience
 
 - `runOutreachCampaignBatch` sliced the audience to `dailyCap` rows before
@@ -8567,6 +8655,16 @@ Use this file for chronological implementation notes that future agents should s
   company names carry native titles, and loading is separated from failure on
   the company profile and company index.
 
+## 2026-09-02 Supplier quote reading corrections
+
+- `procurement-supplier-quote-reading.ts`: grouped thousands need a full group
+  of three, amounts carry their position, and the amount nearest a unit or total
+  cue is the one that cue labels. `mergeSupplierQuoteReadings` folds a thread of
+  inbound readings newest first.
+- `procurement-supplier-quote.ts`: candidates read the whole inbound thread, and
+  an already recorded supplier is listed without a read so the run budget stays
+  available for suppliers that still need capture.
+
 ### 2026-09-02 - Operator office mail surface
 
 - Campaign and demo outbound persistence now invokes the existing
@@ -8593,3 +8691,22 @@ Use this file for chronological implementation notes that future agents should s
 - `awaiting_shortlist_approval` progress no longer claims "0 supplier
   candidates" when the caller has no candidate count, which is the case for the
   queue projection.
+
+## 2026-09-02: Supplier quote reading, denominators, questions, and durations
+
+- A unit price needs a unit denominator. `UNIT_PRICE_CUE` allowed the noun after
+  `per` to be absent, so "$100 per order" and "$400 per shipment" priced the
+  whole job yet read as a price per piece. `per` and the slash form now require
+  an accepted unit noun, while standalone "each" and "apiece" still count.
+- A question states nothing, so the interrogative guard runs before any fact is
+  read: "can you accept delivery in three weeks?" no longer sets a lead time,
+  MOQ, or quantity. A non-question disclaimer keeps its old scope, suppressing
+  the amounts beside it while leaving a lead time the supplier stated.
+- A duration a supplier attaches to a warranty, a price validity, payment
+  terms, or storage is not a delivery promise, so `NON_DELIVERY_DURATION`
+  rejects the clause: "delivery includes a 12 month warranty" is not a 360 day
+  lead time. "Delivery in 3 weeks" and "lead time is 20 days" are unchanged.
+- One autopilot pass now sweeps quote capture with its own cursor across
+  bounded pages, so a request whose first page of respondents stays unquoted
+  cannot hide the priced replies behind them from every later pass. A failed
+  write ends the sweep, because the cursor rewound to that retry.

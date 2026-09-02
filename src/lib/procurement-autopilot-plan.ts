@@ -97,3 +97,49 @@ export function autopilotEscalations(
     .filter((entry) => entry.action.kind === "ESCALATE")
     .map((entry) => ({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason: entry.action.reason }));
 }
+
+export type AutopilotFailure = {
+  vendorId: string;
+  vendorName: string;
+  error: string;
+};
+
+export type AutopilotOutcome = {
+  vendorId: string;
+  vendorName: string;
+  state: string;
+  error?: string | null;
+};
+
+// Every pass of the loop can fail in a way an operator has to see: a delivery
+// that never left, or a priced reply that could not be recorded and so stays
+// invisible to the request. Each source names the work that failed, and the
+// stored message is the opaque one, so a driver or provider error never leaks.
+export function autopilotFailures(args: {
+  chase: readonly AutopilotFailure[];
+  nudge?: readonly AutopilotOutcome[];
+  send?: readonly AutopilotOutcome[];
+  quote?: readonly AutopilotOutcome[];
+}): AutopilotFailure[] {
+  const collected = (
+    outcomes: readonly AutopilotOutcome[] | undefined,
+    failed: (state: string) => boolean,
+    fallback: string,
+  ) => (outcomes ?? [])
+    .filter((outcome) => failed(outcome.state))
+    .map((outcome) => ({
+      vendorId: outcome.vendorId,
+      vendorName: outcome.vendorName,
+      error: outcome.error ?? fallback,
+    }));
+  return [
+    ...args.chase,
+    ...collected(
+      args.nudge,
+      (state) => state !== "SENT" && state !== "ALREADY_SENT",
+      "The supplier follow up failed.",
+    ),
+    ...collected(args.send, (state) => state === "FAILED", "The supplier send failed."),
+    ...collected(args.quote, (state) => state === "FAILED", "The supplier quote could not be recorded."),
+  ];
+}

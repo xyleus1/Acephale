@@ -1,5 +1,77 @@
 # AI Handoff
 
+## 2026-09-02: Quote writes are tenant scoped and quote facts keep their reply
+
+- `dashboard_api` is shared by every tenant, so a column update grant on
+  `order_vendors` would have let one customer's request write another's supplier
+  row. The role now holds no update privilege there and may only execute
+  `record_order_vendor_quote(customer_id, order_id, vendor_id, quote)`, a
+  security definer function that checks the order belongs to the calling
+  customer, writes the quote column alone, refuses an empty quote, and refuses a
+  row that already holds one. Cross tenant rejection is proven against a
+  migrated database.
+- Provisioning note: run `scripts/sql/procurement-dashboard-api.sql` against the
+  workflow database before capture runs, otherwise the function does not exist
+  and every write fails.
+- A quote merged across replies records which reply supplied each fact and the
+  sentences each reply supplied, so a price read from an older message is no
+  longer credited to the newest one.
+- A refused amount is not a price: a clause carrying "cannot offer", "unable to
+  quote", or similar yields no price, while a replacement price in another
+  clause of the same sentence still counts.
+- Ancillary charge filtering now applies to labelled amounts too, so "tooling
+  total is $1250" and "freight is $80 each" never become the product price.
+- A withdrawal takes back what precedes it inside the same message, not only in
+  an older one, and a replacement stated after it is still read.
+- Inside one reply the later statement of a fact wins, so a correction written
+  further down the message is what gets recorded.
+- A fractional unit price such as $0.125 reads as a fraction, while a grouped
+  thousand such as $1,240 still reads whole.
+- A supplier whose reply exists only in the office email records is now a quote
+  candidate: the local RFQ outreach summary is overlaid on the projected
+  response count before the respondent page is built.
+- To test: `npm run test:procurement-supplier-quote-reading`,
+  `npm run test:procurement-workflow` and `npm run test:procurement-workflow-db`
+  against a migrated database.
+
+## 2026-09-02: Quote capture writes under the production role and pages its work
+
+- The capture wrote through `dashboard_api`, whose contract denies updates, so
+  recording would have failed in production. `scripts/sql/procurement-dashboard-api.sql`
+  now grants that role update on `order_vendors (quote, updated_at)` and nothing
+  else, and the role contract still rejects every other column. Verified against
+  a migrated database in `scripts/procurement-workflow-database.test.ts`.
+- Reading associates a fact with the label in its own clause: freight, tooling,
+  setup, tax, and warranty amounts never become a unit or total price, and a
+  validity, warranty, or payment period never becomes a lead time.
+- A newer withdrawal, expiry, or retraction stops the thread merge, so an older
+  price is never restored under a supplier who pulled it.
+- Respondents are read in id order and paged by `quoteCapturePage` in
+  `src/lib/procurement-supplier-quote-page.ts`, which returns a cursor, so a
+  request with more respondents than one pass may read is worked through instead
+  of rereading the same first batch. Already quoted suppliers cost no read.
+- To test: `npm run test:procurement-supplier-quote-reading` and
+  `npm run test:procurement-workflow-db` against a migrated database.
+
+## 2026-08-31: Supplier prices are read out of replies and recorded
+
+- Replies were arriving while requests still reported zero quotes, because a
+  quote only counts once it sits on the supplier row and nothing ever wrote it.
+- New: `src/lib/procurement-supplier-quote-reading.ts` reads a supplier reply
+  deterministically into unit price, total price, quantity, minimum order
+  quantity, and lead time in days, keeping the supplier sentence each fact came
+  from as evidence. A budget question, a ballpark, a disclaimed figure, and our
+  own quoted history are never read as a price.
+- New: `src/lib/procurement-supplier-quote.ts` and the operator command
+  `/api/admin/procurement-supplier-quotes` (`GET` reports what each reply
+  carries, `POST` records). Only a reading with a price plus a lead time is
+  recorded, only onto rows holding no quote, so reruns are idempotent and an
+  operator recorded quote is never overwritten. The autopilot runs the capture
+  each pass and reports `quotesRecorded`.
+- To test: `npm run test:procurement-supplier-quote-reading`, then run the
+  `GET` plan on a request with priced replies and confirm partial readings are
+  reported but not recorded.
+
 ## 2026-09-02: Outreach campaigns page through the whole audience
 
 - `runOutreachCampaignBatch` now excludes records that already have a ledger
@@ -11567,3 +11639,18 @@ Verification caveat:
   `npm run test:supply-os-active-sourcing`,
   `npm run test:supply-os-sourcing-projection`,
   `npm run test:supply-os-panel-alerts`, and `npm run check:product-copy`.
+
+## 2026-09-02 Supplier quote reading, review follow up
+
+- Amount parsing no longer truncates an ungrouped four digit price: the grouped
+  form requires at least one group of three digits, so `1250` reads as 1250.
+- A price is chosen by proximity to its label, so freight, tooling, setup, or
+  tax in the same sentence never replaces the unit or total price.
+- A supplier thread is read as a whole, newest inbound message first: the newest
+  statement of a fact wins and an older message fills what the newest omits, so
+  a price in one message and a lead time in the next still form a quote. Every
+  contributing supplier sentence stays in the evidence.
+- A supplier that already holds a quote is reported without a conversation read
+  and does not consume the per run capture budget.
+- Verified with `npm run test:procurement-supplier-quote-reading` and
+  `npx tsc --noEmit`.
