@@ -1,5 +1,11 @@
 # Engineering Log
 
+## 2026-09-02: Reject activation of closed outreach campaigns
+
+- Activation now requires `DRAFT` status before any approval work. Cancelled
+  and completed campaigns return a status-specific blocker, while pause and
+  resume continue using their existing transitions.
+
 ## 2026-09-02: Campaign variants and authenticated ops sending
 
 - Added validated campaign variants with deterministic campaign and record

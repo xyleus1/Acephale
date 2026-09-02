@@ -6,6 +6,7 @@ import {
   asciiCampaignSenderDisplayName,
   campaignBlockers,
   campaignDefaultName,
+  campaignDraftOnlyBlocker,
   campaignPersonalizationMap,
   campaignRevisionHash,
   campaignRevisionMatches,
@@ -516,6 +517,8 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
 
 export async function activateCampaign(input: { officeId: string; campaignId: string; userId: string | null; expectedRevisionHash?: string }) {
   const campaign = await loadCampaign(input.officeId, input.campaignId);
+  const draftOnlyBlocker = campaignDraftOnlyBlocker(campaign.status);
+  if (draftOnlyBlocker) return { activated: false, blockers: [draftOnlyBlocker] };
   const { records, filters } = await eligibleRecords(campaign);
   const variants = normalizeCampaignVariants(campaign.variants);
   const audiencePersonalization = campaignPersonalizationMap({

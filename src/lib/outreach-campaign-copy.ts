@@ -295,6 +295,11 @@ export function campaignRevisionMatches(expected: string | undefined, actual: st
   return Boolean(expected && actual && expected === actual);
 }
 
+export function campaignDraftOnlyBlocker(status: string) {
+  if (status === "DRAFT") return null;
+  return `This campaign is ${status.toLowerCase()}, not a draft. Plan it again.`;
+}
+
 export function campaignReplyCounts(input: {
   replies: readonly { threadId: string; count: number }[];
   threadToCampaign: ReadonlyMap<string, { campaignId: string; variantKey: string | null }>;

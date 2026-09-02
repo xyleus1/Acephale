@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   campaignBlockers,
   campaignDefaultName,
+  campaignDraftOnlyBlocker,
   campaignPersonalizationMap,
   campaignReplyCounts,
   campaignRevisionHash,
@@ -49,6 +50,15 @@ assert.equal(asciiCampaignSenderDisplayName("Wens Österreich"), null);
 assert.equal(asciiCampaignSenderDisplayName(""), null);
 assert.equal(asciiCampaignSenderDisplayName("   "), null);
 assert.deepEqual(storedCampaignVariants({ malformed: true }), []);
+assert.equal(campaignDraftOnlyBlocker("DRAFT"), null);
+assert.equal(
+  campaignDraftOnlyBlocker("CANCELLED"),
+  "This campaign is cancelled, not a draft. Plan it again.",
+);
+assert.equal(
+  campaignDraftOnlyBlocker("COMPLETED"),
+  "This campaign is completed, not a draft. Plan it again.",
+);
 const testOfficeSlugify = (value: string) => value.toLowerCase().replace(/\s+/g, "-");
 assert.equal(resolveCampaignOffice({
   identifier: "Acme Foods",

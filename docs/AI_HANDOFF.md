@@ -1,5 +1,12 @@
 # AI Handoff
 
+## 2026-09-02: Outreach activation is draft-only
+
+- `activateCampaign` now rejects cancelled, completed, or any other
+  non-draft campaign before recomputing approval state. Pause and resume keep
+  their dedicated transitions, so a stale approval hash cannot reactivate a
+  closed campaign.
+
 ## 2026-09-02: Outreach campaign variants and ops actions
 
 - Campaign drafts may store up to four equal-split variants. Keys are unique,
