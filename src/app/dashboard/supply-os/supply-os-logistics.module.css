@@ -293,6 +293,10 @@
   margin: 0;
 }
 
+.commandState[data-tone="problem"] > svg {
+  color: #a76b45;
+}
+
 .commandState h1 {
   color: var(--ink);
   font-size: 22px;
@@ -1579,6 +1583,37 @@
   text-align: left;
 }
 
+.activeApprovalNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-left: 2px solid #a76b45;
+  color: #7c4d31;
+  background: #f9f5f1;
+  font: 500 11px/1.45 "Instrument Sans", sans-serif;
+}
+
+.activeSourcingTable th:last-child,
+.activeSourcingTable td:last-child:not([colspan]) {
+  position: sticky;
+  right: 0;
+  box-shadow: inset 1px 0 0 var(--line);
+  background: var(--panel);
+}
+
+.activeSourcingTable th:last-child {
+  z-index: 3;
+  background: #f8faf9;
+}
+
+.activeSourcingTable tr[data-active="true"] td:last-child:not([colspan]),
+.activeSourcingTable tr:hover td:last-child:not([colspan]) {
+  background: var(--panel-selected);
+}
+
 .activeSourcingTable td:first-child > button {
   width: 100%;
   min-height: 61px;
@@ -2769,6 +2804,30 @@
 
 .inventoryTable tr:hover td,
 .inventoryTable tr[data-active="true"] td {
+  background: var(--panel-selected);
+}
+
+.inventorySourceState {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventoryTable th:last-child,
+.inventoryTable td:last-child:not([colspan]) {
+  position: sticky;
+  right: 0;
+  box-shadow: inset 1px 0 0 var(--line);
+  background: var(--panel);
+}
+
+.inventoryTable th:last-child {
+  z-index: 3;
+  background: #f8faf9;
+}
+
+.inventoryTable tr:hover td:last-child:not([colspan]),
+.inventoryTable tr[data-active="true"] td:last-child:not([colspan]) {
   background: var(--panel-selected);
 }
 
@@ -5069,6 +5128,21 @@
   color: var(--ink);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.inspectorVerifyFacility {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--panel);
+  font-size: 11px;
+  font-weight: 620;
+  text-decoration: none;
 }
 
 .inspectorRatePlan,

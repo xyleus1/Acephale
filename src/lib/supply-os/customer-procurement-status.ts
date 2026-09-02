@@ -1,6 +1,8 @@
-import { PROCUREMENT_ACTIVE_STATUSES } from "@/lib/procurement-status";
+import { PROCUREMENT_POLLING_STATUSES } from "@/lib/procurement-status";
 
 export const CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS = 7_000;
+
+export const CUSTOMER_PROCUREMENT_MAX_CONSECUTIVE_FAILURES = 4;
 
 export type CustomerProcurementPhase = "researching" | "compare" | "procure" | "attention";
 
@@ -75,6 +77,7 @@ export function startCustomerProcurementPolling<T extends { status: string }>({
   let stopped = false;
   let inFlight = false;
   let lastStatus = initialStatus;
+  let failures = 0;
   let timer: unknown = null;
 
   const tick = () => {
@@ -83,20 +86,24 @@ export function startCustomerProcurementPolling<T extends { status: string }>({
     void load()
       .then((detail) => {
         if (stopped) return;
+        failures = 0;
         lastStatus = detail.status;
         onDetail(detail);
       })
       .catch((error: unknown) => {
-        if (!stopped) onError(error);
+        if (stopped) return;
+        failures += 1;
+        onError(error);
       })
       .finally(() => {
         inFlight = false;
-        if (!stopped && PROCUREMENT_ACTIVE_STATUSES.has(lastStatus)) {
-          timer = schedule(() => {
-            timer = null;
-            tick();
-          }, intervalMs);
-        }
+        if (stopped) return;
+        const retrying = failures > 0 && failures <= CUSTOMER_PROCUREMENT_MAX_CONSECUTIVE_FAILURES;
+        if (!retrying && !PROCUREMENT_POLLING_STATUSES.has(lastStatus)) return;
+        timer = schedule(() => {
+          timer = null;
+          tick();
+        }, intervalMs);
       });
   };
 

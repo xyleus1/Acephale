@@ -522,14 +522,14 @@ export function SupplyInventoryWorkspace({
                       <span className={styles.inventoryStatusDot} />
                       <span>
                         <small>{`NEW-${String(index + 1).padStart(3, "0")}`}</small>
-                        <strong>{request.title}</strong>
-                        <em>{draft?.specification ?? request.requestText}</em>
+                        <strong title={request.title}>{request.title}</strong>
+                        <em title={draft?.specification ?? request.requestText}>{draft?.specification ?? request.requestText}</em>
                       </span>
                     </button>
                   </td>
                   <td>{draft?.quantity && draft.unit ? `${draft.quantity.toLocaleString("en-US")} ${draft.unit}` : "Not set"}</td>
                   <td>{draft?.needByDate ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${draft.needByDate}T12:00:00Z`)) : "Not set"}</td>
-                  <td>{request.status}</td>
+                  <td className={styles.inventorySourceState} title={request.status}>{request.status}</td>
                   <td>
                     <div className={styles.sourcingRowActions}>
                       <button
@@ -558,22 +558,32 @@ export function SupplyInventoryWorkspace({
             {customerProcurementOrders.map((request) => {
               const item = customerProcurementItem(request);
               const order = customerProcurementOrderState(request);
+              const sourceState = PROCUREMENT_APPROVAL_STATUSES.has(request.status)
+                ? "Shortlist under review"
+                : customerProcurementStatusLabel(request.status);
+              const sourceStateDetail = customerProcurementProgress(request.status, 0, request.progress);
               return (
                 <tr key={request.id} data-status="request">
                   <td>
                     <button type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
                       <span className={styles.inventoryStatusDot} />
-                      <span><small>{item.sku}</small><strong>{request.material}</strong><em>{request.specification ?? "Specification not provided"}</em></span>
+                      <span><small>{item.sku}</small><strong title={request.material}>{request.material}</strong><em title={request.specification ?? undefined}>{request.specification ?? "Specification not provided"}</em></span>
                     </button>
                   </td>
                   <td>{request.quantity.toLocaleString("en-US")} {request.unit}</td>
                   <td>{request.neededBy ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${request.neededBy}T12:00:00Z`)) : "Not set"}</td>
-                  <td>{PROCUREMENT_APPROVAL_STATUSES.has(request.status)
-                    ? "Shortlist under review"
-                    : `${customerProcurementStatusLabel(request.status)}: ${customerProcurementProgress(request.status, 0, request.progress)}`}</td>
+                  <td className={styles.inventorySourceState} title={`${sourceState}. ${sourceStateDetail}`}>{sourceState}</td>
                   <td>
                     <button className={styles.sourcingQueueAction} type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
-                      {request.status === "new" ? "Start sourcing" : request.status === "needs_attention" ? "Resolve blocker" : ["researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
+                      {request.status === "new"
+                        ? "Start sourcing"
+                        : request.status === "needs_attention"
+                          ? "Resolve blocker"
+                          : request.status === "awaiting_shortlist_approval"
+                            ? "Review shortlist"
+                            : request.status === "awaiting_order_approval"
+                              ? "Review order"
+                              : ["researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
                     </button>
                   </td>
                 </tr>
@@ -589,12 +599,12 @@ export function SupplyInventoryWorkspace({
                 <td>
                   <button type="button" aria-pressed={item.sku === selectedSku} onClick={() => onSelect(item.sku)}>
                     <span className={styles.inventoryStatusDot} />
-                    <span><small>{item.sku}</small><strong>{item.name}</strong><em>{item.specification}</em></span>
+                    <span><small>{item.sku}</small><strong title={item.name}>{item.name}</strong><em title={item.specification}>{item.specification}</em></span>
                   </button>
                 </td>
                 <td>{item.requirementLabel ?? (requestedQuantity === null ? "Quantity unknown" : `${requestedQuantity.toLocaleString("en-US")} ${item.requestedUnit ?? item.unitOfMeasure ?? "unit not provided"}`)}</td>
                 <td>{formatNeedBy(item)}</td>
-                <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
+                <td className={styles.inventorySourceState} title={workstreamSummary(runCases) ?? resultState(run)}>{workstreamSummary(runCases) ?? resultState(run)}</td>
                 <td>
                   <div className={styles.sourcingRowActions}>
                     <button
@@ -658,12 +668,12 @@ export function SupplyInventoryWorkspace({
                 <td>
                   <button type="button" onClick={() => onOpenSavedResearch(run)}>
                     <span className={styles.inventoryStatusDot} />
-                    <span><small>Custom request</small><strong>{run.input.componentName}</strong><em>{run.input.specification || run.input.requestText}</em></span>
+                    <span><small>Custom request</small><strong title={run.input.componentName}>{run.input.componentName}</strong><em title={run.input.specification || run.input.requestText}>{run.input.specification || run.input.requestText}</em></span>
                   </button>
                 </td>
                 <td>Custom request</td>
                 <td>Not set</td>
-                <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
+                <td className={styles.inventorySourceState} title={workstreamSummary(runCases) ?? resultState(run)}>{workstreamSummary(runCases) ?? resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
@@ -683,12 +693,12 @@ export function SupplyInventoryWorkspace({
                   <td>
                   <button type="button" onClick={() => run.status !== "FAILED" && onOpenSavedResearch(run)} disabled={run.status === "FAILED"}>
                       <span className={styles.inventoryStatusDot} />
-                      <span><small>Saved research · {formatResearchDate(run.createdAt)}</small><strong>{run.input.componentName}</strong><em>{run.input.specification || run.input.requestText}</em></span>
+                      <span><small>Saved research · {formatResearchDate(run.createdAt)}</small><strong title={run.input.componentName}>{run.input.componentName}</strong><em title={run.input.specification || run.input.requestText}>{run.input.specification || run.input.requestText}</em></span>
                     </button>
                   </td>
                   <td>{run.input.componentItemKey}</td>
                   <td>{formatResearchDate(run.createdAt)}</td>
-                  <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
+                  <td className={styles.inventorySourceState} title={workstreamSummary(runCases) ?? resultState(run)}>{workstreamSummary(runCases) ?? resultState(run)}</td>
                   <td>
                   <button
                     className={styles.sourcingQueueAction}

@@ -4599,3 +4599,16 @@ Use this log for durable product and engineering decisions. Do not put every imp
   recipient set, and a changed draft must be planned again.
 - Sender boundary: Every campaign pins one sender account because the sender
   mailbox pool is shared across offices.
+
+## 2026-08-31: Supplier state reconciles the workflow receipt with the thread
+
+- Status: accepted
+- Owner: engineering
+- Decision: Supplier contact and response reads take the workflow receipt as
+  authoritative and fall back to counting messages in the connected email
+  thread, labelled as thread evidence rather than a recorded receipt.
+- Evidence boundary: Thread derived counts never set `contacted` or a response
+  count on a vendor record. They only describe what the connected mailbox shows,
+  so an operator sees why two surfaces disagree instead of one silently winning.
+- Qualification boundary: Candidates stay unqualified regardless of thread
+  activity.

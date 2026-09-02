@@ -98,6 +98,23 @@ description: How to bring up derya-crm locally (app DB, workflow DB, login allow
   below roughly 1000px the Subject column is clipped with no way to scroll to it. Check this at 900px and
   600px on any change to that table.
 
+## Supply OS UI walkthroughs and audits
+
+- Two independent supplier surfaces exist for the same request: the sourcing request detail (Compare) and
+  Sales Agent > Messages. They load data differently, so check both. Messages loaded a 164-vendor request
+  reliably while the request detail for the same id never fetched at all.
+- Requests in `awaiting_shortlist_approval` must load their detail: watch `/tmp/dev.log` for
+  `GET /api/procurement/requests/<id>`. Supplier counts stay hidden until that response lands, and a
+  failed or aborted first fetch must show "Supplier results did not load" with a retry, never a disabled
+  "Refreshing" button with zeros. Approval statuses are part of `PROCUREMENT_POLLING_STATUSES`.
+- Chat "Run research" (context prospecting) cannot complete without Firecrawl/OpenAI keys, so use it to
+  check the escape paths: Dismiss stays enabled while a run is tracked, the card reports rows saved against
+  the target, and a run with no progress past the stale threshold offers a retry after a reload.
+- Resize for responsive checks with `wmctrl -r :ACTIVE: -e 0,0,0,<width>,<height>` (remove the maximized
+  flags first) and re-maximize with `wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz`.
+- Do not judge run-on numbers from the DOM dump: JSX whitespace is stripped in the annotated DOM, so
+  `100units` in the DOM renders as `100 units`. Zoom on the screenshot before reporting spacing bugs.
+
 ## Off limits
 
 - `POST /api/admin/procurement-bulk-rfq` performs a real Gmail send. Never call it during testing;

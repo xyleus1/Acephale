@@ -5,6 +5,11 @@ export const PROCUREMENT_APPROVAL_STATUSES = new Set([
   "awaiting_order_approval",
 ]);
 
+export const PROCUREMENT_POLLING_STATUSES = new Set([
+  ...PROCUREMENT_ACTIVE_STATUSES,
+  ...PROCUREMENT_APPROVAL_STATUSES,
+]);
+
 export const PROCUREMENT_STATUS_LABELS: Record<string, string> = {
   new: "Queued",
   researching: "Supplier research",

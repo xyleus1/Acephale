@@ -101,7 +101,11 @@ export function CustomerProcurementWorkspace({
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "error">("idle");
   const [startRetryState, setStartRetryState] = useState<"idle" | "running" | "requested" | "error">("idle");
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const refreshPromiseRef = useRef<Promise<CustomerProcurementRequestDetail> | null>(null);
+  const [detailLoaded, setDetailLoaded] = useState(false);
+  const refreshPromiseRef = useRef<{
+    signal: AbortSignal | undefined;
+    promise: Promise<CustomerProcurementRequestDetail>;
+  } | null>(null);
   const automaticStartRetryRef = useRef(false);
   const [startRequestedAt, setStartRequestedAt] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -109,9 +113,10 @@ export function CustomerProcurementWorkspace({
   const approvalRequired = PROCUREMENT_APPROVAL_STATUSES.has(detail.status);
 
   const refresh = useCallback((signal?: AbortSignal) => {
-    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+    const pending = refreshPromiseRef.current;
+    if (pending && !pending.signal?.aborted) return pending.promise;
     setRefreshState("running");
-    const pending = (async () => {
+    const requested = (async () => {
       const response = await fetch(`/api/procurement/requests/${encodeURIComponent(orderId)}`, {
         cache: "no-store",
         signal,
@@ -119,6 +124,7 @@ export function CustomerProcurementWorkspace({
       });
       const next = await responseJson<CustomerProcurementRequestDetail>(response);
       setDetail(next);
+      setDetailLoaded(true);
       setRefreshError(null);
       setRefreshState("idle");
       return next;
@@ -128,10 +134,10 @@ export function CustomerProcurementWorkspace({
       setRefreshState("error");
       throw error;
     }).finally(() => {
-      refreshPromiseRef.current = null;
+      if (refreshPromiseRef.current?.promise === requested) refreshPromiseRef.current = null;
     });
-    refreshPromiseRef.current = pending;
-    return pending;
+    refreshPromiseRef.current = { signal, promise: requested };
+    return requested;
   }, [orderId]);
 
   const retryStart = useCallback(async () => {
@@ -265,6 +271,9 @@ export function CustomerProcurementWorkspace({
         : "Not sourcing yet"
     : currentStatus;
   const visibleProgress = customerProcurementProgress(detail.status, detail.vendors.length, detail.progress);
+  const detailUnavailable = !detailLoaded
+    && !initialOrder.vendors.length
+    && (phase === "compare" || phase === "procure");
   const attentionReason = customerProcurementAttentionReason(detail.progress);
   const attentionHints = customerProcurementAttentionHints(item.specification);
   const renderStageList = (compact: boolean) => (
@@ -293,7 +302,7 @@ export function CustomerProcurementWorkspace({
       <header className={styles.procurementHeader}>
         <button type="button" onClick={onBack}><ArrowLeft size={15} /> Back to sourcing queue</button>
         <span><small>{item.sku}</small><h2>{detail.material}</h2></span>
-        <i>{refreshState === "running" ? "Refreshing" : currentStatus}</i>
+        <i>{refreshState === "error" ? "Status refresh failed" : refreshState === "running" && !detailLoaded ? "Loading" : currentStatus}</i>
       </header>
 
       <nav className={styles.procurementProgress} aria-label="Procurement progress">
@@ -304,7 +313,31 @@ export function CustomerProcurementWorkspace({
       </nav>
 
       <AnimatePresence mode="wait" initial={false}>
-        {phase === "researching" ? (
+        {detailUnavailable ? (
+          <motion.div
+            key="unavailable"
+            className={styles.procurementUnknownState}
+            initial={reduceMotion ? false : { opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
+            transition={{ duration: 0.16 }}
+          >
+            {refreshState === "error" ? <TriangleAlert size={28} /> : <LoaderCircle size={28} />}
+            <h3>{refreshState === "error" ? "Supplier results did not load" : "Loading supplier results"}</h3>
+            <p>
+              {refreshState === "error"
+                ? `${refreshError ?? "The request could not be loaded."} No supplier count on this page is trustworthy until it loads.`
+                : `This request is at ${currentStatus.toLowerCase()}. Supplier counts stay hidden until the saved results load.`}
+            </p>
+            <div className={styles.procurementUnknownActions}>
+              <button type="button" data-primary="true" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>
+                {refreshState === "running" ? <LoaderCircle size={14} /> : <RefreshCw size={14} />}
+                {refreshState === "running" ? "Loading" : "Try again"}
+              </button>
+              <button type="button" onClick={onBack}>Back to sourcing queue</button>
+            </div>
+          </motion.div>
+        ) : phase === "researching" ? (
           <motion.div
             key="researching"
             className={styles.procurementResearch}
@@ -418,8 +451,10 @@ export function CustomerProcurementWorkspace({
               </table>
             </div>
             <footer className={styles.procurementDecisionFooter}>
-              <span><TriangleAlert size={14} /> Results are read-only while the shortlist is reviewed.</span>
-              <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? "Refreshing" : "Refresh results"} <RefreshCw size={14} /></button>
+              <span><TriangleAlert size={14} /> {approvalRequired
+                ? "This shortlist is waiting for your approval. No supplier is contacted while it waits."
+                : "Results are read-only while the shortlist is reviewed."}</span>
+              <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? "Refreshing" : refreshState === "error" ? "Retry refresh" : "Refresh results"} <RefreshCw size={14} /></button>
             </footer>
           </motion.div>
         ) : (

@@ -51,6 +51,10 @@ function updatedLabel(value: string) {
   return `Updated ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)}`;
 }
 
+function countLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export function SupplyOsCompanyIndex({
   canCreateCompany,
   canCreateOffice = false,
@@ -347,7 +351,14 @@ export function SupplyOsCompanyIndex({
         </form>
       ) : null}
 
-      {error ? <div className={styles.error} role="alert">{error}</div> : null}
+      {error ? (
+        <div className={styles.error} role="alert">
+          {error}
+          {state === "error" ? (
+            <button type="button" onClick={() => void load()}>Retry</button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className={styles.rows} aria-live="polite">
         {workspaces.map((workspace) => {
@@ -357,12 +368,20 @@ export function SupplyOsCompanyIndex({
             <>
               <span className={styles.companyMark}>{initials || <Building2 size={16} />}</span>
               <span className={styles.companyIdentity}>
-                <strong>{workspace.name}</strong>
+                <strong title={workspace.name}>{workspace.name}</strong>
                 {crossOffice && workspace.officeName ? <span className={styles.officeBadge}>{workspace.officeName}</span> : null}
-                <small>{workspace.company?.website || workspace.company?.name || "No website"}</small>
+                <small title={workspace.company?.website || workspace.company?.name || undefined}>
+                  {workspace.company?.website || workspace.company?.name || "No website"}
+                </small>
               </span>
-              <span className={styles.companyFacts}><b>{snapshot?._count.items ?? 0} items</b><small>{snapshot ? `Snapshot v${snapshot.version}` : "No snapshot"}</small></span>
-              <span className={styles.companyFacts}><b>{snapshot?._count.locations ?? 0} locations</b><small>{updatedLabel(workspace.updatedAt)}</small></span>
+              <span className={styles.companyFacts}>
+                <b>{countLabel(snapshot?._count.items ?? 0, "snapshot item", "snapshot items")}</b>
+                <small>{snapshot ? `Snapshot v${snapshot.version}` : "No snapshot"}</small>
+              </span>
+              <span className={styles.companyFacts}>
+                <b>{countLabel(snapshot?._count.locations ?? 0, "snapshot location", "snapshot locations")}</b>
+                <small>{updatedLabel(workspace.updatedAt)}</small>
+              </span>
               <ArrowRight size={16} />
             </>
           );

@@ -133,6 +133,18 @@ export class ContextAgentError extends Error {
   }
 }
 
+function threadTitleFromFirstMessage(instruction: string) {
+  const line = instruction
+    .split("\n")
+    .map((entry) => entry.replace(/\s+/g, " ").trim())
+    .find((entry) => entry.length > 0) ?? "";
+  if (!line) return "";
+  if (line.length <= 60) return line;
+  const cut = line.slice(0, 60);
+  const boundary = cut.lastIndexOf(" ");
+  return `${(boundary > 24 ? cut.slice(0, boundary) : cut).replace(/[,;:.\s]+$/, "")}...`;
+}
+
 function cleanAnswer(value: unknown) {
   return typeof value === "string"
     ? value.replace(/\u2014/g, "-").replace(/\0/g, "").replace(/\r\n?/g, "\n").trim().slice(0, 12_000)
@@ -188,6 +200,17 @@ export async function chatWithCompanyContext(args: {
       throw new ContextAgentError(error.message, "rate_limited");
     }
     throw error;
+  }
+  // The thread is named from the first message before any model call, so a chat
+  // list stays readable even when the model reply fails.
+  const firstMessageTitle = threadTitleFromFirstMessage(instruction);
+  if (threadId && firstMessageTitle) {
+    await renameDefaultCompanyContextChatThread({
+      context: args.context,
+      workspaceId: args.workspaceId,
+      threadId,
+      title: firstMessageTitle,
+    }).catch(() => undefined);
   }
   // An operator sourcing command is recognized deterministically and queued
   // before any model call, so the wave it starts is the phrase the operator

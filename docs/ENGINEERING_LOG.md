@@ -8478,3 +8478,28 @@ Use this file for chronological implementation notes that future agents should s
   response. Partial failures remain 200 responses with explicit error markers.
 - The worker limit remains capped at two, and the legacy supplier research cron
   remains untouched.
+
+### 2026-08-31 - Sourcing surfaces state what they know
+
+- The customer procurement request detail tracks its own fetch: the first load
+  is deduplicated per abort signal, an aborted or failed load renders "Supplier
+  results did not load" with a retry and a way back to the queue, and supplier
+  counts stay hidden until an authoritative detail arrives instead of rendering
+  zeros. Polling now covers the approval statuses, so a request waiting for a
+  shortlist decision keeps refreshing.
+- Pending shortlist and order approvals are announced on the queue row action
+  ("Review shortlist", "Review order") and above the Messages supplier table,
+  not only inside the request detail.
+- Vendor contact and reply reads reconcile the workflow receipt with the
+  connected email thread, so a vendor with thread traffic and no workflow
+  receipt reads as "N messages in the connected thread, no workflow receipt
+  saved" instead of contradicting the Messages tab.
+- Context prospecting cards report "Searches run", "Pages read", "Companies
+  found", and "N of M rows saved", keep Dismiss reachable while a run is
+  tracked, and treat a run with no progress past the stale threshold as
+  interrupted so it can be retried.
+- Chat threads are renamed from the first operator message, clarifying-question
+  answers are keyed by message id so an older question keeps its own state, the
+  inferred facility objects link to the verification surface, long material and
+  company names carry native titles, and loading is separated from failure on
+  the company profile and company index.

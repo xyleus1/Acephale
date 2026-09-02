@@ -15,6 +15,7 @@ import {
   PenLine,
   RefreshCw,
   Send,
+  ShieldCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
@@ -22,6 +23,7 @@ import {
   procurementContextReplyBody,
   type ProcurementInboundTriage,
 } from "@/lib/procurement-inbound-triage";
+import { PROCUREMENT_APPROVAL_STATUSES } from "@/lib/procurement-status";
 import { PROCUREMENT_REPLY_SENDER_UNAVAILABLE } from "@/lib/procurement-reply-errors";
 import {
   type CustomerProcurementListItem,
@@ -34,12 +36,16 @@ import {
   type CustomerProcurementRequestDetail,
 } from "@/lib/supply-os/customer-procurement-status";
 import {
+  EMPTY_SUPPLIER_THREAD_RECEIPT,
   externalPoReady,
   externalPoState,
   externalSourcingActive,
+  externalVendorActivityLabel,
+  externalVendorOutreachRead,
   externalVendorPoReady,
   externalVendorPoState,
   externalVendorResponseCount,
+  externalVendorResponseRead,
   groupActiveHistoricalSourcing,
   historicalPoReady,
   historicalPoState,
@@ -47,6 +53,8 @@ import {
   historicalSituation,
   historicalSupplierContacted,
   historicalSupplierResponded,
+  supplierThreadReceipt,
+  type SupplierThreadReceipt,
 } from "./supply-os-active-sourcing-model";
 import type {
   SavedProcurementCase,
@@ -121,6 +129,7 @@ function workflowSituation(
   request: CustomerProcurementListItem,
   detail: CustomerProcurementRequestDetail,
   vendor: CustomerProcurementRequestDetail["vendors"][number],
+  receipt: SupplierThreadReceipt,
 ) {
   const poState = externalVendorPoState(request, detail, vendor.id);
   if (poState === "Purchase order placed") return "The purchase order for this manufacturer was approved and placed.";
@@ -130,6 +139,8 @@ function workflowSituation(
   if (vendor.quote) return "The manufacturer responded and commercial terms are recorded for review.";
   if (externalVendorResponseCount(vendor) > 0) return "The manufacturer replied. Commercial terms are not recorded yet.";
   if (vendor.contacted) return "The manufacturer was contacted. The workflow is waiting for a response.";
+  if (receipt.inbound > 0) return "The connected thread below has supplier replies that the workflow did not record. Read the thread before trusting the counts.";
+  if (receipt.outbound > 0) return "The connected thread below has sent messages that the workflow did not record as a contact receipt.";
   return "The manufacturer was identified, but no supplier contact receipt is recorded yet.";
 }
 
@@ -371,6 +382,7 @@ export function ActiveSourcingWorkspace({
     setReplySendState("idle");
   }, [conversation, conversationState, replyDraft, replySendState]);
 
+  const threadReceipt = supplierThreadReceipt(conversation);
   const workflowContacted = activeWorkflowRequests.reduce((sum, request) => sum + request.contactedCount, 0);
   const workflowResponses = activeWorkflowRequests.reduce((sum, request) => sum + request.responseCount, 0);
   const historicalContacted = historicalGroups.reduce((sum, group) => sum + group.contactedCount, 0);
@@ -541,7 +553,7 @@ export function ActiveSourcingWorkspace({
           <tbody>
             {activeWorkflowRequests.map((request) => (
               <tr key={`workflow:${request.id}`} data-active={selection?.kind === "workflow" && selection.id === request.id}>
-                <td><button type="button" onClick={() => setSelection({ kind: "workflow", id: request.id })}><span className={styles.inventoryStatusDot} /><span><small>Automated workflow</small><strong>{request.material}</strong><em>{request.quantity.toLocaleString("en-US")} {request.unit}</em></span></button></td>
+                <td><button type="button" onClick={() => setSelection({ kind: "workflow", id: request.id })}><span className={styles.inventoryStatusDot} /><span><small>Automated workflow</small><strong title={request.material}>{request.material}</strong><em>{request.quantity.toLocaleString("en-US")} {request.unit}</em></span></button></td>
                 <td>{outreachLabel(request.contactedCount, request.supplierCount)}</td>
                 <td>{responseCountLabel(request.responseCount)}</td>
                 <td>{externalPoState(request.status)}</td>
@@ -550,7 +562,7 @@ export function ActiveSourcingWorkspace({
             ))}
             {historicalGroups.map((group) => (
               <tr key={`historical:${group.id}`} data-active={selection?.kind === "historical" && selection.id === group.id}>
-                <td><button type="button" onClick={() => setSelection({ kind: "historical", id: group.id })}><span className={styles.inventoryStatusDot} /><span><small>Historical Derya workstream</small><strong>{group.title}</strong><em>{group.itemKey}</em></span></button></td>
+                <td><button type="button" onClick={() => setSelection({ kind: "historical", id: group.id })}><span className={styles.inventoryStatusDot} /><span><small>Historical Derya workstream</small><strong title={group.title}>{group.title}</strong><em title={group.itemKey}>{group.itemKey}</em></span></button></td>
                 <td>{outreachLabel(group.contactedCount, group.supplierCount)}</td>
                 <td>{responseCountLabel(group.responseCount)}</td>
                 <td>{group.poReadyCount ? `${group.poReadyCount} PO-ready` : "Not ready for PO"}</td>
@@ -581,8 +593,8 @@ export function ActiveSourcingWorkspace({
             {detailState === "error" && workflowRequest ? <div className={styles.activeConversationEmpty}><span>{detailError}</span><button type="button" onClick={retryWorkflowDetail}><RefreshCw size={13} /> Retry</button></div> : null}
             {workflowDetail?.vendors.map((vendor) => (
               <button key={vendor.id} type="button" data-active={workflowVendor?.id === vendor.id} onClick={() => setManufacturerId(vendor.id)}>
-                <span><strong>{vendor.name}</strong><small>{vendor.contact?.email ?? "Supplier email not saved"}</small></span>
-                <span><b>{externalVendorResponseCount(vendor) ? "Responded" : vendor.contacted ? "Contacted" : "Identified"}</b><small>{externalVendorResponseCount(vendor) ? responseCountLabel(externalVendorResponseCount(vendor)) : customerProcurementQuoteSummary(vendor.quote)}</small></span>
+                <span><strong title={vendor.name}>{vendor.name}</strong><small>{vendor.contact?.email ?? "Supplier email not saved"}</small></span>
+                <span><b>{externalVendorActivityLabel(vendor, vendor.id === workflowVendor?.id ? threadReceipt : EMPTY_SUPPLIER_THREAD_RECEIPT)}</b><small>{externalVendorResponseCount(vendor) ? responseCountLabel(externalVendorResponseCount(vendor)) : customerProcurementQuoteSummary(vendor.quote)}</small></span>
               </button>
             ))}
             {historicalGroup?.cases.map((procurementCase) => (
@@ -596,15 +608,23 @@ export function ActiveSourcingWorkspace({
           {workflowRequest && workflowDetail && workflowVendor ? (
             <article className={styles.activeSupplierDossier}>
               <header>
-                <span><small>Situation read</small><h3>{workflowVendor.name}</h3><p>{workflowSituation(workflowRequest, workflowDetail, workflowVendor)}</p></span>
+                <span><small>Situation read</small><h3>{workflowVendor.name}</h3><p>{workflowSituation(workflowRequest, workflowDetail, workflowVendor, threadReceipt)}</p></span>
                 <i data-ready={externalVendorPoReady(workflowRequest, workflowDetail, workflowVendor.id)}>{externalVendorPoState(workflowRequest, workflowDetail, workflowVendor.id)}</i>
               </header>
               <dl className={styles.activeSupplierFacts}>
-                <div><dt>Outreach</dt><dd>{workflowVendor.contacted ? "Gmail contact recorded" : "No contact receipt"}</dd></div>
-                <div><dt>Response</dt><dd>{workflowVendor.quote ? customerProcurementQuoteSummary(workflowVendor.quote) : externalVendorResponseCount(workflowVendor) ? `${responseCountLabel(externalVendorResponseCount(workflowVendor))} received. Quote not recorded.` : "No response recorded"}</dd></div>
+                <div><dt>Outreach</dt><dd>{externalVendorOutreachRead(workflowVendor, threadReceipt)}</dd></div>
+                <div><dt>Response</dt><dd>{workflowVendor.quote ? customerProcurementQuoteSummary(workflowVendor.quote) : externalVendorResponseRead(workflowVendor, threadReceipt)}</dd></div>
                 <div><dt>Contact</dt><dd>{customerProcurementContactSummary(workflowVendor.contact).secondary}</dd></div>
                 <div><dt>Workflow</dt><dd>{customerProcurementStatusLabel(workflowRequest.status)}</dd></div>
               </dl>
+              {PROCUREMENT_APPROVAL_STATUSES.has(workflowRequest.status) ? (
+                <p className={styles.activeApprovalNotice}>
+                  <ShieldCheck size={14} />
+                  {workflowRequest.status === "awaiting_shortlist_approval"
+                    ? "Shortlist approval is pending. Approve or reject in the Bourne Inbox. No further supplier contact happens until then."
+                    : "Final order approval is pending. Approve or reject in the Bourne Inbox before the purchase order is released."}
+                </p>
+              ) : null}
               <section className={styles.activeEvidenceRead}>
                 <small>Evidence read</small>
                 {customerProcurementEvidenceSummary(workflowVendor.research).map((entry) => <p key={entry}>{entry}</p>)}

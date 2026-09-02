@@ -786,6 +786,16 @@
   font-size: 12px;
 }
 
+.starter i {
+  margin-top: 4px;
+  color: var(--chat-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 720px) {
   .starters {
     grid-template-columns: minmax(0, 1fr);

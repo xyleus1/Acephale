@@ -106,6 +106,52 @@ export function externalVendorResponseCount(vendor: Pick<CustomerProcurementVend
   return Math.max(vendor.responseCount, vendor.quote ? 1 : 0);
 }
 
+export type SupplierThreadReceipt = { outbound: number; inbound: number };
+
+export const EMPTY_SUPPLIER_THREAD_RECEIPT: SupplierThreadReceipt = { outbound: 0, inbound: 0 };
+
+export function supplierThreadReceipt(
+  conversation: { available: boolean; messages: Array<{ direction: "INBOUND" | "OUTBOUND" }> } | null,
+): SupplierThreadReceipt {
+  if (!conversation?.available) return EMPTY_SUPPLIER_THREAD_RECEIPT;
+  return {
+    outbound: conversation.messages.filter((message) => message.direction === "OUTBOUND").length,
+    inbound: conversation.messages.filter((message) => message.direction === "INBOUND").length,
+  };
+}
+
+export function externalVendorOutreachRead(
+  vendor: Pick<CustomerProcurementVendor, "contacted">,
+  receipt: SupplierThreadReceipt = EMPTY_SUPPLIER_THREAD_RECEIPT,
+) {
+  if (vendor.contacted) return "Gmail contact recorded";
+  if (receipt.outbound > 0) {
+    return `${receipt.outbound} message${receipt.outbound === 1 ? "" : "s"} in the connected thread, no workflow receipt saved`;
+  }
+  return "No contact receipt";
+}
+
+export function externalVendorResponseRead(
+  vendor: Pick<CustomerProcurementVendor, "quote" | "responseCount">,
+  receipt: SupplierThreadReceipt = EMPTY_SUPPLIER_THREAD_RECEIPT,
+) {
+  const responses = externalVendorResponseCount(vendor);
+  if (responses > 0) return `${responses} response${responses === 1 ? "" : "s"} recorded`;
+  if (receipt.inbound > 0) {
+    return `${receipt.inbound} repl${receipt.inbound === 1 ? "y" : "ies"} in the connected thread, not recorded by the workflow`;
+  }
+  return "No response recorded";
+}
+
+export function externalVendorActivityLabel(
+  vendor: Pick<CustomerProcurementVendor, "contacted" | "quote" | "responseCount">,
+  receipt: SupplierThreadReceipt = EMPTY_SUPPLIER_THREAD_RECEIPT,
+) {
+  if (externalVendorResponseCount(vendor) > 0 || receipt.inbound > 0) return "Responded";
+  if (vendor.contacted || receipt.outbound > 0) return "Contacted";
+  return "Identified";
+}
+
 function record(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

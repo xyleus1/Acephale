@@ -278,7 +278,7 @@ export function SupplyOsContext({
   const [threadsOpen, setThreadsOpen] = useState(true);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
-  const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [dragActive, setDragActive] = useState(false);
   const [, setStaleTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -399,16 +399,9 @@ export function SupplyOsContext({
     ];
   }, [data?.workspace.name, openRequestCount]);
 
-  const lastAgentMessageId = useMemo(() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].role === "AGENT") return messages[index].id;
-    }
-    return null;
-  }, [messages]);
-
   useEffect(() => {
     setQuestionAnswers({});
-  }, [lastAgentMessageId, activeThreadId]);
+  }, [activeThreadId]);
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ block: "end" });
@@ -576,6 +569,12 @@ export function SupplyOsContext({
     }
   }
 
+  function stopProspectingTracking() {
+    prospectingGenerationRef.current += 1;
+    setActionBusyId(null);
+    void load().catch(() => undefined);
+  }
+
   async function createThread() {
     if (!workspaceId || readOnly || threadBusy) return;
     setThreadBusy(true);
@@ -670,29 +669,45 @@ export function SupplyOsContext({
     }
   }
 
-  function toggleQuestionAnswer(questionIndex: number, answer: string) {
+  function answerKey(messageId: string, questionIndex: number) {
+    return `${messageId}:${questionIndex}`;
+  }
+
+  function answeredCount(messageId: string, questions: ContextQuestion[]) {
+    return questions.filter((question, questionIndex) => questionAnswers[answerKey(messageId, questionIndex)]).length;
+  }
+
+  function toggleQuestionAnswer(messageId: string, questionIndex: number, answer: string) {
     if (busy) return;
+    const key = answerKey(messageId, questionIndex);
     setQuestionAnswers((current) => {
       const next = { ...current };
-      if (next[questionIndex] === answer) {
-        delete next[questionIndex];
+      if (next[key] === answer) {
+        delete next[key];
       } else {
-        next[questionIndex] = answer;
+        next[key] = answer;
       }
       return next;
     });
   }
 
-  function sendQuestionAnswers(questions: ContextQuestion[]) {
+  function sendQuestionAnswers(messageId: string, questions: ContextQuestion[]) {
     if (busy) return;
     const combined = questions
       .map((question, questionIndex) => {
-        const answer = questionAnswers[questionIndex];
+        const answer = questionAnswers[answerKey(messageId, questionIndex)];
         return answer ? `${question.question} ${answer}` : null;
       })
       .filter((line): line is string => line !== null)
       .join("\n");
     if (!combined) return;
+    setQuestionAnswers((current) => {
+      const next = { ...current };
+      questions.forEach((question, questionIndex) => {
+        delete next[answerKey(messageId, questionIndex)];
+      });
+      return next;
+    });
     void submitMessage(undefined, combined);
   }
 
@@ -838,6 +853,7 @@ export function SupplyOsContext({
                     >
                       <strong>{starter.label}</strong>
                       <span>{starter.hint}</span>
+                      <i>{starter.prefill ? "Fills the message box" : "Sends this question"}</i>
                     </button>
                   ))}
                 </div>
@@ -875,24 +891,24 @@ export function SupplyOsContext({
                               type="button"
                               key={option}
                               className={styles.questionChip}
-                              data-selected={entry.id === lastAgentMessageId && questionAnswers[questionIndex] === option}
-                              aria-pressed={entry.id === lastAgentMessageId && questionAnswers[questionIndex] === option}
-                              disabled={readOnly || busy || entry.id !== lastAgentMessageId}
-                              onClick={() => toggleQuestionAnswer(questionIndex, option)}
+                              data-selected={questionAnswers[answerKey(entry.id, questionIndex)] === option}
+                              aria-pressed={questionAnswers[answerKey(entry.id, questionIndex)] === option}
+                              disabled={readOnly || busy}
+                              onClick={() => toggleQuestionAnswer(entry.id, questionIndex, option)}
                             >{option}</button>
                           ))}
                         </div>
                       </div>
                     ))}
-                    {entry.id === lastAgentMessageId && !readOnly ? (
+                    {!readOnly ? (
                       <button
                         type="button"
                         className={styles.sendAnswersButton}
-                        disabled={busy || !Object.keys(questionAnswers).length}
-                        onClick={() => sendQuestionAnswers(entry.questions ?? [])}
+                        disabled={busy || !answeredCount(entry.id, entry.questions)}
+                        onClick={() => sendQuestionAnswers(entry.id, entry.questions ?? [])}
                       >
-                        {Object.keys(questionAnswers).length > 1
-                          ? `Send ${Object.keys(questionAnswers).length} answers`
+                        {answeredCount(entry.id, entry.questions) > 1
+                          ? `Send ${answeredCount(entry.id, entry.questions)} answers`
                           : "Send answer"}
                       </button>
                     ) : null}
@@ -1119,10 +1135,10 @@ export function SupplyOsContext({
                 <div><dt>List</dt><dd>{action.draft.listSlug}</dd></div>
               </dl>
               <dl>
-                <div><dt>Queries used</dt><dd>{action.stats.queriesUsed}</dd></div>
-                <div><dt>Pages fetched</dt><dd>{action.stats.pagesFetched}</dd></div>
-                <div><dt>Candidates found</dt><dd>{action.stats.candidatesFound}</dd></div>
-                <div><dt>Rows</dt><dd>{action.stats.rowsCreated} of {action.draft.rowTarget}</dd></div>
+                <div><dt>Searches run</dt><dd>{action.stats.queriesUsed} {action.stats.queriesUsed === 1 ? "search" : "searches"}</dd></div>
+                <div><dt>Pages read</dt><dd>{action.stats.pagesFetched} {action.stats.pagesFetched === 1 ? "page" : "pages"}</dd></div>
+                <div><dt>Companies found</dt><dd>{action.stats.candidatesFound} {action.stats.candidatesFound === 1 ? "company" : "companies"}</dd></div>
+                <div><dt>Rows saved</dt><dd>{action.stats.rowsCreated} of {action.draft.rowTarget} rows saved</dd></div>
               </dl>
               {documentCitations(action.citations).length ? (
                 <div className={styles.citations} aria-label="Prospecting sources">
@@ -1170,10 +1186,29 @@ export function SupplyOsContext({
                     </div>
                   </>
                 ) : (
-                  <div className={styles.procurementResult}>
-                    <span>Confirmation accepted</span>
-                    <strong>Research is running</strong>
-                  </div>
+                  <>
+                    <div className={styles.procurementResult}>
+                      <span>{action.stats.rowsCreated} of {action.draft.rowTarget} rows saved so far</span>
+                      <strong>Research is running</strong>
+                    </div>
+                    <p className={styles.approvalBoundary}>
+                      Rows appear as they are saved. If nothing changes within {Math.round(STALE_RUN_MS / 60_000)} minutes the run is treated as interrupted and you can retry it.
+                    </p>
+                    <div className={styles.procurementButtons}>
+                      <button
+                        type="button"
+                        className={styles.dismissProcurement}
+                        disabled={Boolean(actionBusyId) && actionBusyId !== action.id}
+                        onClick={() => {
+                          if (actionBusyId === action.id) {
+                            stopProspectingTracking();
+                            return;
+                          }
+                          void decideProspectingAction(action.id, "dismiss");
+                        }}
+                      >{actionBusyId === action.id ? "Stop tracking" : "Dismiss"}</button>
+                    </div>
+                  </>
                 )
               ) : (
                 <div className={styles.procurementButtons}>
@@ -1188,7 +1223,13 @@ export function SupplyOsContext({
                       {action.status === "COMPLETED" ? "Continue research" : action.status === "FAILED" ? "Retry research" : "Run research"}
                     </button>
                   ) : null}
-                  {action.status === "PENDING" || action.status === "FAILED" ? (
+                  {actionBusyId === action.id ? (
+                    <button
+                      type="button"
+                      className={styles.dismissProcurement}
+                      onClick={stopProspectingTracking}
+                    >Stop tracking</button>
+                  ) : action.status === "PENDING" || action.status === "FAILED" ? (
                     <button
                       type="button"
                       className={styles.dismissProcurement}

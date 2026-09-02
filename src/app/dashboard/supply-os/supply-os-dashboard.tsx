@@ -10,6 +10,7 @@ import {
   PackageSearch,
   Phone,
   ShieldAlert,
+  TriangleAlert,
   Truck,
   Warehouse,
   type LucideIcon,
@@ -548,6 +549,7 @@ export function SupplyOsDashboardWorkspace({
         <SupplyOsContext workspaceId={workspaceId ?? null} />
       ) : activePanel === "logistics" && workspaceId && logisticsSettingsState === "error" ? (
         <CommandState
+          tone="problem"
           title="Logistics setup unavailable"
           detail="The saved operating base could not be checked. Logistics stays locked until the company data is available."
           action={<button type="button" onClick={() => setProfileRevision((revision) => revision + 1)}>Retry setup</button>}
@@ -571,8 +573,9 @@ export function SupplyOsDashboardWorkspace({
         />
       ) : workspaceId && profileState === "error" ? (
         <CommandState
+          tone="problem"
           title="Company profile unavailable"
-          detail="No public company profile is available."
+          detail="No public company profile is available. Enter it manually or retry the lookup."
           action={manualProfileOpen ? (
             <form className={styles.manualProfileForm} onSubmit={submitManualProfile}>
               <label>
@@ -734,14 +737,18 @@ function CommandState({
   title,
   detail,
   action,
+  tone = "loading",
 }: {
   title: string;
   detail: string;
   action?: ReactNode;
+  tone?: "loading" | "problem";
 }) {
   return (
-    <div className={styles.commandState}>
-      <LoaderCircle size={22} strokeWidth={1.6} />
+    <div className={styles.commandState} data-tone={tone}>
+      {tone === "problem"
+        ? <TriangleAlert size={22} strokeWidth={1.6} />
+        : <LoaderCircle size={22} strokeWidth={1.6} />}
       <h1>{title}</h1>
       <p>{detail}</p>
       {action}
@@ -1589,6 +1596,9 @@ function CaseCommandCenter({
             onModeChange={setInspectorMode}
             onFocusAction={focusOptimizationAction}
             activePanel={activePanel}
+            facilitySettingsHref={workspaceId
+              ? `/dashboard/settings?workspaceId=${encodeURIComponent(workspaceId)}`
+              : null}
           />
         ) : null}
         </AnimatePresence>
@@ -1607,6 +1617,7 @@ function CommandInspector({
   onModeChange,
   onFocusAction,
   activePanel,
+  facilitySettingsHref,
 }: {
   dashboard: SupplyCaseDashboard;
   model: ReturnType<typeof buildSupplyOptimizationModel>;
@@ -1616,6 +1627,7 @@ function CommandInspector({
   onModeChange: (mode: "object" | "optimization") => void;
   onFocusAction: (actionId: string) => void;
   activePanel: SupplyOsPanel;
+  facilitySettingsHref: string | null;
 }) {
   const Icon = objectIcon(object.kind);
   const workspace = workspaceForObject(object, model);
@@ -1676,6 +1688,14 @@ function CommandInspector({
               <div><dt>Cargo</dt><dd>{object.cargo}</dd></div>
               <div><dt>{object.rateEstimate ? "Road distance" : "Confidence"}</dt><dd>{object.rateEstimate ? `${object.rateEstimate.distanceMiles.toLocaleString()} mi estimated` : object.confidence}</dd></div>
             </dl>
+
+            {facilitySettingsHref
+              && object.basis === "inferred"
+              && (object.kind === "factory" || object.kind === "distribution") ? (
+              <a className={styles.inspectorVerifyFacility} href={facilitySettingsHref}>
+                <ShieldAlert size={13} /> Verify this facility
+              </a>
+            ) : null}
 
             {object.rateEstimate ? (
               <section className={styles.inspectorRatePlan}>

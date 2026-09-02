@@ -11474,3 +11474,27 @@ Verification caveat:
 - Office provisioning still uses the shared service and requires an
   allowlisted operator email. Research imports resolve the office by name and
   keep list and record operations scoped by `officeId`.
+
+## 2026-08-31: Sourcing and Chat legibility pass
+
+- Fixed: a request in `awaiting_shortlist_approval` never loaded its detail and
+  showed zeros behind a permanently disabled "Refreshing" button. The detail now
+  has explicit loading, error, and retry states, hides counts until the real
+  detail lands, and keeps polling approval statuses.
+- Fixed: a tracked Context prospecting run had no escape. Dismiss stays enabled,
+  progress is reported as rows saved against the target, and a stalled run is
+  treated as interrupted so it can be retried.
+- Also in this pass: pinned queue action columns, approval notices on the queue
+  and Messages surfaces, supplier state reconciled against the connected thread,
+  prospecting stats with units, an inferred facility verification link, chat
+  threads named from the first message, per-message clarifying answers, native
+  titles on long names, loading separated from failure on company surfaces, and
+  correct pluralisation in the company index.
+- Not done: approving a shortlist still happens in the approval inbox. The queue
+  and Messages surfaces announce that a decision is pending but do not decide it.
+- Verified with `npx tsc --noEmit`, `npm run lint` (no new errors in touched
+  files), `npm run test:workflow-guild2`, `npm run test:supply-os-context`,
+  `npm run test:supply-os-context-prospecting`,
+  `npm run test:supply-os-active-sourcing`,
+  `npm run test:supply-os-sourcing-projection`,
+  `npm run test:supply-os-panel-alerts`, and `npm run check:product-copy`.

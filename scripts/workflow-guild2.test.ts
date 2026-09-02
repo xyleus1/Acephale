@@ -13,6 +13,7 @@ import {
   customerProcurementResearchEmail,
   customerProcurementResearchComplete,
   customerProcurementStatusLabel,
+  CUSTOMER_PROCUREMENT_MAX_CONSECUTIVE_FAILURES,
   startCustomerProcurementPolling,
 } from "../src/lib/supply-os/customer-procurement-status";
 
@@ -30,6 +31,9 @@ assert.doesNotMatch(campaignRoute, /pollGuildSupplierResearchCampaign|GUILD_SUPP
 assert.doesNotMatch(researchPersistence, /system:guild-procurement|demoSourcingWorkspace/);
 assert.match(workbench, /Start sourcing/);
 assert.match(workbench, /Resolve blocker/);
+assert.match(workbench, /Review shortlist/);
+assert.match(guidedWorkspace, /Supplier results did not load/);
+assert.match(guidedWorkspace, /Retry refresh/);
 assert.doesNotMatch(guidedWorkspace, /if \(!result\.workflowWakeRequested\)/);
 assert.match(guidedWorkspace, /Request<\/span>/);
 assert.match(guidedWorkspace, /Research<\/span>/);
@@ -160,6 +164,80 @@ async function main() {
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(observed, ["researching", "ordered"]);
   stop();
+
+  const approvalSchedule: Array<{ callback: () => void; delay: number }> = [];
+  const approvalObserved: string[] = [];
+  const stopApproval = startCustomerProcurementPolling({
+    initialStatus: "awaiting_shortlist_approval",
+    load: async () => ({ status: "awaiting_shortlist_approval" }),
+    onDetail: (detail) => approvalObserved.push(detail.status),
+    onError: (error) => { throw error; },
+    schedule: (callback, delay) => {
+      approvalSchedule.push({ callback, delay });
+      return approvalSchedule.length;
+    },
+    cancel: () => undefined,
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(approvalObserved, ["awaiting_shortlist_approval"]);
+  assert.equal(approvalSchedule.length, 1, "an approval state must keep polling for its detail");
+  stopApproval();
+
+  const failureSchedule: Array<{ callback: () => void; delay: number }> = [];
+  const failures: string[] = [];
+  let attempts = 0;
+  const stopFailing = startCustomerProcurementPolling({
+    initialStatus: "ordered",
+    load: async () => {
+      attempts += 1;
+      throw new Error(`load ${attempts} failed`);
+    },
+    onDetail: () => undefined,
+    onError: (error) => failures.push(error instanceof Error ? error.message : "unknown"),
+    schedule: (callback, delay) => {
+      failureSchedule.push({ callback, delay });
+      return failureSchedule.length;
+    },
+    cancel: () => undefined,
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(failures, ["load 1 failed"]);
+  for (let retry = 0; retry < CUSTOMER_PROCUREMENT_MAX_CONSECUTIVE_FAILURES; retry += 1) {
+    const next = failureSchedule.shift();
+    assert.ok(next, "a failed load must schedule a retry until the retry budget runs out");
+    next.callback();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.equal(attempts, CUSTOMER_PROCUREMENT_MAX_CONSECUTIVE_FAILURES + 1);
+  assert.equal(failureSchedule.length, 0, "retries must stop once the failure budget is spent");
+  stopFailing();
+
+  const recoverySchedule: Array<{ callback: () => void; delay: number }> = [];
+  const recovered: string[] = [];
+  let recoveryAttempts = 0;
+  const stopRecovering = startCustomerProcurementPolling({
+    initialStatus: "awaiting_shortlist_approval",
+    load: async () => {
+      recoveryAttempts += 1;
+      if (recoveryAttempts === 1) throw new Error("first load failed");
+      return { status: "awaiting_shortlist_approval" };
+    },
+    onDetail: (detail) => recovered.push(detail.status),
+    onError: () => undefined,
+    schedule: (callback, delay) => {
+      recoverySchedule.push({ callback, delay });
+      return recoverySchedule.length;
+    },
+    cancel: () => undefined,
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(recovered, []);
+  recoverySchedule.shift()?.callback();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(recovered, ["awaiting_shortlist_approval"], "a failed load must recover on the next tick");
+  assert.equal(recoverySchedule.length, 1, "a recovered approval state keeps polling");
+  stopRecovering();
+
   console.log("Customer procurement workflow boundary checks passed.");
 }
 
