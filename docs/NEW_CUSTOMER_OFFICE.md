@@ -20,8 +20,9 @@ profile, so a new customer needs a profile plus configuration, not new pipeline
 code.
 
 The leadgen runner selects profiles with `--profile <slug>`. The registry in
-`src/lib/leadgen/registry.ts` currently exposes `maneks`, `maneks-corridor`,
-and `wens`, and rejects unknown slugs before a run starts. For example:
+`src/lib/leadgen/registry.ts` currently exposes the profiles `maneks`,
+`maneks-corridor`, `wens`, and `feast`; it rejects unknown slugs before a run
+starts. For example:
 
 ```bash
 npx tsx scripts/leadgen-run.ts plan --profile wens --limit 900 --out .leadgen/wens-queries.txt

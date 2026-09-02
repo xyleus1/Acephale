@@ -11684,6 +11684,14 @@ Verification caveat:
 - Verified with `npm run test:procurement-supplier-quote-reading` and
   `npx tsc --noEmit`.
 
+## 2026-09-02: Feast leadgen profile and office
+
+- Added the Feast profile and provisioned the Feast office via
+  `POST /api/ops/offices` for a South of England coffee shop and cafe campaign.
+- The mailing list is to be imported as a research list via
+  `POST /api/ops/research/import` with list slug `feast-south-england-cafes`,
+  then reviewed before any outreach.
+
 ## 2026-08-31: Supplier file replies refuse stale sends server side
 
 - A saved supplier file bearing draft now carries a state fingerprint of the

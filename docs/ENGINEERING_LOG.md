@@ -8799,3 +8799,11 @@ Use this file for chronological implementation notes that future agents should s
   reply body and the fingerprint, so a field line past the body's shared
   character budget is not treated as supplier visible state. The suite controls
   for it with a document whose fields run past the per document line budget.
+
+## 2026-09-02: Feast leadgen profile and office
+
+- Added the Feast profile and provisioned the Feast office via
+  `POST /api/ops/offices` for a South of England coffee shop and cafe campaign.
+- The mailing list is to be imported as a research list via
+  `POST /api/ops/research/import` with list slug `feast-south-england-cafes`,
+  then reviewed before any outreach.
