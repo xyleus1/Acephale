@@ -95,7 +95,7 @@ export default async function SupplyOsPage({
           !isCustomer && !previewMode && (
             params.materialsView === "prospects" ||
             params.materialsView === "messages" ||
-            params.materialsView === "outreach"
+            (params.materialsView === "outreach" && currentUser.role !== "EMPLOYEE")
           )
             ? params.materialsView
             : undefined

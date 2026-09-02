@@ -293,7 +293,7 @@ export function SupplyOsOperatingShell({
                 preferredWorkspaceId={initialWorkspaceId ?? workspaceToRestore}
                 onPreferredWorkspaceUnavailable={clearStoredWorkspace}
                 autoOpenFirstWorkspace={
-                  (activePanel === "context" || allowedWorkspaceIds !== undefined)
+                  (activePanel === "context" || allowedWorkspaceIds !== undefined || Boolean(initialMaterialsView))
                     && !workspaceSelection
                 }
                 onOpenWorkspace={openWorkspace}
@@ -309,7 +309,11 @@ export function SupplyOsOperatingShell({
                 canAuthorizePurchase={canAuthorizePurchase}
                 previewMode={previewMode}
                 canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
-                canShowOutreach={!previewMode && accountRole !== "CUSTOMER"}
+                canShowOutreach={
+                  !previewMode &&
+                  accountRole !== "CUSTOMER" &&
+                  accountRole !== "EMPLOYEE"
+                }
                 initialMaterialsView={initialMaterialsView}
                 initialResearchListSlug={initialResearchListSlug}
                 initialResearchQuery={initialResearchQuery}
