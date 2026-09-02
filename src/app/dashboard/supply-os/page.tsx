@@ -92,7 +92,11 @@ export default async function SupplyOsPage({
         allowedWorkspaceIds={allowedWorkspaceIds}
         initialWorkspaceId={initialWorkspace?.id}
         initialMaterialsView={
-          !isCustomer && !previewMode && (params.materialsView === "prospects" || params.materialsView === "messages")
+          !isCustomer && !previewMode && (
+            params.materialsView === "prospects" ||
+            params.materialsView === "messages" ||
+            params.materialsView === "outreach"
+          )
             ? params.materialsView
             : undefined
         }

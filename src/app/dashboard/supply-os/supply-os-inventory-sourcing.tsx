@@ -46,6 +46,7 @@ import type {
 } from "./supply-os-sourcing-research-types";
 import { ActiveSourcingWorkspace } from "./supply-os-active-sourcing";
 import { SupplyOsProspects } from "./supply-os-prospects";
+import { SupplyOsOutreach } from "./supply-os-outreach";
 import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 
 export type PendingSourcingQueueItem = {
@@ -58,7 +59,7 @@ export type PendingSourcingQueueItem = {
   status: "Clarification needed" | "Researching" | "Research unavailable";
 };
 
-export type SupplyInventoryWorkspaceView = "inventory" | "messages" | "prospects";
+export type SupplyInventoryWorkspaceView = "inventory" | "messages" | "prospects" | "outreach";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -113,6 +114,7 @@ export function SupplyInventoryWorkspace({
   onHideSourceMap,
   companyName,
   canShowProspects = false,
+  canShowOutreach = false,
   storageScope,
   initialResearchListSlug,
   initialResearchQuery,
@@ -153,6 +155,7 @@ export function SupplyInventoryWorkspace({
   onHideSourceMap?: () => void;
   companyName: string;
   canShowProspects?: boolean;
+  canShowOutreach?: boolean;
   storageScope: string;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -392,12 +395,21 @@ export function SupplyInventoryWorkspace({
       <Tabs.Root
         className={styles.inventoryTabs}
         value={activeView}
-        onValueChange={(value) => onViewChange(value === "messages" ? "messages" : value === "prospects" ? "prospects" : "inventory")}
+        onValueChange={(value) => onViewChange(
+          value === "messages"
+            ? "messages"
+            : value === "prospects"
+              ? "prospects"
+              : value === "outreach"
+                ? "outreach"
+                : "inventory",
+        )}
       >
-        <Tabs.List className={styles.inventoryTabList} aria-label="Inventory, messages, and prospects views">
+        <Tabs.List className={styles.inventoryTabList} aria-label="Inventory, messages, prospects, and outreach views">
           <Tabs.Trigger value="inventory">Inventory</Tabs.Trigger>
           <Tabs.Trigger value="messages"><MessageSquare size={14} /> Messages</Tabs.Trigger>
           {canShowProspects ? <Tabs.Trigger value="prospects">Prospects</Tabs.Trigger> : null}
+          {canShowOutreach ? <Tabs.Trigger value="outreach">Outreach</Tabs.Trigger> : null}
         </Tabs.List>
         <Tabs.Content value="inventory" className={styles.inventoryTabPanel}>
       {workspaceId && canImportSupplyData ? (
@@ -725,6 +737,11 @@ export function SupplyInventoryWorkspace({
               initialStatus={initialResearchStatus}
               initialPage={initialResearchPage}
             />
+          </Tabs.Content>
+        ) : null}
+        {canShowOutreach ? (
+          <Tabs.Content value="outreach" className={`${styles.inventoryTabPanel} ${styles.outreachTabPanel}`}>
+            <SupplyOsOutreach />
           </Tabs.Content>
         ) : null}
       </Tabs.Root>

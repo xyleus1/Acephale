@@ -1195,6 +1195,10 @@
   grid-template-rows: repeat(4, auto) minmax(0, 1fr);
 }
 
+.outreachTabPanel[data-state="active"] {
+  display: block;
+}
+
 .prospectsWorkspace {
   min-width: 0;
   min-height: 0;

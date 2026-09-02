@@ -7,6 +7,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   chatWithAgent,
   type AgentToolTrace,
@@ -15,7 +16,12 @@ import {
 import { AgentMessageContent } from "@/components/agent-message-content";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
 import { Icon } from "@/components/icon";
-import styles from "./campaign-chat-desk.module.css";
+import {
+  CAMPAIGN_APPLY_COMMAND,
+  CAMPAIGN_DESK_SCOPE,
+  CAMPAIGN_GREENLIGHT_COMMAND,
+} from "@/lib/campaign-desk-scope";
+import styles from "./supply-os-outreach.module.css";
 
 type CampaignChatItem = ChatMsg & {
   id: string;
@@ -28,11 +34,20 @@ const SUGGESTED_PROMPTS = [
   "Greenlight the pending campaign",
 ] as const;
 
+const CAMPAIGN_MUTATING_TOOL_NAMES = new Set([
+  "plan_outreach_campaign",
+  "pause_outreach_campaign",
+  "resume_outreach_campaign",
+  "cancel_outreach_campaign",
+  "run_outreach_campaign_now",
+]);
+
 function nextMessageId(role: ChatMsg["role"]) {
   return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function CampaignChatDesk() {
+export function SupplyOsOutreach() {
+  const router = useRouter();
   const [messages, setMessages] = useState<CampaignChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,8 +89,17 @@ export function CampaignChatDesk() {
         text,
         undefined,
         undefined,
-        "/dashboard/campaigns",
+        CAMPAIGN_DESK_SCOPE,
       );
+      const refreshForCampaignCommand =
+        CAMPAIGN_APPLY_COMMAND.test(text) ||
+        CAMPAIGN_GREENLIGHT_COMMAND.test(text);
+      const refreshForCampaignTool = result.toolTrace?.some(
+        (trace) => trace.ok && CAMPAIGN_MUTATING_TOOL_NAMES.has(trace.name),
+      );
+      if (refreshForCampaignCommand || refreshForCampaignTool) {
+        router.refresh();
+      }
       setMessages([
         ...nextMessages,
         {
@@ -117,16 +141,7 @@ export function CampaignChatDesk() {
   }
 
   return (
-    <main className={styles.desk} data-campaign-chat>
-      <header className={styles.deskHeader}>
-        <div>
-          <h1>Outreach</h1>
-          <span className={styles.headerStatus}>
-            Plan, review, and run approved campaigns
-          </span>
-        </div>
-      </header>
-
+    <section className={styles.desk} data-campaign-chat>
       <section
         className={styles.conversation}
         aria-label="Outreach conversation"
@@ -237,6 +252,6 @@ export function CampaignChatDesk() {
           <span>Enter to send, Shift+Enter for a new line</span>
         </div>
       </div>
-    </main>
+    </section>
   );
 }

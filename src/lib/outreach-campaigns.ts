@@ -11,6 +11,7 @@ import {
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
+  normalizeResearchListQuery,
   renderCampaignEmail,
   type CampaignStatus,
 } from "@/lib/outreach-campaign-copy";
@@ -30,6 +31,13 @@ type CampaignRecord = {
   status: string;
   data: ResearchRecordData;
   createdAt: Date;
+};
+
+type ResearchListForCampaign = {
+  id: string;
+  slug: string;
+  name: string;
+  fields: Prisma.JsonValue;
 };
 
 type CampaignWithList = {
@@ -141,6 +149,54 @@ function renderRow(
   };
 }
 
+async function resolveResearchList(officeId: string, query: string): Promise<ResearchListForCampaign> {
+  const normalizedQuery = normalizeResearchListQuery(query);
+  const exactSlug = await prisma.researchList.findFirst({
+    where: { officeId, slug: normalizedQuery },
+    select: { id: true, slug: true, name: true, fields: true },
+  });
+  if (exactSlug) return exactSlug;
+
+  const exactNameMatches = await prisma.researchList.findMany({
+    where: { officeId, name: normalizedQuery },
+    select: { id: true, slug: true, name: true, fields: true },
+    take: 2,
+  });
+  if (exactNameMatches.length > 1) {
+    throw new Error("Research list query is ambiguous. Use an exact slug.");
+  }
+  if (exactNameMatches[0]) return exactNameMatches[0];
+
+  const insensitiveSlugMatches = await prisma.researchList.findMany({
+    where: { officeId, slug: { equals: normalizedQuery, mode: "insensitive" } },
+    select: { id: true, slug: true, name: true, fields: true },
+    take: 2,
+  });
+  if (insensitiveSlugMatches.length > 1) {
+    throw new Error("Research list query is ambiguous. Use an exact slug.");
+  }
+  if (insensitiveSlugMatches[0]) return insensitiveSlugMatches[0];
+
+  const insensitiveNameMatches = await prisma.researchList.findMany({
+    where: { officeId, name: { equals: normalizedQuery, mode: "insensitive" } },
+    select: { id: true, slug: true, name: true, fields: true },
+    take: 2,
+  });
+  if (insensitiveNameMatches.length > 1) {
+    throw new Error("Research list query is ambiguous. Use an exact slug.");
+  }
+  if (insensitiveNameMatches[0]) return insensitiveNameMatches[0];
+
+  const availableLists = await prisma.researchList.findMany({
+    where: { officeId },
+    select: { slug: true },
+    orderBy: { slug: "asc" },
+    take: 10,
+  });
+  const availableSlugs = availableLists.map((list) => list.slug).join(", ");
+  throw new Error(`Research list not found. Available lists: ${availableSlugs || "none"}`);
+}
+
 async function loadCampaign(officeId: string, campaignId: string): Promise<CampaignWithList> {
   const campaign = await prisma.outreachCampaign.findFirst({
     where: { id: campaignId, officeId },
@@ -223,14 +279,7 @@ async function senderDetails(senderAccountId: string | null) {
 }
 
 export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Promise<CampaignPlan> {
-  const list = await prisma.researchList.findFirst({
-    where: {
-      officeId: input.officeId,
-      OR: [{ slug: input.list }, { name: input.list }],
-    },
-    select: { id: true, slug: true, name: true, fields: true },
-  });
-  if (!list) throw new Error("Research list not found.");
+  const list = await resolveResearchList(input.officeId, input.list);
   const fields = validateResearchFields(list.fields);
   const emailField = input.emailField ?? fields.find((field) => field.type === "email")?.key ?? "email";
   if (!fields.some((field) => field.key === emailField)) {
@@ -337,13 +386,12 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
 export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
   listId?: string;
 }) {
-  const list = await prisma.researchList.findFirst({
-    where: {
-      officeId: input.officeId,
-      ...(input.listId ? { id: input.listId } : { OR: [{ slug: input.list }, { name: input.list }] }),
-    },
-    select: { id: true, fields: true },
-  });
+  const list = input.listId
+    ? await prisma.researchList.findFirst({
+        where: { officeId: input.officeId, id: input.listId },
+        select: { id: true, slug: true, name: true, fields: true },
+      })
+    : await resolveResearchList(input.officeId, input.list);
   if (!list) throw new Error("Research list not found.");
   const fields = validateResearchFields(list.fields);
   const emailField = input.emailField ?? fields.find((field) => field.type === "email")?.key ?? "email";

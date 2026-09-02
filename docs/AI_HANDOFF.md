@@ -59,16 +59,20 @@
 
 ## 2026-09-01: Dedicated outreach campaign desk
 
-- Operators can reach the existing campaign chat tools at
-  `/dashboard/campaigns`, from the `Outreach` topbar link or an active
-  campaign name in the banner. Customer-access and employee sessions are
-  redirected to Supply OS.
-- The desk uses the campaign scope when calling `chatWithAgent`, which
-  suppresses implicit job focus. Campaign chat runs remain audit logged,
-  unlike the freight-intelligence desk runs.
+- Operators can reach the existing campaign chat tools in the Supply OS
+  company profile's `Outreach` tab, next to Inventory, Messages, and Prospects.
+  Active campaign names in the banner open that tab. Customer-access sessions
+  and preview workspaces do not receive the operator-only tab.
+- The desk uses the shared `/dashboard/supply-os/outreach` scope when calling
+  `chatWithAgent`, which suppresses implicit job focus. Campaign chat runs
+  remain audit logged, unlike the freight-intelligence desk runs.
+- Campaign planning resolves trimmed, count-suffixed list labels within the
+  current office, preferring exact slugs and reporting available office slugs
+  when no list matches. Successful mutating campaign tools refresh the active
+  campaign banner.
 - Campaign planning, listing, greenlighting, and `apply <id>` retain their
-  existing approval and execution behavior. Campaign tools, proposal
-  handling, send logic, and banner data queries were not changed.
+  existing approval and execution behavior. Proposal handling, send logic,
+  and banner data queries were not changed.
 
 ## 2026-09-01: Chat thread deletion
 

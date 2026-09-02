@@ -310,6 +310,7 @@ export function SupplyOsDashboardWorkspace({
   canAuthorizePurchase = false,
   previewMode = false,
   canShowProspects = false,
+  canShowOutreach = false,
   initialMaterialsView,
   initialResearchListSlug,
   initialResearchQuery,
@@ -327,6 +328,7 @@ export function SupplyOsDashboardWorkspace({
   canAuthorizePurchase?: boolean;
   previewMode?: boolean;
   canShowProspects?: boolean;
+  canShowOutreach?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -629,6 +631,7 @@ export function SupplyOsDashboardWorkspace({
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             canShowProspects={canShowProspects}
+            canShowOutreach={canShowOutreach}
             initialMaterialsView={initialMaterialsView}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}
@@ -755,6 +758,7 @@ function CaseCommandCenter({
   canApproveProcurement,
   canAuthorizePurchase,
   canShowProspects,
+  canShowOutreach,
   initialMaterialsView,
   initialResearchListSlug,
   initialResearchQuery,
@@ -770,6 +774,7 @@ function CaseCommandCenter({
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
   canShowProspects?: boolean;
+  canShowOutreach?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -847,13 +852,18 @@ function CaseCommandCenter({
     }
     try {
       const stored = window.localStorage.getItem(materialsViewStorageKey);
-      if (stored === "inventory" || stored === "messages" || (stored === "prospects" && canShowProspects)) {
+      if (
+        stored === "inventory" ||
+        stored === "messages" ||
+        (stored === "prospects" && canShowProspects) ||
+        (stored === "outreach" && canShowOutreach)
+      ) {
         setInventoryWorkspaceView(stored);
       }
     } catch {
       // Local storage is optional.
     }
-  }, [canShowProspects, initialMaterialsView, materialsViewStorageKey]);
+  }, [canShowOutreach, canShowProspects, initialMaterialsView, materialsViewStorageKey]);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -1416,6 +1426,7 @@ function CaseCommandCenter({
             activeView={inventoryWorkspaceView}
             onViewChange={changeInventoryWorkspaceView}
             canShowProspects={canShowProspects}
+            canShowOutreach={canShowOutreach}
             storageScope={storageScope}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}

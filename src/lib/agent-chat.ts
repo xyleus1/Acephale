@@ -29,6 +29,11 @@ import { leadBoardPromptLine } from "@/lib/lead-board";
 import { US_LEAD_PARSED_MARKER } from "@/lib/meta-leads";
 import { operatorMetricLabel } from "@/lib/operator-action-labels";
 import {
+  CAMPAIGN_APPLY_COMMAND,
+  CAMPAIGN_GREENLIGHT_COMMAND,
+  isCampaignDeskScope,
+} from "@/lib/campaign-desk-scope";
+import {
   parsedCargoVolumeReview,
   parsedDimensionVolume,
   parsedDimensionsJson,
@@ -701,12 +706,6 @@ function isIntelDeskScope(scopePage?: string): boolean {
   return rawPath.replace(/\/+$/, "") === "/dashboard/intel";
 }
 
-function isCampaignDeskScope(scopePage?: string): boolean {
-  if (!scopePage || typeof scopePage !== "string") return false;
-  const [rawPath] = scopePage.slice(0, 600).split("?");
-  return rawPath.replace(/\/+$/, "") === "/dashboard/campaigns";
-}
-
 function boardAgeLabel(receivedAt: Date, now: Date): string {
   const days = Math.max(0, Math.floor((now.getTime() - new Date(receivedAt).getTime()) / 86_400_000));
   return days === 0 ? "today" : `${days}d ago`;
@@ -869,7 +868,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     return { reply: `Debug:\n· officeId: ${session.officeId}\n· scopeJobId: ${scopeJobId ?? "none"}\n· OPENAI_API_KEY: ${apiKey ? "set" : "MISSING"}\n· ${checks.join("\n· ")}` };
   }
 
-  const applyMatch = userMessage.trim().match(/^apply(?:\s+update)?\s+([a-z0-9]+)/i);
+  const applyMatch = userMessage.trim().match(CAMPAIGN_APPLY_COMMAND);
   if (applyMatch) {
     if (session.accessKind === "customer" || session.role === "EMPLOYEE") {
       const matches = await prisma.agentProposal.findMany({
@@ -887,7 +886,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     }
     return applyAgentProposal(session.officeId, session.userId, applyMatch[1]);
   }
-  const greenlightMatch = userMessage.trim().match(/^(greenlight|green ?light|send it|approve it|go ahead)\b/i);
+  const greenlightMatch = userMessage.trim().match(CAMPAIGN_GREENLIGHT_COMMAND);
   if (greenlightMatch) {
     if (session.accessKind === "customer" || session.role === "EMPLOYEE") {
       return { reply: "Outreach campaign approval is available only to operator accounts." };

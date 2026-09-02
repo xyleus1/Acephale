@@ -1,43 +1,33 @@
 .desk {
-  min-height: calc(100vh - 98px);
-  color: var(--text);
-}
-
-.deskHeader {
+  --text: var(--ink);
+  --text-2: var(--ink-soft);
+  --text-3: var(--ink-muted);
+  --surface: var(--panel);
+  --surface-2: var(--panel-subtle);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+  --derya-blue: var(--navy);
+  --derya-blue-border: var(--line-strong);
+  --derya-blue-soft: var(--navy-soft);
+  --derya-navy: var(--navy);
+  --derya-walnut: var(--decision);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 5px 4px 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.deskHeader h1 {
-  margin: 0;
+  flex-direction: column;
   color: var(--text);
-  font-size: 18px;
-  font-weight: 720;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-
-.headerStatus {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-3);
-  font-size: 12px;
 }
 
 .conversation {
+  flex: 1;
   display: grid;
   width: 100%;
-  max-width: 1500px;
-  min-height: 58vh;
+  min-height: 0;
   margin: 0 auto;
-  padding: 26px 4px 140px;
+  padding: 22px 18px 24px;
   gap: 22px;
+  overflow-y: auto;
 }
 
 .emptyState {
@@ -210,17 +200,11 @@
 }
 
 .composerDock {
-  position: sticky;
-  bottom: 0;
-  z-index: 24;
-  width: min(980px, calc(100% - 24px));
-  margin: -108px auto 0;
-  padding: 10px 0 max(12px, env(safe-area-inset-bottom));
-  background: linear-gradient(
-    to bottom,
-    rgba(247, 249, 252, 0),
-    var(--surface-2) 28%
-  );
+  width: 100%;
+  margin: 0;
+  padding: 10px 18px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .composer {
@@ -316,20 +300,8 @@
 }
 
 @media (max-width: 760px) {
-  .desk {
-    min-height: calc(100vh - 72px);
-  }
-
-  .deskHeader {
-    padding: 2px 0 16px;
-  }
-
-  .headerStatus {
-    max-width: 210px;
-  }
-
   .conversation {
-    padding: 20px 0 132px;
+    padding: 20px 12px 18px;
   }
 
   .emptyState {
@@ -360,8 +332,8 @@
   }
 
   .composerDock {
-    width: calc(100% + 8px);
-    margin-left: -4px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
   .composerMeta {

@@ -73,7 +73,7 @@ export function SupplyOsOperatingShell({
   contextEnabled: boolean;
   allowedWorkspaceIds?: string[];
   initialWorkspaceId?: string;
-  initialMaterialsView?: "inventory" | "messages" | "prospects";
+  initialMaterialsView?: "inventory" | "messages" | "prospects" | "outreach";
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
@@ -309,6 +309,7 @@ export function SupplyOsOperatingShell({
                 canAuthorizePurchase={canAuthorizePurchase}
                 previewMode={previewMode}
                 canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
+                canShowOutreach={!previewMode && accountRole !== "CUSTOMER"}
                 initialMaterialsView={initialMaterialsView}
                 initialResearchListSlug={initialResearchListSlug}
                 initialResearchQuery={initialResearchQuery}

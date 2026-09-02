@@ -21,14 +21,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <strong>Derya</strong>
               </span>
             </a>
-            {!isEmployee && !isCustomer ? (
-              <a
-                href="/dashboard/campaigns"
-                className="topbar-title"
-              >
-                Outreach
-              </a>
-            ) : null}
           </div>
           <div className="topbar-right">
             <details className="topbar-menu">

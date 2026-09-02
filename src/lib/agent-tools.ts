@@ -933,7 +933,7 @@ export const TOOLS = [
   },
   {
     name: "plan_outreach_campaign",
-    description: "Plan an office-scoped campaign and create a review proposal only when no blockers remain.",
+    description: "Call list_research_lists first, then pass its exact research-list slug to plan an office-scoped campaign. Creates a review proposal only when no blockers remain.",
     input_schema: {
       type: "object",
       properties: {

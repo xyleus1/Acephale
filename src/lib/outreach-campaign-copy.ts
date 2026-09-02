@@ -4,6 +4,10 @@ import { stripEmDashes } from "@/lib/no-em-dash";
 export const CAMPAIGN_STATUSES = ["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
+export function normalizeResearchListQuery(value: string): string {
+  return value.trim().replace(/\s+/g, " ").replace(/\s+\(\d+\)$/, "").trim();
+}
+
 type CampaignRow = Record<string, unknown> & {
   data?: Record<string, unknown>;
   status?: unknown;

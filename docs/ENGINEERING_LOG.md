@@ -87,14 +87,18 @@
 
 ## 2026-09-01: Dedicated outreach campaign desk
 
-- Added the operator-only `/dashboard/campaigns` page and a neutral chat desk
-  for campaign planning, listing, greenlighting, and `apply <id>`.
-- Added an operator-only `Outreach` topbar link and linked active campaign
-  names in the banner to the desk. Customer-access and employee sessions
-  remain on Supply OS.
-- Campaign scope suppresses implicit job focus without suppressing
-  `chatWithAgent` audit logging. Campaign tools, proposal behavior, send logic,
-  and banner data queries remain unchanged.
+- Added an operator-only `Outreach` tab inside the Supply OS company profile,
+  next to Inventory, Messages, and Prospects, for campaign planning, listing,
+  greenlighting, and `apply <id>`.
+- Active campaign names in the banner open the Supply OS Outreach tab.
+  Customer-access sessions and preview workspaces do not receive the
+  operator-only tab.
+- The shared `/dashboard/supply-os/outreach` scope suppresses implicit job focus
+  without suppressing `chatWithAgent` audit logging. Campaign tools, proposal
+  behavior, send logic, and banner data queries remain unchanged.
+- Planning resolves normalized list labels within the current office, with
+  exact slugs preferred and available office slugs reported on a miss.
+  Successful mutating campaign tool traces refresh the active campaign banner.
 
 ## 2026-09-01: Hide request cards in the Requests panel
 

@@ -18,7 +18,7 @@ export async function ActiveCampaignBanner() {
           <div>
             <div className={styles.label}>Campaign</div>
             <div className={styles.value}>
-              <Link href="/dashboard/campaigns">{campaign.name}</Link>
+              <Link href="/dashboard/supply-os?materialsView=outreach">{campaign.name}</Link>
             </div>
           </div>
           <div>

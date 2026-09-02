@@ -10,8 +10,13 @@ import {
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
+  normalizeResearchListQuery,
   renderCampaignEmail,
 } from "../src/lib/outreach-campaign-copy";
+import {
+  CAMPAIGN_APPLY_COMMAND,
+  CAMPAIGN_GREENLIGHT_COMMAND,
+} from "../src/lib/campaign-desk-scope";
 
 const row = {
   status: "new",
@@ -22,6 +27,16 @@ const row = {
     email_address: "buyer@baker-house.example",
   },
 };
+
+assert.equal(normalizeResearchListQuery("  Maneks   prospects  "), "Maneks prospects");
+assert.equal(normalizeResearchListQuery("Maneks prospects (2046)"), "Maneks prospects");
+assert.equal(normalizeResearchListQuery("  Wens\tpilot   primary (123)  "), "Wens pilot primary");
+assert.equal(normalizeResearchListQuery("wens-pilot-primary (abc)"), "wens-pilot-primary (abc)");
+assert.equal("apply abc123".match(CAMPAIGN_APPLY_COMMAND)?.[1], "abc123");
+assert.equal("apply update abc123".match(CAMPAIGN_APPLY_COMMAND)?.[1], "abc123");
+assert.equal(CAMPAIGN_GREENLIGHT_COMMAND.test("green light"), true);
+assert.equal(CAMPAIGN_GREENLIGHT_COMMAND.test("approve it now"), true);
+assert.equal(CAMPAIGN_GREENLIGHT_COMMAND.test("greenlighting"), false);
 
 const rendered = renderCampaignEmail({
   subject: " Hello {{company}}\n",
