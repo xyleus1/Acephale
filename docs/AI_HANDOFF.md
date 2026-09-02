@@ -1,5 +1,21 @@
 # AI Handoff
 
+## 2026-08-31: Cold suppliers are followed up on our own RFQ
+
+- A zero quote campaign was traced to the follow up gap, not to discovery or
+  attachments: the chase path needs an inbound supplier message to answer, so
+  every supplier that ignored the first RFQ was skipped silently.
+- New: `src/lib/procurement-supplier-nudge.ts` plus the pure policy in
+  `src/lib/procurement-supplier-nudge-policy.ts`, and the operator command
+  `/api/admin/procurement-supplier-nudges` (`GET` plans, `POST` sends with the
+  confirmation phrase). Files stay category scoped, the send stays on the
+  original thread and mailbox, and two follow ups per supplier is the ceiling.
+- To test: run the `GET` plan on a request with old outbound-only threads and
+  read the skip reasons, then send with a small `limit` and confirm the follow up
+  lands in the same thread with the request files attached and no duplicate on a
+  second run.
+
+||||||| 1d4a56e
 ## 2026-09-01: Context prospecting multilingual signals and row targets
 
 - Draft-derived Context prospecting profiles now use deterministic multilingual
@@ -201,6 +217,7 @@
   assert shell markup that predates the Sales Agent navigation and already fail
   on `main`. They were left alone rather than rewritten in this pass.
 
+||||||| parent of 6e82be5 (feat(procurement): follow up on suppliers that never answered the first RFQ)
 ## 2026-08-31: The state recheck suite runs in CI
 
 - `npm run test:state-recheck` is now a step in the `database-contracts` job of

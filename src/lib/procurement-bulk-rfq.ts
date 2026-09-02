@@ -28,7 +28,7 @@ export const BULK_RFQ_MAX_RECONCILE_PER_RUN = 20;
 // Bourne-owned order_vendors rows store the supplier address either on the
 // column or inside nested research and identity JSON. Read every shape the
 // procurement detail view reads so the campaign contacts the same pool.
-const BULK_RFQ_VENDOR_EMAIL_SQL = `COALESCE(
+export const BULK_RFQ_VENDOR_EMAIL_SQL = `COALESCE(
     to_jsonb(order_vendors)->>'contact_email',
     to_jsonb(order_vendors)->'contact'->>'email',
     to_jsonb(order_vendors)->'identity'->>'contact_email',

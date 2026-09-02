@@ -1,5 +1,30 @@
 # Engineering Log
 
+## 2026-08-31: Suppliers that never replied now get a follow up
+
+- Diagnostics on the two live HypnoDreamz requests showed 261 suppliers past the
+  quiet threshold with zero follow ups ever sent. The chase path builds a reply
+  from the supplier's newest inbound message, so a supplier that never answered
+  the first RFQ had no anchor and was skipped without a recorded reason.
+- `src/lib/procurement-supplier-nudge.ts` follows up on our own RFQ instead: the
+  same local thread, the same mailbox that owns the thread, `In-Reply-To` on the
+  RFQ message id, and the same category scoped request files the RFQ carried.
+  Eligibility lives in `src/lib/procurement-supplier-nudge-policy.ts`: no quote,
+  no inbound reply, a recorded first send, quiet for four days, at most two
+  follow ups per supplier.
+- Idempotency follows the bulk RFQ pattern. Each round reserves
+  `procurement-rfq-nudge:<orderId>:<round>:<vendorId>` from the sender pool, a
+  completed reservation reports `ALREADY_SENT` without mailing anyone, a rejected
+  send releases the slot, and an unknown one stays reserved for reconciliation.
+- `POST /api/admin/procurement-supplier-nudges` needs the confirmation phrase to
+  send; `GET` returns the plan with a skip reason per supplier. The autopilot
+  pass reports `nudgeCandidates` always and only sends when the operator turned
+  sending on.
+- Verification: `npm run test:procurement-supplier-nudge`,
+  `test:procurement-autopilot-plan`, `test:procurement-bulk-rfq`, `next lint`,
+  `npx tsc --noEmit`.
+
+||||||| 1d4a56e
 ## 2026-09-01: Context prospecting targets and multilingual fit
 
 - Context prospecting profiles now derive deterministic fit signals from the
@@ -232,6 +257,7 @@
   composer or submit through the existing `submitMessage` path. Visible Context
   copy is now Chat.
 
+||||||| parent of 6e82be5 (feat(procurement): follow up on suppliers that never answered the first RFQ)
 ## 2026-08-31: Context intake handles relative dates, citation tokens, and multi-question answers
 
 - `normalizeContextProcurementDraft` no longer rejects a whole draft over an

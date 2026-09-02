@@ -42,6 +42,7 @@
     "test:procurement-inbound-triage": "tsx scripts/procurement-inbound-triage.test.ts",
     "test:procurement-file-draft-batch": "tsx scripts/procurement-file-draft-batch.test.ts",
     "test:procurement-autopilot-plan": "tsx scripts/procurement-autopilot-plan.test.ts",
+    "test:procurement-supplier-nudge": "tsx scripts/procurement-supplier-nudge.test.ts",
     "test:procurement-sourcing-command": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-sourcing-command.test.ts",
     "test:procurement-sourcing-wave": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-sourcing-wave.test.ts",
     "test:procurement-request-document-merge": "tsx scripts/procurement-request-document-merge.test.ts",

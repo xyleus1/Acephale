@@ -20,6 +20,7 @@ on:
       - "scripts/production-database-migration-contract.test.ts"
       - "scripts/production-bourne-ledger-contract.test.ts"
       - "scripts/procurement-conversation.test.ts"
+      - "scripts/procurement-supplier-nudge.test.ts"
       - "scripts/supply-os-active-sourcing.test.ts"
       - "scripts/supply-os-deployment-boundary.test.ts"
       - "scripts/minimal-live-schema.test.ts"
@@ -475,6 +476,7 @@ jobs:
           npm run test:supply-os-active-sourcing
           npm run test:procurement-file-draft-batch
           npm run test:procurement-autopilot-plan
+          npm run test:procurement-supplier-nudge
           npm run test:procurement-request-document-merge
           npm run test:workflow-guild2
           npm run prebuild

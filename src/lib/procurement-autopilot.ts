@@ -16,6 +16,10 @@ import {
 } from "@/lib/procurement-file-delivery-draft";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { chasesSentAfterLastReply } from "@/lib/procurement-supplier-chase";
+import {
+  listSupplierNudgeTargets,
+  runProcurementSupplierNudges,
+} from "@/lib/procurement-supplier-nudge";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
 import { procurementReplyFacts, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
@@ -67,6 +71,10 @@ export type AutopilotRunResult = {
   replied: number;
   drafted: number;
   chased: number;
+  // A supplier that never answered the first RFQ cannot be chased through the
+  // reply path, so those follow ups are counted separately.
+  nudgeCandidates: number;
+  nudged: number;
   sent: number;
   alreadySent: number;
   failed: number;
@@ -232,6 +240,14 @@ export async function runProcurementAutopilot(args: {
     ...plan.filter((entry) => entry.action.kind === "SEND_DRAFT").map((entry) => entry.vendorId),
     ...chaseRun.drafted,
   ];
+  // Suppliers that never replied have no inbound message to answer, so their
+  // follow up rides on our own RFQ thread instead of being silently skipped.
+  const nudgeRun = autoSend
+    ? await runProcurementSupplierNudges({ orderId: args.orderId, limit })
+    : null;
+  const nudgePlan = nudgeRun
+    ? null
+    : await listSupplierNudgeTargets({ order: summary, limit });
   const sendRun = autoSend && deliverable.length
     ? await runProcurementFileDraftSendBatch({ orderId: args.orderId, limit, vendorIds: deliverable })
     : null;
@@ -244,6 +260,8 @@ export async function runProcurementAutopilot(args: {
     replied: states.filter((state) => state.lastDirection === "INBOUND").length,
     drafted: draftRun.drafted,
     chased: chaseRun.drafted.length,
+    nudgeCandidates: nudgeRun?.candidates ?? nudgePlan?.targets.length ?? 0,
+    nudged: nudgeRun?.sent ?? 0,
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
     failed: sendRun?.failed ?? 0,
@@ -251,6 +269,13 @@ export async function runProcurementAutopilot(args: {
     // escalations instead of being reduced to a count.
     failures: [
       ...chaseRun.failures,
+      ...(nudgeRun?.outcomes ?? [])
+        .filter((outcome) => outcome.state !== "SENT" && outcome.state !== "ALREADY_SENT")
+        .map((outcome) => ({
+          vendorId: outcome.vendorId,
+          vendorName: outcome.vendorName,
+          error: outcome.error ?? "The supplier follow up failed.",
+        })),
       ...(sendRun?.outcomes ?? [])
         .filter((outcome) => outcome.state === "FAILED")
         .map((outcome) => ({
