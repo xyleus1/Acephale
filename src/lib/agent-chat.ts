@@ -701,6 +701,12 @@ function isIntelDeskScope(scopePage?: string): boolean {
   return rawPath.replace(/\/+$/, "") === "/dashboard/intel";
 }
 
+function isCampaignDeskScope(scopePage?: string): boolean {
+  if (!scopePage || typeof scopePage !== "string") return false;
+  const [rawPath] = scopePage.slice(0, 600).split("?");
+  return rawPath.replace(/\/+$/, "") === "/dashboard/campaigns";
+}
+
 function boardAgeLabel(receivedAt: Date, now: Date): string {
   const days = Math.max(0, Math.floor((now.getTime() - new Date(receivedAt).getTime()) / 86_400_000));
   return days === 0 ? "today" : `${days}d ago`;
@@ -813,6 +819,7 @@ export async function chatWithAgent(history: ChatMsg[], userMessage: string, sco
 async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string, scopePage?: string): Promise<ChatResult> {
   const session = await requireSession();
   const intelDeskScope = isIntelDeskScope(scopePage);
+  const campaignDeskScope = isCampaignDeskScope(scopePage);
 
   async function recordRun(args: Parameters<typeof logAgentRun>[0]) {
     if (intelDeskScope) return;
@@ -911,7 +918,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
 
   // Branch 1: pasted RFQ → ingest as Inquiry (kept as a special case because
   // tool-use isn't the right shape for "the message itself is the data").
-  if (!intelDeskScope && looksLikeRFQ(userMessage)) {
+  if (!intelDeskScope && !campaignDeskScope && looksLikeRFQ(userMessage)) {
     const parsed = await parsePastedRfqText(apiKey, userMessage).catch(() => null);
 
     if (scopeJobId && parsed) {
@@ -1340,7 +1347,9 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // answering about a different load there, so the board scope suppresses
   // both and injects a live snapshot of the visible cards instead.
   const leadBoardScope = parseLeadBoardScope(scopePage);
-  const suppressImplicitJob = Boolean(leadBoardScope || intelDeskScope);
+  const suppressImplicitJob = Boolean(
+    leadBoardScope || intelDeskScope || campaignDeskScope
+  );
   const effectiveScopeJobId =
     scopeJobId ??
     (suppressImplicitJob
@@ -1376,7 +1385,10 @@ Do not create or update an RFQ from text entered on this page.`
           jobId: effectiveScopeJobId,
           limit: 8,
         }).catch(() => ""),
-    isPriceQuery(userMessage) && !leadBoardScope && !intelDeskScope
+    isPriceQuery(userMessage) &&
+    !leadBoardScope &&
+    !intelDeskScope &&
+    !campaignDeskScope
       ? buildPriceContext(session.officeId, effectiveScopeJobId ?? undefined)
       : Promise.resolve(""),
   ]);

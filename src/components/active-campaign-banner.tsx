@@ -17,7 +17,9 @@ export async function ActiveCampaignBanner() {
         <div className={`${styles.row} ${campaign.status === "PAUSED" ? styles.paused : ""}`} key={campaign.id}>
           <div>
             <div className={styles.label}>Campaign</div>
-            <div className={styles.value}>{campaign.name}</div>
+            <div className={styles.value}>
+              <Link href="/dashboard/campaigns">{campaign.name}</Link>
+            </div>
           </div>
           <div>
             <div className={styles.label}>Status</div>

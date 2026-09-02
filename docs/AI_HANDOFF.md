@@ -57,6 +57,19 @@
 - The UI filters cards and the Requests badge on
   `status !== "DISMISSED" && !hiddenAt`.
 
+## 2026-09-01: Dedicated outreach campaign desk
+
+- Operators can reach the existing campaign chat tools at
+  `/dashboard/campaigns`, from the `Outreach` topbar link or an active
+  campaign name in the banner. Customer-access and employee sessions are
+  redirected to Supply OS.
+- The desk uses the campaign scope when calling `chatWithAgent`, which
+  suppresses implicit job focus. Campaign chat runs remain audit logged,
+  unlike the freight-intelligence desk runs.
+- Campaign planning, listing, greenlighting, and `apply <id>` retain their
+  existing approval and execution behavior. Campaign tools, proposal
+  handling, send logic, and banner data queries were not changed.
+
 ## 2026-09-01: Chat thread deletion
 
 - Operators can delete a chat thread from the Chats rail (trash icon on

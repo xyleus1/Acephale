@@ -42,6 +42,17 @@
   rows, continues completed batches until that target, and cancels stale loops
   when the workspace changes.
 
+## 2026-09-01: Dedicated outreach campaign desk
+
+- Added the operator-only `/dashboard/campaigns` page and a neutral chat desk
+  for campaign planning, listing, greenlighting, and `apply <id>`.
+- Added an operator-only `Outreach` topbar link and linked active campaign
+  names in the banner to the desk. Customer-access and employee sessions
+  remain on Supply OS.
+- Campaign scope suppresses implicit job focus without suppressing
+  `chatWithAgent` audit logging. Campaign tools, proposal behavior, send logic,
+  and banner data queries remain unchanged.
+
 ## 2026-09-01: Hide request cards in the Requests panel
 
 - Added `hiddenAt: string | null` to the stored procurement and prospecting
