@@ -129,6 +129,22 @@
   exact slugs preferred and available office slugs reported on a miss.
   Successful mutating campaign tool traces refresh the active campaign banner.
 
+## 2026-09-01: Campaign sender display names
+
+- Added nullable `OutreachCampaign.senderDisplayName` in migration
+  `20260901000400_outreach_campaign_sender_display_name` with a read-only
+  production verification script.
+- Campaign planning normalizes optional display names, includes the requested
+  value in the revision hash, persists it on drafts, and shows the exact
+  provider-sent display identity and sender email in approval details.
+- Gmail OAuth sends emit a quoted ASCII display name only after header
+  cleaning, quote and backslash removal, and length truncation. Invalid or
+  non-ASCII names use the existing bare-address header. App-password sends
+  override the mailbox display name only for the campaign send.
+- Batch sending and the `plan_outreach_campaign` tool carry the display name
+  through without changing sender reservations, approval gates, or the shared
+  mailbox pool.
+
 ## 2026-09-01: Hide request cards in the Requests panel
 
 - Added `hiddenAt: string | null` to the stored procurement and prospecting

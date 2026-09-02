@@ -14,6 +14,10 @@ import {
   sendGmailAppPasswordMail,
 } from "@/lib/gmail-app-password";
 import { imapThreadExternalId } from "@/lib/imap-identifiers";
+import {
+  buildCampaignFromHeader,
+  normalizeCampaignSenderDisplayName,
+} from "@/lib/outreach-campaign-copy";
 
 export type SupplierEmailSendInput = {
   officeId: string;
@@ -26,6 +30,7 @@ export type SupplierEmailSendInput = {
   providerThreadId?: string | null;
   inReplyToRfcMessageId?: string | null;
   attachments?: readonly OutboundEmailAttachment[];
+  senderDisplayName?: string | null;
 };
 
 export type SupplierEmailSent = {
@@ -131,7 +136,7 @@ export function createGmailSupplierEmailProvider(
     }
 
     const headers = [
-      `From: ${cleanHeader(account.email)}`,
+      `From: ${buildCampaignFromHeader(cleanHeader(account.email), normalizeCampaignSenderDisplayName(cleanHeader(input.senderDisplayName ?? "")))}`,
       `To: ${cleanHeader(input.recipient)}`,
       `Subject: ${cleanHeader(input.subject)}`,
       `Message-ID: ${cleanHeader(input.rfcMessageId)}`,
@@ -283,8 +288,10 @@ const gmailAppPasswordSupplierEmailProvider: SupplierEmailProvider = {
     const references = input.inReplyToRfcMessageId ? [input.inReplyToRfcMessageId] : [];
     let sent: Awaited<ReturnType<typeof sendGmailAppPasswordMail>>;
     try {
+      const senderDisplayName = normalizeCampaignSenderDisplayName(cleanHeader(input.senderDisplayName ?? ""));
       sent = await sendGmailAppPasswordMail({
         account,
+        ...(senderDisplayName ? { from: { name: senderDisplayName, address: account.email } } : {}),
         to: cleanHeader(input.recipient),
         subject: cleanHeader(input.subject),
         text: stripEmDashes(input.body),

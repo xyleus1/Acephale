@@ -11,6 +11,8 @@ import {
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
   normalizeResearchListQuery,
+  asciiCampaignSenderDisplayName,
+  buildCampaignFromHeader,
   renderCampaignEmail,
 } from "../src/lib/outreach-campaign-copy";
 import {
@@ -32,6 +34,15 @@ assert.equal(normalizeResearchListQuery("  Maneks   prospects  "), "Maneks prosp
 assert.equal(normalizeResearchListQuery("Maneks prospects (2046)"), "Maneks prospects");
 assert.equal(normalizeResearchListQuery("  Wens\tpilot   primary (123)  "), "Wens pilot primary");
 assert.equal(normalizeResearchListQuery("wens-pilot-primary (abc)"), "wens-pilot-primary (abc)");
+assert.equal(buildCampaignFromHeader("addr@example.com", "Name"), '"Name" <addr@example.com>');
+assert.equal(buildCampaignFromHeader("addr@example.com", 'Na"me\\Co'), '"NameCo" <addr@example.com>');
+assert.equal(buildCampaignFromHeader("addr@example.com", "Wens Österreich"), "addr@example.com");
+assert.equal(buildCampaignFromHeader("addr@example.com", ""), "addr@example.com");
+assert.equal(buildCampaignFromHeader("addr@example.com", "   "), "addr@example.com");
+assert.equal(asciiCampaignSenderDisplayName("Wens"), "Wens");
+assert.equal(asciiCampaignSenderDisplayName("Wens Österreich"), null);
+assert.equal(asciiCampaignSenderDisplayName(""), null);
+assert.equal(asciiCampaignSenderDisplayName("   "), null);
 assert.equal("apply abc123".match(CAMPAIGN_APPLY_COMMAND)?.[1], "abc123");
 assert.equal("apply update abc123".match(CAMPAIGN_APPLY_COMMAND)?.[1], "abc123");
 assert.equal(CAMPAIGN_GREENLIGHT_COMMAND.test("green light"), true);
@@ -89,6 +100,7 @@ const revisionInput = {
   filters: { countries: ["United Kingdom"] },
   dailyCap: 40,
   senderAccountId: "account-1",
+  senderDisplayName: null,
   audienceRecordIds: ["record-1", "record-2"],
   audiencePersonalization: {
     "record-1": { email: "one@example.com", company: "One", country: "UK" },
@@ -104,6 +116,10 @@ assert.notEqual(campaignRevisionHash({
     ...revisionInput.audiencePersonalization,
     "record-1": { ...revisionInput.audiencePersonalization["record-1"], email: "changed@example.com" },
   },
+}), revision);
+assert.notEqual(campaignRevisionHash({
+  ...revisionInput,
+  senderDisplayName: "Wens",
 }), revision);
 assert.deepEqual(campaignPersonalizationMap({
   rows: [{

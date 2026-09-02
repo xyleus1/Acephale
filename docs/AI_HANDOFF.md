@@ -102,6 +102,21 @@
   existing approval and execution behavior. Proposal handling, send logic,
   and banner data queries were not changed.
 
+## 2026-09-01: Campaign sender display names
+
+- Outreach campaigns optionally persist a recipient-visible sender display
+  name, while the shared sender mailbox remains pinned by account id.
+- Approval review details show the exact display identity the pinned
+  mailbox's provider will send, along with the sender email. The requested
+  display name participates in the approved revision hash, so changing it
+  requires a new approval.
+- Gmail OAuth sends use a safe ASCII `From` header name, with invalid names
+  falling back to the bare address. App-password sends override the display
+  name for that campaign only, while absent names preserve mailbox behavior.
+- The sender display name is passed through the Supply OS Outreach planning
+  tool and campaign batch provider input. The migration is
+  `20260901000400_outreach_campaign_sender_display_name`.
+
 ## 2026-09-01: Chat thread deletion
 
 - Operators can delete a chat thread from the Chats rail (trash icon on

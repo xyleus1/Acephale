@@ -166,6 +166,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
           rowStatuses: ["new"],
           filters: null,
           senderAccountId: "account-1",
+          senderDisplayName: "Wens",
           dailyCap: 5,
           listId: "list-1",
           audienceRecordIds: ["record-1"],
@@ -233,14 +234,18 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     providerThreadId: null,
     localThreadId: null,
   };
+  let sentProviderInput: Record<string, unknown> | undefined;
   const provider = {
-    send: async () => ({
-      state: "SENT" as const,
-      provider: "GMAIL" as const,
-      providerMessageId: "provider-message",
-      providerThreadId: "provider-thread",
-      sourceUrl: "https://mail.google.com",
-    }),
+    send: async (input: Record<string, unknown>) => {
+      sentProviderInput = input;
+      return {
+        state: "SENT" as const,
+        provider: "GMAIL" as const,
+        providerMessageId: "provider-message",
+        providerThreadId: "provider-thread",
+        sourceUrl: "https://mail.google.com",
+      };
+    },
     reconcile: async () => ({ state: "UNKNOWN" as const, error: "unused" }),
   };
   const noSenderDb = fakeDatabase() as any;
@@ -295,6 +300,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     now: new Date("2026-01-01T12:00:00Z"),
   });
   assert.equal(sentRun.sent, 1);
+  assert.equal(sentProviderInput?.senderDisplayName, "Wens");
 
   let released = 0;
   const rejectedRun = await runOutreachCampaignBatch({

@@ -208,6 +208,7 @@ type LoadedCampaign = {
   rowStatuses: Prisma.JsonValue;
   filters: Prisma.JsonValue | null;
   senderAccountId: string | null;
+  senderDisplayName: string | null;
   dailyCap: number;
   listId: string;
   companyField: string | null;
@@ -535,6 +536,7 @@ export async function runOutreachCampaignBatch(input: {
       rowStatuses: true,
       filters: true,
       senderAccountId: true,
+      senderDisplayName: true,
       dailyCap: true,
       listId: true,
       audienceRecordIds: true,
@@ -692,6 +694,7 @@ export async function runOutreachCampaignBatch(input: {
       subject: email.subject,
       body: email.body,
       rfcMessageId,
+      senderDisplayName: campaign.senderDisplayName,
     });
     if (receipt.state === "SENT") {
       await recordSent(db, {

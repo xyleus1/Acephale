@@ -131,6 +131,7 @@ export async function sendGmailAppPasswordMail(input: {
   messageId?: string | null;
   inReplyTo?: string | null;
   references?: string[];
+  from?: { name: string; address: string };
   attachments?: readonly OutboundEmailAttachment[];
 }) {
   const credentials = readGmailAppPasswordAccount(input.account);
@@ -138,9 +139,9 @@ export async function sendGmailAppPasswordMail(input: {
   const transporter = smtpTransport(credentials);
   try {
     const info = await transporter.sendMail({
-      from: credentials.displayName
+      from: input.from ?? (credentials.displayName
         ? { name: credentials.displayName, address: credentials.email }
-        : credentials.email,
+        : credentials.email),
       to: input.to,
       subject: input.subject,
       text: input.text,

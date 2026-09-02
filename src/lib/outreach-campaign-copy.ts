@@ -8,6 +8,29 @@ export function normalizeResearchListQuery(value: string): string {
   return value.trim().replace(/\s+/g, " ").replace(/\s+\(\d+\)$/, "").trim();
 }
 
+export function normalizeCampaignSenderDisplayName(value: string | null | undefined): string | null {
+  const cleaned = stripEmDashes(value ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/["\\]/g, "")
+    .trim()
+    .slice(0, 78)
+    .trim();
+  return cleaned || null;
+}
+
+export function asciiCampaignSenderDisplayName(value: string | null | undefined): string | null {
+  const cleaned = normalizeCampaignSenderDisplayName(value);
+  return cleaned && /^[\x00-\x7F]*$/.test(cleaned) ? cleaned : null;
+}
+
+export function buildCampaignFromHeader(address: string, displayName: string | null | undefined): string {
+  const cleanAddress = stripEmDashes(address).replace(/[\r\n]+/g, " ").trim();
+  const cleanDisplayName = asciiCampaignSenderDisplayName(displayName);
+  return cleanDisplayName
+    ? `"${cleanDisplayName}" <${cleanAddress}>`
+    : cleanAddress;
+}
+
 type CampaignRow = Record<string, unknown> & {
   data?: Record<string, unknown>;
   status?: unknown;
@@ -163,6 +186,7 @@ export function campaignRevisionHash(input: {
   filters: Record<string, unknown>;
   dailyCap: number;
   senderAccountId: string | null;
+  senderDisplayName: string | null;
   audienceRecordIds: readonly string[];
   audiencePersonalization?: Record<string, CampaignPersonalization> | null;
 }) {
@@ -182,6 +206,7 @@ export function campaignRevisionHash(input: {
     filters: input.filters,
     dailyCap: input.dailyCap,
     senderAccountId: input.senderAccountId,
+    senderDisplayName: input.senderDisplayName,
     audienceRecordIds: [...input.audienceRecordIds].sort(),
     audiencePersonalization: sortedPersonalization,
   })).digest("hex");

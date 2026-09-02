@@ -946,6 +946,7 @@ export const TOOLS = [
         body: { type: "string" },
         campaign_name: { type: "string" },
         sender_mailbox: { type: "string", description: "Sender mailbox email address or account id" },
+        sender_display_name: { type: "string", description: "Name recipients will see in the From header. Defaults to the mailbox's own name when omitted." },
       },
       required: ["list"],
     },
@@ -4235,6 +4236,7 @@ export async function dispatchTool(
           bodyTemplate: body,
           campaignName: typeof input.campaign_name === "string" ? input.campaign_name : undefined,
           senderAccountId: sender?.id ?? null,
+          senderDisplayName: typeof input.sender_display_name === "string" ? input.sender_display_name : null,
         };
         const plan = await planOutreachCampaign(campaignInput);
         const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
@@ -4249,7 +4251,8 @@ export async function dispatchTool(
             actionInput: { campaignId, revisionHash: campaign.revisionHash },
             actionLabel: `Start outreach campaign for ${plan.list.name}, ${plan.eligible} recipients`,
             actionDetails: [
-              `Sender mailbox: ${plan.senderEmail ?? "no mailbox connected"}`,
+              `Sender display name: ${plan.senderDisplayName ?? "none, the address only"}`,
+              `Sender email: ${plan.senderEmail ?? "no mailbox connected"}`,
               `Daily cap: ${plan.dailyCap}`,
               `Filters: ${JSON.stringify(plan.filters)}`,
               `Subject: ${plan.subject}`,

@@ -1,7 +1,9 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { GMAIL_APP_PASSWORD_PROVIDER } from "@/lib/gmail-app-password";
 import {
+  asciiCampaignSenderDisplayName,
   campaignBlockers,
   campaignDefaultName,
   campaignPersonalizationMap,
@@ -12,6 +14,7 @@ import {
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
   normalizeResearchListQuery,
+  normalizeCampaignSenderDisplayName,
   renderCampaignEmail,
   type CampaignStatus,
 } from "@/lib/outreach-campaign-copy";
@@ -54,6 +57,7 @@ type CampaignWithList = {
   rowStatuses: Prisma.JsonValue;
   filters: Prisma.JsonValue | null;
   senderAccountId: string | null;
+  senderDisplayName: string | null;
   dailyCap: number;
   audienceTotal: number;
   audienceRecordIds: Prisma.JsonValue | null;
@@ -90,6 +94,7 @@ export type CampaignPlan = {
   sampleBody: string;
   renderedBody: string;
   senderEmail: string | null;
+  senderDisplayName: string | null;
   blockers: string[];
 };
 
@@ -107,6 +112,7 @@ export type PlanOutreachCampaignInput = {
   dailyCap?: number;
   campaignName?: string;
   senderAccountId?: string | null;
+  senderDisplayName?: string | null;
   companyField?: string;
   createdByUserId?: string;
 };
@@ -214,6 +220,7 @@ async function loadCampaign(officeId: string, campaignId: string): Promise<Campa
       rowStatuses: true,
       filters: true,
       senderAccountId: true,
+      senderDisplayName: true,
       dailyCap: true,
       audienceTotal: true,
       audienceRecordIds: true,
@@ -265,17 +272,29 @@ async function eligibleRecords(campaign: CampaignWithList, useSnapshot = false) 
   };
 }
 
-async function senderDetails(senderAccountId: string | null) {
+async function senderDetails(senderAccountId: string | null, requestedDisplayName: string | null) {
   const mailboxes = await listEmailSenderPoolAccounts();
   let email: string | null = null;
+  let mailboxDisplayName: string | null = null;
+  let provider: string | null = null;
   if (senderAccountId) {
     const account = await prisma.emailAccount.findUnique({
       where: { id: senderAccountId },
-      select: { email: true },
+      select: { email: true, displayName: true, provider: true },
     });
     email = account?.email ?? null;
+    mailboxDisplayName = account?.displayName ?? null;
+    provider = account?.provider ?? null;
   }
-  return { email, mailboxesAvailable: mailboxes.length };
+  const requested = normalizeCampaignSenderDisplayName(requestedDisplayName);
+  const isAppPassword = provider === GMAIL_APP_PASSWORD_PROVIDER;
+  const candidate = requested ?? (isAppPassword ? normalizeCampaignSenderDisplayName(mailboxDisplayName) : null);
+  const displayName = isAppPassword ? candidate : asciiCampaignSenderDisplayName(candidate);
+  return {
+    email,
+    displayName,
+    mailboxesAvailable: mailboxes.length,
+  };
 }
 
 export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Promise<CampaignPlan> {
@@ -332,7 +351,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
   });
   const sample = eligible[0] ? renderedSample.body.slice(0, 400) : "";
   const dailyCap = input.dailyCap ?? 40;
-  const sender = await senderDetails(input.senderAccountId ?? null);
+  const senderDisplayName = normalizeCampaignSenderDisplayName(input.senderDisplayName);
+  const sender = await senderDetails(input.senderAccountId ?? null, senderDisplayName);
   const revisionHash = campaignRevisionHash({
     subject,
     bodyTemplate,
@@ -341,6 +361,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     filters,
     dailyCap,
     senderAccountId: input.senderAccountId ?? null,
+    senderDisplayName,
     audienceRecordIds: eligible.map((record) => record.id),
     audiencePersonalization: campaignPersonalizationMap({
       rows: eligible.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
@@ -369,6 +390,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     sampleBody: sample,
     renderedBody: renderedSample.body,
     senderEmail: sender.email,
+    senderDisplayName: sender.displayName,
     mailboxesAvailable: sender.mailboxesAvailable,
     emailField,
     sampleRecipients,
@@ -444,6 +466,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     filters,
     dailyCap: input.dailyCap ?? 40,
     senderAccountId: input.senderAccountId ?? null,
+    senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
     audienceRecordIds,
     audiencePersonalization,
   });
@@ -462,6 +485,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     revisionHash,
     dailyCap: input.dailyCap ?? 40,
     senderAccountId: input.senderAccountId ?? null,
+    senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
     createdByUserId: input.createdByUserId ?? null,
   };
   const campaign = existing
@@ -490,6 +514,7 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
     filters,
     dailyCap: campaign.dailyCap,
     senderAccountId: campaign.senderAccountId,
+    senderDisplayName: campaign.senderDisplayName,
     audienceRecordIds: records.map((record) => record.id),
     audiencePersonalization,
   });
@@ -499,7 +524,7 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
   ) {
     return { activated: false, blockers: ["This campaign changed after it was proposed. Plan it again."] };
   }
-  const sender = await senderDetails(campaign.senderAccountId);
+  const sender = await senderDetails(campaign.senderAccountId, campaign.senderDisplayName);
   const blockers = campaignBlockers({
     eligible: records.length,
     mailboxesAvailable: sender.mailboxesAvailable,
