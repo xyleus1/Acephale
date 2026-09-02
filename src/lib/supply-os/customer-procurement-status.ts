@@ -177,6 +177,20 @@ export function customerProcurementAttentionHints(specification: string | null |
   return hints;
 }
 
+/**
+ * Supplier rows read from communication receipts, not the raw workflow vendor
+ * status, so the request detail cannot claim contact that the message history
+ * does not show.
+ */
+export function customerProcurementVendorStateLabel(
+  vendor: Pick<CustomerProcurementVendor, "contacted" | "responseCount" | "quote">,
+) {
+  if (vendor.quote) return "Quote received";
+  if (vendor.responseCount > 0) return "Replied";
+  if (vendor.contacted) return "Contact recorded";
+  return "No contact receipt";
+}
+
 export function customerProcurementProgress(status: string, supplierCount: number, storedProgress?: string | null) {
   switch (status) {
     case "new":
@@ -186,7 +200,9 @@ export function customerProcurementProgress(status: string, supplierCount: numbe
         ? `${supplierCount} supplier candidate${supplierCount === 1 ? " is" : "s are"} being verified.`
         : "Searching and verifying supplier candidates.";
     case "awaiting_shortlist_approval":
-      return `${supplierCount} supplier candidate${supplierCount === 1 ? " is" : "s are"} ready for review.`;
+      return supplierCount > 0
+        ? `${supplierCount} supplier candidate${supplierCount === 1 ? " is" : "s are"} ready for review.`
+        : "The supplier shortlist is ready for review.";
     case "sourcing":
       return "Shortlisted suppliers are being evaluated and commercial terms are being collected.";
     case "awaiting_order_approval":

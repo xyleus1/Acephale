@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { facilityMatchesVerifiedBase } from "../src/lib/supply-os/facility-verification";
 import {
   CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS,
   customerProcurementAttentionHints,
@@ -13,6 +14,7 @@ import {
   customerProcurementResearchEmail,
   customerProcurementResearchComplete,
   customerProcurementStatusLabel,
+  customerProcurementVendorStateLabel,
   CUSTOMER_PROCUREMENT_MAX_CONSECUTIVE_FAILURES,
   startCustomerProcurementPolling,
 } from "../src/lib/supply-os/customer-procurement-status";
@@ -58,6 +60,74 @@ assert.equal(customerProcurementStatusLabel("researching"), "Researching supplie
 assert.equal(customerProcurementStatusLabel("internal_worker_state"), "In progress");
 assert.equal(customerProcurementProgress("new", 0), "Request received. Supplier research has not started yet.");
 assert.equal(customerProcurementProgress("researching", 1), "1 supplier candidate is being verified.");
+assert.equal(
+  customerProcurementProgress("awaiting_shortlist_approval", 0),
+  "The supplier shortlist is ready for review.",
+);
+assert.equal(
+  customerProcurementProgress("awaiting_shortlist_approval", 4),
+  "4 supplier candidates are ready for review.",
+);
+assert.equal(
+  customerProcurementVendorStateLabel({ contacted: false, responseCount: 0, quote: null }),
+  "No contact receipt",
+);
+assert.equal(
+  customerProcurementVendorStateLabel({ contacted: true, responseCount: 0, quote: null }),
+  "Contact recorded",
+);
+assert.equal(
+  customerProcurementVendorStateLabel({ contacted: true, responseCount: 2, quote: null }),
+  "Replied",
+);
+assert.equal(
+  customerProcurementVendorStateLabel({ contacted: false, responseCount: 0, quote: { price: 12 } }),
+  "Quote received",
+);
+assert.match(guidedWorkspace, /customerProcurementVendorStateLabel\(vendor\)/);
+assert.doesNotMatch(guidedWorkspace, /vendorStatusLabel/);
+
+const verifiedBase = {
+  label: "Northwind Robotics base, Detroit, MI, US",
+  city: "Detroit",
+};
+const operatingSite = { id: "processing-site", kind: "factory" as const };
+assert.equal(
+  facilityMatchesVerifiedBase({ ...operatingSite, label: "Northwind Robotics operating site", location: "Detroit, MI" }, verifiedBase),
+  true,
+);
+assert.equal(
+  facilityMatchesVerifiedBase({ ...operatingSite, label: "Northwind Robotics operating site", location: "Austin, TX" }, verifiedBase),
+  false,
+);
+// A second factory in the saved base city is a different site and stays unverified.
+assert.equal(
+  facilityMatchesVerifiedBase({ id: "source-detroit-castings-1", kind: "factory", label: "Detroit Castings plant", location: "Detroit, MI" }, verifiedBase),
+  false,
+);
+// The generated label carries the company name, not facility identity, so it cannot confirm a conflicting address.
+assert.equal(
+  facilityMatchesVerifiedBase({ ...operatingSite, label: "Northwind Robotics base operating site", location: "Austin, TX" }, verifiedBase),
+  false,
+);
+assert.equal(
+  facilityMatchesVerifiedBase({ ...operatingSite, label: "Detroit Robotics operating site", location: "Austin, TX" }, verifiedBase),
+  false,
+);
+assert.equal(
+  facilityMatchesVerifiedBase({ id: "distribution-1", kind: "distribution", label: "Third party warehouse", location: "Detroit, MI" }, verifiedBase),
+  false,
+);
+assert.equal(
+  facilityMatchesVerifiedBase({ ...operatingSite, label: "Operating site", location: "Detroit, MI" }, null),
+  false,
+);
+assert.equal(
+  facilityMatchesVerifiedBase({ ...operatingSite, label: "Operating site", location: "Detroit, MI" }, { label: "Base", city: null }),
+  false,
+);
+assert.match(dashboard, /facilityMatchesVerifiedBase\(object, verifiedFacility\)/);
+assert.match(dashboard, /Verified operating base/);
 assert.equal(
   customerProcurementAttentionReason("Missing STL measurement units and a confirmed PCB surface finish."),
   "Missing STL measurement units and a confirmed PCB surface finish.",

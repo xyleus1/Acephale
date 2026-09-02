@@ -29,6 +29,7 @@ import {
   type SupplyCompanyResearch,
 } from "@/lib/supply-os-case-model";
 import { parseSupplyCompanyResearch } from "@/lib/supply-os/company-profile";
+import { facilityMatchesVerifiedBase, type VerifiedFacilityBase } from "@/lib/supply-os/facility-verification";
 import {
   buildSupplyCommandMap,
   type SupplyCommandMap,
@@ -358,6 +359,7 @@ export function SupplyOsDashboardWorkspace({
   const [logisticsSettings, setLogisticsSettings] = useState<WorkspaceManagementSettings | null>(null);
   const [logisticsSettingsState, setLogisticsSettingsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const verifiedFacilityRef = useRef<string | null>(null);
+  const [verifiedFacility, setVerifiedFacility] = useState<VerifiedFacilityBase | null>(null);
 
   useEffect(() => {
     setManualProfileOpen(false);
@@ -369,6 +371,7 @@ export function SupplyOsDashboardWorkspace({
     setManualProfileInputs("");
     setManualProfileError(null);
     verifiedFacilityRef.current = null;
+    setVerifiedFacility(null);
   }, [workspaceId, workspaceName]);
 
   async function submitManualProfile(event: FormEvent<HTMLFormElement>) {
@@ -465,9 +468,13 @@ export function SupplyOsDashboardWorkspace({
         verifiedFacilityRef.current = currentLogisticsSettings.base
           ? formatCustomerBase(currentLogisticsSettings.base)
           : null;
+        setVerifiedFacility(currentLogisticsSettings.base && verifiedFacilityRef.current
+          ? { label: verifiedFacilityRef.current, city: currentLogisticsSettings.base.city }
+          : null);
       } catch (error) {
         if (onLogistics || (error instanceof DOMException && error.name === "AbortError")) throw error;
         verifiedFacilityRef.current = null;
+        setVerifiedFacility(null);
       }
       if (currentLogisticsSettings && onLogistics) {
         setLogisticsSettings(currentLogisticsSettings);
@@ -640,6 +647,8 @@ export function SupplyOsDashboardWorkspace({
             initialResearchQuery={initialResearchQuery}
             initialResearchStatus={initialResearchStatus}
             initialResearchPage={initialResearchPage}
+            previewMode={previewMode}
+            verifiedFacility={verifiedFacility}
             onOpenContext={onOpenContext}
           />
       ) : null}
@@ -771,6 +780,8 @@ function CaseCommandCenter({
   initialResearchQuery,
   initialResearchStatus,
   initialResearchPage,
+  previewMode,
+  verifiedFacility,
   onOpenContext,
 }: {
   dashboard: SupplyCaseDashboard;
@@ -787,6 +798,8 @@ function CaseCommandCenter({
   initialResearchQuery?: string;
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
   initialResearchPage?: number;
+  previewMode: boolean;
+  verifiedFacility: VerifiedFacilityBase | null;
   onOpenContext: () => void;
 }) {
   const companyName = dashboardName(dashboard);
@@ -1596,8 +1609,11 @@ function CaseCommandCenter({
             onModeChange={setInspectorMode}
             onFocusAction={focusOptimizationAction}
             activePanel={activePanel}
+            verifiedFacility={verifiedFacility}
             facilitySettingsHref={workspaceId
-              ? `/dashboard/settings?workspaceId=${encodeURIComponent(workspaceId)}`
+              ? previewMode
+                ? `/dashboard/settings?preview=customer&workspaceId=${encodeURIComponent(workspaceId)}`
+                : `/dashboard/settings?workspaceId=${encodeURIComponent(workspaceId)}`
               : null}
           />
         ) : null}
@@ -1617,6 +1633,7 @@ function CommandInspector({
   onModeChange,
   onFocusAction,
   activePanel,
+  verifiedFacility,
   facilitySettingsHref,
 }: {
   dashboard: SupplyCaseDashboard;
@@ -1627,9 +1644,11 @@ function CommandInspector({
   onModeChange: (mode: "object" | "optimization") => void;
   onFocusAction: (actionId: string) => void;
   activePanel: SupplyOsPanel;
+  verifiedFacility: VerifiedFacilityBase | null;
   facilitySettingsHref: string | null;
 }) {
   const Icon = objectIcon(object.kind);
+  const verifiedBySavedBase = facilityMatchesVerifiedBase(object, verifiedFacility);
   const workspace = workspaceForObject(object, model);
   const action = model.actions.find((candidate) => candidate.id === object.priority?.id)
     ?? model.actions.find((candidate) => candidate.workstreamId === object.workstreamId)
@@ -1675,7 +1694,9 @@ function CommandInspector({
               <small>{objectKindLabel(object.kind)}</small>
               <h2>{object.label}</h2>
             </span>
-            <i data-status={object.status}>{object.statusLabel}</i>
+            {verifiedBySavedBase
+              ? <i data-status="verified">Verified operating base</i>
+              : <i data-status={object.status}>{object.statusLabel}</i>}
           </header>
 
           <div className={styles.inspectorBody}>
@@ -1690,6 +1711,7 @@ function CommandInspector({
             </dl>
 
             {facilitySettingsHref
+              && !verifiedBySavedBase
               && object.basis === "inferred"
               && (object.kind === "factory" || object.kind === "distribution") ? (
               <a className={styles.inspectorVerifyFacility} href={facilitySettingsHref}>

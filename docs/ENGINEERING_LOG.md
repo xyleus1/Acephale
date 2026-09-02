@@ -8503,3 +8503,18 @@ Use this file for chronological implementation notes that future agents should s
   inferred facility objects link to the verification surface, long material and
   company names carry native titles, and loading is separated from failure on
   the company profile and company index.
+
+## 2026-09-02: Supplier state, facility verification, and shortlist counts
+
+- The request detail Compare table showed the raw workflow vendor status, so a
+  vendor could read "contacted" there while the Messages tab reported no
+  receipt. Both surfaces now derive the supplier line from receipts:
+  `customerProcurementVendorStateLabel` reads quote, response count, and
+  contact receipt in that order.
+- A saved operating base is operator-entered, so the map inspector no longer
+  asks to verify the company operating site when it matches that base. Matching
+  is limited to the factory object through `facilityMatchesVerifiedBase`, so
+  other facilities in the same city stay unverified.
+- `awaiting_shortlist_approval` progress no longer claims "0 supplier
+  candidates" when the caller has no candidate count, which is the case for the
+  queue projection.

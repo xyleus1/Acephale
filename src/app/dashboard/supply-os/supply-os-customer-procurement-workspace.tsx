@@ -26,20 +26,14 @@ import {
   customerProcurementPublicPriceSummary,
   customerProcurementQuoteSummary,
   customerProcurementResearchComplete,
+  customerProcurementVendorStateLabel,
   startCustomerProcurementPolling,
   type CustomerProcurementOrderState,
   type CustomerProcurementRequestDetail,
 } from "@/lib/supply-os/customer-procurement-status";
-import {
-  PROCUREMENT_APPROVAL_STATUSES,
-  PROCUREMENT_STATUS_LABELS,
-} from "@/lib/procurement-status";
+import { PROCUREMENT_APPROVAL_STATUSES } from "@/lib/procurement-status";
 import type { SupplyInventoryItem } from "@/lib/supply-os/inventory-item";
 import styles from "./supply-os-logistics.module.css";
-
-function vendorStatusLabel(status: string) {
-  return PROCUREMENT_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
-}
 
 function clockLabel(value: string | null) {
   if (!value) return null;
@@ -433,7 +427,7 @@ export function CustomerProcurementWorkspace({
                     const publicPrice = customerProcurementPublicPriceSummary(vendor.research);
                     return (
                       <tr key={vendor.id}>
-                        <td><strong>{vendor.name}</strong><small>{vendorStatusLabel(vendor.status)}</small></td>
+                        <td><strong>{vendor.name}</strong><small>{customerProcurementVendorStateLabel(vendor)}</small></td>
                         <td><strong>{contact.primary}</strong><small>{contact.secondary}</small></td>
                         <td><strong>{evidence[0] ?? "Evidence pending"}</strong><small>{evidence[1] ?? "Review the supplier source before approval"}</small></td>
                         <td>

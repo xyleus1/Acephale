@@ -11498,3 +11498,14 @@ Verification caveat:
   `npm run test:supply-os-active-sourcing`,
   `npm run test:supply-os-sourcing-projection`,
   `npm run test:supply-os-panel-alerts`, and `npm run check:product-copy`.
+
+## 2026-09-02: Supplier state and facility verification consistency
+
+- Compare and Messages now read supplier contact state from the same receipt
+  logic, so the two surfaces cannot contradict each other.
+- The map inspector treats the saved operating base as verified for the factory
+  object and drops the verify link there. Other facilities keep it.
+- The queue tooltip for a shortlist under review no longer reports zero
+  candidates when the count is unknown to the list projection.
+- Verified with `npx tsc --noEmit`, `npm run test:workflow-guild2`,
+  `npm run check:product-copy`, and lint on the touched library files.

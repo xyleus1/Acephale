@@ -112,6 +112,19 @@ description: How to bring up derya-crm locally (app DB, workflow DB, login allow
   the target, and a run with no progress past the stale threshold offers a retry after a reload.
 - Resize for responsive checks with `wmctrl -r :ACTIVE: -e 0,0,0,<width>,<height>` (remove the maximized
   flags first) and re-maximize with `wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz`.
+- To force the honest detail-failure state, `docker stop pgworkflow`, open the request from the queue, then
+  `docker start pgworkflow`, wait for `docker exec pgworkflow pg_isready`, and click "Try again". The
+  workflow-backed endpoints answer 503 while the container is down, which is the fastest adversarial setup.
+- Prospecting action cards are `CompanyContext` rows with `kind='ACTION'` (there is no ContextProspectingRun
+  table). Reset one to PENDING or fake a stale RUNNING run by editing `payload->>'status'` and
+  `payload->>'runningStartedAt'` (set it ~20 minutes in the past) plus `"processingState"`, then reload.
+- A vendor's workflow `order_vendors.status` (often bulk-set to `contacted`) is not the same as a Gmail
+  contact receipt. Compare renders the raw status while Messages renders receipts, so the two surfaces can
+  still disagree for the same vendor. Query
+  `procurement_communication_messages` joined to `order_vendors` to learn which vendors really have traffic
+  before calling a mismatch a bug.
+- The queue row's Source state `title` tooltip can still read "0 supplier candidates are ready for review"
+  for a request whose detail loads hundreds of candidates: the queue list payload has no supplier counts.
 - Do not judge run-on numbers from the DOM dump: JSX whitespace is stripped in the annotated DOM, so
   `100units` in the DOM renders as `100 units`. Zoom on the screenshot before reporting spacing bugs.
 

@@ -21,7 +21,6 @@ import {
   type CustomerProcurementOrderState,
 } from "@/lib/supply-os/customer-procurement-status";
 import {
-  PROCUREMENT_APPROVAL_STATUSES,
 } from "@/lib/procurement-status";
 import {
   sourcingNeedByDate,
@@ -558,9 +557,11 @@ export function SupplyInventoryWorkspace({
             {customerProcurementOrders.map((request) => {
               const item = customerProcurementItem(request);
               const order = customerProcurementOrderState(request);
-              const sourceState = PROCUREMENT_APPROVAL_STATUSES.has(request.status)
+              const sourceState = request.status === "awaiting_shortlist_approval"
                 ? "Shortlist under review"
-                : customerProcurementStatusLabel(request.status);
+                : request.status === "awaiting_order_approval"
+                  ? "Order under review"
+                  : customerProcurementStatusLabel(request.status);
               const sourceStateDetail = customerProcurementProgress(request.status, 0, request.progress);
               return (
                 <tr key={request.id} data-status="request">
