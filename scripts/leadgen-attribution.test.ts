@@ -19,26 +19,63 @@ async function main() {
 let freeCalls = 0;
 const enoughProvider = createCascadingSearchProvider({
   serperApiKey: "test-key",
-  threshold: 1,
-  fetchPage: async (url) => {
+  threshold: 2,
+  fetchPage: async () => {
     freeCalls += 1;
-    const engine = new URL(url).hostname;
-    return freePage(engine === "duckduckgo.com" ? "duck.example" : engine === "search.brave.com" ? "brave.example" : "bing.example");
+    return freePage("free.example");
   },
   serperProvider: {
     name: "serper",
+    searchWithStats: async () => ({
+      hits: [
+        { url: "https://paid-one.example/", domain: "paid-one.example", engine: "serper", rank: 1, provider: "serper" },
+        { url: "https://paid-two.example/", domain: "paid-two.example", engine: "serper", rank: 2, provider: "serper" },
+      ],
+      pagesFetched: 1,
+      providersUsed: ["serper"],
+    }),
     search: async () => {
-      throw new Error("Serper must not run when free results are sufficient");
+      throw new Error("search should use searchWithStats");
     },
   },
 });
 const enoughHits = await enoughProvider.search("steel buyers");
-assert.equal(freeCalls, 1);
-assert.deepEqual(enoughHits.map((hit) => hit.engine), ["duckduckgo"]);
-assert.ok(enoughHits.every((hit) => hit.provider === "html"));
+assert.equal(freeCalls, 0);
+assert.deepEqual(enoughHits.map((hit) => hit.engine), ["serper", "serper"]);
+assert.ok(enoughHits.every((hit) => hit.provider === "serper"));
 const enoughResult = await enoughProvider.searchWithStats!("steel buyers");
 assert.equal(enoughResult.pagesFetched, 1);
-assert.deepEqual(enoughResult.providersUsed, ["html:duckduckgo"]);
+assert.deepEqual(enoughResult.providersUsed, ["serper"]);
+
+let mergedFreeCalls = 0;
+const mergedProvider = createCascadingSearchProvider({
+  threshold: 3,
+  serperApiKey: "test-key",
+  freeEngines: ["duckduckgo", "brave", "bing"],
+  fetchPage: async (url) => {
+    mergedFreeCalls += 1;
+    const host = new URL(url).hostname;
+    return freePage(host === "html.duckduckgo.com" ? "free-one.example" : "free-two.example");
+  },
+  serperProvider: {
+    name: "serper",
+    searchWithStats: async () => ({
+      hits: [{ url: "https://paid.example/", domain: "paid.example", engine: "serper", rank: 1, provider: "serper" }],
+      pagesFetched: 1,
+      providersUsed: ["serper"],
+    }),
+    search: async () => [],
+  },
+});
+const mergedResult = await mergedProvider.searchWithStats!("merged query");
+assert.equal(mergedFreeCalls, 2);
+assert.equal(mergedResult.pagesFetched, 3);
+assert.deepEqual(mergedResult.providersUsed, ["serper", "html:duckduckgo", "html:brave"]);
+assert.deepEqual(mergedResult.hits.map((hit) => hit.domain), [
+  "paid.example",
+  "free-one.example",
+  "free-two.example",
+]);
 
 let nullHtmlFetches = 0;
 const nullHtml = createHtmlSearchProvider({
@@ -92,11 +129,65 @@ assert.equal(dedupeFallbackCalls, 1);
 let noKeyCalls = 0;
 const noKeyProvider = createCascadingSearchProvider({
   serperApiKey: "",
-  fetchPage: async () => null,
+  freeEngines: ["duckduckgo", "brave", "bing"],
+  fetchPage: async () => {
+    noKeyCalls += 1;
+    return null;
+  },
   serperProvider: { name: "serper", search: async () => { noKeyCalls += 1; return []; } },
 });
-await noKeyProvider.search("no paid access");
-assert.equal(noKeyCalls, 0);
+const noKeyResult = await noKeyProvider.searchWithStats!("no paid access");
+assert.equal(noKeyCalls, 3);
+assert.equal(noKeyResult.pagesFetched, 3);
+assert.deepEqual(noKeyResult.providersUsed, ["html:duckduckgo", "html:brave", "html:bing"]);
+
+let budgetSerperCalls = 0;
+let budgetFreeCalls = 0;
+const budgetProvider = createCascadingSearchProvider({
+  threshold: 3,
+  serperApiKey: "test-key",
+  fetchPage: async () => {
+    budgetFreeCalls += 1;
+    return freePage("budget-free.example");
+  },
+  serperProvider: {
+    name: "serper",
+    searchWithStats: async () => {
+      budgetSerperCalls += 1;
+      return {
+        hits: [],
+        pagesFetched: 1,
+        providersUsed: ["serper"],
+      };
+    },
+    search: async () => [],
+  },
+});
+const budgetResult = await budgetProvider.searchWithStats!("budget query", { maxPagesRemaining: 1 });
+assert.equal(budgetSerperCalls, 1);
+assert.equal(budgetFreeCalls, 0);
+assert.equal(budgetResult.pagesFetched, 1);
+assert.deepEqual(budgetResult.providersUsed, ["serper"]);
+
+let zeroBudgetCalls = 0;
+const zeroBudgetProvider = createCascadingSearchProvider({
+  serperApiKey: "test-key",
+  fetchPage: async () => {
+    zeroBudgetCalls += 1;
+    return null;
+  },
+  serperProvider: {
+    name: "serper",
+    search: async () => {
+      zeroBudgetCalls += 1;
+      return [];
+    },
+  },
+});
+const zeroBudgetResult = await zeroBudgetProvider.searchWithStats!("zero budget", { maxPagesRemaining: 0 });
+assert.equal(zeroBudgetCalls, 0);
+assert.equal(zeroBudgetResult.pagesFetched, 0);
+assert.deepEqual(zeroBudgetResult.providersUsed, []);
 assert.equal(selectSearchProvider({ providerName: "serper" }).name, "serper");
 assert.equal(selectSearchProvider({ providerName: "html" }).name, "html");
 

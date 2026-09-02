@@ -1,5 +1,12 @@
 # Engineering Log
 
+## 2026-09-02 - Serper-first leadgen search cascade
+
+- The cascading lead search now uses Serper first whenever a key is
+  configured. It only calls free HTML engines when Serper returns fewer than
+  the deduplicated threshold, preserving combined page budgets and provider
+  call-order accounting. Without a key, the free-only cascade is unchanged.
+
 ## 2026-09-02 - Office Mail revalidates operator access
 
 - Office Mail rejects customer sessions before querying the database, then

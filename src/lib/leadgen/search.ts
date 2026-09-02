@@ -259,8 +259,24 @@ export function createCascadingSearchProvider(options: {
   const searchWithStats = async (query: string, providerOptions?: SearchProviderOptions): Promise<SearchProviderResult> => {
     let pagesFetched = 0;
     const providersUsed: string[] = [];
-    const freeHits: SearchHit[] = [];
+    const hits: SearchHit[] = [];
     const maxPages = providerOptions?.maxPagesRemaining;
+    if (serperApiKey && !(maxPages !== undefined && pagesFetched >= maxPages)) {
+      const serper = options.serperProvider ?? createSerperSearchProvider(serperApiKey);
+      const result = serper.searchWithStats
+        ? await serper.searchWithStats(query, providerOptions)
+        : { hits: await serper.search(query, providerOptions), pagesFetched: 1, providersUsed: ["serper"] };
+      pagesFetched += result.pagesFetched;
+      providersUsed.push(...result.providersUsed);
+      hits.push(...result.hits);
+      if (
+        dedupeByDomain(hits).length >= fallbackThreshold
+        || (maxPages !== undefined && pagesFetched >= maxPages)
+      ) {
+        return { hits, pagesFetched, providersUsed };
+      }
+    }
+
     for (const engine of freeEngines) {
       if (maxPages !== undefined && pagesFetched >= maxPages) break;
       const provider = createHtmlSearchProvider({ engine, fetchPage: options.fetchPage });
@@ -269,26 +285,11 @@ export function createCascadingSearchProvider(options: {
         : { hits: await provider.search(query, providerOptions), pagesFetched: 1, providersUsed: [`html:${engine}`] };
       pagesFetched += result.pagesFetched;
       providersUsed.push(...result.providersUsed);
-      freeHits.push(...result.hits);
-      if (dedupeByDomain(freeHits).length >= fallbackThreshold) break;
+      hits.push(...result.hits);
+      if (dedupeByDomain(hits).length >= fallbackThreshold) break;
     }
 
-    if (
-      dedupeByDomain(freeHits).length >= fallbackThreshold
-      || !serperApiKey
-      || (maxPages !== undefined && pagesFetched >= maxPages)
-    ) {
-      return { hits: freeHits, pagesFetched, providersUsed };
-    }
-    const serper = options.serperProvider ?? createSerperSearchProvider(serperApiKey);
-    const result = serper.searchWithStats
-      ? await serper.searchWithStats(query, providerOptions)
-      : { hits: await serper.search(query, providerOptions), pagesFetched: 1, providersUsed: ["serper"] };
-    return {
-      hits: [...freeHits, ...result.hits],
-      pagesFetched: pagesFetched + result.pagesFetched,
-      providersUsed: [...providersUsed, ...result.providersUsed],
-    };
+    return { hits, pagesFetched, providersUsed };
   };
   return {
     name: "cascade",
