@@ -5,8 +5,10 @@ import { GMAIL_APP_PASSWORD_PROVIDER } from "@/lib/gmail-app-password";
 import {
   asciiCampaignSenderDisplayName,
   campaignBlockers,
+  campaignEmailFieldKey,
   campaignDefaultName,
   campaignDraftOnlyBlocker,
+  campaignActivationTransitionWhere,
   campaignPersonalizationMap,
   campaignRevisionHash,
   campaignRevisionMatches,
@@ -309,7 +311,7 @@ async function senderDetails(senderAccountId: string | null, requestedDisplayNam
 export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Promise<CampaignPlan> {
   const list = await resolveResearchList(input.officeId, input.list);
   const fields = validateResearchFields(list.fields);
-  const emailField = input.emailField ?? fields.find((field) => field.type === "email")?.key ?? "email";
+  const emailField = campaignEmailFieldKey(fields, input.emailField);
   const variants = normalizeCampaignVariants(input.variants);
   const campaignSubject = variants?.[0]?.subject ?? input.subject;
   const campaignBodyTemplate = variants?.[0]?.bodyTemplate ?? input.bodyTemplate;
@@ -432,7 +434,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     : await resolveResearchList(input.officeId, input.list);
   if (!list) throw new Error("Research list not found.");
   const fields = validateResearchFields(list.fields);
-  const emailField = input.emailField ?? fields.find((field) => field.type === "email")?.key ?? "email";
+  const emailField = campaignEmailFieldKey(fields, input.emailField);
   if (!fields.some((field) => field.key === emailField)) throw new Error("Email field is not in the list definition.");
   const existing = await prisma.outreachCampaign.findFirst({
     where: { officeId: input.officeId, listId: list.id, status: "DRAFT" },
@@ -506,12 +508,23 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     variants: variants ? variants as Prisma.InputJsonValue : Prisma.DbNull,
     createdByUserId: input.createdByUserId ?? null,
   };
-  const campaign = existing
-    ? await prisma.outreachCampaign.update({ where: { id: existing.id }, data, select: { id: true } })
-    : await prisma.outreachCampaign.create({
-      data: { officeId: input.officeId, listId: list.id, ...data },
+  let campaign = existing
+    ? await prisma.outreachCampaign.updateMany({
+      where: { id: existing.id, officeId: input.officeId, status: "DRAFT" },
+      data,
+    }).then((result) => result.count > 0 ? { id: existing.id } : null)
+    : null;
+  if (!campaign) {
+    const taken = await prisma.outreachCampaign.findMany({
+      where: { officeId: input.officeId, name: { startsWith: name } },
+      select: { name: true },
+    });
+    name = campaignDefaultName(name, new Set(taken.map((item) => item.name)));
+    campaign = await prisma.outreachCampaign.create({
+      data: { officeId: input.officeId, listId: list.id, ...data, name },
       select: { id: true },
     });
+  }
   return { id: campaign.id, revisionHash };
 }
 
@@ -557,8 +570,12 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
     variants,
   });
   if (blockers.length) return { activated: false, blockers };
-  const updated = await prisma.outreachCampaign.update({
-    where: { id: campaign.id },
+  const updated = await prisma.outreachCampaign.updateMany({
+    where: campaignActivationTransitionWhere({
+      officeId: input.officeId,
+      campaignId: campaign.id,
+      revisionHash: campaign.revisionHash,
+    }),
     data: {
       status: "ACTIVE",
       approvedByUserId: input.userId,
@@ -568,9 +585,25 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
       audienceRecordIds: records.map((record) => record.id) as Prisma.InputJsonValue,
       audiencePersonalization: audiencePersonalization as Prisma.InputJsonValue,
     },
-    select: { id: true, status: true },
   });
-  return { activated: true, blockers: [], campaign: updated };
+  if (updated.count === 0) {
+    const current = await prisma.outreachCampaign.findFirst({
+      where: { id: campaign.id, officeId: input.officeId },
+      select: { status: true },
+    });
+    return {
+      activated: false,
+      blockers: [
+        campaignDraftOnlyBlocker(current?.status)
+          ?? "This campaign changed after it was proposed. Plan it again.",
+      ],
+    };
+  }
+  return {
+    activated: true,
+    blockers: [],
+    campaign: { id: campaign.id, status: "ACTIVE" },
+  };
 }
 
 export async function pauseCampaign(input: { officeId: string; campaignId: string }) {

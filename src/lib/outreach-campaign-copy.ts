@@ -8,6 +8,18 @@ export function normalizeResearchListQuery(value: string): string {
   return value.trim().replace(/\s+/g, " ").replace(/\s+\(\d+\)$/, "").trim();
 }
 
+export function campaignEmailFieldKey(
+  fields: readonly { key: string; type: string }[],
+  explicit?: string,
+): string {
+  const explicitKey = explicit?.trim();
+  return explicitKey
+    || fields.find((field) => field.type === "email")?.key
+    || fields.find((field) => field.key === "email")?.key
+    || fields.find((field) => /^[a-z0-9]+(?:_[a-z0-9]+)*_e-?mail$/.test(field.key.toLowerCase()))?.key
+    || "email";
+}
+
 export function normalizeCampaignSenderDisplayName(value: string | null | undefined): string | null {
   const cleaned = stripEmDashes(value ?? "")
     .replace(/[\r\n]+/g, " ")
@@ -295,9 +307,22 @@ export function campaignRevisionMatches(expected: string | undefined, actual: st
   return Boolean(expected && actual && expected === actual);
 }
 
-export function campaignDraftOnlyBlocker(status: string) {
-  if (status === "DRAFT") return null;
+export function campaignDraftOnlyBlocker(status: string | null | undefined) {
+  if (!status || status === "DRAFT") return null;
   return `This campaign is ${status.toLowerCase()}, not a draft. Plan it again.`;
+}
+
+export function campaignActivationTransitionWhere(input: {
+  officeId: string;
+  campaignId: string;
+  revisionHash: string | null;
+}) {
+  return {
+    id: input.campaignId,
+    officeId: input.officeId,
+    status: "DRAFT" as const,
+    revisionHash: input.revisionHash,
+  };
 }
 
 export function campaignReplyCounts(input: {

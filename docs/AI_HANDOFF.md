@@ -7,6 +7,47 @@
   `dailyCap` stalled after day one because every later run re-read the same
   first rows. Verify with `npm run test:outreach-campaign-send`.
 
+## 2026-09-02: Office Mail revalidates operator access
+
+- Office Mail now rejects customer sessions before any user lookup, then
+  re-reads the active user in the requested office before listing threads or
+  opening message bodies.
+- Mail requires a fresh non-EMPLOYEE role with whole-office access, or an
+  ADMIN or MANAGER role. The Supply OS page and Mail tab use the same gate.
+
+## 2026-09-02: Supplier state and facility verification consistency
+
+- Compare and Messages now read supplier contact state from the same receipt
+  logic, so the two surfaces cannot contradict each other.
+- The map inspector treats the saved operating base as verified for the factory
+  object and drops the verify link there. Other facilities keep it.
+- The queue tooltip for a shortlist under review no longer reports zero
+  candidates when the count is unknown to the list projection.
+- Verified with `npx tsc --noEmit`, `npm run test:workflow-guild2`,
+  `npm run check:product-copy`, and lint on the touched library files.
+
+## 2026-09-02: Operator office mail surface
+
+- Outbound campaign and demo messages now call the existing CRM email-touch
+  resolver after persistence, so matched companies can receive the email
+  activity and thread link.
+- Added an office-scoped operator-only Mail surface to Supply OS. It lists
+  deterministic, searchable thread pages and loads up to 200 message bodies
+  without rendering stored HTML.
+- Customer, CUSTOMER, and EMPLOYEE contexts are rejected by the Mail backend.
+- Verified the new persistence projection with an offline database contract
+  covering access rejection, office isolation, pagination, and newest-mailbox
+  selection.
+
+## 2026-09-02: Harden outreach activation and list field planning
+
+- Activation keeps the early draft-only guard and conditionally transitions
+  only an office-scoped campaign that is still in `DRAFT`, preventing a
+  concurrent cancellation from being overwritten.
+- Campaign planning resolves imported address columns such as `primary_email`
+  even when their list field type is `text`. Ops and agent callers pass the
+  optional list-shape fields and filters through to planning.
+
 ## 2026-09-02: Outreach activation is draft-only
 
 - `activateCampaign` now rejects cancelled, completed, or any other
@@ -11526,35 +11567,3 @@ Verification caveat:
   `npm run test:supply-os-active-sourcing`,
   `npm run test:supply-os-sourcing-projection`,
   `npm run test:supply-os-panel-alerts`, and `npm run check:product-copy`.
-
-## 2026-09-02: Operator office mail surface
-
-- Outbound campaign and demo messages now call the existing CRM email-touch
-  resolver after persistence, so matched companies can receive the email
-  activity and thread link.
-- Added an office-scoped operator-only Mail surface to Supply OS. It lists
-  deterministic, searchable thread pages and loads up to 200 message bodies
-  without rendering stored HTML.
-- Customer, CUSTOMER, and EMPLOYEE contexts are rejected by the Mail backend.
-- Verified the new persistence projection with an offline database contract
-  covering access rejection, office isolation, pagination, and newest-mailbox
-  selection.
-
-## 2026-09-02: Supplier state and facility verification consistency
-
-- Compare and Messages now read supplier contact state from the same receipt
-  logic, so the two surfaces cannot contradict each other.
-- The map inspector treats the saved operating base as verified for the factory
-  object and drops the verify link there. Other facilities keep it.
-- The queue tooltip for a shortlist under review no longer reports zero
-  candidates when the count is unknown to the list projection.
-- Verified with `npx tsc --noEmit`, `npm run test:workflow-guild2`,
-  `npm run check:product-copy`, and lint on the touched library files.
-
-## 2026-09-02: Office Mail revalidates operator access
-
-- Office Mail now rejects customer sessions before any user lookup, then
-  re-reads the active user in the requested office before listing threads or
-  opening message bodies.
-- Mail requires a fresh non-EMPLOYEE role with whole-office access, or an
-  ADMIN or MANAGER role. The Supply OS page and Mail tab use the same gate.

@@ -30,6 +30,13 @@ type CampaignOpsBody = {
   list?: unknown;
   senderMailbox?: unknown;
   senderDisplayName?: unknown;
+  emailField?: unknown;
+  companyField?: unknown;
+  countryField?: unknown;
+  segmentField?: unknown;
+  statuses?: unknown;
+  countries?: unknown;
+  segments?: unknown;
   dailyCap?: unknown;
   campaignName?: unknown;
   subject?: unknown;
@@ -45,6 +52,14 @@ type CampaignOpsBody = {
 function isPrismaError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError
     || (error instanceof Error && error.constructor.name.startsWith("PrismaClient"));
+}
+
+function boundedStringArray(value: unknown, max: number) {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((item) => {
+    const bounded = boundedText(item, max);
+    return bounded ? [bounded] : [];
+  });
 }
 
 async function resolveOffice(value: unknown) {
@@ -154,6 +169,13 @@ export async function POST(request: NextRequest) {
       const campaignInput = {
         officeId: office.id,
         list: boundedText(body?.list, 120) ?? "",
+        emailField: boundedText(body?.emailField, 120),
+        companyField: boundedText(body?.companyField, 120),
+        countryField: boundedText(body?.countryField, 120),
+        segmentField: boundedText(body?.segmentField, 120),
+        statuses: boundedStringArray(body?.statuses, 120),
+        countries: boundedStringArray(body?.countries, 120),
+        segments: boundedStringArray(body?.segments, 120),
         senderAccountId: sender.id,
         senderDisplayName: boundedText(body?.senderDisplayName, 160) ?? null,
         dailyCap: typeof body?.dailyCap === "number" ? body.dailyCap : undefined,

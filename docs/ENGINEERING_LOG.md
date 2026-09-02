@@ -19,6 +19,21 @@
   the deduplicated threshold, preserving combined page budgets and provider
   call-order accounting. Without a key, the free-only cascade is unchanged.
 
+## 2026-09-02: Harden activation races and imported email fields
+
+- The final outreach activation transition is conditional on the
+  office-scoped campaign remaining in `DRAFT`, so cancellation during
+  approval work cannot be overwritten.
+- Planning now resolves address keys such as `primary_email` when imported
+  fields are typed as `text`, and both callers pass optional list-shape
+  inputs through.
+- Activation also compares the approved revision hash, while draft saves use
+  a conditional transition and create a fresh draft if activation wins first.
+- Email-field inference now accepts only address-shaped final segments, avoiding
+  metadata keys such as `email_verdict` and `email_confidence`.
+- Explicit campaign names are also suffix-resolved when a fallback draft must
+  be created after activation wins a save race.
+
 ## 2026-09-02 - Office Mail revalidates operator access
 
 - Office Mail rejects customer sessions before querying the database, then
@@ -33,6 +48,9 @@
 - Activation now requires `DRAFT` status before any approval work. Cancelled
   and completed campaigns return a status-specific blocker, while pause and
   resume continue using their existing transitions.
+- The final activation transition is also conditional on the office-scoped
+  campaign remaining in `DRAFT`, preventing a concurrent cancellation from
+  being overwritten.
 
 ## 2026-09-02: Campaign variants and authenticated ops sending
 

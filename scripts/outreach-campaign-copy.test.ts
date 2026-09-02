@@ -3,6 +3,8 @@ import {
   campaignBlockers,
   campaignDefaultName,
   campaignDraftOnlyBlocker,
+  campaignEmailFieldKey,
+  campaignActivationTransitionWhere,
   campaignPersonalizationMap,
   campaignReplyCounts,
   campaignRevisionHash,
@@ -51,6 +53,30 @@ assert.equal(asciiCampaignSenderDisplayName(""), null);
 assert.equal(asciiCampaignSenderDisplayName("   "), null);
 assert.deepEqual(storedCampaignVariants({ malformed: true }), []);
 assert.equal(campaignDraftOnlyBlocker("DRAFT"), null);
+assert.equal(campaignEmailFieldKey([{ key: "other", type: "text" }], " explicit "), "explicit");
+assert.equal(campaignEmailFieldKey([{ key: "typed", type: "email" }]), "typed");
+assert.equal(campaignEmailFieldKey([
+  { key: "primary_email", type: "text" },
+  { key: "email_type", type: "text" },
+]), "primary_email");
+assert.equal(campaignEmailFieldKey([
+  { key: "email_type", type: "text" },
+  { key: "email", type: "text" },
+]), "email");
+assert.equal(campaignEmailFieldKey([
+  { key: "company", type: "text" },
+  { key: "primary_email", type: "text" },
+]), "primary_email");
+assert.equal(campaignEmailFieldKey([
+  { key: "email_verdict", type: "text" },
+  { key: "email_confidence", type: "text" },
+  { key: "primary_email", type: "text" },
+]), "primary_email");
+assert.equal(campaignEmailFieldKey([
+  { key: "email_type", type: "text" },
+  { key: "email_status", type: "text" },
+]), "email");
+assert.equal(campaignEmailFieldKey([{ key: "company", type: "text" }]), "email");
 assert.equal(
   campaignDraftOnlyBlocker("CANCELLED"),
   "This campaign is cancelled, not a draft. Plan it again.",
@@ -59,6 +85,16 @@ assert.equal(
   campaignDraftOnlyBlocker("COMPLETED"),
   "This campaign is completed, not a draft. Plan it again.",
 );
+assert.deepEqual(campaignActivationTransitionWhere({
+  officeId: "office-1",
+  campaignId: "campaign-1",
+  revisionHash: "revision-1",
+}), {
+  id: "campaign-1",
+  officeId: "office-1",
+  status: "DRAFT",
+  revisionHash: "revision-1",
+});
 const testOfficeSlugify = (value: string) => value.toLowerCase().replace(/\s+/g, "-");
 assert.equal(resolveCampaignOffice({
   identifier: "Acme Foods",
