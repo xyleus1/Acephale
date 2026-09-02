@@ -1,5 +1,17 @@
 # Engineering Log
 
+## 2026-09-02: Outreach campaigns page through the whole audience
+
+- `runOutreachCampaignBatch` sliced the audience to `dailyCap` rows before
+  excluding records that already had a ledger row, so every run after the
+  first day re-read the same first rows, found them all handled, and claimed
+  nothing. Campaigns larger than one day's cap stalled at `dailyCap` sends.
+- The batch now loads the campaign's ledger record ids first and excludes them
+  before the slice, so day two pages into the next unsent rows. The locked
+  claim still re-checks the ledger, so concurrent runs stay idempotent.
+- `scripts/outreach-campaign-send.test.ts` runs a three-day, cap-one campaign
+  against an in-memory ledger and asserts one distinct recipient per day.
+
 ## 2026-09-02 - Serper-first leadgen search cascade
 
 - The cascading lead search now uses Serper first whenever a key is

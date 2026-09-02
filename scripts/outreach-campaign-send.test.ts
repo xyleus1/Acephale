@@ -368,6 +368,110 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     pauseMs: 0,
   });
   assert.equal(exhaustedRun.poolExhausted, true);
+
+  // Day two must page past yesterday's ledger rows instead of re-reading the
+  // first dailyCap audience rows (which are all already handled).
+  const pagingLedger: Array<{ recordId: string; recipient: string; status: string; sentAt: Date | null; createdAt: Date }> = [];
+  const pagingAudience = ["record-1", "record-2", "record-3"];
+  const pagingPersonalization = Object.fromEntries(pagingAudience.map((id) => [id, {
+    email: `${id}@example.com`,
+    company: `Company ${id}`,
+    country: null,
+  }]));
+  type PagingWhere = {
+    status?: string | { in: string[] };
+    sentAt?: { gte?: Date; lt?: Date };
+    createdAt?: { gte?: Date; lt?: Date };
+  };
+  const pagingMatches = (row: typeof pagingLedger[number], where: PagingWhere | undefined) => {
+    if (!where) return true;
+    const status = where.status;
+    if (typeof status === "string" && row.status !== status) return false;
+    if (status && typeof status !== "string" && !status.in.includes(row.status)) return false;
+    for (const field of ["sentAt", "createdAt"] as const) {
+      const range = where[field];
+      if (!range) continue;
+      const value = row[field];
+      if (!value) return false;
+      if (range.gte && value < range.gte) return false;
+      if (range.lt && value >= range.lt) return false;
+    }
+    return true;
+  };
+  const pagingSendModel = {
+    count: async (args: { where?: PagingWhere }) => pagingLedger.filter((row) => pagingMatches(row, args.where)).length,
+    findMany: async (args: { where?: PagingWhere }) => pagingLedger.filter((row) => pagingMatches(row, args.where)),
+    deleteMany: async () => undefined,
+    createMany: async (args: { data: Array<{ recordId: string; recipient: string; status: string }> }) => {
+      for (const row of args.data) pagingLedger.push({ ...row, sentAt: null, createdAt: new Date() });
+    },
+    updateMany: async (args: { where: { recordId?: string }; data: { status?: string; sentAt?: Date } }) => {
+      for (const row of pagingLedger) {
+        if (args.where.recordId && row.recordId !== args.where.recordId) continue;
+        if (args.data.status) row.status = args.data.status;
+        if (args.data.sentAt) row.sentAt = args.data.sentAt;
+      }
+    },
+    upsert: async (args: {
+      where: { campaignId_recordId: { recordId: string } };
+      create: { recordId: string; recipient: string; status: string; sentAt?: Date };
+      update: { status: string; sentAt?: Date };
+    }) => {
+      const existing = pagingLedger.find((row) => row.recordId === args.where.campaignId_recordId.recordId);
+      if (existing) {
+        existing.status = args.update.status;
+        existing.sentAt = args.update.sentAt ?? existing.sentAt;
+        return;
+      }
+      pagingLedger.push({ ...args.create, sentAt: args.create.sentAt ?? null, createdAt: new Date() });
+    },
+  };
+  const pagingBase = fakeDatabase({
+    dailyCap: 1,
+    audienceRecordIds: pagingAudience,
+    audiencePersonalization: pagingPersonalization,
+  });
+  const pagingDb = {
+    ...pagingBase,
+    outreachCampaignSend: pagingSendModel,
+    researchRecord: {
+      findMany: async () => pagingAudience.map((id, index) => ({
+        id,
+        status: "new",
+        data: { email: `${id}@example.com`, company: `Company ${id}` },
+        createdAt: new Date(2026, 0, 1 + index),
+      })),
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      emailMessage: { findFirst: async () => null, create: async () => ({ id: "message-1" }) },
+      emailThread: { create: async () => ({ id: "thread-1" }) },
+      emailSenderReservation: { updateMany: async () => undefined },
+      outreachCampaignSend: pagingSendModel,
+      outreachCampaign: { updateMany: async () => undefined },
+    }),
+  };
+  const sentRecipients: string[] = [];
+  const pagingProvider = {
+    ...provider,
+    send: async (input: Record<string, unknown>) => {
+      sentRecipients.push(String(input.recipient));
+      return provider.send(input);
+    },
+  };
+  for (const day of [1, 2, 3]) {
+    const run = await runOutreachCampaignBatch({
+      officeId: "office-1",
+      campaignId: "campaign-1",
+      db: pagingDb as never,
+      provider: pagingProvider,
+      reserve: async () => reservation,
+      complete: async () => ({ completed: false }),
+      pauseMs: 0,
+      now: new Date(`2026-02-0${day}T12:00:00Z`),
+    });
+    assert.equal(run.sent, 1, `day ${day} should send exactly one first touch`);
+  }
+  assert.deepEqual(sentRecipients, ["record-1@example.com", "record-2@example.com", "record-3@example.com"]);
   console.log("Outreach campaign send checks passed.");
 }
 

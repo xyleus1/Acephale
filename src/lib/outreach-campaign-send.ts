@@ -608,11 +608,18 @@ export async function runOutreachCampaignBatch(input: {
     },
     select: { id: true, status: true, data: true, createdAt: true },
   }) as CampaignBatchRow[];
+  // Every record that already has a ledger row (sent, rejected, unknown, or
+  // claimed) is excluded before the daily-cap slice, so later runs page into
+  // the rest of the audience instead of re-reading the first rows every day.
+  const handledRecords = await db.outreachCampaignSend.findMany({
+    where: { officeId: input.officeId, campaignId: campaign.id },
+    select: { recordId: true },
+  });
   const rows = selectOutreachCampaignSnapshotRows({
     rows: records,
     audienceRecordIds,
     audiencePersonalization,
-    sentRecordIds: undefined,
+    sentRecordIds: new Set(handledRecords.map((row) => row.recordId)),
     statuses: jsonStrings(campaign.rowStatuses),
     emailField: campaign.emailField,
     companyField: campaign.companyField,

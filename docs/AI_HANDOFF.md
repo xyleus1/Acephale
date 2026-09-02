@@ -1,5 +1,12 @@
 # AI Handoff
 
+## 2026-09-02: Outreach campaigns page through the whole audience
+
+- `runOutreachCampaignBatch` now excludes records that already have a ledger
+  row before applying the daily-cap slice. Previously a campaign larger than
+  `dailyCap` stalled after day one because every later run re-read the same
+  first rows. Verify with `npm run test:outreach-campaign-send`.
+
 ## 2026-09-02: Outreach activation is draft-only
 
 - `activateCampaign` now rejects cancelled, completed, or any other
