@@ -3,6 +3,11 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
+import {
+  PROCUREMENT_FILE_DRAFT_STALE_REASON,
+  PROCUREMENT_FILE_DRAFT_UNVERIFIED_REASON,
+  procurementFileDraftStateKey,
+} from "@/lib/procurement-file-draft-freshness";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "@/lib/procurement-workflow";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-os/persistence";
 import {
@@ -64,6 +69,9 @@ export type ProcurementFileDeliveryDraft = {
   body: string;
   attachments: ProcurementDraftAttachment[];
   withheld: Array<{ name: string; reason: string }>;
+  // Fingerprint of the request state the draft repeats. Drafts saved before the
+  // send time recheck existed carry none, and those cannot be delivered.
+  stateKey: string | null;
   savedAt: string;
 };
 
@@ -129,6 +137,28 @@ export function documentContextLines(document: ProcurementRequestDocument, budge
   return lines;
 }
 
+// The document lines a reply actually renders: attached documents only, walked
+// in order under one shared character budget. The body and the state
+// fingerprint both read from here, so a line the supplier never sees cannot
+// count as supplier visible state.
+export function renderedDocumentContext(args: {
+  documents: readonly ProcurementRequestDocument[];
+  attachments: readonly ProcurementDraftAttachment[];
+}) {
+  const attached = new Set(args.attachments.map((attachment) => attachment.documentId));
+  const rendered: { documentId: string; name: string; lines: string[] }[] = [];
+  let budget = MAX_TOTAL_DOCUMENT_CONTEXT_CHARS;
+  for (const document of args.documents) {
+    if (budget <= 0) break;
+    if (!attached.has(document.documentId)) continue;
+    const lines = documentContextLines(document, budget);
+    if (!lines.length) continue;
+    budget -= lines.join("\n").length;
+    rendered.push({ documentId: document.documentId, name: document.name, lines });
+  }
+  return rendered;
+}
+
 function sizeLabel(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -159,18 +189,11 @@ export function buildFileDeliveryReplyBody(args: {
 }) {
   const { order, attachments } = args;
   const chase = args.variant === "CHASE";
-  const attachedIds = new Set(attachments.map((attachment) => attachment.documentId));
-  let budget = MAX_TOTAL_DOCUMENT_CONTEXT_CHARS;
   const included = new Set<string>();
-  const documentSections = args.documents
-    .filter((document) => attachedIds.has(document.documentId))
-    .flatMap((document) => {
-      if (budget <= 0) return [];
-      const lines = documentContextLines(document, budget);
-      if (!lines.length) return [];
-      lines.forEach((line) => included.add(line));
-      budget -= lines.join("\n").length;
-      return [[`From ${document.name}:`, ...lines].join("\n")];
+  const documentSections = renderedDocumentContext({ documents: args.documents, attachments })
+    .map((document) => {
+      document.lines.forEach((line) => included.add(line));
+      return [`From ${document.name}:`, ...document.lines].join("\n");
     });
   // Anything the request recorded but the file sections did not repeat, such as
   // a field the operator flagged as ambiguous, still has to reach the supplier.
@@ -270,8 +293,177 @@ function draftFromTask(task: { input: Prisma.JsonValue | null; result: Prisma.Js
           return { name: String(withheld.name ?? ""), reason: String(withheld.reason ?? "") };
         })
       : [],
+    stateKey: typeof input.stateKey === "string" ? input.stateKey : null,
     savedAt: String(result.savedAt ?? ""),
   };
+}
+
+async function requestAttachmentState(args: { context: SupplyAccessContext; order: ProcurementOrderDetail }) {
+  const access = await currentAccessContext(args.context);
+  const workspaceId = requestWorkspaceId(args.order);
+  const workspace = await requireSupplyWorkspace(access, workspaceId, "edit");
+  if (!workspace.companyId) {
+    throw new SupplyPersistenceError("This sourcing request is not linked to a company profile, so its files cannot be attached.", "conflict");
+  }
+  const documents = procurementRequestDocuments(args.order);
+  const selection = await loadRequestDocumentAttachments({
+    officeId: access.officeId,
+    companyId: workspace.companyId,
+    documentIds: documents.map((document) => document.documentId),
+  });
+  const attachments: ProcurementDraftAttachment[] = selection.attachments.map((attachment) => ({
+    documentId: attachment.documentId,
+    name: attachment.storedName,
+    mimeType: attachment.contentType,
+    size: attachment.bytes.length,
+  }));
+  return { access, workspaceId, documents, attachments, selection };
+}
+
+function stateKeyFor(args: {
+  order: ProcurementOrderDetail;
+  documents: ProcurementRequestDocument[];
+  attachments: ProcurementDraftAttachment[];
+}) {
+  // A document the attachment screen withheld is never named or quoted to the
+  // supplier, and neither is prose the body drops or a line past the body's
+  // shared character budget, so the fingerprint reads the same rendered lines
+  // the reply body renders.
+  return procurementFileDraftStateKey({
+    material: args.order.material,
+    quantity: args.order.quantity,
+    unit: args.order.unit,
+    neededBy: args.order.neededBy == null ? null : String(args.order.neededBy),
+    specification: args.order.specification,
+    documents: renderedDocumentContext({
+      documents: args.documents,
+      attachments: args.attachments,
+    }),
+    attachments: args.attachments,
+  });
+}
+
+// The request state a saved draft would repeat, read from live records rather
+// than from the draft. The send path compares it with the fingerprint the draft
+// stored, so an order whose quantity, date, specification, or file set moved
+// after drafting cannot reach a supplier as if nothing had changed.
+export async function procurementFileDraftCurrentStateKey(args: {
+  context: SupplyAccessContext;
+  order: ProcurementOrderDetail;
+}): Promise<string> {
+  const state = await requestAttachmentState(args);
+  return stateKeyFor({ order: args.order, documents: state.documents, attachments: state.attachments });
+}
+
+export type ProcurementFileDraftFreshness = {
+  fresh: boolean;
+  reason: string | null;
+  storedStateKey: string | null;
+  currentStateKey: string | null;
+};
+
+export async function procurementFileDraftFreshness(args: {
+  context: SupplyAccessContext;
+  order: ProcurementOrderDetail;
+  draft: Pick<ProcurementFileDeliveryDraft, "stateKey">;
+}): Promise<ProcurementFileDraftFreshness> {
+  const currentStateKey = await procurementFileDraftCurrentStateKey({ context: args.context, order: args.order });
+  const storedStateKey = args.draft.stateKey;
+  if (!storedStateKey) {
+    return { fresh: false, reason: PROCUREMENT_FILE_DRAFT_UNVERIFIED_REASON, storedStateKey: null, currentStateKey };
+  }
+  if (storedStateKey !== currentStateKey) {
+    return { fresh: false, reason: PROCUREMENT_FILE_DRAFT_STALE_REASON, storedStateKey, currentStateKey };
+  }
+  return { fresh: true, reason: null, storedStateKey, currentStateKey };
+}
+
+export type ProcurementFileSendDecision =
+  | { deliver: true }
+  // `audited` is false when the refusal could not be written to the event
+  // trail, so a run can tell an audited refusal from an unaudited one.
+  | { deliver: false; reason: string; audited: boolean };
+
+export const PROCUREMENT_FILE_DRAFT_UNAUDITED_REFUSAL_SUFFIX =
+  " The refusal could not be recorded on the supplier communication trail, so this run needs an operator.";
+
+// The recheck every file bearing delivery passes through. It reads the request
+// state from live records, compares it with the state the draft was built on,
+// and records the refusal on the draft's own event trail. Nothing here contacts
+// a provider, so scripts/state-recheck.test.ts exercises the real gate.
+export async function procurementFileDraftSendDecision(args: {
+  context: SupplyAccessContext;
+  order: ProcurementOrderDetail;
+  vendorId: string;
+  draft: Pick<ProcurementFileDeliveryDraft, "stateKey">;
+}): Promise<ProcurementFileSendDecision> {
+  // A recheck that cannot run is not a pass, so an unreadable request state
+  // refuses the delivery the same way a changed one does.
+  const freshness = await procurementFileDraftFreshness(args)
+    .catch((error): ProcurementFileDraftFreshness => ({
+      fresh: false,
+      reason: error instanceof Error ? error.message : "The saved draft state could not be rechecked before sending.",
+      storedStateKey: args.draft.stateKey,
+      currentStateKey: null,
+    }));
+  if (freshness.fresh) return { deliver: true };
+  // Delivery stays refused either way, but a refusal with no trail entry is
+  // reported as such instead of reading like a routine stale outcome.
+  const audited = await recordProcurementFileDraftStaleRefusal({
+    context: args.context,
+    order: args.order,
+    vendorId: args.vendorId,
+    freshness,
+  }).catch(() => false);
+  const reason = freshness.reason ?? PROCUREMENT_FILE_DRAFT_STALE_REASON;
+  return {
+    deliver: false,
+    reason: audited ? reason : `${reason}${PROCUREMENT_FILE_DRAFT_UNAUDITED_REFUSAL_SUFFIX}`,
+    audited,
+  };
+}
+
+// A refused delivery is a decision, so it is appended to the draft's own event
+// trail instead of being dropped in a run summary the operator may never read.
+export async function recordProcurementFileDraftStaleRefusal(args: {
+  context: SupplyAccessContext;
+  order: ProcurementOrderDetail;
+  vendorId: string;
+  freshness: ProcurementFileDraftFreshness;
+}): Promise<boolean> {
+  const access = await currentAccessContext(args.context);
+  const workspaceId = requestWorkspaceId(args.order);
+  const task = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      officeId: access.officeId,
+      workspaceId,
+      taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
+      taskKey: { startsWith: `${draftTaskScopeKey({ orderId: args.order.id, vendorId: args.vendorId })}:` },
+      status: "PLANNED",
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true },
+  });
+  if (!task) return false;
+  await prisma.$transaction(async (tx) => {
+    await appendSupplierCommunicationEvent({
+      tx,
+      taskId: task.id,
+      officeId: access.officeId,
+      workspaceId,
+      actorUserId: access.userId,
+      eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_REFUSED_STALE",
+      status: "PLANNED",
+      message: args.freshness.reason ?? PROCUREMENT_FILE_DRAFT_STALE_REASON,
+      payload: inputJson({
+        orderId: args.order.id,
+        vendorId: args.vendorId,
+        storedStateKey: args.freshness.storedStateKey,
+        currentStateKey: args.freshness.currentStateKey,
+      }),
+    });
+  });
+  return true;
 }
 
 export async function saveProcurementFileDeliveryDraft(args: {
@@ -287,30 +479,15 @@ export async function saveProcurementFileDeliveryDraft(args: {
   variant?: ProcurementDraftVariant;
   answers?: readonly string[];
 }): Promise<ProcurementFileDeliveryDraft> {
-  const access = await currentAccessContext(args.context);
-  const workspaceId = requestWorkspaceId(args.order);
-  const workspace = await requireSupplyWorkspace(access, workspaceId, "edit");
-  if (!workspace.companyId) {
-    throw new SupplyPersistenceError("This sourcing request is not linked to a company profile, so its files cannot be attached.", "conflict");
-  }
   const documents = procurementRequestDocuments(args.order);
   if (!documents.length) {
     throw new SupplyPersistenceError("This sourcing request has no stored source files to send.", "conflict");
   }
-  const selection = await loadRequestDocumentAttachments({
-    officeId: access.officeId,
-    companyId: workspace.companyId,
-    documentIds: documents.map((document) => document.documentId),
-  });
-  if (!selection.attachments.length) {
+  const state = await requestAttachmentState({ context: args.context, order: args.order });
+  const { access, workspaceId, attachments, selection } = state;
+  if (!attachments.length) {
     throw new SupplyPersistenceError("None of the stored request files passed the attachment safety check.", "conflict");
   }
-  const attachments: ProcurementDraftAttachment[] = selection.attachments.map((attachment) => ({
-    documentId: attachment.documentId,
-    name: attachment.storedName,
-    mimeType: attachment.contentType,
-    size: attachment.bytes.length,
-  }));
   const withheld = selection.skipped.map((skip: RequestDocumentAttachmentSkip) => ({
     name: skip.name,
     reason: skip.reason,
@@ -341,6 +518,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
     messageHash: digest(message),
     attachments,
     withheld,
+    stateKey: stateKeyFor({ order: args.order, documents, attachments }),
   };
   const result = { state: "DRAFT", savedAt, attachmentCount: attachments.length };
   const existing = await prisma.supplyExecutionTask.findMany({

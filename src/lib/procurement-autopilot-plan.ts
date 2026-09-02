@@ -139,7 +139,13 @@ export function autopilotFailures(args: {
       (state) => state !== "SENT" && state !== "ALREADY_SENT",
       "The supplier follow up failed.",
     ),
-    ...collected(args.send, (state) => state === "FAILED", "The supplier send failed."),
+    // A send refused for stale state needs an operator as much as one that
+    // failed in transport: the draft has to be rebuilt before it can go.
+    ...collected(
+      args.send,
+      (state) => state === "FAILED" || state === "STALE",
+      "The supplier send failed.",
+    ),
     ...collected(args.quote, (state) => state === "FAILED", "The supplier quote could not be recorded."),
   ];
 }

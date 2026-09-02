@@ -4,6 +4,7 @@ import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
 import {
   getProcurementFileDeliveryDraft,
+  procurementFileDraftCurrentStateKey,
   saveProcurementFileDeliveryDraft,
 } from "@/lib/procurement-file-delivery-draft";
 import {
@@ -62,6 +63,10 @@ async function vendorTarget(args: {
   vendorId: string;
   vendorName: string;
   bestEffort: boolean;
+  // The request state a fresh draft would repeat, read once per run. Null when
+  // it cannot be computed, in which case draft staleness is left to the other
+  // signals and the send path still refuses what it cannot recheck.
+  currentStateKey: string | null;
 }): Promise<(FileDraftTarget & { answers: string[] }) | null> {
   const conversation = await procurementVendorConversation({
     officeId: args.officeId,
@@ -94,6 +99,12 @@ async function vendorTarget(args: {
   const savedBody = stripEmDashes(existing?.body ?? "");
   const missesAnswers = answers.length > 0
     && !answers.every((answer) => savedBody.includes(stripEmDashes(answer)));
+  // The request itself can move after a draft is saved: quantity, needed by
+  // date, specification, or the stored file set. The send path refuses such a
+  // draft, so it is redrafted here rather than left to be refused later.
+  const staleState = Boolean(existing)
+    && args.currentStateKey != null
+    && existing?.stateKey !== args.currentStateKey;
   return {
     vendorId: args.vendorId,
     vendorName: args.vendorName,
@@ -102,7 +113,7 @@ async function vendorTarget(args: {
     conversationSubject: latest.subject ?? null,
     inboundKind,
     hasDraft: Boolean(existing),
-    staleDraft: Boolean(existing) && (existing?.sourceMessageId !== latest.id || missesAnswers),
+    staleDraft: Boolean(existing) && (existing?.sourceMessageId !== latest.id || missesAnswers || staleState),
     skipReason: fileDraftSkipReason(inboundKind),
     answers,
   };
@@ -113,6 +124,11 @@ async function draftTargets(
   bestEffort: boolean,
 ) {
   const targets: Array<FileDraftTarget & { answers: string[] }> = [];
+  const access = await procurementOperatorAccess(context.summary.officeId);
+  const currentStateKey = await procurementFileDraftCurrentStateKey({
+    context: access,
+    order: context.order,
+  }).catch(() => null);
   for (const vendor of context.order.vendors) {
     const target = await vendorTarget({
       officeId: context.summary.officeId,
@@ -121,6 +137,7 @@ async function draftTargets(
       vendorId: vendor.id,
       vendorName: vendor.name,
       bestEffort,
+      currentStateKey,
     });
     if (target) targets.push(target);
   }

@@ -6,6 +6,10 @@
  * wrongly treated as conflicts. Every scenario runs against a real database case built
  * through the production persistence functions, not against fixtures or pure helpers.
  *
+ * Covered families:
+ * - procurement case actions: quote request, quote release, approval, order draft, purchase authorization
+ * - supplier file bearing reply delivery: the send time recheck, with no provider contacted
+ *
  * Reported metrics:
  * - stale executions detected out of stale executions attempted
  * - stale actions that escaped the guard
@@ -15,7 +19,14 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { storeContextDocumentFile } from "../src/lib/document-storage";
 import { prisma } from "../src/lib/prisma";
+import {
+  PROCUREMENT_FILE_DRAFT_UNAUDITED_REFUSAL_SUFFIX,
+  procurementFileDraftSendDecision,
+  saveProcurementFileDeliveryDraft,
+} from "../src/lib/procurement-file-delivery-draft";
+import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
 import { createSupplyWorkspace, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import {
   decidePurchaseActionApproval,
@@ -437,6 +448,8 @@ type Noise = { staleCase: BuiltCase; foreignCase: BuiltCase };
 
 /** Reason reported by the last guard refusal, recorded so the results are attributable. */
 let lastReason = "";
+// Whether the last refusal reached the supplier communication trail.
+let lastAudited = true;
 
 /** Runs a guarded action and reports whether the guard refused it, by throw or by a blocked result. */
 async function guarded(run: () => Promise<boolean>) {
@@ -784,6 +797,335 @@ const scenarios: Scenario[] = [
   },
 ];
 
+/**
+ * Supplier file bearing replies repeat the sourcing request they were drafted from, so the
+ * delivery path rechecks that request state. The order detail is assembled the way the
+ * workflow returns it, and the documents and drafts are real rows.
+ */
+type FileDraftHome = { companyId: string; workspaceId: string };
+
+async function makeFileDraftHome(office: Office): Promise<FileDraftHome> {
+  const company = await prisma.company.create({
+    data: { officeId: office.officeId, name: `State recheck file customer ${suffix}` },
+  });
+  const workspace = await prisma.supplyWorkspace.create({
+    data: {
+      officeId: office.officeId,
+      companyId: company.id,
+      createdByUserId: office.buyerContext.userId,
+      name: `State recheck file workspace ${suffix}`,
+    },
+  });
+  return { companyId: company.id, workspaceId: workspace.id };
+}
+
+type FileDraftCase = {
+  office: Office;
+  home: FileDraftHome;
+  order: ProcurementOrderDetail;
+  vendor: ProcurementOrderVendor;
+  draft: { stateKey: string | null };
+  documentIds: string[];
+};
+
+let fileCaseCounter = 0;
+
+function fileDraftVendor(tag: string, index: number): ProcurementOrderVendor {
+  return {
+    id: `vendor-${tag}-${index}`,
+    name: `Supplier ${index}`,
+    website: "https://example.com",
+    contact: { name: "Quotes", email: `supplier-${tag}-${index}@example.test`, phone: null },
+    contacted: true,
+    responseCount: 1,
+    status: "shortlisted",
+    research: {},
+    quote: null,
+  };
+}
+
+async function buildFileDraftCase(office: Office, home: FileDraftHome): Promise<FileDraftCase> {
+  fileCaseCounter += 1;
+  const tag = `${suffix}-${fileCaseCounter}`;
+  const files = [
+    { name: `assembly-bom-${tag}.csv`, mimeType: "text/csv", bytes: Buffer.from(`Designator,Part,Quantity\nR1,RC0402FR-0710KL,${fileCaseCounter}\n`, "utf-8") },
+    { name: `stackup-${tag}.csv`, mimeType: "text/csv", bytes: Buffer.from(`Layer,Material\n1,copper\n2,FR4\n`, "utf-8") },
+    // The attachment screen withholds this one, so nothing it says reaches the
+    // supplier and changing it must not refuse a delivery.
+    { name: `mailbox-notes-${tag}.csv`, mimeType: "text/csv", bytes: Buffer.from(`Setting,Value\npassword: hunter2\n`, "utf-8") },
+  ];
+  const documents = await Promise.all(files.map(async (file) => {
+    const stored = await storeContextDocumentFile({
+      officeId: office.officeId,
+      workspaceId: home.workspaceId,
+      preferredName: file.name,
+      bytes: file.bytes,
+      contentType: file.mimeType,
+    });
+    return prisma.companyContext.create({
+      data: {
+        officeId: office.officeId,
+        companyId: home.companyId,
+        kind: "DOCUMENT",
+        name: file.name,
+        mimeType: file.mimeType,
+        sizeBytes: file.bytes.length,
+        storageUrl: stored.url,
+        contentHash: randomUUID(),
+      },
+      select: { id: true, name: true },
+    });
+  }));
+
+  const vendor = fileDraftVendor(tag, 1);
+  const order: ProcurementOrderDetail = {
+    id: `file-order-${tag}`,
+    status: "awaiting_shortlist_approval",
+    progress: "Collecting supplier responses",
+    neededBy: futureDate(45),
+    quantity: 100,
+    unit: "units",
+    material: "Rigid two piece mouse bite PCB",
+    specification: "Four layers. 1 mm thickness. Black solder mask.",
+    requestContext: {
+      source: { workspace_id: home.workspaceId },
+      procurement_context: {
+        documents: documents.map((document) => ({
+          citation_id: `document:${document.id}`,
+          name: document.name,
+          summary: null,
+          // Only the field lines are carried into supplier mail, and only as
+          // many as the body's line budget renders, so the fixture mixes
+          // rendered lines with prose the body drops and field lines past the
+          // budget it never reaches.
+          markdown: [
+            `Notes on ${document.name} that the reply never quotes.`,
+            "Material: FR4 laminate",
+            "Thickness: 1.6 mm",
+            ...Array.from({ length: 30 }, (_, index) => `Field${String(index + 1).padStart(2, "0")}: value${index + 1}`),
+          ].join("\n"),
+        })),
+      },
+    },
+    approvalRequestedAt: null,
+    decisionSnapshot: null,
+    vendors: [vendor],
+    updatedAt: new Date().toISOString(),
+  };
+  const draft = await saveProcurementFileDeliveryDraft({
+    context: office.buyerContext,
+    customerId: home.companyId,
+    order,
+    vendor,
+    sourceMessageId: `inbound-${tag}`,
+    recipient: vendor.contact!.email!,
+    conversationSubject: `Re: RFQ ${tag}`,
+  });
+  return { office, home, order, vendor, draft, documentIds: documents.map((document) => document.id) };
+}
+
+/** The citations the request records, which is the only trusted link to a stored document. */
+function requestDocuments(built: FileDraftCase) {
+  const context = built.order.requestContext as { procurement_context: { documents: Array<Record<string, unknown>> } };
+  return context.procurement_context.documents;
+}
+
+/** Runs the exact recheck the delivery batch runs before contacting a provider. */
+const deliverFileDraft = (built: FileDraftCase) => guarded(async () => {
+  const decision = await procurementFileDraftSendDecision({
+    context: built.office.buyerContext,
+    order: built.order,
+    vendorId: built.vendor.id,
+    draft: built.draft,
+  });
+  if (decision.deliver) return false;
+  lastReason = decision.reason;
+  lastAudited = decision.audited;
+  return true;
+});
+
+type FileScenario = {
+  id: string;
+  kind: "stale" | "unrelated";
+  advanceDays?: number;
+  mutate?: (built: FileDraftCase) => Promise<void>;
+  // A refusal the event trail could not record has to say so, so the run can
+  // tell an audited refusal from one no operator would ever find.
+  expectUnaudited?: boolean;
+};
+
+const fileScenarios: FileScenario[] = [
+  {
+    id: "file_reply.quantity_changed",
+    kind: "stale",
+    mutate: async (built) => {
+      built.order.quantity = 250;
+    },
+  },
+  {
+    id: "file_reply.needed_by_moved",
+    kind: "stale",
+    mutate: async (built) => {
+      built.order.neededBy = futureDate(120);
+    },
+  },
+  {
+    id: "file_reply.specification_changed",
+    kind: "stale",
+    mutate: async (built) => {
+      built.order.specification = "Six layers. 1.6 mm thickness. Green solder mask.";
+    },
+  },
+  {
+    id: "file_reply.request_file_content_changed",
+    kind: "stale",
+    mutate: async (built) => {
+      requestDocuments(built)[0]!.markdown = [
+        "Material: aluminium",
+        "Thickness: 2.4 mm",
+      ].join("\n");
+    },
+  },
+  {
+    id: "file_reply.request_file_removed",
+    kind: "stale",
+    mutate: async (built) => {
+      requestDocuments(built).shift();
+    },
+  },
+  {
+    id: "file_reply.stored_file_renamed",
+    kind: "stale",
+    mutate: async (built) => {
+      await prisma.companyContext.update({
+        where: { id: built.documentIds[0]! },
+        data: { name: `renamed-${built.documentIds[0]!}.csv` },
+      });
+    },
+  },
+  {
+    // The trail entry hangs off the planned draft task, so a task no longer
+    // planned is the real shape of an audit write that cannot land.
+    id: "file_reply.refusal_trail_unavailable",
+    kind: "stale",
+    expectUnaudited: true,
+    mutate: async (built) => {
+      built.order.quantity = 275;
+      await prisma.supplyExecutionTask.updateMany({
+        where: {
+          officeId: built.office.officeId,
+          workspaceId: built.home.workspaceId,
+          taskType: "PROCUREMENT_SUPPLIER_REPLY_DRAFT",
+          status: "PLANNED",
+        },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+    },
+  },
+  {
+    id: "file_reply.draft_without_state_fingerprint",
+    kind: "stale",
+    // A draft saved before the send time recheck existed carries no fingerprint,
+    // so its inputs cannot be rechecked and it cannot be delivered.
+    mutate: async (built) => {
+      built.draft = { stateKey: null };
+    },
+  },
+  {
+    id: "file_reply.supplier_contact_changed",
+    kind: "unrelated",
+    mutate: async (built) => {
+      built.vendor.contact = { ...built.vendor.contact!, phone: "+1 512 555 0134" };
+    },
+  },
+  {
+    id: "file_reply.request_progress_changed",
+    kind: "unrelated",
+    mutate: async (built) => {
+      built.order.progress = "Comparing supplier responses";
+      built.order.updatedAt = new Date().toISOString();
+    },
+  },
+  {
+    id: "file_reply.unrelated_company_document_added",
+    kind: "unrelated",
+    mutate: async (built) => {
+      const stored = await storeContextDocumentFile({
+        officeId: built.office.officeId,
+        workspaceId: built.home.workspaceId,
+        preferredName: `unrelated-${randomUUID().slice(0, 6)}.csv`,
+        bytes: Buffer.from("note,value\nunrelated,1\n", "utf-8"),
+        contentType: "text/csv",
+      });
+      await prisma.companyContext.create({
+        data: {
+          officeId: built.office.officeId,
+          companyId: built.home.companyId,
+          kind: "DOCUMENT",
+          name: "unrelated-attachment.csv",
+          mimeType: "text/csv",
+          sizeBytes: 24,
+          storageUrl: stored.url,
+          contentHash: randomUUID(),
+        },
+      });
+    },
+  },
+  {
+    id: "file_reply.other_supplier_drafted",
+    kind: "unrelated",
+    mutate: async (built) => {
+      const other = fileDraftVendor(`${suffix}-${fileCaseCounter}`, 2);
+      built.order.vendors = [...built.order.vendors, other];
+      await saveProcurementFileDeliveryDraft({
+        context: built.office.buyerContext,
+        customerId: built.home.companyId,
+        order: built.order,
+        vendor: other,
+        sourceMessageId: `inbound-other-${randomUUID().slice(0, 6)}`,
+        recipient: other.contact!.email!,
+        conversationSubject: "Re: RFQ second supplier",
+      });
+    },
+  },
+  {
+    id: "file_reply.request_file_prose_changed",
+    kind: "unrelated",
+    // Prose the reply body drops says nothing to the supplier, so rewriting it
+    // must not refuse an otherwise unchanged draft.
+    mutate: async (built) => {
+      const document = requestDocuments(built)[0]!;
+      document.markdown = String(document.markdown)
+        .split("\n")
+        .map((line) => (line.startsWith("Notes on ") ? "Rewritten commentary the reply never quotes." : line))
+        .join("\n");
+    },
+  },
+  {
+    id: "file_reply.request_file_line_past_budget_changed",
+    kind: "unrelated",
+    // The body renders at most 24 lines per document, so a field line past that
+    // never reaches the supplier and must not refuse an unchanged draft.
+    mutate: async (built) => {
+      const document = requestDocuments(built)[0]!;
+      document.markdown = String(document.markdown).replace("Field29: value29", "Field29: rewritten");
+    },
+  },
+  {
+    id: "file_reply.withheld_file_content_changed",
+    kind: "unrelated",
+    mutate: async (built) => {
+      const withheld = requestDocuments(built).at(-1)!;
+      withheld.markdown = "Material: withheld file rewritten after the draft was saved";
+    },
+  },
+  {
+    id: "file_reply.time_elapsed",
+    kind: "unrelated",
+    advanceDays: ELAPSED_DAYS,
+  },
+];
+
 type Measurement = {
   scenario: string;
   action: string;
@@ -812,6 +1154,40 @@ async function main() {
     };
 
     const measurements: Measurement[] = [];
+    const fileHome = await makeFileDraftHome(office);
+    for (const scenario of fileScenarios) {
+      for (let repeat = 0; repeat < REPEATS; repeat += 1) {
+        const built = await buildFileDraftCase(office, fileHome);
+        await scenario.mutate?.(built);
+        if (scenario.advanceDays) advanceClock(scenario.advanceDays);
+        const startedAt = performance.now();
+        let blocked = false;
+        try {
+          blocked = await deliverFileDraft(built);
+        } finally {
+          resetClock();
+        }
+        if (scenario.expectUnaudited) {
+          assert.equal(blocked, true, `${scenario.id} must refuse the delivery`);
+          assert.equal(lastAudited, false, `${scenario.id} must report an unaudited refusal`);
+          assert.ok(
+            lastReason?.includes(PROCUREMENT_FILE_DRAFT_UNAUDITED_REFUSAL_SUFFIX.trim()),
+            `${scenario.id} must name the missing trail entry in its reason`,
+          );
+        } else if (blocked) {
+          assert.equal(lastAudited, true, `${scenario.id} must record its refusal on the trail`);
+        }
+        measurements.push({
+          scenario: scenario.id,
+          action: "procurementFileDraftSendDecision",
+          kind: scenario.kind,
+          blocked,
+          reason: lastReason,
+          ms: performance.now() - startedAt,
+        });
+      }
+    }
+
     for (const scenario of scenarios) {
       for (let repeat = 0; repeat < REPEATS; repeat += 1) {
         const built = await buildCase(office, scenario.stage, scenario.validity);
@@ -870,7 +1246,8 @@ async function main() {
       0,
       `unrelated changes were treated as conflicts: ${[...new Set(falseConflicts.map((entry) => entry.scenario))].join(", ")}`,
     );
-    assert.ok(stale.length >= scenarios.filter((entry) => entry.kind === "stale").length, "every stale scenario must run");
+    const staleScenarios = [...scenarios, ...fileScenarios].filter((entry) => entry.kind === "stale").length;
+    assert.ok(stale.length >= staleScenarios, "every stale scenario must run");
 
     console.log("\nstate-recheck.test.ts passed");
   } finally {

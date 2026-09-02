@@ -8710,3 +8710,36 @@ Use this file for chronological implementation notes that future agents should s
   bounded pages, so a request whose first page of respondents stays unquoted
   cannot hide the priced replies behind them from every later pass. A failed
   write ends the sweep, because the cursor rewound to that retry.
+
+## 2026-08-31: Send time state recheck for supplier file replies
+
+- Before this change the only server side stale state refusals lived in the
+  procurement approval and purchase order paths. A supplier file bearing draft
+  showed a stale badge in the dashboard, but the send path itself accepted a
+  draft written from request state that had since changed.
+- `procurement-file-draft-freshness.ts` hashes the request fields and file
+  identity a reply actually repeats to the supplier: material, normalized
+  quantity, unit, needed by date, specification, request document ids, names,
+  summaries and content hashes, and attachment ids, names, mime types, and
+  sizes. Documents and attachments are sorted by document id, so hashing is
+  order independent.
+- The fingerprint is written into the planned execution task input at draft
+  time and restored on read, which keeps it under the existing immutability
+  trigger instead of adding a mutable column.
+- The recheck fails closed. An unreadable request state refuses the delivery
+  the same way a changed one does, and a draft saved before this change has no
+  fingerprint, so it is refused with its own reason until it is redrafted.
+- Refusals are durable: the run summary counts them and the supplier
+  communication event trail records the stored and current fingerprint.
+- Review follow up: the fingerprint now covers only supplier visible content
+  (attached documents and the field lines the reply body renders), the delivery
+  batch rereads the request per draft so a mid run edit is caught, and a refusal
+  whose event trail write failed says so in its reason instead of reading like a
+  routine stale outcome.
+- The suite now asserts the unaudited case directly: a refusal whose draft task
+  is no longer planned must refuse, report `audited: false`, and name the missing
+  trail entry in its reason.
+- `renderedDocumentContext` is now the one reader of document lines for both the
+  reply body and the fingerprint, so a field line past the body's shared
+  character budget is not treated as supplier visible state. The suite controls
+  for it with a document whose fields run past the per document line budget.

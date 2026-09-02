@@ -25,3 +25,4 @@ tsconfig.tsbuildinfo
 .gstack/
 /.codex-tmp/supplier-eval/
 .leadgen/
+.local-uploads/

@@ -82,6 +82,9 @@ export type AutopilotRunResult = {
   quotesRecorded: number;
   sent: number;
   alreadySent: number;
+  // Deliveries the send time state recheck refused because the sourcing request
+  // moved after the draft was saved. They need a redraft, not a retry.
+  refused: number;
   failed: number;
   failures: Array<{ vendorId: string; vendorName: string; error: string }>;
   autoSend: boolean;
@@ -283,6 +286,7 @@ export async function runProcurementAutopilot(args: {
     quotesRecorded: quoteRun?.recorded ?? 0,
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
+    refused: sendRun?.stale ?? 0,
     // Both delivery paths count toward one failure total, so a run where every
     // follow up failed cannot report zero.
     failed: (sendRun?.failed ?? 0) + (nudgeRun?.failed ?? 0) + (quoteRun?.failed ?? 0),

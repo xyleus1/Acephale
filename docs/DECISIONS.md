@@ -4665,3 +4665,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Mailbox boundary: Because sender accounts are pooled across offices, the
   displayed mailbox is the sender of the newest outbound message, while thread
   and message reads remain scoped by the owning office.
+
+## 2026-08-31: Supplier file replies are rechecked against live state at send time
+
+- Status: accepted
+- Owner: engineering
+- Decision: A saved supplier file bearing draft is only delivered when the
+  sourcing request state it was written from still matches live records. The
+  state fingerprint is stored in the immutable execution task input at draft
+  time and recomputed inside the send path, before any provider call.
+- Safety boundary: The recheck fails closed. A missing fingerprint, a changed
+  request, or a recheck that cannot complete all refuse delivery. This does not
+  replace the existing operator confirmation, supplier qualification, thread,
+  recipient, or idempotency guards, and it is not permission to send without
+  human instruction.
+- Scope boundary: Unrelated changes must not block a send. Supplier contact
+  edits, request progress changes, other suppliers' drafts, unrelated company
+  documents, and elapsed time are covered as negative controls in
+  `scripts/state-recheck.test.ts`, which fails CI if a stale send escapes or an
+  unrelated change is blocked.

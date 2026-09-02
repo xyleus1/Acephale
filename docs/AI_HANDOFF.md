@@ -11654,3 +11654,36 @@ Verification caveat:
   and does not consume the per run capture budget.
 - Verified with `npm run test:procurement-supplier-quote-reading` and
   `npx tsc --noEmit`.
+
+## 2026-08-31: Supplier file replies refuse stale sends server side
+
+- A saved supplier file bearing draft now carries a state fingerprint of the
+  sourcing request it was written from (material, quantity, unit, needed by,
+  specification, request documents, attached files). The fingerprint lives in
+  the immutable execution task input, so no schema change was needed.
+- `procurementFileDraftSendDecision` recomputes that fingerprint from live
+  records before the provider is contacted and refuses the delivery when it
+  moved, when the draft has no fingerprint, or when the recheck itself cannot
+  run. The refusal is appended as
+  `PROCUREMENT_SUPPLIER_FILE_REPLY_REFUSED_STALE` on the supplier
+  communication event trail and reported as a `STALE` send outcome.
+- Draft regeneration uses the same fingerprint, so a request whose inputs moved
+  is redrafted instead of resent, and autopilot reports refusals separately
+  from transport failures.
+- The fingerprint follows the reply body: it covers the request fields plus the
+  attached documents and the field lines the body renders. Documents the
+  attachment screen withheld and prose the body drops stay out, so a change to
+  content the supplier never sees does not refuse a delivery.
+- The delivery batch rereads the request immediately before each recheck, so an
+  edit made after the run started is compared against, not the snapshot the run
+  opened with.
+- A refusal whose trail entry could not be written is reported as unaudited and
+  says so in its reason, so an operator can tell it from a routine refusal.
+- The state recheck suite now covers this path: eight stale scenarios and eight
+  unrelated controls run against real drafts on a local database and never
+  contact a provider. Full run: 162/162 stale executions blocked, 0 escaped,
+  0/84 false conflicts, p50 13.6ms and p95 32.1ms.
+- Verified with `npx tsc --noEmit`, `npm run lint` (no new errors in touched
+  files; `src/lib/thread-actions.ts` and `src/lib/whatsapp.ts` keep their
+  preexisting `no-explicit-any` errors), `npm run test:state-recheck`, and
+  `npm run test:procurement-file-draft-db`.
