@@ -173,4 +173,47 @@ const getBlock = route.slice(route.indexOf("export async function GET"), route.i
 assert.match(getBlock, /listSupplierNudgeTargets/, "GET reports the plan.");
 assert.doesNotMatch(getBlock, /runProcurementSupplierNudges/, "GET must not be able to mail anyone.");
 
+// A plan an operator approves has to cover the same suppliers a send would, so
+// an absent limit means the whole run instead of a single recipient.
+assert.match(
+  getBlock,
+  /limitParam === null \? undefined : Number\(limitParam\)/,
+  "GET without a limit plans the whole run, not one supplier.",
+);
+
+// A follow up whose delivery is unknown stays reserved, so the next round must
+// wait for reconciliation instead of mailing the same supplier again.
+assert.match(
+  module,
+  /unconfirmedNudges/,
+  "An unconfirmed follow up blocks the next round for that supplier.",
+);
+assert.match(
+  module,
+  /reservation\.status === "RESERVED"/,
+  "Only a recorded follow up is treated as delivered.",
+);
+
+// A finished request and a supplier ruled out of the request are both closed to
+// further outreach.
+assert.match(
+  module,
+  /NUDGE_CLOSED_ORDER_STATUSES\.includes\(orderStatus\)/,
+  "An ordered or cancelled request contacts nobody.",
+);
+assert.match(
+  module,
+  /lower\(coalesce\(order_vendors\.status, ''\)\) <> ALL/,
+  "A rejected or excluded supplier is not followed up.",
+);
+
+// One failure total covers both delivery paths, so a run where only follow ups
+// failed cannot report zero failures.
+const autopilot = readFileSync(resolve(root, "src/lib/procurement-autopilot.ts"), "utf8");
+assert.match(
+  autopilot,
+  /failed: \(sendRun\?\.failed \?\? 0\) \+ \(nudgeRun\?\.failed \?\? 0\)/,
+  "Failed follow ups count toward the autopilot failure total.",
+);
+
 console.log("procurement supplier nudge policy and command contracts passed");

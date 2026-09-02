@@ -35,8 +35,11 @@ export async function GET(req: NextRequest) {
   try {
     const order = await loadBulkRfqOrder(orderId);
     if (!order) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
-    const limit = boundedLimit(Number(req.nextUrl.searchParams.get("limit")));
-    const { targets, skipped } = await listSupplierNudgeTargets({ order, limit });
+    // An absent limit means the whole run, so the plan an operator approves
+    // covers as many suppliers as a send would.
+    const limitParam = req.nextUrl.searchParams.get("limit");
+    const limit = boundedLimit(limitParam === null ? undefined : Number(limitParam));
+    const { targets, skipped, blocked } = await listSupplierNudgeTargets({ order, limit });
     return NextResponse.json({
       orderId: order.orderId,
       material: order.material,
@@ -47,6 +50,7 @@ export async function GET(req: NextRequest) {
         recipient: target.recipient,
         round: target.round,
       })),
+      blocked,
       skipped,
     });
   } catch (error) {

@@ -1,5 +1,21 @@
 # Engineering Log
 
+## 2026-09-02: Supplier follow up eligibility narrowed after review
+
+- A dry run without an explicit limit planned one supplier while a send defaults
+  to the whole run, so the plan an operator approved could cover fewer recipients
+  than the send. An absent limit now means the whole run.
+- A follow up whose delivery came back unknown stays reserved. It used to count
+  as a spent round, so the next run could mail the same supplier again before the
+  first was resolved. A supplier with an unconfirmed follow up is now skipped
+  with that reason until reconciliation decides.
+- An ordered or cancelled request now contacts nobody, and a supplier whose
+  status ended outreach (rejected, declined, excluded, disqualified, archived) is
+  no longer eligible. The plan reports a closed request through `blocked` so an
+  empty plan is not read as every supplier having answered.
+- Autopilot counted only draft send failures in `failed`, so a pass where every
+  follow up failed reported zero. Both paths now feed one total.
+
 ## 2026-08-31: Suppliers that never replied now get a follow up
 
 - Diagnostics on the two live HypnoDreamz requests showed 261 suppliers past the

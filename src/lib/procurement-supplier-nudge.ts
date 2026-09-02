@@ -52,6 +52,7 @@ export type SupplierNudgeRunResult = {
   alreadySent: number;
   failed: number;
   skipped: Array<{ vendorId: string; vendorName: string; reason: string }>;
+  blocked: string | null;
   outcomes: SupplierNudgeOutcome[];
 };
 
@@ -69,6 +70,23 @@ const NUDGE_VENDOR_QUOTE_SQL = `(
     jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
     AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
   )`;
+
+// Sourcing sets a supplier to 'researched' and the RFQ send moves it to
+// 'contacted', but that write back is best effort, so this is a block list of
+// statuses that end outreach rather than an allow list of statuses that keep it.
+const NUDGE_CLOSED_VENDOR_STATUSES = [
+  "rejected",
+  "declined",
+  "excluded",
+  "disqualified",
+  "archived",
+  "ordered",
+  "cancelled",
+];
+
+// A request that is ordered or cancelled is finished, and the autopilot reader
+// already treats those two the same way.
+const NUDGE_CLOSED_ORDER_STATUSES = ["ordered", "cancelled"];
 
 export type SupplierNudgeTarget = {
   vendorId: string;
@@ -149,8 +167,25 @@ export async function listSupplierNudgeTargets(args: {
   order: BulkRfqOrder;
   limit: number;
   now?: number;
-}): Promise<{ targets: SupplierNudgeTarget[]; skipped: SupplierNudgeRunResult["skipped"] }> {
+}): Promise<{
+  targets: SupplierNudgeTarget[];
+  skipped: SupplierNudgeRunResult["skipped"];
+  // Set when the whole request is closed, so an empty plan is never mistaken
+  // for a request whose suppliers all answered.
+  blocked: string | null;
+}> {
   const now = args.now ?? Date.now();
+  const closed = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{ status: string }>>(`
+    SELECT orders.status AS "status" FROM orders WHERE orders.id = $1::uuid
+  `, args.order.orderId);
+  const orderStatus = closed.at(0)?.status ?? "";
+  if (NUDGE_CLOSED_ORDER_STATUSES.includes(orderStatus)) {
+    return {
+      targets: [],
+      skipped: [],
+      blocked: "This request is finished, so its suppliers are not contacted again.",
+    };
+  }
   const rows = await procurementWorkflowDatabase().$queryRawUnsafe<NudgeVendorRow[]>(`
     SELECT
       order_vendors.id AS "vendorId",
@@ -161,14 +196,15 @@ export async function listSupplierNudgeTargets(args: {
     FROM order_vendors
     WHERE order_vendors.order_id = $1::uuid
       AND ${BULK_RFQ_VENDOR_EMAIL_SQL} IS NOT NULL
+      AND lower(coalesce(order_vendors.status, '')) <> ALL($2::text[])
     ORDER BY order_vendors.created_at ASC, order_vendors.id ASC
-  `, args.order.orderId);
+  `, args.order.orderId, NUDGE_CLOSED_VENDOR_STATUSES);
   // The workflow write-back that stamps `last_email_message_id` is best effort,
   // so a real send can leave no workflow receipt. Those vendors stay in the list
   // and the local thread supplies the message id to reply to.
   const contacted = rows.filter((row): row is NudgeVendorRow & { contactEmail: string } =>
     Boolean(row.contactEmail?.includes("@")));
-  if (!contacted.length) return { targets: [], skipped: [] };
+  if (!contacted.length) return { targets: [], skipped: [], blocked: null };
   const reservations = await prisma.emailSenderReservation.findMany({
     where: {
       officeId: args.order.officeId,
@@ -181,6 +217,7 @@ export async function listSupplierNudgeTargets(args: {
     select: {
       idempotencyKey: true,
       accountId: true,
+      status: true,
       localThreadId: true,
       providerThreadId: true,
       account: { select: { email: true } },
@@ -188,6 +225,10 @@ export async function listSupplierNudgeTargets(args: {
   });
   const rfqByVendor = new Map<string, typeof reservations[number]>();
   const nudgesByVendor = new Map<string, number>();
+  // A follow up whose delivery came back unknown stays RESERVED on purpose. That
+  // supplier is left alone until reconciliation decides, because advancing to
+  // the next round would mail a supplier that may already have the message.
+  const unconfirmedNudges = new Set<string>();
   for (const reservation of reservations) {
     const vendorId = reservation.idempotencyKey.split(":").at(-1) ?? "";
     if (reservation.idempotencyKey.startsWith("procurement-bulk-rfq:")) {
@@ -195,6 +236,7 @@ export async function listSupplierNudgeTargets(args: {
       continue;
     }
     nudgesByVendor.set(vendorId, (nudgesByVendor.get(vendorId) ?? 0) + 1);
+    if (reservation.status === "RESERVED") unconfirmedNudges.add(vendorId);
   }
   const threadIds = [...new Set([...rfqByVendor.values()].flatMap((entry) => entry.localThreadId ? [entry.localThreadId] : []))];
   const messages = threadIds.length
@@ -229,6 +271,14 @@ export async function listSupplierNudgeTargets(args: {
     if (targets.length >= args.limit) break;
     const rfq = rfqByVendor.get(row.vendorId);
     const state = rfq?.localThreadId ? threadState.get(rfq.localThreadId) : undefined;
+    if (unconfirmedNudges.has(row.vendorId)) {
+      skipped.push({
+        vendorId: row.vendorId,
+        vendorName: row.name,
+        reason: "The last follow up to this supplier is still unconfirmed, so it waits for reconciliation.",
+      });
+      continue;
+    }
     const decision = supplierNudgeDecision({
       hasQuote: row.hasQuote === true,
       hasInboundReply: state?.inbound === true,
@@ -263,7 +313,7 @@ export async function listSupplierNudgeTargets(args: {
       round: decision.round,
     });
   }
-  return { targets, skipped };
+  return { targets, skipped, blocked: null };
 }
 
 async function recordSentNudge(args: {
@@ -343,7 +393,7 @@ export async function runProcurementSupplierNudges(args: {
   const provider = args.provider ?? gmailSupplierEmailProvider;
   const limit = Math.min(NUDGE_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? NUDGE_MAX_PER_RUN)));
   const pauseMs = args.pauseMs ?? 400;
-  const { targets, skipped } = await listSupplierNudgeTargets({ order, limit, now: args.now });
+  const { targets, skipped, blocked } = await listSupplierNudgeTargets({ order, limit, now: args.now });
   const files = args.attachRequestFiles === false
     ? EMPTY_RFQ_ATTACHMENT_PACKAGE
     : await (args.loadFiles ?? loadProcurementRfqAttachmentPackage)({
@@ -360,6 +410,7 @@ export async function runProcurementSupplierNudges(args: {
     alreadySent: 0,
     failed: 0,
     skipped,
+    blocked,
     outcomes: [],
   };
   for (const target of targets) {

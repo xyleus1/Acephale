@@ -264,7 +264,9 @@ export async function runProcurementAutopilot(args: {
     nudged: nudgeRun?.sent ?? 0,
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
-    failed: sendRun?.failed ?? 0,
+    // Both delivery paths count toward one failure total, so a run where every
+    // follow up failed cannot report zero.
+    failed: (sendRun?.failed ?? 0) + (nudgeRun?.failed ?? 0),
     // A delivery that fails needs an operator, so it is reported next to the
     // escalations instead of being reduced to a count.
     failures: [
