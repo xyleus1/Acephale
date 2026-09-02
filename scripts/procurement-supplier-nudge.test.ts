@@ -216,4 +216,84 @@ assert.match(
   "Failed follow ups count toward the autopilot failure total.",
 );
 
+// An unknown delivery must not park a supplier forever: every run settles the
+// reserved follow ups first, a confirmed one is recorded and a send the mailbox
+// never saw releases the slot.
+assert.match(
+  module,
+  /export async function reconcileProcurementSupplierNudges/,
+  "Reserved follow ups have a reconcile path of their own.",
+);
+assert.match(
+  module,
+  /await reconcileProcurementSupplierNudges\(\{\s*orderId: order\.orderId/,
+  "A run reconciles before it reads the plan.",
+);
+assert.match(
+  module,
+  /receipt\.state === "NOT_FOUND"[\s\S]{0,200}releaseEmailSenderReservation/,
+  "A follow up the mailbox never saw frees the reservation again.",
+);
+assert.match(
+  module,
+  /nudgeRfcMessageId\(\{ orderId: order\.orderId, vendorId, round \}\)/,
+  "Reconcile asks the provider about the exact message the round would have sent.",
+);
+
+// Eligibility is re-read immediately before each send, so a request cancelled
+// mid run stops mailing the suppliers still in the plan.
+assert.match(
+  module,
+  /if \(!await nudgeStillEligible\(/,
+  "A target whose request or supplier closed mid run is skipped, not mailed.",
+);
+
+const postBlock = route.slice(route.indexOf("export async function POST"));
+assert.match(
+  postBlock,
+  /payload\.action === "reconcile"/,
+  "An operator can settle unknown deliveries without mailing anyone.",
+);
+assert.doesNotMatch(getBlock, /reconcileProcurementSupplierNudges/, "GET stays free of side effects.");
+
+// A reservation young enough to belong to a send still in flight is left alone,
+// so a concurrent run cannot have its slot released and mail the supplier twice.
+assert.match(
+  module,
+  /updatedAt: \{ lt: new Date\(Date\.now\(\) - NUDGE_RECONCILE_MIN_AGE_MS\) \}/,
+  "Only slots untouched long enough to be settled are reconciled, so a reused reservation keeps the same protection.",
+);
+// A slot that stays uncertain rotates to the back of the queue, so ten stuck
+// deliveries cannot hold every pass and starve newer ones.
+assert.match(module, /orderBy: \{ updatedAt: "asc" \}/, "Least recently checked slots are reconciled first.");
+assert.match(
+  module,
+  /if \(receipt\.state !== "SENT"\) \{\s*await touchReservation\(/,
+  "An uncertain slot is touched so the next pass moves on to newer deliveries.",
+);
+// A pass with nothing old enough to check still reports the outstanding work.
+assert.match(
+  module,
+  /reconciled: 0,\s*remaining: await countReservedNudges\(/,
+  "An empty pass still counts every unresolved follow up slot.",
+);
+// A provider check can spend its own timeout, so the pass is small and stops at
+// its own deadline instead of being killed by the route.
+assert.match(
+  module,
+  /NUDGE_MAX_RECONCILE_PER_RUN = 10;/,
+  "A reconcile pass stays small enough for the route budget.",
+);
+assert.match(
+  module,
+  /if \(Date\.now\(\) >= deadline\) break;/,
+  "A reconcile pass gives up its remaining work at its own deadline.",
+);
+// A supplier that answered while the run was working belongs to the reply path.
+assert.match(
+  module,
+  /direction: "INBOUND"[\s\S]{0,80}\}\);\s*if \(inbound > 0\) return false;/,
+  "A reply that lands mid run stops the queued follow up.",
+);
+
 console.log("procurement supplier nudge policy and command contracts passed");

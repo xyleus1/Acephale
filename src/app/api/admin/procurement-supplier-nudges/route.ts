@@ -5,6 +5,7 @@ import {
   NUDGE_CONFIRMATION,
   NUDGE_MAX_PER_RUN,
   listSupplierNudgeTargets,
+  reconcileProcurementSupplierNudges,
   runProcurementSupplierNudges,
 } from "@/lib/procurement-supplier-nudge";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
@@ -65,10 +66,26 @@ export async function POST(req: NextRequest) {
     orderId?: unknown;
     limit?: unknown;
     confirm?: unknown;
+    action?: unknown;
   };
   const orderId = typeof payload.orderId === "string" ? payload.orderId.trim() : "";
   const invalid = procurementOrderIdError(orderId);
   if (invalid) return badRequest(invalid);
+  // Settling unknown deliveries mails nobody, so it needs no confirmation and is
+  // available on its own for a supplier whose last follow up is unresolved.
+  if (payload.action === "reconcile") {
+    try {
+      const reconciled = await reconcileProcurementSupplierNudges({
+        orderId,
+        limit: boundedLimit(payload.limit),
+      });
+      if (!reconciled) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
+      return NextResponse.json(reconciled);
+    } catch (error) {
+      console.error("procurement supplier nudge reconcile failed", error);
+      return NextResponse.json({ error: "The supplier follow up reconcile failed." }, { status: 500 });
+    }
+  }
   // Mailing suppliers again is irreversible, so the confirmation phrase has to
   // be present in the body rather than implied by calling the route.
   if (payload.confirm !== NUDGE_CONFIRMATION) {

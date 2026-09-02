@@ -1,5 +1,32 @@
 # Engineering Log
 
+## 2026-09-02: Unknown follow up deliveries reconcile, and eligibility is rechecked at send time
+
+- Suppressing later rounds while a follow up is unconfirmed parked that supplier
+  forever, because `reconcileProcurementBulkRfq` only settles first sends.
+  `reconcileProcurementSupplierNudges` settles `procurement-rfq-nudge:`
+  reservations: it rebuilds the round's RFC message id, asks the provider,
+  records a confirmed send on the original thread, releases a send the mailbox
+  never saw, and leaves anything still uncertain reserved. Every run reconciles
+  before it reads the plan, and `POST { action: "reconcile" }` runs it alone
+  without a confirmation phrase because it mails nobody.
+- The plan is read once and the run then mails one supplier at a time, so a
+  request cancelled or a supplier ruled out mid run could still be contacted.
+  Eligibility is now re-read immediately before each reservation, and a target
+  that closed in the meantime is skipped with that reason. The same recheck
+  counts inbound messages on the thread, so a supplier that answers mid run is
+  never sent the obsolete follow up that was already planned for it.
+- Reconcile only touches slots whose last attempt is older than
+  `NUDGE_RECONCILE_MIN_AGE_MS`, because releasing a slot that still belongs to a
+  send in flight would let a concurrent run mail the same supplier twice. The age
+  is read from `updatedAt`, so a reservation the pool reuses for a retry is
+  protected exactly like a first attempt. A pass is capped at ten reservations
+  and stops at its own 90 second budget, since one provider check can spend its
+  whole timeout and the route allows 300 seconds. A slot still uncertain after a
+  check is touched and the batch is ordered by least recently checked, so stuck
+  deliveries rotate instead of holding every pass and starving newer ones, and a
+  pass with nothing old enough to check still reports every unresolved slot.
+
 ## 2026-09-02: Supplier follow up eligibility narrowed after review
 
 - A dry run without an explicit limit planned one supplier while a send defaults
