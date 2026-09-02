@@ -1,5 +1,28 @@
 # Decisions
 
+## Every sign-in surface shares one hashed attempt counter
+
+Date: 2026-09-02
+
+`consumeLoginAttempt` in `src/lib/login-throttle.ts` is the only sign-in attempt
+counter. Callers pass an identity string they namespace themselves
+(`login-code:<address>`, `login-verify:<address>`, `login-password:<address>`,
+and the bare address for the customer portal), a maximum, and an optional
+window. The identity is HMAC-hashed with `AUTH_SECRET` before storage, so no
+client address is persisted, and namespacing keeps one surface from spending
+another's budget. Rows continue to live in `CustomerPortalLoginThrottle`: the
+table is now generic despite its name, which is preferable to a second table
+with identical semantics. New sign-in surfaces must consume a budget here
+before any allowlist check or account lookup, so a flooded form cannot be used
+to tell allowed addresses from unknown ones.
+
+Address budgets are treated as best effort: `x-forwarded-for` is caller
+controlled, so `clientAddressFromHeaders` prefers the platform-set
+`x-vercel-forwarded-for` and every credential-guessing surface must also carry
+an identifier-scoped budget that address rotation cannot escape. Identifier
+budgets count failures only, read with `loginAttemptsExhausted` and spent after
+the attempt is judged, so a valid credential is never locked out.
+
 ## Supplier quotes are written through a tenant scoped database function
 
 Date: 2026-09-02

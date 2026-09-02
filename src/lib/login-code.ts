@@ -6,7 +6,15 @@ import { getValidAccessToken } from "@/lib/gmail-oauth";
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 3;
 const REQUEST_WINDOW_MS = 15 * 60 * 1000;
+// Ceiling on how many codes one mailbox can be sent in a day. The 15 minute
+// window alone still allows a steady trickle of unsolicited codes.
+const MAX_REQUESTS_PER_DAY = 12;
+const REQUEST_DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
+// A code is persisted only after it is sent, so the counted caps below cannot
+// see a request that is still in flight. This serializes one mailbox to a
+// single request at a time, which is what makes those caps hold under a burst.
+const SEND_GUARD_MS = 30 * 1000;
 const DEFAULT_LOGIN_CODE_SMTP_USER = "rfq@usederya.com";
 
 export function loginCodeSmtpConfig() {
@@ -159,20 +167,58 @@ async function sendCodeEmailWithSmtp(to: string, code: string) {
   });
 }
 
-export async function requestLoginCode(rawEmail: string): Promise<RequestCodeResult> {
+export async function requestLoginCode(
+  rawEmail: string,
+  context: { clientAddress?: string } = {},
+): Promise<RequestCodeResult> {
   const email = normalizeLoginEmail(rawEmail);
-  if (isUsernameLoginEmail(email)) return { ok: false, error: "not_allowed" };
-  if (!isLoginEmailAllowed(email)) return { ok: false, error: "not_allowed" };
+  // Unsolicited code requests are the visible symptom of an attack on this
+  // form, so every attempt is attributable by address without logging the code.
+  // The submitted address is only logged once it is a known operator mailbox,
+  // so arbitrary submitted identifiers are not retained.
+  const clientAddress = context.clientAddress ?? "unknown";
+  if (isUsernameLoginEmail(email) || !isLoginEmailAllowed(email)) {
+    console.warn("login code request rejected", { clientAddress, reason: "not_allowed" });
+    return { ok: false, error: "not_allowed" };
+  }
+  const attempt = { email, clientAddress };
 
   const user = await prisma.user.findFirst({
     where: { email, isActive: true },
     select: { id: true, officeId: true },
   });
-  if (!user) return { ok: false, error: "no_user" };
+  if (!user) {
+    console.warn("login code request rejected", { ...attempt, reason: "no_user" });
+    return { ok: false, error: "no_user" };
+  }
 
   const windowStart = new Date(Date.now() - REQUEST_WINDOW_MS);
   const recent = await prisma.loginCode.count({ where: { email, createdAt: { gte: windowStart } } });
-  if (recent >= MAX_REQUESTS_PER_WINDOW) return { ok: false, error: "rate_limited" };
+  if (recent >= MAX_REQUESTS_PER_WINDOW) {
+    console.warn("login code request rejected", { ...attempt, reason: "rate_limited" });
+    return { ok: false, error: "rate_limited" };
+  }
+
+  const dayStart = new Date(Date.now() - REQUEST_DAY_MS);
+  const daily = await prisma.loginCode.count({ where: { email, createdAt: { gte: dayStart } } });
+  if (daily >= MAX_REQUESTS_PER_DAY) {
+    console.warn("login code request rejected", { ...attempt, reason: "daily_limited" });
+    return { ok: false, error: "rate_limited" };
+  }
+
+  // Imported here because this module is also loaded by the copy and helper
+  // contracts, which cannot pull in a server-only module.
+  const { consumeLoginAttempt } = await import("@/lib/login-throttle");
+  if (
+    !(await consumeLoginAttempt({
+      identity: `login-code-send:${email}`,
+      maxAttempts: 1,
+      windowMs: SEND_GUARD_MS,
+    }))
+  ) {
+    console.warn("login code request rejected", { ...attempt, reason: "send_in_flight" });
+    return { ok: false, error: "rate_limited" };
+  }
 
   const sender = await pickSenderAccount(user.officeId, email);
   const code = generateLoginCode();
@@ -222,6 +268,7 @@ export async function requestLoginCode(rawEmail: string): Promise<RequestCodeRes
     },
   });
 
+  console.info("login code sent", { ...attempt, sentVia });
   return { ok: true, sentVia };
 }
 

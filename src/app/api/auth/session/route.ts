@@ -4,6 +4,7 @@ import {
   AUTH_SESSION_RESPONSE_HEADERS,
   handleAuthSessionPost,
 } from "@/lib/auth-session-route";
+import { consumeLoginAttempt, loginAttemptsExhausted } from "@/lib/login-throttle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ export async function POST(request: Request) {
     resolveIdentifier: resolveLoginIdentifier,
     login: loginWithCredentials,
     sessionMaxAgeSeconds: SESSION_MAX_AGE_SECONDS,
+    consumePersistentAttempt: consumeLoginAttempt,
+    persistentAttemptsExhausted: loginAttemptsExhausted,
   });
 }
 

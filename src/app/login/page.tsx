@@ -1,18 +1,42 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession, loginWithCredentials, loginWithVerifiedEmail } from "@/lib/auth";
 import { requestLoginCode, resolveLoginIdentifier, verifyLoginCode } from "@/lib/login-code";
+import { clientAddressFromHeaders, consumeLoginAttempt, loginAttemptsExhausted } from "@/lib/login-throttle";
+import {
+  MAX_PASSWORD_ATTEMPTS_PER_ADDRESS,
+  MAX_PASSWORD_FAILURES_PER_IDENTIFIER,
+  passwordAddressIdentity,
+  passwordIdentifierIdentity,
+} from "@/lib/auth-session-route";
 import { LogoMark } from "@/components/logo-mark";
+
+// Per client address, per 15 minutes. Requesting a code sends mail to someone
+// else's mailbox, so it gets the tightest budget of the three actions.
+const MAX_CODE_REQUESTS_PER_ADDRESS = 6;
+const MAX_CODE_VERIFICATIONS_PER_ADDRESS = 15;
+// Password budgets and identities come from the JSON sign-in route so both
+// surfaces spend the same counters. Address budgets are best effort because a
+// caller can rotate forwarded addresses, so failed guesses are also counted
+// against the identifier. Only failures count, so a working password is never
+// locked out by this.
 
 type Params = {
   searchParams: Promise<{ error?: string; sent?: string; email?: string; via?: string }>;
 };
 
+// One wording for every reason a code cannot be sent: whether an address is on
+// the sign-in list or has an account is not something this form should confirm.
+const UNAVAILABLE_TEXT = "Could not send a sign-in code to that address. Check the address, or use the password fallback.";
+
 const ERROR_TEXT: Record<string, string> = {
   "1": "Invalid username, email, or password. Please try again.",
-  not_allowed: "This is an internal Derya deployment. That email is not on the sign-in list.",
-  no_user: "No active account exists for that email.",
-  rate_limited: "Too many codes requested. Wait 15 minutes and try again.",
-  send_failed: "Could not send the sign-in code email. Try again, or use the password fallback.",
+  not_allowed: UNAVAILABLE_TEXT,
+  no_user: UNAVAILABLE_TEXT,
+  send_failed: UNAVAILABLE_TEXT,
+  // Deliberately vague about the wait: this covers a 15 minute address budget
+  // and a rolling 24 hour cap on codes sent to one mailbox.
+  rate_limited: "Too many sign-in attempts. Wait and try again later, or use the password fallback.",
   badcode: "That code is wrong or expired. Request a new one if needed.",
 };
 
@@ -30,7 +54,18 @@ export default async function LoginPage({ searchParams }: Params) {
     "use server";
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     if (!email) redirect("/login");
-    const result = await requestLoginCode(email);
+    const clientAddress = clientAddressFromHeaders(await headers());
+    // Checked before the allowlist so a flooded form answers the same way for
+    // every address, including ones that cannot sign in at all.
+    const withinBudget = await consumeLoginAttempt({
+      identity: `login-code:${clientAddress}`,
+      maxAttempts: MAX_CODE_REQUESTS_PER_ADDRESS,
+    });
+    if (!withinBudget) {
+      console.warn("login code request throttled", { clientAddress });
+      redirect(`/login?error=rate_limited&email=${encodeURIComponent(email)}`);
+    }
+    const result = await requestLoginCode(email, { clientAddress });
     if (!result.ok) {
       redirect(`/login?error=${result.error}&email=${encodeURIComponent(email)}`);
     }
@@ -41,8 +76,18 @@ export default async function LoginPage({ searchParams }: Params) {
     "use server";
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const code = String(formData.get("code") ?? "").trim();
+    const clientAddress = clientAddressFromHeaders(await headers());
+    const withinBudget = await consumeLoginAttempt({
+      identity: `login-verify:${clientAddress}`,
+      maxAttempts: MAX_CODE_VERIFICATIONS_PER_ADDRESS,
+    });
+    if (!withinBudget) {
+      console.warn("login code verification throttled", { clientAddress });
+      redirect(`/login?sent=1&email=${encodeURIComponent(email)}&error=rate_limited`);
+    }
     const verified = await verifyLoginCode(email, code);
     if (!verified.ok) {
+      console.warn("login code verification failed", { clientAddress });
       redirect(`/login?sent=1&email=${encodeURIComponent(email)}&error=badcode`);
     }
     const result = await loginWithVerifiedEmail(verified.email);
@@ -56,9 +101,30 @@ export default async function LoginPage({ searchParams }: Params) {
     "use server";
     const identifier = resolveLoginIdentifier(String(formData.get("email") ?? ""));
     const password = String(formData.get("password") ?? "");
+    const clientAddress = clientAddressFromHeaders(await headers());
+    // The password form accepts customer office usernames too, so without this
+    // it is an unlimited guessing oracle against shared office passwords.
+    const withinBudget = await consumeLoginAttempt({
+      identity: passwordAddressIdentity(clientAddress),
+      maxAttempts: MAX_PASSWORD_ATTEMPTS_PER_ADDRESS,
+    });
+    if (!withinBudget) {
+      console.warn("login password attempt throttled", { clientAddress });
+      redirect("/login?error=rate_limited");
+    }
+
+    if (await loginAttemptsExhausted(passwordIdentifierIdentity(identifier), MAX_PASSWORD_FAILURES_PER_IDENTIFIER)) {
+      console.warn("login password attempts exhausted for identifier", { clientAddress });
+      redirect("/login?error=rate_limited");
+    }
 
     const result = await loginWithCredentials(identifier, password);
     if (!result) {
+      await consumeLoginAttempt({
+        identity: passwordIdentifierIdentity(identifier),
+        maxAttempts: MAX_PASSWORD_FAILURES_PER_IDENTIFIER,
+      });
+      console.warn("login password attempt failed", { clientAddress });
       redirect("/login?error=1");
     }
 

@@ -9,6 +9,7 @@ import {
   issueCustomerPortalSession,
 } from "@/lib/customer-portal-auth";
 import { consumeCustomerPortalLoginAttempt } from "@/lib/customer-portal-login-rate-limit";
+import { clientAddressFromHeaders } from "@/lib/login-throttle";
 import styles from "./portal-workspace.module.css";
 
 export const metadata: Metadata = {
@@ -35,10 +36,7 @@ export default async function CustomerPortalLoginPage({
     const username = String(formData.get("username") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
     const office = String(formData.get("office") ?? "").trim() || null;
-    const requestHeaders = await headers();
-    const clientAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
-      || requestHeaders.get("x-real-ip")
-      || "unknown";
+    const clientAddress = clientAddressFromHeaders(await headers());
     if (!await consumeCustomerPortalLoginAttempt(clientAddress)) {
       redirect(`/portal?error=limited&username=${encodeURIComponent(username)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
     }

@@ -1,5 +1,43 @@
 # Engineering Log
 
+## 2026-09-02 - Operator login throttling, daily code cap, generic errors
+
+- Unsolicited sign-in codes reached the founder mailbox because the only limit
+  was 3 codes per 15 minutes per email and nothing limited the sender.
+- Extracted `consumeLoginAttempt` into `src/lib/login-throttle.ts` from the
+  customer portal limiter, which now delegates to it with the same identity and
+  therefore the same stored key hashes. No schema change: the shared counter
+  keeps using `CustomerPortalLoginThrottle`.
+- The operator login server actions consume `login-code:`, `login-verify:`, and
+  `login-password:` budgets per client address before touching the database.
+  The password form previously accepted unlimited guesses against customer
+  office usernames.
+- `requestLoginCode` takes the client address for logging and rejects a mailbox
+  that has already received 12 codes in 24 hours.
+- Review follow-up: address budgets are best effort because `x-forwarded-for`
+  is caller controlled, so the address now comes from `x-vercel-forwarded-for`
+  first and failed password guesses additionally consume a per-identifier
+  budget (`loginAttemptsExhausted` reads it, only failures spend it). The
+  throttled copy no longer promises a 15 minute wait it cannot honour for the
+  daily cap, and submitted identifiers are kept out of the logs unless already
+  known to be an operator mailbox.
+- Review follow-up: `POST /api/auth/session` guessed passwords behind a
+  module-level `Map`, which resets per serverless instance, so it now consumes
+  the same persistent budgets through injected `consumePersistentAttempt` and
+  `persistentAttemptsExhausted`. The budgets and identity builders moved to
+  `src/lib/auth-session-route.ts`, which the login form imports, so the two
+  password surfaces cannot drift apart. The in-memory counter stays as a cheap
+  first check.
+- Review follow-up: the counted mailbox caps read persisted codes, which are
+  written only after delivery, so concurrent requests could each pass both
+  counts and each send mail. `requestLoginCode` now consumes an atomic
+  `login-code-send:<email>` budget of one per 30 seconds immediately before
+  sending, which serializes a mailbox and makes the counts hold under a burst.
+- Verified: `npx tsc --noEmit`, `tsx scripts/login-code.test.ts`,
+  `tsx scripts/customer-portal.test.ts`, `tsx scripts/auth-session-route.test.ts`,
+  `npm run check:product-copy`. Touched-file lint reports only the pre-existing
+  `no-html-link-for-pages` error on the portal link in the login page.
+
 ## 2026-09-02: Quote write tenant boundary and per message provenance
 
 - The shared `dashboard_api` role lost its update privilege on `order_vendors`.

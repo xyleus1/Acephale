@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   handleAuthSessionPost,
+  MAX_PASSWORD_FAILURES_PER_IDENTIFIER,
+  passwordIdentifierIdentity,
   type AuthSessionRouteDependencies,
 } from "../src/lib/auth-session-route";
 
@@ -18,11 +21,20 @@ async function responseJson(response: Response) {
   return await response.json() as Record<string, unknown>;
 }
 
+// Stands in for the shared database counter, which survives an instance swap.
+const persistentAttempts = new Map<string, number>();
+
 function dependencies(overrides: Partial<AuthSessionRouteDependencies> = {}): AuthSessionRouteDependencies {
   return {
     resolveIdentifier: (identifier) => `${identifier.toLowerCase()}@office.derya.invalid`,
     login: async () => null,
     sessionMaxAgeSeconds: SESSION_MAX_AGE_SECONDS,
+    consumePersistentAttempt: async ({ identity, maxAttempts }) => {
+      const next = (persistentAttempts.get(identity) ?? 0) + 1;
+      persistentAttempts.set(identity, next);
+      return next <= maxAttempts;
+    },
+    persistentAttemptsExhausted: async (identity, maxAttempts) => (persistentAttempts.get(identity) ?? 0) >= maxAttempts,
     ...overrides,
   };
 }
@@ -176,6 +188,85 @@ assert.deepEqual(successLogin, {
 assert.equal(success.headers.get("cache-control"), "no-store");
 assert.equal(success.headers.get("x-content-type-options"), "nosniff");
 assert.doesNotMatch(JSON.stringify(successBody), /correct-password|guild@office/);
+
+// A failed guess spends the same identifier budget the login form spends, so a
+// fresh serverless instance cannot hand the attacker a new allowance.
+const persistedIdentity = passwordIdentifierIdentity("instance-swap-user@office.derya.invalid");
+assert.ok((persistentAttempts.get(persistedIdentity) ?? 0) === 0);
+await handleAuthSessionPost(
+  request(JSON.stringify({ identifier: "instance-swap-user", password: "wrong" }), {
+    "x-vercel-forwarded-for": "198.51.100.50",
+  }),
+  dependencies({ now: () => 4_000_000 }),
+);
+assert.equal(persistentAttempts.get(persistedIdentity), 1);
+persistentAttempts.set(persistedIdentity, MAX_PASSWORD_FAILURES_PER_IDENTIFIER);
+const persistentlyThrottled = await handleAuthSessionPost(
+  request(JSON.stringify({ identifier: "instance-swap-user", password: "wrong" }), {
+    "x-vercel-forwarded-for": "198.51.100.51",
+  }),
+  dependencies({ now: () => 5_000_000 }),
+);
+assert.equal(persistentlyThrottled.status, 429);
+
+// A throttle store outage must still answer in the route's JSON contract, and
+// must not hand out an unmetered guess.
+const throttleOutage = await handleAuthSessionPost(
+  request(JSON.stringify({ identifier: "outage-user", password: "wrong" }), {
+    "x-vercel-forwarded-for": "198.51.100.60",
+  }),
+  dependencies({
+    now: () => 6_000_000,
+    consumePersistentAttempt: async () => {
+      throw new Error("throttle store unavailable");
+    },
+  }),
+);
+assert.equal(throttleOutage.status, 503);
+assert.equal(
+  (await responseJson(throttleOutage)).error,
+  "Sign-in is temporarily unavailable. Try again shortly.",
+);
+assert.equal(throttleOutage.headers.get("cache-control"), "no-store");
+
+// A denied address is definitive, so a failing exhaustion query after it must
+// not turn the refusal into an outage.
+const deniedAddressWithOutage = await handleAuthSessionPost(
+  request(JSON.stringify({ identifier: "denied-address-user", password: "wrong" }), {
+    "x-vercel-forwarded-for": "198.51.100.62",
+  }),
+  dependencies({
+    now: () => 6_500_000,
+    consumePersistentAttempt: async () => false,
+    persistentAttemptsExhausted: async () => {
+      throw new Error("throttle store unavailable");
+    },
+  }),
+);
+assert.equal(deniedAddressWithOutage.status, 429);
+
+// Failing to record a failure must not lose the 401 the caller earned.
+let recordCalls = 0;
+const failedRecording = await handleAuthSessionPost(
+  request(JSON.stringify({ identifier: "record-outage-user", password: "wrong" }), {
+    "x-vercel-forwarded-for": "198.51.100.61",
+  }),
+  dependencies({
+    now: () => 7_000_000,
+    consumePersistentAttempt: async () => {
+      recordCalls += 1;
+      if (recordCalls > 1) throw new Error("throttle store unavailable");
+      return true;
+    },
+  }),
+);
+assert.equal(failedRecording.status, 401);
+assert.equal((await responseJson(failedRecording)).error, "Invalid username, email, or password.");
+assert.equal(failedRecording.headers.get("x-content-type-options"), "nosniff");
+
+const sessionRouteSource = readFileSync("src/app/api/auth/session/route.ts", "utf8");
+assert.match(sessionRouteSource, /consumePersistentAttempt: consumeLoginAttempt/);
+assert.match(sessionRouteSource, /persistentAttemptsExhausted: loginAttemptsExhausted/);
 
 console.log("Auth session route contract passed.");
 }

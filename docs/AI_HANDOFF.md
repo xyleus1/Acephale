@@ -1,5 +1,34 @@
 # AI Handoff
 
+## 2026-09-02: Operator sign-in abuse resistance
+
+- Requesting a code, verifying a code, and password sign-in each consume a
+  per-client-address budget over 15 minutes (6, 15, 15). The address budget is
+  consumed before any allowlist or account lookup, so a flooded form behaves
+  the same for every address.
+- Code requests are additionally capped at 12 per mailbox per 24 hours on top
+  of the existing 3 per 15 minutes. Both are counted from persisted codes, which
+  are written after delivery, so a `login-code-send:<email>` guard allows one
+  send per mailbox per 30 seconds and keeps a parallel burst from slipping past
+  the counts.
+- `not_allowed`, `no_user`, and `send_failed` now render one message, so the
+  form no longer confirms whether an address is on the sign-in list or has an
+  active account.
+- Failed password guesses also count against `login-password-id:<identifier>`
+  (10 per 15 minutes), because a caller can rotate `x-forwarded-for`. Only
+  failures count, so a valid password is never locked out by it. The client
+  address is read from `x-vercel-forwarded-for` first, which Vercel sets.
+- `POST /api/auth/session` spends the same persistent password budgets. Its
+  in-memory counter is per instance, so on its own an instance swap handed out a
+  fresh allowance. Budgets and identity keys live in
+  `src/lib/auth-session-route.ts` and the login form imports them.
+- Attempts log the client address and the reason. Submitted identifiers are
+  logged only once known to be an operator mailbox. Codes, passwords, and
+  tokens are never logged.
+- `consumeLoginAttempt` in `src/lib/login-throttle.ts` is now the single
+  attempt counter and `clientAddressFromHeaders` the single address reader; the
+  customer portal delegates to both and keeps its bare-address key derivation.
+
 ## 2026-09-02: Quote writes are tenant scoped and quote facts keep their reply
 
 - `dashboard_api` is shared by every tenant, so a column update grant on
