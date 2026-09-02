@@ -95,10 +95,37 @@ export const GENERIC_INDUSTRIAL_SIGNALS = [
   "zavod", "planta",
 ] as const;
 
-const METAL_DOMAIN_MARKERS = [
-  "steel", "iron", "ore", "metal", "celik", "demir", "cevher", "acero",
-  "aco", "siderurg", "billet", "slab", "scrap", "ferro", "alloy",
+const METAL_EXACT_MARKERS = [
+  "steel", "iron", "ore", "metal", "metals", "celik", "demir", "cevher",
+  "acero", "aco", "billet", "slab", "scrap", "ferro", "ferrous", "ferroalloy",
+  "alloy",
 ] as const;
+
+const METAL_STEM_MARKERS = [
+  "siderurg", "metalurg", "metall",
+  "ferroman", "ferrochrom", "ferrosilic", "ferronickel", "ferrovanad",
+  "steelmak", "steelwork", "ironwork", "ironmak",
+] as const;
+
+function containsTokenMarker(
+  text: string,
+  exactMarkers: readonly string[],
+  stemMarkers: readonly string[],
+) {
+  const tokens = normalizeTurkish(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const hasExactMarker = exactMarkers.some((marker) => {
+    const normalizedMarker = normalizeTurkish(marker);
+    return tokens.some((token) =>
+      token === normalizedMarker
+      || (token.endsWith("s") && token.slice(0, -1) === normalizedMarker),
+    );
+  });
+  if (hasExactMarker) return true;
+  return stemMarkers.some((marker) => {
+    const normalizedMarker = normalizeTurkish(marker);
+    return tokens.some((token) => token.startsWith(normalizedMarker));
+  });
+}
 
 const PRODUCT_FOCUS_STOPWORDS = new Set([
   "and",
@@ -129,24 +156,52 @@ const PRODUCT_FOCUS_STOPWORDS = new Set([
   "sector",
   "iron",
   "steel",
+  "manufacturer",
+  "manufacturing",
+  "exporter",
+  "importer",
+  "supplier",
+  "buyer",
+  "producer",
+  "distributor",
+  "trader",
+  "trading",
+  "wholesale",
+  "factory",
+  "industry",
+  "industrial",
+  "business",
+  "market",
+  "corridor",
+  "country",
+  "region",
+  "global",
+  "worldwide",
 ]);
 
 export function signalsFromProductFocus(input: {
   productFocus: string;
   segments: readonly string[];
 }): { positive: readonly string[]; negative: readonly string[] } {
-  const normalizedFocus = normalizeTurkish([input.productFocus, ...input.segments].join(" "));
-  const hasMetalFocus = METAL_DOMAIN_MARKERS.some((marker) =>
-    normalizedFocus.includes(normalizeTurkish(marker)),
+  const focusText = [input.productFocus, ...input.segments].join(" ");
+  const hasMetalFocus = containsTokenMarker(
+    focusText,
+    METAL_EXACT_MARKERS,
+    METAL_STEM_MARKERS,
   );
   const derived = [input.productFocus, ...input.segments]
     .flatMap((value) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(/\s+/))
-    .filter((token) => token.length >= 4 && !PRODUCT_FOCUS_STOPWORDS.has(token))
+    .filter((token) => {
+      const singular = token.endsWith("s") ? token.slice(0, -1) : token;
+      return token.length >= 4
+        && !PRODUCT_FOCUS_STOPWORDS.has(token)
+        && !PRODUCT_FOCUS_STOPWORDS.has(singular);
+    })
     .filter((token, index, tokens) => tokens.indexOf(token) === index)
     .slice(0, 40);
   const baseSignals = hasMetalFocus
     ? MULTILINGUAL_INDUSTRIAL_SIGNALS
-    : GENERIC_INDUSTRIAL_SIGNALS;
+    : derived.length ? derived : GENERIC_INDUSTRIAL_SIGNALS;
   const positive = [...new Set([...baseSignals, ...derived])];
   const positiveSet = new Set(positive);
   const negative = [...new Set([

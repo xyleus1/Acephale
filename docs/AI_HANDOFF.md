@@ -1,5 +1,19 @@
 # AI Handoff
 
+## 2026-09-02: Prospecting signal precision
+
+- Metal markers use normalized exact-token matching plus deliberate stems, so
+  `core` and `forestry` do not activate the steel vocabulary through `ore`.
+- Exact metal markers now distinguish ordinary words such as `Oregon`,
+  `ironing`, and `acoustic` from deliberate linguistic stems. Non-metal
+  profiles require product evidence after filtering generic business,
+  audience, and geography wording, with generic industrial terms reserved for
+  drafts that produce no derived tokens.
+- Narrow compound stems preserve ferromanganese, steelmaking, and ironworks
+  metal detection without broadening exact markers.
+- Regression coverage includes steel, hotel, packaging, textile, core, forestry,
+  Oregon, ironing, and acoustic examples.
+
 ## 2026-08-31: Cold suppliers are followed up on our own RFQ
 
 - A zero quote campaign was traced to the follow up gap, not to discovery or
@@ -15,7 +29,6 @@
   lands in the same thread with the request files attached and no duplicate on a
   second run.
 
-||||||| 1d4a56e
 ## 2026-09-01: Context prospecting multilingual signals and row targets
 
 - Draft-derived Context prospecting profiles now use deterministic multilingual
@@ -234,7 +247,6 @@
   assert shell markup that predates the Sales Agent navigation and already fail
   on `main`. They were left alone rather than rewritten in this pass.
 
-||||||| parent of 6e82be5 (feat(procurement): follow up on suppliers that never answered the first RFQ)
 ## 2026-08-31: The state recheck suite runs in CI
 
 - `npm run test:state-recheck` is now a step in the `database-contracts` job of

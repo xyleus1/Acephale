@@ -1,5 +1,19 @@
 # Engineering Log
 
+## 2026-09-02: Prospecting signal precision
+
+- Metal-domain detection now matches normalized word tokens by exact match or
+  prefix, preventing terms such as `core` and `forestry` from matching `ore`.
+- Exact metal markers no longer treat ordinary words such as `Oregon`,
+  `ironing`, or `acoustic` as metal domains. Plural exact markers are handled
+  without broadening the deliberate linguistic stems.
+- Narrow compound stems preserve metal-domain detection for ferromanganese,
+  steelmaking, and ironworks without restoring broad `iron` or `ore` prefixes.
+- Non-metal drafts require derived product or segment evidence; generic
+  business, audience, and geography wording is excluded from that evidence,
+  and generic industrial terms are only a fallback when no derived tokens
+  exist.
+
 ## 2026-09-02: Unknown follow up deliveries reconcile, and eligibility is rechecked at send time
 
 - Suppressing later rounds while a follow up is unconfirmed parked that supplier
@@ -67,7 +81,6 @@
   `test:procurement-autopilot-plan`, `test:procurement-bulk-rfq`, `next lint`,
   `npx tsc --noEmit`.
 
-||||||| 1d4a56e
 ## 2026-09-01: Context prospecting targets and multilingual fit
 
 - Context prospecting profiles now derive deterministic fit signals from the
@@ -315,7 +328,6 @@
   composer or submit through the existing `submitMessage` path. Visible Context
   copy is now Chat.
 
-||||||| parent of 6e82be5 (feat(procurement): follow up on suppliers that never answered the first RFQ)
 ## 2026-08-31: Context intake handles relative dates, citation tokens, and multi-question answers
 
 - `normalizeContextProcurementDraft` no longer rejects a whole draft over an

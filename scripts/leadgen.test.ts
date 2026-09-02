@@ -147,7 +147,8 @@ const multilingualSignals = signalsFromProductFocus({
 });
 assert.ok(multilingualSignals.positive.includes("steel"));
 assert.ok(multilingualSignals.positive.includes("billet"));
-assert.ok(multilingualSignals.positive.includes("producers"));
+assert.ok(multilingualSignals.positive.includes("bloom"));
+assert.equal(multilingualSignals.positive.includes("producers"), false);
 assert.equal(
   multilingualSignals.negative.some((signal) => multilingualSignals.positive.includes(signal)),
   false,
@@ -173,7 +174,7 @@ assert.equal(nonIndustrialFit.tier, "reject");
 const nonMetalDraft = {
   ...multilingualDraft,
   objective: "Find corrugated packaging manufacturers",
-  segments: ["Corrugated box manufacturers"],
+  segments: ["Corrugated box manufacturers and exporters"],
   productFocus: "Corrugated packaging and folding cartons for food exporters",
   listSlug: "corrugated-packaging-manufacturers",
 };
@@ -196,6 +197,89 @@ const packagingFit = scoreLead(nonMetalProfile, {
   hasPhone: false,
 });
 assert.notEqual(packagingFit.tier, "reject");
+const nonMetalCoreProfile = profileFromProspectingDraft({
+  ...nonMetalDraft,
+  productFocus: "Corrugated packaging with honeycomb core board",
+});
+assert.equal(scoreLead(nonMetalCoreProfile, {
+  companyName: "Tata Steel Limited",
+  domain: "tata.com",
+  pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+}).tier, "reject");
+const nonMetalForestryProfile = profileFromProspectingDraft({
+  ...nonMetalDraft,
+  productFocus: "Corrugated packaging for forestry exporters",
+});
+assert.equal(scoreLead(nonMetalForestryProfile, {
+  companyName: "Tata Steel Limited",
+  domain: "tata.com",
+  pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+}).tier, "reject");
+for (const productFocus of [
+  "Corrugated packaging for Oregon exporters",
+  "Corrugated packaging for ironing equipment",
+  "Corrugated packaging for acoustic panels",
+]) {
+  const profile = profileFromProspectingDraft({ ...nonMetalDraft, productFocus });
+  assert.equal(scoreLead(profile, {
+    companyName: "Tata Steel Limited",
+    domain: "tata.com",
+    pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+    segmentKey: null,
+    emailCount: 0,
+    hasPhone: false,
+  }).tier, "reject");
+}
+for (const productFocus of [
+  "Siderurgica production",
+  "Ferroalloy materials",
+]) {
+  const fit = scoreLead(profileFromProspectingDraft({
+    ...multilingualDraft,
+    productFocus,
+  }), {
+    companyName: "Tata Steel Limited",
+    domain: "tata.com",
+    pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+    segmentKey: null,
+    emailCount: 0,
+    hasPhone: false,
+  });
+  assert.notEqual(fit.tier, "reject");
+}
+for (const productFocus of [
+  "Ferromanganese smelters",
+  "Steelmaking raw materials",
+  "Ironworks suppliers",
+]) {
+  const fit = scoreLead(profileFromProspectingDraft({
+    ...multilingualDraft,
+    productFocus,
+    segments: [],
+  }), {
+    companyName: "Tata Steel Limited",
+    domain: "tata.com",
+    pageText: "Tata Steel Limited is an integrated steel producer of hot rolled coil, billet and slab",
+    segmentKey: null,
+    emailCount: 0,
+    hasPhone: false,
+  });
+  assert.notEqual(fit.tier, "reject");
+}
+assert.equal(scoreLead(nonMetalProfile, {
+  companyName: "Aegean Textile Mills",
+  domain: "aegean-textile.example",
+  pageText: "Aegean Textile Mills is a garment manufacturer and supplier of apparel",
+  segmentKey: null,
+  emailCount: 0,
+  hasPhone: false,
+}).tier, "reject");
 
 // Search result parsing
 
