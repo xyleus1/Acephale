@@ -4587,6 +4587,19 @@ Use this log for durable product and engineering decisions. Do not put every imp
   human operators, with the direct script and GitHub Actions paths retained as
   fallbacks.
 
+## 2026-08-31: Supplier state reconciles the workflow receipt with the thread
+
+- Status: accepted
+- Owner: engineering
+- Decision: Supplier contact and response reads take the workflow receipt as
+  authoritative and fall back to counting messages in the connected email
+  thread, labelled as thread evidence rather than a recorded receipt.
+- Evidence boundary: Thread derived counts never set `contacted` or a response
+  count on a vendor record. They only describe what the connected mailbox shows,
+  so an operator sees why two surfaces disagree instead of one silently winning.
+- Qualification boundary: Candidates stay unqualified regardless of thread
+  activity.
+
 ## 2026-09-01: Outreach approval pins audience and campaign revision
 
 - Status: accepted
@@ -4600,15 +4613,15 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Sender boundary: Every campaign pins one sender account because the sender
   mailbox pool is shared across offices.
 
-## 2026-08-31: Supplier state reconciles the workflow receipt with the thread
+## 2026-09-02: Ops campaign actions reuse human approval
 
 - Status: accepted
-- Owner: engineering
-- Decision: Supplier contact and response reads take the workflow receipt as
-  authoritative and fall back to counting messages in the connected email
-  thread, labelled as thread evidence rather than a recorded receipt.
-- Evidence boundary: Thread derived counts never set `contacted` or a response
-  count on a vendor record. They only describe what the connected mailbox shows,
-  so an operator sees why two surfaces disagree instead of one silently winning.
-- Qualification boundary: Candidates stay unqualified regardless of thread
-  activity.
+- Owner: product and engineering
+- Decision: The authenticated outreach ops endpoint is not a new approval
+  authority. It records a real ADMIN user as approver, requires the exact
+  confirmation phrase `send outreach campaign`, and calls the existing
+  `activateCampaign` flow with its stale revision guard.
+- Safety boundary: The endpoint does not license unattended sending or bypass
+  existing approval, sender reservation, daily cap, pinned audience, sender
+  pinning, or ACTIVE-state guards. A future agent must not interpret it as
+  permission to send without human instruction.

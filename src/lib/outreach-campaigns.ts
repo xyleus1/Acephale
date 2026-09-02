@@ -13,9 +13,13 @@ import {
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
+  campaignReplyCounts,
   normalizeResearchListQuery,
   normalizeCampaignSenderDisplayName,
+  normalizeCampaignVariants,
   renderCampaignEmail,
+  storedCampaignVariants,
+  type CampaignVariant,
   type CampaignStatus,
 } from "@/lib/outreach-campaign-copy";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
@@ -58,6 +62,7 @@ type CampaignWithList = {
   filters: Prisma.JsonValue | null;
   senderAccountId: string | null;
   senderDisplayName: string | null;
+  variants: Prisma.JsonValue | null;
   dailyCap: number;
   audienceTotal: number;
   audienceRecordIds: Prisma.JsonValue | null;
@@ -95,6 +100,7 @@ export type CampaignPlan = {
   renderedBody: string;
   senderEmail: string | null;
   senderDisplayName: string | null;
+  variants: CampaignVariant[] | null;
   blockers: string[];
 };
 
@@ -113,6 +119,7 @@ export type PlanOutreachCampaignInput = {
   campaignName?: string;
   senderAccountId?: string | null;
   senderDisplayName?: string | null;
+  variants?: readonly CampaignVariant[] | null;
   companyField?: string;
   createdByUserId?: string;
 };
@@ -221,6 +228,7 @@ async function loadCampaign(officeId: string, campaignId: string): Promise<Campa
       filters: true,
       senderAccountId: true,
       senderDisplayName: true,
+      variants: true,
       dailyCap: true,
       audienceTotal: true,
       audienceRecordIds: true,
@@ -301,6 +309,9 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
   const list = await resolveResearchList(input.officeId, input.list);
   const fields = validateResearchFields(list.fields);
   const emailField = input.emailField ?? fields.find((field) => field.type === "email")?.key ?? "email";
+  const variants = normalizeCampaignVariants(input.variants);
+  const campaignSubject = variants?.[0]?.subject ?? input.subject;
+  const campaignBodyTemplate = variants?.[0]?.bodyTemplate ?? input.bodyTemplate;
   if (!fields.some((field) => field.key === emailField)) {
     throw new Error("Email field is not in the list definition.");
   }
@@ -337,16 +348,14 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
       where: { officeId: input.officeId, campaignId: draft.id, status: "SENT", recordId: { in: eligible.map((record) => record.id) } },
     })
     : 0;
-  const subject = input.subject ?? "";
-  const bodyTemplate = input.bodyTemplate ?? "";
   const previewRow = eligible[0] ? renderRow(eligible[0].data as ResearchRecordData, {
     emailField,
     companyField: input.companyField,
     countryField: input.countryField,
   }) : {};
   const renderedSample = renderCampaignEmail({
-    subject,
-    bodyTemplate,
+    subject: campaignSubject,
+    bodyTemplate: campaignBodyTemplate,
     row: previewRow,
   });
   const sample = eligible[0] ? renderedSample.body.slice(0, 400) : "";
@@ -354,14 +363,15 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
   const senderDisplayName = normalizeCampaignSenderDisplayName(input.senderDisplayName);
   const sender = await senderDetails(input.senderAccountId ?? null, senderDisplayName);
   const revisionHash = campaignRevisionHash({
-    subject,
-    bodyTemplate,
+    subject: campaignSubject,
+    bodyTemplate: campaignBodyTemplate,
     emailField,
     rowStatuses: statuses,
     filters,
     dailyCap,
     senderAccountId: input.senderAccountId ?? null,
     senderDisplayName,
+    variants,
     audienceRecordIds: eligible.map((record) => record.id),
     audiencePersonalization: campaignPersonalizationMap({
       rows: eligible.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
@@ -386,11 +396,12 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     revisionHash,
     filters,
     dailyCap,
-    subject: eligible[0] ? renderedSample.subject : subject,
+    subject: eligible[0] ? renderedSample.subject : campaignSubject,
     sampleBody: sample,
     renderedBody: renderedSample.body,
     senderEmail: sender.email,
     senderDisplayName: sender.displayName,
+    variants,
     mailboxesAvailable: sender.mailboxesAvailable,
     emailField,
     sampleRecipients,
@@ -398,9 +409,10 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
       eligible: eligible.length,
       mailboxesAvailable: sender.mailboxesAvailable,
       senderPinned: Boolean(input.senderAccountId),
-      subject,
-      bodyTemplate,
+      subject: campaignSubject,
+      bodyTemplate: campaignBodyTemplate,
       dailyCap,
+      variants,
     }),
   };
 }
@@ -408,6 +420,9 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
 export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
   listId?: string;
 }) {
+  const variants = normalizeCampaignVariants(input.variants);
+  const campaignSubject = variants?.[0]?.subject ?? input.subject;
+  const campaignBodyTemplate = variants?.[0]?.bodyTemplate ?? input.bodyTemplate;
   const list = input.listId
     ? await prisma.researchList.findFirst({
         where: { officeId: input.officeId, id: input.listId },
@@ -459,21 +474,22 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
   });
   const audienceTotal = audienceRecordIds.length;
   const revisionHash = campaignRevisionHash({
-    subject: input.subject,
-    bodyTemplate: input.bodyTemplate,
+    subject: campaignSubject,
+    bodyTemplate: campaignBodyTemplate,
     emailField,
     rowStatuses: input.statuses?.length ? input.statuses : ["new", "reviewed"],
     filters,
     dailyCap: input.dailyCap ?? 40,
     senderAccountId: input.senderAccountId ?? null,
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
+    variants,
     audienceRecordIds,
     audiencePersonalization,
   });
   const data = {
     name,
-    subject: input.subject,
-    bodyTemplate: input.bodyTemplate,
+    subject: campaignSubject,
+    bodyTemplate: campaignBodyTemplate,
     emailField,
     companyField: input.companyField ?? null,
     countryField: input.countryField ?? null,
@@ -486,6 +502,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     dailyCap: input.dailyCap ?? 40,
     senderAccountId: input.senderAccountId ?? null,
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
+    variants: variants ? variants as Prisma.InputJsonValue : Prisma.DbNull,
     createdByUserId: input.createdByUserId ?? null,
   };
   const campaign = existing
@@ -500,6 +517,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
 export async function activateCampaign(input: { officeId: string; campaignId: string; userId: string | null; expectedRevisionHash?: string }) {
   const campaign = await loadCampaign(input.officeId, input.campaignId);
   const { records, filters } = await eligibleRecords(campaign);
+  const variants = normalizeCampaignVariants(campaign.variants);
   const audiencePersonalization = campaignPersonalizationMap({
     rows: records.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
     emailField: campaign.emailField,
@@ -515,6 +533,7 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
     dailyCap: campaign.dailyCap,
     senderAccountId: campaign.senderAccountId,
     senderDisplayName: campaign.senderDisplayName,
+    variants,
     audienceRecordIds: records.map((record) => record.id),
     audiencePersonalization,
   });
@@ -532,6 +551,7 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
     subject: campaign.subject,
     bodyTemplate: campaign.bodyTemplate,
     dailyCap: campaign.dailyCap,
+    variants,
   });
   if (blockers.length) return { activated: false, blockers };
   const updated = await prisma.outreachCampaign.update({
@@ -584,6 +604,7 @@ export type CampaignSummary = {
   replies: number;
   dailyCap: number;
   senderEmail: string | null;
+  variants: Array<{ key: string; sent: number; replies: number }>;
   lastRunAt: Date | null;
 };
 
@@ -601,6 +622,7 @@ export async function listCampaignSummaries(
         audienceTotal: true,
         dailyCap: true,
         senderAccountId: true,
+        variants: true,
         lastRunAt: true,
         list: { select: { name: true, slug: true } },
       },
@@ -609,7 +631,7 @@ export async function listCampaignSummaries(
     if (campaigns.length === 0) return [];
     const campaignIds = campaigns.map((campaign) => campaign.id);
     const sends = await prisma.outreachCampaignSend.groupBy({
-      by: ["campaignId", "status"],
+      by: ["campaignId", "status", "variantKey"],
       where: { officeId, campaignId: { in: campaignIds } },
       _count: { _all: true },
     });
@@ -621,9 +643,12 @@ export async function listCampaignSummaries(
     });
     const localThreads = await prisma.outreachCampaignSend.findMany({
       where: { officeId, campaignId: { in: campaignIds }, status: "SENT", localThreadId: { not: null } },
-      select: { campaignId: true, localThreadId: true },
+      select: { campaignId: true, localThreadId: true, variantKey: true },
     });
-    const threadToCampaign = new Map(localThreads.map((row) => [row.localThreadId as string, row.campaignId]));
+    const threadToCampaign = new Map(localThreads.map((row) => [
+      row.localThreadId as string,
+      { campaignId: row.campaignId, variantKey: row.variantKey },
+    ]));
     const replies = threadToCampaign.size
       ? await prisma.emailMessage.groupBy({
         by: ["threadId"],
@@ -631,13 +656,19 @@ export async function listCampaignSummaries(
         _count: { _all: true },
       })
       : [];
+    const replyCounts = campaignReplyCounts({
+      replies: replies.map((reply) => ({ threadId: reply.threadId, count: reply._count._all })),
+      threadToCampaign,
+    });
     const mailboxes = await listEmailSenderPoolAccounts();
     const senderEmails = new Map(mailboxes.map((mailbox) => [mailbox.id, mailbox.email]));
     return campaigns.map((campaign) => {
-      const counts = new Map(sends.filter((row) => row.campaignId === campaign.id).map((row) => [row.status, row._count._all]));
-      const replyCount = replies
-        .filter((row) => threadToCampaign.get(row.threadId) === campaign.id)
-        .reduce((sum, row) => sum + row._count._all, 0);
+      const campaignSends = sends.filter((row) => row.campaignId === campaign.id);
+      const counts = new Map<string, number>();
+      for (const row of campaignSends) {
+        counts.set(row.status, (counts.get(row.status) ?? 0) + row._count._all);
+      }
+      const variants = storedCampaignVariants(campaign.variants);
       return {
         id: campaign.id,
         name: campaign.name,
@@ -648,9 +679,16 @@ export async function listCampaignSummaries(
         sentToday: sentToday.find((row) => row.campaignId === campaign.id)?._count._all ?? 0,
         rejected: counts.get("REJECTED") ?? 0,
         unknown: counts.get("UNKNOWN") ?? 0,
-        replies: replyCount,
+        replies: replyCounts.totals.get(campaign.id) ?? 0,
         dailyCap: campaign.dailyCap,
         senderEmail: campaign.senderAccountId ? senderEmails.get(campaign.senderAccountId) ?? null : null,
+        variants: variants.map((variant) => ({
+          key: variant.key,
+          sent: campaignSends
+            .filter((row) => row.status === "SENT" && row.variantKey === variant.key)
+            .reduce((sum, row) => sum + row._count._all, 0),
+          replies: replyCounts.variants.get(`${campaign.id}:${variant.key}`) ?? 0,
+        })),
         lastRunAt: campaign.lastRunAt,
       };
     });

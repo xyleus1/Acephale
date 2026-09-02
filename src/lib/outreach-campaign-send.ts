@@ -6,6 +6,8 @@ import {
   campaignRowEligible,
   campaignSnapshotRowSendable,
   renderCampaignEmail,
+  selectCampaignVariant,
+  storedCampaignVariants,
   type CampaignPersonalization,
 } from "@/lib/outreach-campaign-copy";
 import {
@@ -38,6 +40,7 @@ export type CampaignBatchSend = {
   recipient: string;
   state: "SENT" | "ALREADY_SENT" | "REJECTED" | "UNKNOWN" | "POOL_EXHAUSTED";
   senderEmail: string | null;
+  variantKey: string | null;
   error: string | null;
 };
 
@@ -209,6 +212,7 @@ type LoadedCampaign = {
   filters: Prisma.JsonValue | null;
   senderAccountId: string | null;
   senderDisplayName: string | null;
+  variants: Prisma.JsonValue | null;
   dailyCap: number;
   listId: string;
   companyField: string | null;
@@ -251,6 +255,7 @@ async function recordSent(
     providerMessageId: string;
     providerThreadId: string;
     sentAt: Date;
+    variantKey: string | null;
   },
 ) {
   await db.$transaction(async (tx) => {
@@ -319,6 +324,7 @@ async function recordSent(
         recipient: input.recipient,
         status: "SENT",
         senderEmail: input.senderEmail,
+        variantKey: input.variantKey,
         reservationId: input.reservationId,
         providerMessageId: input.providerMessageId,
         providerThreadId: input.providerThreadId,
@@ -330,6 +336,7 @@ async function recordSent(
         recipient: input.recipient,
         status: "SENT",
         senderEmail: input.senderEmail,
+        variantKey: input.variantKey,
         reservationId: input.reservationId,
         providerMessageId: input.providerMessageId,
         providerThreadId: input.providerThreadId,
@@ -354,6 +361,7 @@ async function recordOutcome(
     recipient: string;
     status: "REJECTED" | "UNKNOWN";
     senderEmail: string;
+    variantKey: string | null;
     error: string;
     reservationId: string;
   },
@@ -367,6 +375,7 @@ async function recordOutcome(
       recipient: input.recipient,
       status: input.status,
       senderEmail: input.senderEmail,
+      variantKey: input.variantKey,
       reservationId: input.reservationId,
       error: input.error,
     },
@@ -375,6 +384,7 @@ async function recordOutcome(
       recipient: input.recipient,
       status: input.status,
       senderEmail: input.senderEmail,
+      variantKey: input.variantKey,
       reservationId: input.reservationId,
       error: input.error,
     },
@@ -434,9 +444,14 @@ async function reconcileUnknownCampaignSends(
     const personalization = jsonPersonalization(campaign.audiencePersonalization)[send.recordId];
     if (!personalization) continue;
     const recipient = personalization.email.trim().toLowerCase();
+    const variant = selectCampaignVariant({
+      campaignId: campaign.id,
+      recordId: send.recordId,
+      variants: storedCampaignVariants(campaign.variants),
+    });
     const email = renderCampaignEmail({
-      subject: campaign.subject,
-      bodyTemplate: campaign.bodyTemplate,
+      subject: variant?.subject ?? campaign.subject,
+      bodyTemplate: variant?.bodyTemplate ?? campaign.bodyTemplate,
       row: personalization,
     });
     await recordSent(db, {
@@ -453,6 +468,7 @@ async function reconcileUnknownCampaignSends(
       providerMessageId: receipt.providerMessageId,
       providerThreadId: receipt.providerThreadId,
       sentAt: now,
+      variantKey: variant?.key ?? null,
     });
   }
 }
@@ -499,6 +515,11 @@ async function claimOutreachCampaignRows(
         recordId: row.id,
         recipient: String(row.data[campaign.emailField] ?? "").trim().toLowerCase(),
         status: "QUEUED",
+        variantKey: selectCampaignVariant({
+          campaignId: campaign.id,
+          recordId: row.id,
+          variants: storedCampaignVariants(campaign.variants),
+        })?.key ?? null,
       })),
     });
     return candidates;
@@ -537,6 +558,7 @@ export async function runOutreachCampaignBatch(input: {
       filters: true,
       senderAccountId: true,
       senderDisplayName: true,
+      variants: true,
       dailyCap: true,
       listId: true,
       audienceRecordIds: true,
@@ -603,9 +625,14 @@ export async function runOutreachCampaignBatch(input: {
     if (!outreachCampaignStatusAllowsSend(current?.status)) break;
     const data = row.data;
     const recipient = String(data[campaign.emailField] ?? "").trim().toLowerCase();
+    const variant = selectCampaignVariant({
+      campaignId: campaign.id,
+      recordId: row.id,
+      variants: storedCampaignVariants(campaign.variants),
+    });
     const email = renderCampaignEmail({
-      subject: campaign.subject,
-      bodyTemplate: campaign.bodyTemplate,
+      subject: variant?.subject ?? campaign.subject,
+      bodyTemplate: variant?.bodyTemplate ?? campaign.bodyTemplate,
       row: {
         company: campaign.companyField ? data[campaign.companyField] : data.company,
         country: campaign.countryField ? data[campaign.countryField] : data.country,
@@ -634,6 +661,7 @@ export async function runOutreachCampaignBatch(input: {
         recipient,
         state: reservationOutcome.state,
         senderEmail: null,
+        variantKey: variant?.key ?? null,
         error: reservation.error,
       });
       if (reservationOutcome.poolExhausted) {
@@ -655,6 +683,7 @@ export async function runOutreachCampaignBatch(input: {
         data: {
           status: "SENT",
           senderEmail: reservation.senderEmail,
+          variantKey: variant?.key ?? null,
           sentAt: now,
         },
       });
@@ -665,6 +694,7 @@ export async function runOutreachCampaignBatch(input: {
         recipient,
         state: "ALREADY_SENT",
         senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
         error: null,
       });
       continue;
@@ -711,6 +741,7 @@ export async function runOutreachCampaignBatch(input: {
         providerMessageId: receipt.providerMessageId,
         providerThreadId: receipt.providerThreadId,
         sentAt: now,
+        variantKey: variant?.key ?? null,
       });
       output.sent += 1;
       output.outcomes.push({
@@ -719,6 +750,7 @@ export async function runOutreachCampaignBatch(input: {
         recipient,
         state: "SENT",
         senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
         error: null,
       });
     } else if (receipt.state === "REJECTED") {
@@ -732,6 +764,7 @@ export async function runOutreachCampaignBatch(input: {
         senderEmail: reservation.senderEmail,
         error: receipt.error,
         reservationId: reservation.reservationId,
+        variantKey: variant?.key ?? null,
       });
       output.rejected += 1;
       output.outcomes.push({
@@ -740,6 +773,7 @@ export async function runOutreachCampaignBatch(input: {
         recipient,
         state: "REJECTED",
         senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
         error: receipt.error,
       });
     } else {
@@ -752,6 +786,7 @@ export async function runOutreachCampaignBatch(input: {
         senderEmail: reservation.senderEmail,
         error: receipt.error,
         reservationId: reservation.reservationId,
+        variantKey: variant?.key ?? null,
       });
       output.unknown += 1;
       output.outcomes.push({
@@ -760,6 +795,7 @@ export async function runOutreachCampaignBatch(input: {
         recipient,
         state: "UNKNOWN",
         senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
         error: receipt.error,
       });
     }

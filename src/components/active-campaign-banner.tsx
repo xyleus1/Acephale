@@ -41,6 +41,17 @@ export async function ActiveCampaignBanner() {
               {campaign.sent} / {campaign.total}, today {campaign.sentToday} / {campaign.dailyCap}
               <br />
               rejected {campaign.rejected}, replies {campaign.replies}
+              {campaign.variants.length > 0 ? (
+                <>
+                  <br />
+                  {campaign.variants.map((variant, index) => (
+                    <span key={variant.key}>
+                      {index > 0 ? " · " : ""}
+                      {variant.key} {variant.sent} sent, {variant.replies} replies
+                    </span>
+                  ))}
+                </>
+              ) : null}
               <br />
               last attempt {campaign.lastRunAt ? campaign.lastRunAt.toLocaleString() : "not attempted"}
             </div>

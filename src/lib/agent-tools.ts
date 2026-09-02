@@ -66,6 +66,7 @@ import {
 } from "@/lib/outreach-campaigns";
 import { outreachCampaignRunNowLimitValid, runOutreachCampaignBatch } from "@/lib/outreach-campaign-send";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
+import { renderCampaignEmail, selectCampaignVariant } from "@/lib/outreach-campaign-copy";
 
 // Tool schemas use the app's provider-neutral input_schema shape. The shared
 // GPT-5.6 adapter converts these to Responses API function tools.
@@ -947,6 +948,19 @@ export const TOOLS = [
         campaign_name: { type: "string" },
         sender_mailbox: { type: "string", description: "Sender mailbox email address or account id" },
         sender_display_name: { type: "string", description: "Name recipients will see in the From header. Defaults to the mailbox's own name when omitted." },
+        variants: {
+          type: "array",
+          description: "Optional A/B variants of subject and body. Each variant needs a short unique key. Variants split the audience evenly. Defaults to the single subject and body when omitted.",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              subject: { type: "string" },
+              body: { type: "string" },
+            },
+            required: ["key", "subject", "body"],
+          },
+        },
       },
       required: ["list"],
     },
@@ -4237,10 +4251,41 @@ export async function dispatchTool(
           campaignName: typeof input.campaign_name === "string" ? input.campaign_name : undefined,
           senderAccountId: sender?.id ?? null,
           senderDisplayName: typeof input.sender_display_name === "string" ? input.sender_display_name : null,
+          variants: Array.isArray(input.variants)
+            ? input.variants.map((variant, index) => {
+              const item = variant && typeof variant === "object" ? variant as Record<string, unknown> : {};
+              const unexpectedKeys = Object.keys(item).filter(
+                (key) => !["key", "subject", "body"].includes(key),
+              );
+              if (unexpectedKeys.length > 0) {
+                throw new Error(`Campaign variant ${index + 1} has unsupported fields.`);
+              }
+              return {
+                key: typeof item.key === "string" ? item.key : "",
+                subject: typeof item.subject === "string" ? item.subject : "",
+                bodyTemplate: typeof item.body === "string" ? item.body : "",
+              };
+            })
+            : null,
         };
         const plan = await planOutreachCampaign(campaignInput);
         const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
         const campaignId = campaign.id;
+        const firstRecipient = plan.sampleRecipients[0];
+        const reviewVariant = firstRecipient
+          ? selectCampaignVariant({
+            campaignId,
+            recordId: firstRecipient.id,
+            variants: plan.variants ?? [],
+          })
+          : null;
+        const reviewEmail = firstRecipient && reviewVariant
+          ? renderCampaignEmail({
+            subject: reviewVariant.subject,
+            bodyTemplate: reviewVariant.bodyTemplate,
+            row: { data: firstRecipient },
+          })
+          : null;
         let proposalId: string | null = null;
         if (plan.blockers.length === 0) {
           const proposal = await createPendingBulkActionProposal({
@@ -4255,8 +4300,9 @@ export async function dispatchTool(
               `Sender email: ${plan.senderEmail ?? "no mailbox connected"}`,
               `Daily cap: ${plan.dailyCap}`,
               `Filters: ${JSON.stringify(plan.filters)}`,
+              ...(plan.variants ?? []).map((variant) => `Variant ${variant.key} subject: ${variant.subject}`),
               `Subject: ${plan.subject}`,
-              `Body (rendered from the first eligible row):\n${plan.renderedBody}`,
+              `Body (rendered from the first eligible row):\n${reviewEmail?.body ?? plan.renderedBody}`,
               `Eligible recipients: ${plan.eligible}. The review items below are the first ${Math.min(plan.eligible, plan.sampleRecipients.length)} of ${plan.eligible} eligible recipients.`,
               "Sending starts on the next batch after approval.",
             ],

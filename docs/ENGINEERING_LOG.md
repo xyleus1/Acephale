@@ -1,5 +1,16 @@
 # Engineering Log
 
+## 2026-09-02: Campaign variants and authenticated ops sending
+
+- Added validated campaign variants with deterministic campaign and record
+  assignment, persisted `variantKey` values, and aggregate banner metrics.
+- Added the authenticated ops campaign route for mailbox discovery, planning,
+  approval, and capped runs. Approval records a real ADMIN user, requires
+  `send outreach campaign`, and reuses the existing activation guard.
+- Migration: `20260902000100_outreach_campaign_ab_variants`. Verify it only
+  against a fresh local PostgreSQL database using the committed read-only SQL
+  script in `scripts/sql/production-verification/`.
+
 ## 2026-09-02: Context research runs continue server-side
 
 - Context prospecting actions now opt into durable continuation when an operator

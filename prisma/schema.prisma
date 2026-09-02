@@ -3326,6 +3326,7 @@ model OutreachCampaign {
   filters          Json?
   senderAccountId  String?
   senderDisplayName String?
+  variants         Json?
   audienceTotal    Int      @default(0)
   audienceRecordIds Json?
   audiencePersonalization Json?
@@ -3358,6 +3359,7 @@ model OutreachCampaignSend {
   recipient         String
   status            String   @default("QUEUED")
   senderEmail       String?
+  variantKey        String?
   reservationId     String?
   providerMessageId String?
   providerThreadId  String?

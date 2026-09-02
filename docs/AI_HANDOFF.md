@@ -1,5 +1,19 @@
 # AI Handoff
 
+## 2026-09-02: Outreach campaign variants and ops actions
+
+- Campaign drafts may store up to four equal-split variants. Keys are unique,
+  trimmed, and at most eight characters. Assignment is deterministic from the
+  SHA-256 hash of campaign id and research record id, and the selected key is
+  persisted on each send.
+- Variant subjects and persisted sent and reply metrics are visible in the
+  active campaign banner. Approval review lists every variant subject and
+  previews the copy assigned to the first sample recipient.
+- `POST /api/ops/outreach/campaigns` supports mailbox discovery, draft
+  planning, explicit ADMIN approval, and capped batch runs. Approval records a
+  real ADMIN user, requires `send outreach campaign`, and reuses
+  `activateCampaign`; it is not a new approval authority.
+
 ## 2026-09-02: Server-owned Context prospecting
 
 - Operator-started prospecting actions now carry durable continuation state and

@@ -31,6 +31,82 @@ export function buildCampaignFromHeader(address: string, displayName: string | n
     : cleanAddress;
 }
 
+export type CampaignVariant = {
+  key: string;
+  subject: string;
+  bodyTemplate: string;
+};
+
+export function normalizeCampaignVariants(value: unknown): CampaignVariant[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 4) {
+    throw new Error("Campaign variants must be a non-empty array with at most 4 entries.");
+  }
+  const keys = new Set<string>();
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`Campaign variant ${index + 1} must be an object.`);
+    }
+    const variant = item as Record<string, unknown>;
+    const unexpectedKeys = Object.keys(variant).filter((key) => !["key", "subject", "bodyTemplate"].includes(key));
+    if (unexpectedKeys.length > 0) {
+      throw new Error(`Campaign variant ${index + 1} has unsupported fields.`);
+    }
+    if (typeof variant.key !== "string" || typeof variant.subject !== "string" || typeof variant.bodyTemplate !== "string") {
+      throw new Error(`Campaign variant ${index + 1} requires key, subject, and bodyTemplate strings.`);
+    }
+    const normalized = {
+      key: variant.key.trim(),
+      subject: variant.subject.trim(),
+      bodyTemplate: variant.bodyTemplate.trim(),
+    };
+    if (!normalized.key) throw new Error(`Campaign variant ${index + 1} key is required.`);
+    if (normalized.key.length > 8) throw new Error(`Campaign variant ${index + 1} key must be at most 8 characters.`);
+    if (keys.has(normalized.key)) throw new Error(`Campaign variant key "${normalized.key}" must be unique.`);
+    keys.add(normalized.key);
+    return normalized;
+  });
+}
+
+export function storedCampaignVariants(value: unknown): CampaignVariant[] {
+  try {
+    return normalizeCampaignVariants(value) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export function resolveCampaignOffice<T extends { id: string; name: string }>(input: {
+  identifier: string;
+  offices: readonly T[];
+  slugify: (value: string) => string;
+}): T {
+  const identifier = input.identifier.toLowerCase();
+  const matches = new Map<string, T>();
+  for (const office of input.offices) {
+    if (
+      office.name.toLowerCase() === identifier
+      || input.slugify(office.name) === input.slugify(input.identifier)
+    ) {
+      matches.set(office.id, office);
+    }
+  }
+  if (matches.size > 1) throw new Error("Office identifier is ambiguous.");
+  const office = matches.values().next().value;
+  if (!office) throw new Error("Office not found.");
+  return office;
+}
+
+export function selectCampaignVariant<T extends { key: string }>(input: {
+  campaignId: string;
+  recordId: string;
+  variants: readonly T[];
+}): T | null {
+  if (input.variants.length === 0) return null;
+  const digest = createHash("sha256").update(`${input.campaignId}:${input.recordId}`).digest();
+  return input.variants[digest.readUInt32BE(0) % input.variants.length] ?? null;
+}
+
 type CampaignRow = Record<string, unknown> & {
   data?: Record<string, unknown>;
   status?: unknown;
@@ -187,6 +263,7 @@ export function campaignRevisionHash(input: {
   dailyCap: number;
   senderAccountId: string | null;
   senderDisplayName: string | null;
+  variants: readonly CampaignVariant[] | null;
   audienceRecordIds: readonly string[];
   audiencePersonalization?: Record<string, CampaignPersonalization> | null;
 }) {
@@ -198,6 +275,7 @@ export function campaignRevisionHash(input: {
   const sortedPersonalization = Object.fromEntries(
     Object.entries(personalization).sort(([left], [right]) => left.localeCompare(right)),
   );
+  const variants = normalizeCampaignVariants(input.variants);
   return createHash("sha256").update(JSON.stringify({
     subject: input.subject,
     bodyTemplate: input.bodyTemplate,
@@ -207,6 +285,7 @@ export function campaignRevisionHash(input: {
     dailyCap: input.dailyCap,
     senderAccountId: input.senderAccountId,
     senderDisplayName: input.senderDisplayName,
+    variants,
     audienceRecordIds: [...input.audienceRecordIds].sort(),
     audiencePersonalization: sortedPersonalization,
   })).digest("hex");
@@ -214,6 +293,22 @@ export function campaignRevisionHash(input: {
 
 export function campaignRevisionMatches(expected: string | undefined, actual: string | null) {
   return Boolean(expected && actual && expected === actual);
+}
+
+export function campaignReplyCounts(input: {
+  replies: readonly { threadId: string; count: number }[];
+  threadToCampaign: ReadonlyMap<string, { campaignId: string; variantKey: string | null }>;
+}) {
+  const totals = new Map<string, number>();
+  const variants = new Map<string, number>();
+  for (const reply of input.replies) {
+    const campaign = input.threadToCampaign.get(reply.threadId);
+    if (!campaign) continue;
+    totals.set(campaign.campaignId, (totals.get(campaign.campaignId) ?? 0) + reply.count);
+    const variantId = `${campaign.campaignId}:${campaign.variantKey ?? ""}`;
+    variants.set(variantId, (variants.get(variantId) ?? 0) + reply.count);
+  }
+  return { totals, variants };
 }
 
 export function campaignDefaultName(base: string, takenNames: ReadonlySet<string>) {
@@ -234,12 +329,22 @@ export function campaignBlockers(input: {
   subject: string;
   bodyTemplate: string;
   dailyCap: number;
+  variants?: readonly CampaignVariant[] | null;
 }) {
   const blockers: string[] = [];
-  if (!input.subject.trim()) blockers.push("Subject is required.");
-  if (!input.bodyTemplate.trim()) blockers.push("Body is required.");
-  if (!/reply\s+(stop|no)|unsubscrib|opt out|opt-out/i.test(input.bodyTemplate)) {
-    blockers.push("Body must contain an opt-out line.");
+  const copyBlockers = (subject: string, bodyTemplate: string, variantKey?: string) => {
+    const prefix = variantKey ? `Variant ${variantKey} ` : "";
+    const subjectLabel = variantKey ? "subject" : "Subject";
+    const bodyLabel = variantKey ? "body" : "Body";
+    if (!subject.trim()) blockers.push(`${prefix}${subjectLabel} is required.`);
+    if (!bodyTemplate.trim()) blockers.push(`${prefix}${bodyLabel} is required.`);
+    if (!/reply\s+(stop|no)|unsubscrib|opt out|opt-out/i.test(bodyTemplate)) {
+      blockers.push(`${prefix}${bodyLabel} must contain an opt-out line.`);
+    }
+  };
+  copyBlockers(input.subject, input.bodyTemplate);
+  for (const variant of input.variants?.slice(1) ?? []) {
+    copyBlockers(variant.subject, variant.bodyTemplate, variant.key);
   }
   if (input.mailboxesAvailable === 0) {
     blockers.push("No mailbox is connected for sending.");

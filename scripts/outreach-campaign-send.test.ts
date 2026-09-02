@@ -19,7 +19,7 @@ async function main() {
     outreachCampaignUtcDayBounds,
     runOutreachCampaignBatch,
   } = await import("../src/lib/outreach-campaign-send");
-  const { renderCampaignEmail } = await import("../src/lib/outreach-campaign-copy");
+  const { renderCampaignEmail, selectCampaignVariant } = await import("../src/lib/outreach-campaign-copy");
   const rows = [
     { id: "late", status: "new", data: { email: "late@example.com" }, createdAt: new Date("2026-01-02") },
     { id: "early", status: "new", data: { email: "early@example.com" }, createdAt: new Date("2026-01-01") },
@@ -301,6 +301,29 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   });
   assert.equal(sentRun.sent, 1);
   assert.equal(sentProviderInput?.senderDisplayName, "Wens");
+  const variantCampaign = fakeDatabase({
+    variants: [
+      { key: "A", subject: "Variant A {{company}}", bodyTemplate: "A body {{company}}. Reply STOP to opt out." },
+      { key: "B", subject: "Variant B {{company}}", bodyTemplate: "B body {{company}}. Reply STOP to opt out." },
+    ],
+  }) as never;
+  const variantRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: variantCampaign,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  const expectedVariant = selectCampaignVariant({
+    campaignId: "campaign-1",
+    recordId: "record-1",
+    variants: [{ key: "A" }, { key: "B" }],
+  });
+  assert.equal(variantRun.outcomes[0]?.variantKey, expectedVariant?.key);
+  assert.equal(sentProviderInput?.subject, `${expectedVariant?.key === "A" ? "Variant A" : "Variant B"} Buyer Co`);
+  assert.match(String(sentProviderInput?.body), new RegExp(`${expectedVariant?.key === "A" ? "A" : "B"} body Buyer Co`));
 
   let released = 0;
   const rejectedRun = await runOutreachCampaignBatch({
