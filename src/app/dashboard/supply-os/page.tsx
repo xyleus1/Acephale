@@ -30,7 +30,7 @@ export default async function SupplyOsPage({
   const session = await requireSession();
   const currentUser = await prisma.user.findFirst({
     where: { id: session.userId, officeId: session.officeId, isActive: true },
-    select: { role: true },
+    select: { role: true, canViewWholeOffice: true },
   });
   if (!currentUser) redirect("/login");
   const params = await searchParams;
@@ -62,6 +62,10 @@ export default async function SupplyOsPage({
     ? session.restrictedWorkspaceIds
     : previewWorkspace ? [previewWorkspace.id] : undefined;
   const customerCanEdit = isCustomer && session.customerRole !== "VIEWER";
+  const canShowMail = !isCustomer
+    && !previewMode
+    && currentUser.role !== "EMPLOYEE"
+    && (currentUser.canViewWholeOffice || currentUser.role === "ADMIN" || currentUser.role === "MANAGER");
   const validResearchStatuses = ["new", "reviewed", "rejected"] as const;
   const initialResearchStatus = validResearchStatuses.includes(params.status as typeof validResearchStatuses[number])
     ? params.status as typeof validResearchStatuses[number]
@@ -88,6 +92,7 @@ export default async function SupplyOsPage({
         canImportSupplyData={!previewMode && (customerCanEdit || (!isCustomer && (currentUser.role === "ADMIN" || currentUser.role === "MANAGER")))}
         canApproveProcurement={!previewMode && (customerCanEdit || (!isCustomer && (currentUser.role === "ADMIN" || currentUser.role === "MANAGER")))}
         canAuthorizePurchase={!previewMode && (customerCanEdit || (!isCustomer && currentUser.role === "ADMIN"))}
+        canViewWholeOffice={currentUser.canViewWholeOffice}
         contextEnabled={contextEnabled}
         allowedWorkspaceIds={allowedWorkspaceIds}
         initialWorkspaceId={initialWorkspace?.id}
@@ -96,6 +101,7 @@ export default async function SupplyOsPage({
             params.materialsView === "prospects" ||
             params.materialsView === "messages" ||
             (params.materialsView === "outreach" && currentUser.role !== "EMPLOYEE")
+            || (params.materialsView === "mail" && canShowMail)
           )
             ? params.materialsView
             : undefined

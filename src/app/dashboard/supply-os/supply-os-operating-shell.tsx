@@ -59,6 +59,7 @@ export function SupplyOsOperatingShell({
   initialResearchStatus,
   initialResearchPage,
   previewMode = false,
+  canViewWholeOffice,
   switchableOffices,
   switchOfficeAction,
 }: {
@@ -73,12 +74,13 @@ export function SupplyOsOperatingShell({
   contextEnabled: boolean;
   allowedWorkspaceIds?: string[];
   initialWorkspaceId?: string;
-  initialMaterialsView?: "inventory" | "messages" | "prospects" | "outreach";
+  initialMaterialsView?: "inventory" | "messages" | "prospects" | "outreach" | "mail";
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
   initialResearchPage?: number;
   previewMode?: boolean;
+  canViewWholeOffice: boolean;
   switchableOffices?: SwitchableOffice[];
   switchOfficeAction?: OfficeSwitchAction;
 }) {
@@ -313,6 +315,12 @@ export function SupplyOsOperatingShell({
                   !previewMode &&
                   accountRole !== "CUSTOMER" &&
                   accountRole !== "EMPLOYEE"
+                }
+                canShowMail={
+                  !previewMode &&
+                  accountRole !== "CUSTOMER" &&
+                  accountRole !== "EMPLOYEE" &&
+                  (canViewWholeOffice || accountRole === "ADMIN" || accountRole === "MANAGER")
                 }
                 initialMaterialsView={initialMaterialsView}
                 initialResearchListSlug={initialResearchListSlug}

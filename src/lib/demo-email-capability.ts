@@ -9,6 +9,7 @@ import {
 } from "@/lib/gmail-app-password";
 import { DEMO_EMAIL_CLASSIFICATION, DEMO_EMAIL_THREAD_MARKER } from "@/lib/email-demo-markers";
 import { imapMessageExternalId, imapThreadExternalId } from "@/lib/imap-identifiers";
+import { logEmailTouch } from "@/lib/crm/email-touch";
 
 const DEMO_COMPANY_NAME = "HypnoDreamz Email Capability Demo";
 const DEMO_WORKSPACE_KEY = "demo:hypnodreamz:email-capability";
@@ -307,7 +308,7 @@ async function sendInitialMessage(input: {
       autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER,
     },
   });
-  await dependencies.db.emailMessage.create({
+  const message = await dependencies.db.emailMessage.create({
     data: {
       threadId: thread.id,
       accountId: input.sender.id,
@@ -324,6 +325,17 @@ async function sendInitialMessage(input: {
       classificationAt: sentAt,
       sentAt,
     },
+  });
+  await logEmailTouch({
+    officeId: input.officeId,
+    threadId: thread.id,
+    messageId: message.id,
+    direction: "OUTBOUND",
+    fromEmail: input.sender.email,
+    toEmails: [input.recipient.email],
+    subject: input.subject,
+    snippet: input.body,
+    sentAt,
   });
   return { messageId: sent.messageId, threadId: thread.id };
 }
@@ -470,7 +482,7 @@ async function sendReply(input: {
       autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER,
     },
   });
-  await dependencies.db.emailMessage.create({
+  const message = await dependencies.db.emailMessage.create({
     data: {
       threadId: thread.id,
       accountId: input.account.id,
@@ -487,6 +499,17 @@ async function sendReply(input: {
       classificationAt: sentAt,
       sentAt,
     },
+  });
+  await logEmailTouch({
+    officeId: input.officeId,
+    threadId: thread.id,
+    messageId: message.id,
+    direction: "OUTBOUND",
+    fromEmail: input.account.email,
+    toEmails: [input.to],
+    subject: input.subject,
+    snippet: input.body,
+    sentAt,
   });
   return { messageId: sent.messageId, sentAt };
 }

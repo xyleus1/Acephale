@@ -1,5 +1,14 @@
 # Engineering Log
 
+## 2026-09-02 - Office Mail revalidates operator access
+
+- Office Mail rejects customer sessions before querying the database, then
+  re-reads the active user by id and office before either thread listing or
+  detail access. Fresh role and whole-office access control the result, so
+  deactivated users and restricted SALES users cannot read message bodies.
+- The Supply OS page passes the same whole-office flag to the client shell and
+  only restores the Mail tab for whole-office operators, ADMINs, or MANAGERs.
+
 ## 2026-09-02: Reject activation of closed outreach campaigns
 
 - Activation now requires `DRAFT` status before any approval work. Cancelled
@@ -8520,6 +8529,18 @@ Use this file for chronological implementation notes that future agents should s
   inferred facility objects link to the verification surface, long material and
   company names carry native titles, and loading is separated from failure on
   the company profile and company index.
+
+### 2026-09-02 - Operator office mail surface
+
+- Campaign and demo outbound persistence now invokes the existing
+  `logEmailTouch` resolver after the local transaction or message write.
+- Added office-scoped Mail thread and detail reads with deterministic keyset
+  pagination, participant parsing, company and contact links, and pooled
+  mailbox attribution from the newest outbound message.
+- Added an operator-only Supply OS Mail tab. Customer and employee contexts
+  are hidden in the shell and rejected again in the backend.
+- Mail detail renders only stored body text and treats missing body text as an
+  empty body.
 
 ## 2026-09-02: Supplier state, facility verification, and shortlist counts
 

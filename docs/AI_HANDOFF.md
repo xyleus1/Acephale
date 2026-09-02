@@ -11520,6 +11520,19 @@ Verification caveat:
   `npm run test:supply-os-sourcing-projection`,
   `npm run test:supply-os-panel-alerts`, and `npm run check:product-copy`.
 
+## 2026-09-02: Operator office mail surface
+
+- Outbound campaign and demo messages now call the existing CRM email-touch
+  resolver after persistence, so matched companies can receive the email
+  activity and thread link.
+- Added an office-scoped operator-only Mail surface to Supply OS. It lists
+  deterministic, searchable thread pages and loads up to 200 message bodies
+  without rendering stored HTML.
+- Customer, CUSTOMER, and EMPLOYEE contexts are rejected by the Mail backend.
+- Verified the new persistence projection with an offline database contract
+  covering access rejection, office isolation, pagination, and newest-mailbox
+  selection.
+
 ## 2026-09-02: Supplier state and facility verification consistency
 
 - Compare and Messages now read supplier contact state from the same receipt
@@ -11530,3 +11543,11 @@ Verification caveat:
   candidates when the count is unknown to the list projection.
 - Verified with `npx tsc --noEmit`, `npm run test:workflow-guild2`,
   `npm run check:product-copy`, and lint on the touched library files.
+
+## 2026-09-02: Office Mail revalidates operator access
+
+- Office Mail now rejects customer sessions before any user lookup, then
+  re-reads the active user in the requested office before listing threads or
+  opening message bodies.
+- Mail requires a fresh non-EMPLOYEE role with whole-office access, or an
+  ADMIN or MANAGER role. The Supply OS page and Mail tab use the same gate.

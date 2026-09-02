@@ -4625,3 +4625,23 @@ Use this log for durable product and engineering decisions. Do not put every imp
   existing approval, sender reservation, daily cap, pinned audience, sender
   pinning, or ACTIVE-state guards. A future agent must not interpret it as
   permission to send without human instruction.
+
+## 2026-09-02: Office mail is an operator-only projection
+
+- Status: accepted
+- Owner: engineering
+- Decision: Supply OS exposes persisted email threads through an office-scoped
+  Mail projection for operator accounts only. Customer and employee contexts
+  are denied at the domain boundary even when other workspace surfaces are
+  available.
+- Access boundary: Authorization is re-read from the database on every call,
+  so a deactivated or demoted account loses Mail immediately, and an operator
+  restricted to their own workspaces needs whole-office access, ADMIN, or
+  MANAGER to read office-wide threads.
+- Evidence boundary: The projection reads stored text bodies and existing
+  company and contact links. It never renders stored HTML or sends mail.
+  Threads that inbound routing could not attribute to an office stay in the
+  admin mail log instead of appearing under a company.
+- Mailbox boundary: Because sender accounts are pooled across offices, the
+  displayed mailbox is the sender of the newest outbound message, while thread
+  and message reads remain scoped by the owning office.

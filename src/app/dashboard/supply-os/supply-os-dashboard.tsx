@@ -313,6 +313,7 @@ export function SupplyOsDashboardWorkspace({
   previewMode = false,
   canShowProspects = false,
   canShowOutreach = false,
+  canShowMail = false,
   initialMaterialsView,
   initialResearchListSlug,
   initialResearchQuery,
@@ -331,6 +332,7 @@ export function SupplyOsDashboardWorkspace({
   previewMode?: boolean;
   canShowProspects?: boolean;
   canShowOutreach?: boolean;
+  canShowMail?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -642,6 +644,7 @@ export function SupplyOsDashboardWorkspace({
             canAuthorizePurchase={canAuthorizePurchase}
             canShowProspects={canShowProspects}
             canShowOutreach={canShowOutreach}
+            canShowMail={canShowMail}
             initialMaterialsView={initialMaterialsView}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}
@@ -775,6 +778,7 @@ function CaseCommandCenter({
   canAuthorizePurchase,
   canShowProspects,
   canShowOutreach,
+  canShowMail,
   initialMaterialsView,
   initialResearchListSlug,
   initialResearchQuery,
@@ -793,6 +797,7 @@ function CaseCommandCenter({
   canAuthorizePurchase: boolean;
   canShowProspects?: boolean;
   canShowOutreach?: boolean;
+  canShowMail?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -876,14 +881,15 @@ function CaseCommandCenter({
         stored === "inventory" ||
         stored === "messages" ||
         (stored === "prospects" && canShowProspects) ||
-        (stored === "outreach" && canShowOutreach)
+        (stored === "outreach" && canShowOutreach) ||
+        (stored === "mail" && canShowMail)
       ) {
         setInventoryWorkspaceView(stored);
       }
     } catch {
       // Local storage is optional.
     }
-  }, [canShowOutreach, canShowProspects, initialMaterialsView, materialsViewStorageKey]);
+  }, [canShowMail, canShowOutreach, canShowProspects, initialMaterialsView, materialsViewStorageKey]);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -1447,6 +1453,7 @@ function CaseCommandCenter({
             onViewChange={changeInventoryWorkspaceView}
             canShowProspects={canShowProspects}
             canShowOutreach={canShowOutreach}
+            canShowMail={canShowMail}
             storageScope={storageScope}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}

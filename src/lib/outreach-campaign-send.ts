@@ -17,6 +17,7 @@ import {
   releaseEmailSenderReservation,
   reserveEmailSender,
 } from "@/lib/email-sender-pool";
+import { logEmailTouch } from "@/lib/crm/email-touch";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import { prisma } from "@/lib/prisma";
 import {
@@ -258,6 +259,8 @@ async function recordSent(
     variantKey: string | null;
   },
 ) {
+  let localThreadId: string | null = null;
+  let localMessageId: string | null = null;
   await db.$transaction(async (tx) => {
     const existing = await tx.emailMessage.findFirst({
       where: {
@@ -266,8 +269,8 @@ async function recordSent(
       },
       select: { id: true, threadId: true },
     });
-    let localThreadId = existing?.threadId ?? null;
-    let localMessageId = existing?.id ?? null;
+    localThreadId = existing?.threadId ?? null;
+    localMessageId = existing?.id ?? null;
     if (!localMessageId) {
       const thread = await tx.emailThread.create({
         data: {
@@ -350,6 +353,19 @@ async function recordSent(
       data: { lastRunAt: input.sentAt },
     });
   });
+  if (localThreadId && localMessageId) {
+    await logEmailTouch({
+      officeId: input.officeId,
+      threadId: localThreadId,
+      messageId: localMessageId,
+      direction: "OUTBOUND",
+      fromEmail: input.senderEmail,
+      toEmails: [input.recipient],
+      subject: input.subject,
+      snippet: input.body,
+      sentAt: input.sentAt,
+    });
+  }
 }
 
 async function recordOutcome(

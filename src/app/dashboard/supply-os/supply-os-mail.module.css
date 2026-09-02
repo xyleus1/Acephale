@@ -1,0 +1,221 @@
+.mail {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px clamp(16px, 3vw, 34px) 34px;
+  color: var(--ink);
+}
+
+.header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  margin: 7px 0 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.search {
+  display: flex;
+  min-width: min(390px, 100%);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.search button,
+.state button,
+.loadOlder {
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 7px 11px;
+  color: var(--ink);
+  background: var(--panel-subtle);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.threadList {
+  display: grid;
+  gap: 8px;
+}
+
+.thread {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.threadButton {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 250px) 17px;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 17px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.threadButton:hover {
+  background: var(--panel-subtle);
+}
+
+.threadMain,
+.threadMeta {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.threadMain strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participants,
+.threadMeta,
+.detailState {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subject {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadMeta {
+  justify-items: end;
+}
+
+.detail {
+  padding: 0 17px 17px;
+}
+
+.messages {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 13px;
+}
+
+.message {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-subtle);
+}
+
+.message header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.message header strong {
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.message header time {
+  margin-left: auto;
+}
+
+.message p {
+  min-height: 18px;
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 40px 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.state[data-tone="error"] {
+  color: var(--decision);
+}
+
+.loadOlder {
+  align-self: center;
+}
+
+@media (max-width: 760px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search {
+    min-width: 0;
+  }
+
+  .threadButton {
+    grid-template-columns: minmax(0, 1fr) 17px;
+  }
+
+  .threadMeta {
+    display: none;
+  }
+}
