@@ -246,6 +246,31 @@
   office-wide dedupe, while send-time status checks and personalization hashing
   continue to protect delivery.
 
+## 2026-09-03: Attach approved follow-ups to active campaigns
+
+- The ops campaign route now passes `followUps` through campaign planning and
+  exposes a `followups` action for existing campaigns.
+- The action requires an active ADMIN in the resolved office and the exact
+  confirmation phrase `approve outreach follow-ups`. It normalizes and
+  validates each step before writing.
+- `setCampaignFollowUps` recomputes the revision hash from the stored campaign
+  content and approved audience snapshot plus the new steps, then changes only
+  `followUps` and `revisionHash` for DRAFT, ACTIVE, or PAUSED campaigns.
+- Follow-up sequences are positional in the existing ledger, so replacement is
+  rejected once any follow-up row has been queued or sent. Sequence versioning
+  was intentionally not added.
+- The route rejects malformed arrays before normalization, while omitted
+  plan-time follow-ups remain optional.
+- Completion now compares the loaded revision hash in its final ACTIVE to
+  COMPLETED update. If follow-ups or another approved change commit between
+  the completion snapshot and that update, the compare-and-set fails and the
+  next batch reevaluates the campaign.
+- Completed and cancelled campaigns are refused. First-touch copy, sender,
+  audience, personalization, variants, and daily cap remain pinned.
+- Verified with the outreach copy, send, and planning database suites, product
+  copy checks, Prisma validation and generation, TypeScript, targeted lint, and
+  diff checks.
+
 ## 2026-09-03 - Supplier replies that lost the RFQ reference
 
 - Request level reply matching read only messages whose subject still contained

@@ -798,6 +798,83 @@ export async function activateCampaign(input: {
   return { activated: true, blockers: [], campaign: { id: campaign.id, status: "ACTIVE" } };
 }
 
+export async function setCampaignFollowUps(input: {
+  officeId: string;
+  campaignId: string;
+  followUps: readonly CampaignFollowUpStep[];
+  approvedByUserId: string;
+}) {
+  if (!input.followUps.length) throw new Error("At least one follow-up step is required.");
+  const followUps = normalizeCampaignFollowUps(input.followUps);
+  if (followUps.length !== input.followUps.length) {
+    throw new Error("Every follow-up step must have an integer waitDays and a body.");
+  }
+  const blockers = campaignFollowUpBlockers(followUps);
+  if (blockers.length) throw new Error(blockers[0]);
+  const campaign = await loadCampaign(input.officeId, input.campaignId);
+  const { records, filters } = await eligibleRecords(campaign, true);
+  const variants = normalizeCampaignVariants(campaign.variants);
+  const audiencePersonalization = campaignPersonalizationMap({
+    rows: records.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
+    emailField: campaign.emailField,
+    companyField: campaign.companyField ?? undefined,
+    countryField: campaign.countryField ?? undefined,
+  });
+  const revisionHash = campaignRevisionHash({
+    subject: campaign.subject,
+    bodyTemplate: campaign.bodyTemplate,
+    emailField: campaign.emailField,
+    rowStatuses: jsonStrings(campaign.rowStatuses),
+    filters,
+    dailyCap: campaign.dailyCap,
+    senderAccountId: campaign.senderAccountId,
+    senderRotation: campaign.senderRotation,
+    senderDisplayName: campaign.senderDisplayName,
+    variants,
+    audienceRecordIds: records.map((record) => record.id),
+    audiencePersonalization,
+    followUps,
+  });
+  const update = () => prisma.$transaction(async (tx) => {
+    const existingFollowUp = await tx.outreachCampaignFollowUp.findFirst({
+      where: { officeId: input.officeId, campaignId: input.campaignId },
+      select: { id: true },
+    });
+    if (existingFollowUp) {
+      return {
+        updated: false as const,
+        reason: "FOLLOW_UPS_ALREADY_IN_FLIGHT" as const,
+        revisionHash: null,
+      };
+    }
+    const updated = await tx.outreachCampaign.updateMany({
+      where: {
+        id: input.campaignId,
+        officeId: input.officeId,
+        status: { in: ["DRAFT", "ACTIVE", "PAUSED"] },
+      },
+      data: {
+        followUps: followUps as Prisma.InputJsonValue,
+        revisionHash,
+      },
+    });
+    return updated.count > 0
+      ? { updated: true as const, revisionHash }
+      : { updated: false as const, reason: "CAMPAIGN_NOT_EDITABLE" as const, revisionHash: null };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await update();
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2034") throw error;
+      if (attempt === 1) {
+        return { updated: false as const, reason: "TRANSACTION_CONFLICT" as const, revisionHash: null };
+      }
+    }
+  }
+  return { updated: false as const, reason: "TRANSACTION_CONFLICT" as const, revisionHash: null };
+}
+
 export async function pauseCampaign(input: { officeId: string; campaignId: string }) {
   return prisma.outreachCampaign.updateMany({
     where: { id: input.campaignId, officeId: input.officeId, status: "ACTIVE" },
@@ -1017,9 +1094,14 @@ export async function completeCampaignIfDone(input: { officeId: string; campaign
     audiencePersonalization: {},
   }, new Date());
   if (outstandingFollowUps > 0) return { completed: false };
-  await prisma.outreachCampaign.updateMany({
-    where: { id: input.campaignId, officeId: input.officeId, status: "ACTIVE" },
+  const updated = await prisma.outreachCampaign.updateMany({
+    where: {
+      id: input.campaignId,
+      officeId: input.officeId,
+      status: "ACTIVE",
+      ...(campaign.revisionHash !== null ? { revisionHash: campaign.revisionHash } : {}),
+    },
     data: { status: "COMPLETED", completedAt: new Date() },
   });
-  return { completed: true };
+  return updated.count > 0 ? { completed: true } : { completed: false };
 }

@@ -5,11 +5,16 @@ import { readBoundedText, boundedText } from "@/lib/ops-input";
 import { opsSecretAuthorized } from "@/lib/ops-secret";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/research-lists";
-import { resolveCampaignOffice } from "@/lib/outreach-campaign-copy";
+import {
+  campaignFollowUpBlockers,
+  normalizeCampaignFollowUps,
+  resolveCampaignOffice,
+} from "@/lib/outreach-campaign-copy";
 import {
   activateCampaign,
   planOutreachCampaign,
   saveDraftCampaign,
+  setCampaignFollowUps,
 } from "@/lib/outreach-campaigns";
 import {
   outreachCampaignRunNowLimitValid,
@@ -43,6 +48,7 @@ type CampaignOpsBody = {
   subject?: unknown;
   body?: unknown;
   variants?: unknown;
+  followUps?: unknown;
   campaignId?: unknown;
   revisionHash?: unknown;
   approvedByEmail?: unknown;
@@ -121,6 +127,18 @@ function variantsInput(value: unknown) {
   });
 }
 
+function followUpsInput(value: unknown, optional = false) {
+  if (value === undefined && optional) return undefined;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("At least one follow-up step is required.");
+  }
+  const normalized = normalizeCampaignFollowUps(value);
+  if (normalized.length !== value.length) {
+    throw new Error("Every follow-up step must have an integer waitDays and a body.");
+  }
+  return normalized;
+}
+
 export async function POST(request: NextRequest) {
   if (!opsSecretAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -140,8 +158,8 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   const action = boundedText(body?.action, 30);
-  if (!action || !["mailboxes", "plan", "approve", "run"].includes(action)) {
-    return NextResponse.json({ error: "action must be mailboxes, plan, approve, or run." }, { status: 400 });
+  if (!action || !["mailboxes", "plan", "approve", "followups", "run"].includes(action)) {
+    return NextResponse.json({ error: "action must be mailboxes, plan, approve, followups, or run." }, { status: 400 });
   }
 
   try {
@@ -189,6 +207,7 @@ export async function POST(request: NextRequest) {
         subject: typeof body?.subject === "string" ? body.subject : "",
         bodyTemplate: typeof body?.body === "string" ? body.body : "",
         variants: variantsInput(body?.variants),
+        followUps: followUpsInput(body?.followUps, true),
       };
       const plan = await planOutreachCampaign(campaignInput);
       const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
@@ -223,6 +242,48 @@ export async function POST(request: NextRequest) {
         expectedRevisionHash: revisionHash,
       });
       return NextResponse.json(result, { status: result.activated ? 200 : 409 });
+    }
+    if (action === "followups") {
+      if (body?.confirm !== "approve outreach follow-ups") {
+        return NextResponse.json({ error: "confirm must be exactly \"approve outreach follow-ups\"." }, { status: 400 });
+      }
+      const approvedByEmail = boundedText(body?.approvedByEmail, 320);
+      if (!approvedByEmail) {
+        return NextResponse.json({ error: "approvedByEmail is required." }, { status: 400 });
+      }
+      const user = await prisma.user.findFirst({
+        where: {
+          officeId: office.id,
+          email: normalizeLoginEmail(approvedByEmail),
+          role: UserRole.ADMIN,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!user) return NextResponse.json({ error: "Active ADMIN approver was not found in the office." }, { status: 403 });
+      const followUps = followUpsInput(body?.followUps);
+      if (!followUps) return NextResponse.json({ error: "At least one follow-up step is required." }, { status: 400 });
+      const blockers = campaignFollowUpBlockers(followUps);
+      if (blockers.length) return NextResponse.json({ error: blockers[0], blockers }, { status: 400 });
+      const result = await setCampaignFollowUps({
+        officeId: office.id,
+        campaignId,
+        followUps,
+        approvedByUserId: user.id,
+      });
+      if (!result.updated) {
+        if (result.reason === "FOLLOW_UPS_ALREADY_IN_FLIGHT") {
+          return NextResponse.json({
+            error: "Follow-up steps cannot be replaced once follow-ups have been queued or sent.",
+            reason: result.reason,
+          }, { status: 409 });
+        }
+        return NextResponse.json({
+          error: "Outreach campaign is no longer editable.",
+          reason: result.reason,
+        }, { status: 409 });
+      }
+      return NextResponse.json(result);
     }
 
     const campaign = await prisma.outreachCampaign.findFirst({

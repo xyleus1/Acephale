@@ -188,6 +188,15 @@
   (the revision the review items were rendered from) and returns a tool error
   instead of a proposal when the saved draft landed on a different revision
   because the list changed between the plan and the save.
+- Follow-up operations: the authenticated ops route can attach normalized
+  follow-up steps to a DRAFT, ACTIVE, or PAUSED campaign after an explicit
+  active office ADMIN approves with the exact phrase `approve outreach
+  follow-ups`. The update recomputes `revisionHash` from the existing approved
+  snapshot plus the new steps, while leaving first-touch copy, sender,
+  audience, personalization, variants, and cap unchanged. Completed and
+  cancelled campaigns cannot be edited. Once any follow-up ledger row exists,
+  replacement is refused because positional step history cannot be safely
+  reinterpreted; malformed step arrays are rejected before normalization.
 - Outreach review surface: `src/lib/outreach-proposal-review.ts` reads pending
   office-scoped `OUTREACH_CAMPAIGN_START` proposals and splits each stored
   review item into subject and body. The Outreach desk mounts

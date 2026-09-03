@@ -78,6 +78,31 @@ dedupe, which would spuriously invalidate an approved revision. Send-time status
 checks still prevent delivery to rows that are no longer eligible, and
 personalization remains part of the revision hash.
 
+## Follow-up steps may be attached after campaign approval
+
+Date: 2026-09-03
+
+An already-active campaign may receive a new follow-up sequence through the
+authenticated ops action. This is an explicit post-approval change, so it
+requires an active ADMIN in the same office and the exact confirmation phrase
+`approve outreach follow-ups`. The route normalizes and validates the steps
+before the domain update.
+
+The update recomputes the stored revision hash from the existing approved
+campaign snapshot plus the new normalized steps. It changes only `followUps`
+and `revisionHash`, leaving first-touch copy, sender, audience,
+personalization, variants, and daily cap pinned. DRAFT, ACTIVE, and PAUSED
+campaigns can receive this change; COMPLETED and CANCELLED campaigns cannot.
+This provides a reviewable way to add an approved follow-up without silently
+changing the already-approved first-touch content.
+
+Follow-up rows use positional step numbers for idempotency keys, provider
+message ids, and reply chains. Replacing a sequence after any follow-up row
+exists would reinterpret its history, so the update is rejected once a row has
+been queued or sent. Sequence versioning was rejected in favor of this
+explicit safety boundary. Malformed step arrays are rejected before
+normalization, while omitted plan-time follow-ups remain optional.
+
 ## Every sign-in surface shares one hashed attempt counter
 
 Date: 2026-09-02

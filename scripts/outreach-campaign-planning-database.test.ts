@@ -10,7 +10,12 @@ import {
   completeCampaignIfDone,
   planOutreachCampaign,
   saveDraftCampaign,
+  setCampaignFollowUps,
 } from "../src/lib/outreach-campaigns";
+import {
+  campaignFollowUpBlockers,
+  normalizeCampaignFollowUps,
+} from "../src/lib/outreach-campaign-copy";
 
 async function main() {
   assert(process.env.DATABASE_URL, "DATABASE_URL is required for the outreach planning database test.");
@@ -259,6 +264,98 @@ async function main() {
       expectedRevisionHash: activeDraft.revisionHash,
     });
     assert.equal(activated.activated, true);
+    const activeBeforeFollowUp = await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: activeDraft.id },
+      select: {
+        subject: true,
+        bodyTemplate: true,
+        audienceRecordIds: true,
+        audiencePersonalization: true,
+        senderAccountId: true,
+        senderDisplayName: true,
+        senderRotation: true,
+        dailyCap: true,
+        revisionHash: true,
+      },
+    });
+    const followUpSteps = normalizeCampaignFollowUps([{
+      waitDays: 3,
+      body: "Still interested in {{company}}? Reply STOP to opt out.",
+    }]);
+    const activeFollowUpUpdate = await setCampaignFollowUps({
+      officeId: office.id,
+      campaignId: activeDraft.id,
+      followUps: followUpSteps,
+      approvedByUserId: "follow-up-approver",
+    });
+    assert.equal(activeFollowUpUpdate.updated, true);
+    assert.notEqual(activeFollowUpUpdate.revisionHash, activeBeforeFollowUp.revisionHash);
+    const activeAfterFollowUp = await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: activeDraft.id },
+      select: {
+        followUps: true,
+        subject: true,
+        bodyTemplate: true,
+        audienceRecordIds: true,
+        audiencePersonalization: true,
+        senderAccountId: true,
+        senderDisplayName: true,
+        senderRotation: true,
+        dailyCap: true,
+        revisionHash: true,
+      },
+    });
+    assert.deepEqual(activeAfterFollowUp, {
+      ...activeBeforeFollowUp,
+      followUps: followUpSteps,
+      revisionHash: activeFollowUpUpdate.revisionHash,
+    });
+    const malformedFollowUps = [
+      ...followUpSteps,
+      { waitDays: "bad", body: "Reply STOP to opt out." },
+    ] as unknown as typeof followUpSteps;
+    await assert.rejects(
+      () => setCampaignFollowUps({
+        officeId: office.id,
+        campaignId: activeDraft.id,
+        followUps: malformedFollowUps,
+        approvedByUserId: "follow-up-approver",
+      }),
+      /Every follow-up step must have an integer waitDays and a body/,
+    );
+    assert.deepEqual(await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: activeDraft.id },
+      select: { followUps: true, revisionHash: true },
+    }), {
+      followUps: followUpSteps,
+      revisionHash: activeFollowUpUpdate.revisionHash,
+    });
+    const invalidFollowUp = normalizeCampaignFollowUps([{
+      waitDays: 3,
+      body: "Still interested in {{company}}?",
+    }]);
+    assert.deepEqual(campaignFollowUpBlockers(invalidFollowUp), [
+      "Follow-up 1 body must contain an opt-out line.",
+    ]);
+    await assert.rejects(
+      () => setCampaignFollowUps({
+        officeId: office.id,
+        campaignId: activeDraft.id,
+        followUps: invalidFollowUp,
+        approvedByUserId: "follow-up-approver",
+      }),
+      /Follow-up 1 body must contain an opt-out line/,
+    );
+    assert.deepEqual(normalizeCampaignFollowUps([{ waitDays: "bad", body: "Reply STOP to opt out." }]), []);
+    await assert.rejects(
+      () => setCampaignFollowUps({
+        officeId: office.id,
+        campaignId: activeDraft.id,
+        followUps: [],
+        approvedByUserId: "follow-up-approver",
+      }),
+      /At least one follow-up step is required/,
+    );
     const afterActivation = await saveDraftCampaign({
       ...baseInput,
       campaignName: activeCampaignName,
@@ -275,6 +372,56 @@ async function main() {
       { id: activeDraft.id, status: "ACTIVE", subject: "Active Wens test" },
       { id: afterActivation.id, status: "DRAFT", subject: "Fresh Wens draft" },
     ]);
+    await prisma.outreachCampaign.update({
+      where: { id: activeDraft.id },
+      data: { status: "COMPLETED" },
+    });
+    assert.deepEqual(await setCampaignFollowUps({
+      officeId: office.id,
+      campaignId: activeDraft.id,
+      followUps: followUpSteps,
+      approvedByUserId: "follow-up-approver",
+    }), { updated: false, reason: "CAMPAIGN_NOT_EDITABLE", revisionHash: null });
+    await prisma.outreachCampaign.update({
+      where: { id: activeDraft.id },
+      data: { status: "CANCELLED" },
+    });
+    assert.deepEqual(await setCampaignFollowUps({
+      officeId: office.id,
+      campaignId: activeDraft.id,
+      followUps: followUpSteps,
+      approvedByUserId: "follow-up-approver",
+    }), { updated: false, reason: "CAMPAIGN_NOT_EDITABLE", revisionHash: null });
+    const sequenceBeforeReplacement = await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: rotationDraft.id },
+      select: { followUps: true, revisionHash: true },
+    });
+    await prisma.outreachCampaignFollowUp.create({
+      data: {
+        officeId: office.id,
+        campaignId: rotationDraft.id,
+        recordId: record.id,
+        step: 1,
+        recipient: `wens-${suffix}@example.test`,
+        status: "QUEUED",
+        dueAt: new Date("2026-09-06T00:00:00.000Z"),
+      },
+    });
+    const replacement = await setCampaignFollowUps({
+      officeId: office.id,
+      campaignId: rotationDraft.id,
+      followUps: followUpSteps,
+      approvedByUserId: "follow-up-approver",
+    });
+    assert.deepEqual(replacement, {
+      updated: false,
+      reason: "FOLLOW_UPS_ALREADY_IN_FLIGHT",
+      revisionHash: null,
+    });
+    assert.deepEqual(await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: rotationDraft.id },
+      select: { followUps: true, revisionHash: true },
+    }), sequenceBeforeReplacement);
 
     const contactedCampaign = await prisma.outreachCampaign.create({
       data: {
@@ -345,6 +492,61 @@ async function main() {
       where: { id: overlappingCampaign.id },
       select: { status: true },
     })).status, "COMPLETED");
+    const compareAndSetCampaign = await prisma.outreachCampaign.create({
+      data: {
+        officeId: office.id,
+        listId: list.id,
+        name: `Compare and set Wens campaign ${suffix}`,
+        status: "ACTIVE",
+        subject: "Compare and set",
+        bodyTemplate: "Reply STOP to opt out.",
+        emailField: "primary_email",
+        rowStatuses: ["new"],
+        filters: Prisma.DbNull,
+        senderAccountId: sender.id,
+        senderDisplayName: null,
+        variants: Prisma.DbNull,
+        audienceTotal: 1,
+        audienceRecordIds: [record.id],
+        audiencePersonalization: {
+          [record.id]: { email: `wens-${suffix}@example.test` },
+        },
+        revisionHash: "compare-and-set-old",
+      },
+      select: { id: true },
+    });
+    const originalUpdateMany = prisma.outreachCampaign.updateMany.bind(prisma.outreachCampaign);
+    let revisionChanged = false;
+    prisma.outreachCampaign.updateMany = async (
+      args: Parameters<typeof prisma.outreachCampaign.updateMany>[0],
+    ) => {
+      if (!revisionChanged && args.data.status === "COMPLETED") {
+        revisionChanged = true;
+        await originalUpdateMany({
+          where: { id: compareAndSetCampaign.id, officeId: office.id },
+          data: { revisionHash: "compare-and-set-new" },
+        });
+      }
+      return originalUpdateMany(args);
+    };
+    let compareAndSetResult: { completed: boolean };
+    try {
+      compareAndSetResult = await completeCampaignIfDone({
+        officeId: office.id,
+        campaignId: compareAndSetCampaign.id,
+      });
+    } finally {
+      prisma.outreachCampaign.updateMany = originalUpdateMany;
+    }
+    assert.deepEqual(compareAndSetResult, { completed: false });
+    assert.equal((await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: compareAndSetCampaign.id },
+      select: { status: true, revisionHash: true },
+    })).status, "ACTIVE");
+    assert.equal((await prisma.outreachCampaign.findUniqueOrThrow({
+      where: { id: compareAndSetCampaign.id },
+      select: { revisionHash: true },
+    })).revisionHash, "compare-and-set-new");
 
     const capList = await prisma.researchList.create({
       data: {
