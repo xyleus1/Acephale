@@ -1,10 +1,13 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { batchRecipientHash } from "@/lib/batch-review";
 import {
   releaseEmailSenderReservation,
   reserveEmailSender,
 } from "@/lib/email-sender-pool";
+import { listSuppressedEmails, type EmailSuppressionReason } from "@/lib/email-delivery-events";
+import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
 import {
@@ -68,9 +71,31 @@ export type BulkRfqOutcome = {
   error: string | null;
 };
 
+export type BulkRfqBatchOptions = {
+  // Restrict the run to these vendors, used when a caller knows exactly which
+  // suppliers it means rather than "the next few uncontacted ones".
+  vendorIds?: readonly string[] | null;
+  // Suppliers a reviewer struck from the batch. They stay uncontacted, so a
+  // later run without the exclusion can still reach them.
+  excludeVendorIds?: readonly string[] | null;
+};
+
+// Thrown before any sender is reserved when the batch a reviewer approved is
+// not the batch the run would send: a supplier was added, contacted elsewhere,
+// suppressed, or its address changed since the preview, or the RFQ copy or
+// files the suppliers would receive are not the ones that were reviewed.
+export class BulkRfqBatchChangedError extends Error {
+  readonly code = "BATCH_CHANGED" as const;
+  constructor(readonly expectedHash: string, readonly currentHash: string) {
+    super("The supplier batch or its RFQ content changed since it was reviewed. Preview it again before sending.");
+    this.name = "BulkRfqBatchChangedError";
+  }
+}
+
 export type BulkRfqRunResult = {
   orderId: string;
   material: string;
+  batchHash: string;
   attachments: string[];
   withheldFiles: Array<{ name: string; reason: string }>;
   candidates: number;
@@ -198,15 +223,68 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
   };
 }
 
+export function boundedBulkRfqLimit(limit: number) {
+  return Math.min(BULK_RFQ_MAX_PER_RUN, Math.max(1, limit));
+}
+
+// The reviewed batch for a request: the same office-scoped suppression and
+// sendable-count limit the run applies, so a preview shows exactly the
+// suppliers a send with the same limit would reach, plus the ones it blocks.
+// The files are part of the review, so the caller resolves them first and
+// the hash covers them together with the recipients.
 export async function listBulkRfqTargets(
   order: BulkRfqOrder,
   limit: number,
   // A sourcing wave contacts the suppliers it just found. Oldest first ordering
   // would otherwise spend the run on vendors that were already sitting there.
+  vendorIds: readonly string[] | null,
+  options: Omit<BulkRfqBatchOptions, "vendorIds"> & { files: ProcurementRfqAttachmentPackage },
+): Promise<{ sendable: BulkRfqTarget[]; blocked: BulkRfqOutcome[]; batchHash: string }> {
+  const uncontacted = await listUncontactedBulkRfqTargets(order, vendorIds, options);
+  const batch = selectBulkRfqBatch(
+    uncontacted,
+    await listSuppressedEmails(order.officeId, uncontacted.map((target) => target.contactEmail)),
+    limit,
+  );
+  return { ...batch, batchHash: bulkRfqBatchHash(order, batch.sendable, options.files) };
+}
+
+// Pins a reviewed batch as what each supplier would receive: per target, the
+// vendor id, normalized address, subject, and the body exactly as the send
+// renders it (so the greeting name, the order copy, and the file context are
+// all covered), plus the exact bytes of every attachment. Order independent.
+// A send that carries the hash refuses to run when any of it differs.
+export function bulkRfqBatchHash(
+  order: BulkRfqOrder,
+  targets: readonly BulkRfqTarget[],
+  files: ProcurementRfqAttachmentPackage,
+) {
+  const subject = buildBulkRfqSubject(order);
+  return requestHash({
+    recipients: batchRecipientHash(targets.map((target) => ({ id: target.vendorId, email: target.contactEmail }))),
+    messages: [...targets]
+      .sort((left, right) => left.vendorId.localeCompare(right.vendorId))
+      .map((target) => ({ vendorId: target.vendorId, subject, body: buildBulkRfqBody(order, target, files) })),
+    attachments: files.attachments.map((file) => ({
+      filename: file.filename,
+      contentType: file.contentType,
+      sha256: createHash("sha256").update(file.bytes).digest("hex"),
+    })),
+  });
+}
+
+// Every uncontacted supplier of the request, oldest first, before any run limit
+// is applied. Suppression is decided on this list so blocked suppliers at the
+// front never use up a run's slots.
+export async function listUncontactedBulkRfqTargets(
+  order: BulkRfqOrder,
   vendorIds?: readonly string[] | null,
+  options: Omit<BulkRfqBatchOptions, "vendorIds"> = {},
 ): Promise<BulkRfqTarget[]> {
-  const bounded = Math.min(BULK_RFQ_MAX_PER_RUN, Math.max(1, limit));
   const only = vendorIds?.length ? new Set(vendorIds) : null;
+  // Vendor ids are uuids; Postgres returns them lowercase, so a struck id is
+  // matched case-insensitively.
+  const excluded = new Set((options.excludeVendorIds ?? []).map((id) => id.trim().toLowerCase()));
   const rows = await procurementWorkflowDatabase().$queryRawUnsafe<VendorRow[]>(`
     SELECT
       order_vendors.id AS "vendorId",
@@ -234,14 +312,55 @@ export async function listBulkRfqTargets(
   return rows
     .filter((row): row is VendorRow & { contactEmail: string } => Boolean(row.contactEmail?.includes("@")))
     .filter((row) => !only || only.has(row.vendorId))
+    .filter((row) => !excluded.has(row.vendorId.toLowerCase()))
     .filter((row) => !alreadyHandled.has(row.vendorId))
-    .slice(0, bounded)
     .map((row) => ({
       vendorId: row.vendorId,
       name: row.name,
       website: row.website,
       contactEmail: row.contactEmail.trim().toLowerCase(),
     }));
+}
+
+// Suppressed supplier addresses (bounced, complained, opted out, or blocked by
+// an operator for this office) are reported as BLOCKED and never reach the
+// sender pool. The vendor row stays uncontacted so a corrected address can be
+// picked up by a later run.
+export function partitionSuppressedRfqTargets(
+  targets: readonly BulkRfqTarget[],
+  suppressed: ReadonlyMap<string, EmailSuppressionReason>,
+) {
+  const blocked: BulkRfqOutcome[] = [];
+  const sendable: BulkRfqTarget[] = [];
+  for (const target of targets) {
+    const reason = suppressed.get(target.contactEmail.trim().toLowerCase());
+    if (!reason) {
+      sendable.push(target);
+      continue;
+    }
+    blocked.push({
+      vendorId: target.vendorId,
+      vendorName: target.name,
+      recipient: target.contactEmail,
+      state: "BLOCKED",
+      senderEmail: null,
+      providerMessageId: null,
+      error: suppressionSkipMessage(reason),
+    });
+  }
+  return { blocked, sendable };
+}
+
+// The run limit counts suppliers that can actually be mailed. Blocked suppliers
+// are reported but never occupy a slot, so a request whose oldest rows are all
+// suppressed still reaches the eligible ones behind them.
+export function selectBulkRfqBatch(
+  candidates: readonly BulkRfqTarget[],
+  suppressed: ReadonlyMap<string, EmailSuppressionReason>,
+  limit: number,
+) {
+  const { blocked, sendable } = partitionSuppressedRfqTargets(candidates, suppressed);
+  return { blocked, sendable: sendable.slice(0, boundedBulkRfqLimit(limit)) };
 }
 
 async function recordSentRfq(args: {
@@ -464,15 +583,24 @@ export async function runProcurementBulkRfq(input: {
   // request with nothing linked simply sends the text RFQ it always sent.
   attachRequestFiles?: boolean;
   loadFiles?: typeof loadProcurementRfqAttachmentPackage;
-  // Restrict the run to these vendors, used when a caller knows exactly which
-  // suppliers it means rather than "the next few uncontacted ones".
-  vendorIds?: readonly string[] | null;
-}): Promise<BulkRfqRunResult> {
+  // The batch hash from the preview the operator approved. When present, the
+  // run refuses to send anything unless it would send exactly that batch.
+  expectedBatchHash?: string | null;
+} & BulkRfqBatchOptions): Promise<BulkRfqRunResult> {
   const order = await loadBulkRfqOrder(input.orderId);
   if (!order) throw new Error("The sourcing request was not found.");
   const provider = input.provider ?? gmailSupplierEmailProvider;
   const pauseMs = input.pauseMs ?? 400;
-  const targets = await listBulkRfqTargets(order, input.limit, input.vendorIds ?? null);
+  const uncontacted = await listUncontactedBulkRfqTargets(order, input.vendorIds ?? null, {
+    excludeVendorIds: input.excludeVendorIds ?? null,
+  });
+  const { blocked, sendable: targets } = selectBulkRfqBatch(
+    uncontacted,
+    await listSuppressedEmails(order.officeId, uncontacted.map((target) => target.contactEmail)),
+    input.limit,
+  );
+  // A loader failure throws here, before the hash check, so it can never be
+  // read as "no files" and pass a review that saw files, or the reverse.
   const files = input.attachRequestFiles === false
     ? EMPTY_RFQ_ATTACHMENT_PACKAGE
     : await (input.loadFiles ?? loadProcurementRfqAttachmentPackage)({
@@ -480,19 +608,24 @@ export async function runProcurementBulkRfq(input: {
       customerId: order.customerId,
       officeId: order.officeId,
     });
+  const batchHash = bulkRfqBatchHash(order, targets, files);
+  if (input.expectedBatchHash && input.expectedBatchHash !== batchHash) {
+    throw new BulkRfqBatchChangedError(input.expectedBatchHash, batchHash);
+  }
   const subject = buildBulkRfqSubject(order);
   const result: BulkRfqRunResult = {
     orderId: order.orderId,
     material: order.material,
+    batchHash,
     attachments: files.names,
     withheldFiles: files.withheld,
-    candidates: targets.length,
+    candidates: blocked.length + targets.length,
     sent: 0,
     alreadySent: 0,
     rejected: 0,
     unknown: 0,
     poolExhausted: false,
-    outcomes: [],
+    outcomes: [...blocked],
   };
 
   for (const target of targets) {
@@ -530,6 +663,24 @@ export async function runProcurementBulkRfq(input: {
         senderEmail: reservation.senderEmail,
         providerMessageId: reservation.providerMessageId,
         error: null,
+      });
+      continue;
+    }
+    // A suppression recorded after the batch was selected, including one that
+    // landed while the reservation was being taken, still keeps the address
+    // away from the provider: the reservation goes back and nothing is sent.
+    const lateSuppression = (await listSuppressedEmails(order.officeId, [target.contactEmail]))
+      .get(target.contactEmail.trim().toLowerCase());
+    if (lateSuppression) {
+      await releaseEmailSenderReservation({ officeId: order.officeId, reservationId: reservation.reservationId });
+      result.outcomes.push({
+        vendorId: target.vendorId,
+        vendorName: target.name,
+        recipient: target.contactEmail,
+        state: "BLOCKED",
+        senderEmail: null,
+        providerMessageId: null,
+        error: suppressionSkipMessage(lateSuppression),
       });
       continue;
     }

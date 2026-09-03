@@ -4,6 +4,17 @@ import PostalMime, { type Address, type Mailbox } from "postal-mime";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { classifyInboundEmail } from "@/lib/email-classifier";
+import {
+  classifyDeliveryFeedback,
+  DELIVERY_FEEDBACK_CLASSIFICATION,
+  encodeStoredDeliveryFeedback,
+} from "@/lib/email-delivery-feedback";
+import {
+  deliveryFeedbackNeedsRecovery,
+  recordDeliveryFeedback,
+  recoverUnfinishedDeliveryFeedback,
+  type DeliveryFeedbackRouting,
+} from "@/lib/email-delivery-events";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logEmailTouch } from "@/lib/crm/email-touch";
 import {
@@ -39,6 +50,8 @@ export type ImapSyncDependencies = {
   readCredentials: typeof readGmailAppPasswordAccount;
   createClient: typeof gmailImapClient;
   classifyInbound: typeof classifyInboundEmail;
+  recordDelivery: typeof recordDeliveryFeedback;
+  recoverDelivery: typeof recoverUnfinishedDeliveryFeedback;
   ingestMemory: typeof ingestKnowledgeObject;
   recordMemory: typeof recordMemoryEvent;
   logTouch: typeof logEmailTouch;
@@ -52,6 +65,8 @@ const defaultDependencies: ImapSyncDependencies = {
   readCredentials: readGmailAppPasswordAccount,
   createClient: gmailImapClient,
   classifyInbound: classifyInboundEmail,
+  recordDelivery: recordDeliveryFeedback,
+  recoverDelivery: recoverUnfinishedDeliveryFeedback,
   ingestMemory: ingestKnowledgeObject,
   recordMemory: recordMemoryEvent,
   logTouch: logEmailTouch,
@@ -286,6 +301,35 @@ export async function syncGmailAppPasswordAccountInternal(input: {
           },
         });
       }
+      // A feedback message whose suppression or sender check failed after the
+      // message itself was stored is completed on the next sync.
+      if (!demoMessage && deliveryFeedbackNeedsRecovery(existing)) {
+        const feedback = classifyDeliveryFeedback({
+          fromEmail,
+          subject,
+          bodyText: (parsed.text || "").trim().slice(0, 50_000),
+          headers: parsed.headers.map((header) => ({ name: header.key, value: header.value })),
+          ownAddresses: [account.email],
+        });
+        const storedThread = await dependencies.db.emailThread.findFirst({
+          where: { id: existing.threadId },
+          select: { officeId: true, autoLinkSkipReason: true },
+        });
+        if (feedback && storedThread) {
+          await dependencies.recordDelivery(dependencies.db, {
+            routing: storedThread.autoLinkSkipReason === UNROUTED_MAIL_THREAD_MARKER
+              ? { routed: false, fallbackOfficeId: account.officeId }
+              : { routed: true, officeId: storedThread.officeId },
+            accountId: account.id,
+            messageId: existing.id,
+            threadId: existing.threadId,
+            occurredAt: existing.sentAt,
+            source: "GMAIL_IMAP",
+            feedback,
+            now: dependencies.now(),
+          }).catch(() => null);
+        }
+      }
       touchedThreadIds.add(existing.threadId);
       continue;
     }
@@ -321,14 +365,35 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     // A shared mailbox has no owning customer, so mail that answers no known
     // thread is parked on the connecting office as hidden, admin-only mail.
     const targetOfficeId = routing?.routed ? routing.officeId : account.officeId;
+    const feedbackRouting: DeliveryFeedbackRouting = routing?.routed
+      ? { routed: true, officeId: routing.officeId }
+      : { routed: false, fallbackOfficeId: account.officeId };
 
-    let classification: string | null = demoMessage ? DEMO_EMAIL_CLASSIFICATION : null;
+    // Bounces, complaints, auto-replies, and opt-outs are recognised
+    // deterministically and never reach the AI classifier.
+    const deliveryFeedback = direction === "INBOUND" && !demoMessage
+      ? classifyDeliveryFeedback({
+        fromEmail,
+        subject,
+        bodyText: body,
+        headers: parsed.headers.map((header) => ({ name: header.key, value: header.value })),
+        ownAddresses: [account.email],
+      })
+      : null;
+
+    let classification: string | null = demoMessage
+      ? DEMO_EMAIL_CLASSIFICATION
+      : deliveryFeedback
+        ? DELIVERY_FEEDBACK_CLASSIFICATION
+        : null;
     let classificationReason: string | null = demoMessage
       ? "Protected test-only connected email capability message."
-      : null;
+      : deliveryFeedback
+        ? encodeStoredDeliveryFeedback(deliveryFeedback)
+        : null;
     let jobId: string | null = null;
     let inquiryId: string | null = null;
-    if (direction === "INBOUND" && !input.skipClassification && !demoMessage && !unroutedMessage) {
+    if (direction === "INBOUND" && !input.skipClassification && !demoMessage && !unroutedMessage && !deliveryFeedback) {
       try {
         const result = await dependencies.classifyInbound({
           subject,
@@ -409,6 +474,18 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         classificationAt: classification ? dependencies.now() : null,
       },
     });
+    if (deliveryFeedback) {
+      await dependencies.recordDelivery(dependencies.db, {
+        routing: feedbackRouting,
+        accountId: account.id,
+        messageId: createdMessage.id,
+        threadId: thread.id,
+        occurredAt: sentAt,
+        source: "GMAIL_IMAP",
+        feedback: deliveryFeedback,
+        now: dependencies.now(),
+      }).catch(() => null);
+    }
 
     await dependencies.db.emailThread.updateMany({
       where: { id: thread.id, officeId: targetOfficeId },
@@ -501,6 +578,18 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         sentAt,
       });
     }
+  }
+
+  // Feedback rows whose persistence failed on an earlier sync are outside the
+  // fetch window by now, so they are completed from the database instead.
+  if (!input.demoObservation) {
+    await dependencies.recoverDelivery(dependencies.db, {
+      accountId: account.id,
+      accountEmail: account.email,
+      fallbackOfficeId: account.officeId,
+      source: "GMAIL_IMAP",
+      now: dependencies.now(),
+    }).catch(() => null);
   }
 
   if (!input.demoObservation && (messages.length === 0 || operationalMessages > 0)) {

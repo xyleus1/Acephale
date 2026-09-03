@@ -4683,6 +4683,88 @@ Use this log for durable product and engineering decisions. Do not put every imp
   human operators, with the direct script and GitHub Actions paths retained as
   fallbacks.
 
+## 2026-09-02: Batch approval reviews a bounded spot check of a pinned batch
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: One approval covers a whole outbound batch (an outreach campaign
+  audience or a bulk RFQ run), never one recipient at a time. The reviewer sees
+  a bounded sample (`spotCheckSample`: the first 3 rows plus 7 rows spread over
+  the rest, seeded by the batch's own revision or batch hash) with the exact
+  rendered message each sampled recipient gets, and deterministic quality
+  counts over the full audience (`summarizeRecipientQuality`: repeated
+  domains, role mailboxes, free mail, duplicates, invalid syntax).
+- Scope boundary: What is approved is the hashed set, not the sample. Outreach
+  keeps the existing campaign revision hash, and the proposal pins the
+  revision the plan rendered its review items from (a draft saved on another
+  revision is a tool error, not a proposal). Bulk RFQ previews return a
+  `batchHash` over vendor id and address plus, per target, the subject and
+  body exactly as the send renders it (greeting name included) and the
+  attachment digests; a send that carries the hash is refused
+  (`BulkRfqBatchChangedError`, HTTP 409) before any sender is reserved when
+  either the batch or what it would send any target differs. A preview that
+  cannot resolve the file package fails rather than reviewing without files.
+  Rule: whatever goes into a supplier-facing or customer-facing message must
+  be in the hash the approval pins, and preview and send compute that hash
+  from the same inputs with the same function.
+- Exclusion boundary: A reviewer can strike recipients (`excludeEmails` on
+  campaigns, `excludeVendorIds` on bulk RFQ). Exclusions are part of the
+  planned filters and the hash, so an approval after an exclusion cannot reach
+  the struck row, and struck rows stay eligible for a later, separately
+  reviewed batch. Identifiers in exclusions are normalized (trimmed,
+  lowercased) at every boundary and compared normalized against the rows, so
+  the letter case of a copied id can never reopen a struck recipient.
+- Quality boundary: Quality signals are advisory. They never block a send and
+  never replace suppression, sender reservation, or the late suppression check.
+- Review boundary: A batch approval is only reachable from a surface that
+  renders the pinned review content in full (action details and every
+  spot-check email) before the apply control, and the apply is refused
+  server-side while any spot-check item has not been marked read. Outreach
+  proposals are approved in the Outreach desk Pending approvals panel; a chat
+  command such as `apply <id>` or the greenlight phrase redirects there and
+  never activates a campaign. Global proposals without a job or inquiry page
+  must not be applied through a surface that shows only a title. A proposal
+  whose stored review items carry no rendered message (planned before spot
+  checks existed, or with no items) cannot be started from any surface; it is
+  shown with its reason and can only be discarded and re-planned.
+- Scope and roles: outreach approvals are office shared. What the review
+  surface lists is what an approver can start or discard, so the apply lookup
+  is office wide (the reviewer is still recorded). Starting or discarding a
+  campaign requires ADMIN or MANAGER, the same roles that approve procurement;
+  SALES plans campaigns and reads the pending list but does not activate
+  external sends. Rights are resolved from the current `User` row (active,
+  stored role) at action time, never from the session cookie alone.
+- Decision boundary: A proposal decision is a compare-and-set from `PENDING`.
+  A decision with an external side effect claims the proposal first
+  (`APPLYING`), performs the side effect, then finalizes; a blocked or failed
+  side effect releases the claim. Exactly one concurrent Start or Discard can
+  win, and the loser reports "no longer pending" with no side effect. A
+  review surface passes its proposal `kind` so it can only decide proposals it
+  was built to render. The side effect itself is a compare-and-set from the
+  reviewable state (`DRAFT` for campaigns) that stamps a durable marker
+  (`approvedAt`), so approval can never restart a cancelled, paused, or
+  finished target. A claim must be recoverable across process death: the
+  review surface settles claims older than a bounded window by reading that
+  marker, finalizing the proposal when the side effect happened and releasing
+  the claim when it did not, never by re-running the side effect.
+- Ownership boundary: A claim is identified by the request that made it, not
+  by the `APPLYING` status alone. The claim timestamp (`reviewedAt`) is the
+  ownership token: every release and finalize predicate carries the exact
+  value written at claim time, recovery clears it and a new claim replaces
+  it, so a request whose claim was released or re-taken can no longer touch
+  the proposal. The side effect and the proposal finalize commit in one
+  database transaction, and a finalize that finds the claim gone rolls the
+  side effect back. Rule: a slow request must be unable to complete an
+  external action after recovery or a colleague has already decided the
+  proposal.
+- Existence boundary: Whether an office has pending approvals is itself
+  privileged. Access is resolved from the live `User` row before any
+  office-wide lookup, on every surface including chat commands; a caller
+  without view access is only ever matched against proposals it owns.
+- Non-goal: No separate approval model. Outreach stays on `AgentProposal`
+  review items; procurement stays on the secret-guarded admin route until the
+  procurement workspace grows a review surface for it.
+
 ## 2026-08-31: Supplier state reconciles the workflow receipt with the thread
 
 - Status: accepted
@@ -4708,6 +4790,128 @@ Use this log for durable product and engineering decisions. Do not put every imp
   recipient set, and a changed draft must be planned again.
 - Sender boundary: Every campaign pins one sender account because the sender
   mailbox pool is shared across offices.
+
+## 2026-09-02: Delivery feedback is read from the synced inbox and suppression is office-scoped
+
+- Status: accepted
+- Owner: engineering
+- Decision: Bounces, complaints, auto-replies, and opt-outs are detected
+  deterministically from the inbound messages that Gmail and IMAP sync already
+  store, before any AI classification. Each such message becomes one
+  `EmailDeliveryEvent`; permanent bounces, complaints, and opt-outs also upsert
+  an `EmailSuppression` row keyed by `(officeId, email)`.
+- Tenant boundary: Suppression is a fact about an office's relationship with a
+  recipient, so it is office-scoped even though mailboxes are a shared pool.
+  One office's bounce does not block another office from writing to the same
+  address. Sender pausing is per mailbox because reputation belongs to the
+  mailbox.
+- Outbound boundary: Every automated outbound path (campaign first touch,
+  follow-up, bulk RFQ, supplier nudge) consults the office suppression list
+  before reserving a sender. A suppressed recipient consumes no daily-cap slot
+  and never reaches the provider. New outbound paths must call
+  `listSuppressedEmails` the same way. Unknown stored reasons block (as
+  `MANUAL`) rather than pass.
+- Sender boundary: Two complaints, or at least 5 percent permanent bounces on
+  10 or more sends, within 24 hours pauses the mailbox by setting
+  `sendPausedAt`. A paused mailbox is excluded from the sender pool but keeps
+  syncing inbound mail so replies and further feedback still arrive. Resuming
+  is an operator action.
+- Non-goals: Transient bounces and auto-replies are recorded for visibility but
+  never suppress. Provider webhooks and paid verification remain separate,
+  later decisions.
+
+## 2026-09-02: Delivery feedback is attributed by outbound evidence, and completion is marked last
+
+- Status: accepted
+- Owner: engineering
+- Decision: A delivery report is attributed to the office whose outbound
+  message it concerns. Thread routing (local thread, RFC references, RFQ
+  reference, participant history) decides first. For a report that reaches a
+  shared mailbox unthreaded, the mailbox's own outbound history for the
+  affected addresses is consulted: exactly one office is a unique origin and
+  receives the event and the suppression; several offices, or none, mean the
+  event is parked on the connecting office for manual routing and no
+  office-scoped suppression is written. The connecting office's `officeId` is
+  never a reason to suppress on that office's behalf.
+- Rationale: Suppression is office-scoped precisely so one tenant's history
+  cannot leak into another's outbound behavior. Guessing an owner from mailbox
+  ownership would suppress the wrong tenant, and suppressing every candidate
+  office would reveal that other offices mailed the same address.
+- Sender protection is exempt: mailbox reputation is a mailbox fact, so bounces
+  and complaints count toward pausing regardless of attribution.
+- Completion marker: `EmailMessage.deliveryKind` is set only by
+  `recordDeliveryFeedback`, after event, suppression, and sender protection
+  succeed. `classification = DELIVERY_FEEDBACK` with `deliveryKind = null` is
+  the durable "not finished" signal that the next sync of the same provider
+  message retries. Sync code must not write `deliveryKind` itself.
+- Limits count sendable recipients: suppression is applied before any per-run
+  limit in bulk RFQs, supplier nudges, and outreach campaign first touches.
+  Suppressed rows are reported but never occupy a limit slot, a daily-cap
+  slot, a sender reservation, or a send attempt.
+- Batch results report the ledger after the run: a runner's outstanding or
+  remaining count is re-read once its sends, skips, and released claims are
+  written, never returned from the pre-send plan.
+- The provider call is the suppression boundary: every outbound runner (first
+  touch, follow-up, bulk RFQ, nudge) rechecks the office-scoped suppression for
+  the exact recipient after its sender reservation and immediately before the
+  provider call. Planning-time snapshots only decide what occupies a limit
+  slot; they never authorize delivery. A late hit releases the reservation and
+  settles only the current run's claim with a deterministic reason.
+- Delivery reports are judged per recipient: a DSN's permanence is decided
+  block by block from that recipient's own Status, Diagnostic-Code, or SMTP
+  code before any wording, and transient evidence beats a generic failure
+  subject. Only permanently failed recipients are suppressed; transient
+  recipients on the same report are recorded, never suppressed. Recipient
+  intent must be recipient-authored: `not-spam` feedback is not a complaint,
+  and opt-out wording carried in an inherited `Re:`/`Fwd:` subject or a quoted
+  block is campaign copy, not a request to stop.
+
+## 2026-09-02: Outreach follow-ups are a per-step ledger inside the approved campaign
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Follow-up steps are part of the campaign draft that the operator
+  approves, hashed into the campaign revision, and executed by the same cron
+  batch as first touches. Each `(campaign, record, step)` is one row in
+  `OutreachCampaignFollowUp`, claimed through its unique key and sent with its
+  own sender-pool idempotency key.
+- Approval boundary: No follow-up copy is sent that was not in the reviewed
+  proposal. Changing a step requires planning the campaign again.
+- Sequence boundary: Only a `SENT` step advances a sequence. A reply on the
+  linked local thread, a rejected or unknown delivery, or a suppressed recipient
+  ends it, and the skip reason is recorded rather than retried.
+- Capacity boundary: Follow-ups share the campaign daily cap and the sender-pool
+  reservation with first touches, so adding steps never multiplies mailbox load
+  past the approved cap. Both ledgers are counted together (`SENT` today plus
+  live `QUEUED` claims) under one per-campaign advisory lock, and a run's
+  `limit` is one budget across first touches and follow-ups.
+- Delivery boundary: An `UNKNOWN` delivery with a live reservation is neither
+  success nor failure. The campaign stays `ACTIVE` until the provider confirms
+  `SENT` or the row has been `NOT_FOUND` for 24 hours, at which point the
+  reservation is released and the row is recorded as `REJECTED`. A confirmed
+  recovery records the reservation's `createdAt` as `sentAt`, so sequence timing
+  follows delivery rather than the cron run that noticed it.
+- Claim boundary: A `QUEUED` claim exists only for the run that took it. When a
+  run stops early (campaign paused or cancelled, sender pool empty), it deletes
+  every remaining `QUEUED` row it claimed so first touches and follow-ups can
+  reuse that capacity immediately instead of waiting for the stale-claim window.
+  Only capacity refusals (`POOL_EXHAUSTED`, `POOL_EMPTY`) release a claim this
+  way. Any other sender-pool refusal settles the claim with an outcome: a
+  `DELIVERY_UNCERTAIN` refusal with an open `RESERVED` reservation under the
+  row's idempotency key records `UNKNOWN` linked to that reservation (so the
+  reconciliation path above settles it), and everything else records
+  `REJECTED`. A claimed row never disappears while a reservation for it exists.
+- Reply boundary: A human reply is an `INBOUND` message in the linked thread
+  whose `classification` is not `DELIVERY_FEEDBACK`. `deliveryKind` alone is not
+  the test: it stays null while feedback persistence is unfinished and being
+  retried, and a transient bounce or auto-reply in that state must not end a
+  sequence as `REPLIED`.
+- Pause boundary: The sender-pool reservation is not the last check. The
+  provider's send-account lookup refuses a mailbox whose `sendPausedAt` is set,
+  so a reputation pause that lands between reservation and delivery still stops
+  the email. That refusal is a `REJECTED` outcome (reservation released, row
+  recorded) and never a reauthentication prompt; reconciliation of earlier sends
+  stays available while the mailbox is paused.
 
 ## 2026-09-02: Ops campaign actions reuse human approval
 

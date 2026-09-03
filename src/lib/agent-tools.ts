@@ -64,9 +64,9 @@ import {
   resumeCampaign,
   saveDraftCampaign,
 } from "@/lib/outreach-campaigns";
+import { recipientQualityLines, spotCheckLabel } from "@/lib/batch-review";
 import { outreachCampaignRunNowLimitValid, runOutreachCampaignBatch } from "@/lib/outreach-campaign-send";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
-import { renderCampaignEmail, selectCampaignVariant } from "@/lib/outreach-campaign-copy";
 
 // Tool schemas use the app's provider-neutral input_schema shape. The shared
 // GPT-5.6 adapter converts these to Responses API function tools.
@@ -934,7 +934,7 @@ export const TOOLS = [
   },
   {
     name: "plan_outreach_campaign",
-    description: "Call list_research_lists first, then pass its exact research-list slug to plan an office-scoped campaign. Creates a review proposal only when no blockers remain.",
+    description: "Call list_research_lists first, then pass its exact research-list slug to plan an office-scoped campaign. Creates a review proposal only when no blockers remain; the operator reads the spot-check emails and applies it in the Outreach desk Pending approvals panel, not through chat.",
     input_schema: {
       type: "object",
       properties: {
@@ -953,6 +953,24 @@ export const TOOLS = [
         sender_mailbox: { type: "string", description: "Sender mailbox email address or account id" },
         senderRotation: { type: "boolean", description: "Rotate across enabled shared-pool mailboxes instead of pinning one sender mailbox." },
         sender_display_name: { type: "string", description: "Name recipients will see in the From header. Defaults to the mailbox's own name when omitted." },
+        follow_ups: {
+          type: "array",
+          description: "Up to 3 follow-up steps sent in the same email thread to recipients who have not replied. Each step waits wait_days after the previous send. Bodies support {{company}}, {{country}}, {{email}} and must include an opt-out line.",
+          items: {
+            type: "object",
+            properties: {
+              wait_days: { type: "integer", description: "Days after the previous send, 1 to 30" },
+              subject: { type: "string", description: "Optional. Defaults to Re: the campaign subject" },
+              body: { type: "string" },
+            },
+            required: ["wait_days", "body"],
+          },
+        },
+        exclude_emails: {
+          type: "array",
+          items: { type: "string" },
+          description: "Recipient addresses the operator struck from the audience after reviewing the spot check. Re-plan with the full list each time; exclusions are part of the approved revision.",
+        },
         variants: {
           type: "array",
           description: "Optional A/B variants of subject and body. Each variant needs a short unique key. Variants split the audience evenly. Defaults to the single subject and body when omitted.",
@@ -4265,6 +4283,8 @@ export async function dispatchTool(
           senderAccountId: sender?.id ?? null,
           senderRotation,
           senderDisplayName: typeof input.sender_display_name === "string" ? input.sender_display_name : null,
+          followUps: input.follow_ups,
+          excludeEmails: input.exclude_emails,
           variants: Array.isArray(input.variants)
             ? input.variants.map((variant, index) => {
               const item = variant && typeof variant === "object" ? variant as Record<string, unknown> : {};
@@ -4282,24 +4302,24 @@ export async function dispatchTool(
             })
             : null,
         };
-        const plan = await planOutreachCampaign(campaignInput);
-        const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
+        const initialPlan = await planOutreachCampaign(campaignInput);
+        const campaign = await saveDraftCampaign({ ...campaignInput, emailField: initialPlan.emailField });
         const campaignId = campaign.id;
-        const firstRecipient = plan.sampleRecipients[0];
-        const reviewVariant = firstRecipient
-          ? selectCampaignVariant({
-            campaignId,
-            recordId: firstRecipient.id,
-            variants: plan.variants ?? [],
-          })
-          : null;
-        const reviewEmail = firstRecipient && reviewVariant
-          ? renderCampaignEmail({
-            subject: reviewVariant.subject,
-            bodyTemplate: reviewVariant.bodyTemplate,
-            row: { data: firstRecipient },
-          })
-          : null;
+        // Variant assignment is keyed by campaign id. A first plan for a list
+        // without a draft rendered its spot check before that id existed, so
+        // re-render against the saved draft to show each recipient's real variant.
+        const plan = initialPlan.variants?.length && initialPlan.spotCheckCampaignId !== campaignId
+          ? await planOutreachCampaign({ ...campaignInput, campaignId })
+          : initialPlan;
+        // The proposal shows the planned snapshot, so it approves that revision
+        // only. A list edit between the plan and the saved draft leaves the
+        // draft on a different revision; that is not reviewable as shown.
+        if (campaign.revisionHash !== plan.revisionHash) {
+          return {
+            ok: false,
+            error: "The research list changed while the campaign was being planned. Plan it again to review the current audience.",
+          };
+        }
         let proposalId: string | null = null;
         if (plan.blockers.length === 0) {
           const proposal = await createPendingBulkActionProposal({
@@ -4307,7 +4327,7 @@ export async function dispatchTool(
             userId: ctx.userId,
             kind: "OUTREACH_CAMPAIGN_START",
             action: "START_OUTREACH_CAMPAIGN",
-            actionInput: { campaignId, revisionHash: campaign.revisionHash },
+            actionInput: { campaignId, revisionHash: plan.revisionHash },
             actionLabel: `Start outreach campaign for ${plan.list.name}, ${plan.eligible} recipients`,
             actionDetails: [
               ...(plan.senderRotation
@@ -4320,15 +4340,27 @@ export async function dispatchTool(
               `Filters: ${JSON.stringify(plan.filters)}`,
               ...(plan.variants ?? []).map((variant) => `Variant ${variant.key} subject: ${variant.subject}`),
               `Subject: ${plan.subject}`,
-              `Body (rendered from the first eligible row):\n${reviewEmail?.body ?? plan.renderedBody}`,
-              `Eligible recipients: ${plan.eligible}. The review items below are the first ${Math.min(plan.eligible, plan.sampleRecipients.length)} of ${plan.eligible} eligible recipients.`,
+              `Body (rendered from the first eligible row):\n${plan.renderedBody}`,
+              `Eligible recipients: ${plan.eligible}. Approval covers all ${plan.eligible}; the ${plan.spotCheck.length} review items below are a spot check spread across the audience, each with the exact email that recipient gets.`,
+              ...recipientQualityLines(plan.audienceQuality),
+              ...(plan.filters.excludeEmails?.length ? [`Excluded by reviewer: ${plan.filters.excludeEmails.join(", ")}`] : []),
+              ...(plan.followUps.length
+                ? [
+                  `Follow-ups: ${plan.followUps.length} step(s) in the same thread, skipped once a recipient replies or the address bounces.`,
+                  ...plan.followUps.map((step, index) => `Follow-up ${index + 1} (${step.waitDays} days after the previous send):\n${step.subject ? `Subject: ${step.subject}\n` : ""}${step.bodyTemplate}`),
+                ]
+                : ["Follow-ups: none."]),
               "Sending starts on the next batch after approval.",
             ],
-            reviewItems: plan.sampleRecipients.map((recipient) => ({
+            reviewItems: plan.spotCheck.map((recipient) => ({
               id: recipient.id,
               title: recipient.email,
-              meta: [recipient.company, recipient.country].filter(Boolean).join(" · "),
-              detail: "Eligible research-list row.",
+              meta: [
+                spotCheckLabel(recipient, plan.eligible),
+                recipient.company,
+                recipient.country,
+              ].filter(Boolean).join(" · "),
+              detail: `Subject: ${recipient.subject}\n${recipient.body}`,
             })),
             sourceType: "AGENT_TOOL",
             sourcePreview: `Plan outreach campaign for ${plan.list.name}.`,
@@ -4340,8 +4372,19 @@ export async function dispatchTool(
           ok: true,
           result: {
             ...plan,
+            // Rendered bodies live on the proposal card; the model only needs
+            // who is in the spot check and where in the audience they sit.
+            spotCheck: plan.spotCheck.map((item) => ({
+              id: item.id,
+              email: item.email,
+              company: item.company,
+              country: item.country,
+              position: item.position,
+              pick: item.pick,
+            })),
             campaign_id: campaignId,
             proposal_id: proposalId,
+            approval_surface: proposalId ? "Outreach desk, Pending approvals panel" : null,
             sender_mailbox: plan.senderEmail,
           },
         };

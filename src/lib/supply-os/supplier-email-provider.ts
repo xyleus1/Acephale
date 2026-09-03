@@ -70,6 +70,13 @@ function cleanHeader(value: string) {
   return stripEmDashes(value).replace(/[\r\n]+/g, " ").trim();
 }
 
+export const SENDER_PAUSED_ERROR = "The selected Gmail sender is paused by sender protection.";
+
+// Sender-side policy refusals (disabled, paused) are not credential problems.
+function senderRefusalNeedsReauth(message: string) {
+  return !message.includes("disabled for sending") && message !== SENDER_PAUSED_ERROR;
+}
+
 async function gmailAccount(_officeId: string, accountId: string, expectedEmail: string) {
   const account = await prisma.emailAccount.findFirst({
     where: { id: accountId, provider: "GMAIL", isActive: true },
@@ -85,10 +92,11 @@ async function gmailAccount(_officeId: string, accountId: string, expectedEmail:
 async function gmailSendAccount(_officeId: string, accountId: string, expectedEmail: string) {
   const account = await prisma.emailAccount.findFirst({
     where: { id: accountId, provider: "GMAIL", isActive: true },
-    select: { id: true, email: true, sendEnabled: true },
+    select: { id: true, email: true, sendEnabled: true, sendPausedAt: true },
   });
   if (!account) throw new Error("The selected Gmail sender is missing or inactive.");
   if (!account.sendEnabled) throw new Error("The selected Gmail sender is disabled for sending.");
+  if (account.sendPausedAt) throw new Error(SENDER_PAUSED_ERROR);
   if (account.email.trim().toLowerCase() !== expectedEmail.trim().toLowerCase()) {
     throw new Error("The connected Gmail sender changed after approval. Save and approve a new email draft.");
   }
@@ -131,7 +139,7 @@ export function createGmailSupplierEmailProvider(
       return {
         state: "REJECTED",
         error: message,
-        ...(message.includes("disabled for sending") ? {} : { needsReauth: true }),
+        ...(senderRefusalNeedsReauth(message) ? { needsReauth: true } : {}),
       };
     }
 
@@ -256,12 +264,14 @@ async function gmailAppPasswordAccount(input: {
       displayName: true,
       credentialSecret: true,
       sendEnabled: true,
+      sendPausedAt: true,
     },
   });
   if (!account) throw new Error("The selected Gmail app-password sender is missing or inactive.");
   if (input.requireSendEnabled && !account.sendEnabled) {
     throw new Error("The selected Gmail app-password sender is disabled for sending.");
   }
+  if (input.requireSendEnabled && account.sendPausedAt) throw new Error(SENDER_PAUSED_ERROR);
   if (account.email.trim().toLowerCase() !== input.expectedEmail.trim().toLowerCase()) {
     throw new Error("The connected Gmail sender changed after approval. Save and approve a new email draft.");
   }

@@ -215,12 +215,16 @@ export function campaignRowEligible(input: {
   emailField: string;
   countryField?: string;
   segmentField?: string;
+  excludeEmails?: readonly string[];
 }) {
   const data = rowData(input.row);
   const status = textValue(input.row.status || data.status).toLowerCase();
   if (!input.statuses.map((value) => value.toLowerCase()).includes(status)) return false;
   const email = textValue(data[input.emailField]);
   if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email)) return false;
+  if (input.excludeEmails?.length && normalizeCampaignExcludeEmails(input.excludeEmails).includes(email.toLowerCase())) {
+    return false;
+  }
   const countries = (input.countries ?? []).map((value) => value.toLowerCase());
   if (countries.length && !countries.includes(textValue(data[input.countryField ?? "country"]).toLowerCase())) {
     return false;
@@ -230,6 +234,18 @@ export function campaignRowEligible(input: {
     return false;
   }
   return true;
+}
+
+// Reviewer exclusions travel inside the campaign filters, so they take part in
+// the revision hash and a greenlight after an exclusion cannot reach the row.
+export function normalizeCampaignExcludeEmails(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(item)),
+  )].sort();
 }
 
 export function campaignSampleRecipients(input: {
@@ -324,6 +340,159 @@ export function campaignSnapshotOutstandingRecordIds(input: {
   });
 }
 
+export const CAMPAIGN_FOLLOW_UP_MAX_STEPS = 3;
+export const CAMPAIGN_FOLLOW_UP_MIN_WAIT_DAYS = 1;
+export const CAMPAIGN_FOLLOW_UP_MAX_WAIT_DAYS = 30;
+export const CAMPAIGN_FOLLOW_UP_STATUSES = ["QUEUED", "SENT", "REJECTED", "UNKNOWN", "SKIPPED"] as const;
+export type CampaignFollowUpStatus = (typeof CAMPAIGN_FOLLOW_UP_STATUSES)[number];
+export const CAMPAIGN_FOLLOW_UP_SKIP_REASONS = ["REPLIED", "BOUNCED", "SUPPRESSED"] as const;
+export type CampaignFollowUpSkipReason = (typeof CAMPAIGN_FOLLOW_UP_SKIP_REASONS)[number];
+
+export type CampaignFollowUpStep = {
+  waitDays: number;
+  subject: string | null;
+  bodyTemplate: string;
+};
+
+export function normalizeCampaignFollowUps(value: unknown): CampaignFollowUpStep[] {
+  if (!Array.isArray(value)) return [];
+  const steps: CampaignFollowUpStep[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const object = item as Record<string, unknown>;
+    const rawWait = object.waitDays ?? object.wait_days;
+    const waitDays = typeof rawWait === "number" ? rawWait : Number(rawWait);
+    const rawBody = object.bodyTemplate ?? object.body_template ?? object.body;
+    const bodyTemplate = typeof rawBody === "string" ? stripEmDashes(rawBody).trim() : "";
+    const rawSubject = object.subject;
+    const subject = typeof rawSubject === "string" ? stripEmDashes(rawSubject).replace(/[\r\n\t]+/g, " ").trim() : "";
+    if (!Number.isInteger(waitDays) || !bodyTemplate) continue;
+    steps.push({ waitDays, subject: subject || null, bodyTemplate });
+  }
+  return steps;
+}
+
+export function campaignFollowUpBlockers(steps: readonly CampaignFollowUpStep[]) {
+  const blockers: string[] = [];
+  if (steps.length > CAMPAIGN_FOLLOW_UP_MAX_STEPS) {
+    blockers.push(`At most ${CAMPAIGN_FOLLOW_UP_MAX_STEPS} follow-up steps are allowed.`);
+  }
+  steps.forEach((step, index) => {
+    const label = `Follow-up ${index + 1}`;
+    if (step.waitDays < CAMPAIGN_FOLLOW_UP_MIN_WAIT_DAYS || step.waitDays > CAMPAIGN_FOLLOW_UP_MAX_WAIT_DAYS) {
+      blockers.push(`${label} must wait between ${CAMPAIGN_FOLLOW_UP_MIN_WAIT_DAYS} and ${CAMPAIGN_FOLLOW_UP_MAX_WAIT_DAYS} days.`);
+    }
+    if (!step.bodyTemplate.trim()) blockers.push(`${label} body is required.`);
+    if (!/reply\s+(stop|no)|unsubscrib|opt out|opt-out/i.test(step.bodyTemplate)) {
+      blockers.push(`${label} body must contain an opt-out line.`);
+    }
+  });
+  return blockers;
+}
+
+export function campaignFollowUpSubject(step: CampaignFollowUpStep, initialSubject: string) {
+  const base = step.subject?.trim() || initialSubject.trim();
+  if (step.subject?.trim()) return base;
+  return /^re:\s/i.test(base) ? base : `Re: ${base}`;
+}
+
+export function campaignFollowUpDueAt(previousSentAt: Date, waitDays: number) {
+  return new Date(previousSentAt.getTime() + waitDays * 86_400_000);
+}
+
+export type CampaignFollowUpSequenceSend = {
+  recordId: string;
+  recipient: string;
+  sentAt: Date | null;
+  localThreadId: string | null;
+  providerThreadId: string | null;
+};
+
+export type CampaignFollowUpSequenceRow = {
+  recordId: string;
+  step: number;
+  status: string;
+  sentAt: Date | null;
+};
+
+export type CampaignFollowUpCandidate = {
+  recordId: string;
+  recipient: string;
+  step: number;
+  dueAt: Date;
+  previousSentAt: Date;
+  localThreadId: string | null;
+  providerThreadId: string | null;
+};
+
+export type CampaignFollowUpSkip = {
+  recordId: string;
+  recipient: string;
+  step: number;
+  reason: CampaignFollowUpSkipReason;
+};
+
+export function planCampaignFollowUps(input: {
+  steps: readonly CampaignFollowUpStep[];
+  sends: readonly CampaignFollowUpSequenceSend[];
+  followUps: readonly CampaignFollowUpSequenceRow[];
+  repliedThreadIds: ReadonlySet<string>;
+  suppressedRecipients?: ReadonlySet<string>;
+  bouncedRecipients?: ReadonlySet<string>;
+  now: Date;
+}): { due: CampaignFollowUpCandidate[]; skips: CampaignFollowUpSkip[]; outstanding: number } {
+  const due: CampaignFollowUpCandidate[] = [];
+  const skips: CampaignFollowUpSkip[] = [];
+  let outstanding = 0;
+  if (!input.steps.length) return { due, skips, outstanding };
+  const rowsByRecord = new Map<string, CampaignFollowUpSequenceRow[]>();
+  for (const row of input.followUps) {
+    const list = rowsByRecord.get(row.recordId) ?? [];
+    list.push(row);
+    rowsByRecord.set(row.recordId, list);
+  }
+  const ordered = [...input.sends]
+    .filter((send) => send.sentAt)
+    .sort((a, b) => (a.sentAt as Date).getTime() - (b.sentAt as Date).getTime() || a.recordId.localeCompare(b.recordId));
+  for (const send of ordered) {
+    const rows = (rowsByRecord.get(send.recordId) ?? []).sort((a, b) => a.step - b.step);
+    if (rows.some((row) => row.status === "SKIPPED" || row.status === "REJECTED" || row.status === "UNKNOWN")) continue;
+    if (rows.some((row) => row.status === "QUEUED")) {
+      outstanding += 1;
+      continue;
+    }
+    const sent = rows.filter((row) => row.status === "SENT" && row.sentAt);
+    const nextStep = sent.length + 1;
+    if (nextStep > input.steps.length) continue;
+    const recipient = send.recipient.trim().toLowerCase();
+    const skipReason: CampaignFollowUpSkipReason | null = input.suppressedRecipients?.has(recipient)
+      ? "SUPPRESSED"
+      : input.bouncedRecipients?.has(recipient)
+        ? "BOUNCED"
+        : send.localThreadId && input.repliedThreadIds.has(send.localThreadId)
+          ? "REPLIED"
+          : null;
+    if (skipReason) {
+      skips.push({ recordId: send.recordId, recipient, step: nextStep, reason: skipReason });
+      continue;
+    }
+    outstanding += 1;
+    const previousSentAt = sent.at(-1)?.sentAt ?? (send.sentAt as Date);
+    const dueAt = campaignFollowUpDueAt(previousSentAt, input.steps[nextStep - 1].waitDays);
+    if (dueAt.getTime() > input.now.getTime()) continue;
+    due.push({
+      recordId: send.recordId,
+      recipient,
+      step: nextStep,
+      dueAt,
+      previousSentAt,
+      localThreadId: send.localThreadId,
+      providerThreadId: send.providerThreadId,
+    });
+  }
+  return { due, skips, outstanding };
+}
+
 export function campaignRevisionHash(input: {
   subject: string;
   bodyTemplate: string;
@@ -337,6 +506,7 @@ export function campaignRevisionHash(input: {
   variants: readonly CampaignVariant[] | null;
   audienceRecordIds: readonly string[];
   audiencePersonalization?: Record<string, CampaignPersonalization> | null;
+  followUps?: readonly CampaignFollowUpStep[] | null;
 }) {
   const personalization = input.audiencePersonalization
     && typeof input.audiencePersonalization === "object"
@@ -360,6 +530,15 @@ export function campaignRevisionHash(input: {
     variants,
     audienceRecordIds: [...input.audienceRecordIds].sort(),
     audiencePersonalization: sortedPersonalization,
+    ...(input.followUps?.length
+      ? {
+        followUps: input.followUps.map((step) => ({
+          waitDays: step.waitDays,
+          subject: step.subject,
+          bodyTemplate: step.bodyTemplate,
+        })),
+      }
+      : {}),
   })).digest("hex");
 }
 
@@ -410,6 +589,12 @@ export function campaignDefaultName(base: string, takenNames: ReadonlySet<string
 
 export function campaignSendCountsAsAttempt(status: string) {
   return status === "SENT" || status === "REJECTED" || status === "UNKNOWN";
+}
+
+/** Approval may only start a draft; every other status has already left the reviewable state. */
+export function campaignStatusBlocker(status: string): string | null {
+  if (status === "DRAFT") return null;
+  return `This campaign is ${status.toLowerCase()}, not a draft, so approval cannot start it. Plan a new campaign.`;
 }
 
 export function campaignBlockers(input: {

@@ -162,6 +162,60 @@ assert.doesNotMatch(
   /allowPooledSender|reserveEmailSender\(\{\s*officeId[^}]*\}\)\s*;\s*\/\/ any/,
   "Nothing in this path may quietly switch the supplier to a different sender.",
 );
+// Suppression is decided inside the plan, before the run limit counts a
+// supplier, so suppressed rows at the front of the list never starve the
+// eligible ones behind them.
+const planBlock = module.slice(
+  module.indexOf("export async function listSupplierNudgeTargets"),
+  module.indexOf("async function recordSentNudge"),
+);
+const planSuppressionIndex = planBlock.indexOf("listSuppressedEmails(args.order.officeId");
+assert.ok(planSuppressionIndex >= 0, "The plan checks the office's suppression list.");
+assert.ok(
+  planSuppressionIndex < planBlock.indexOf("targets.push({"),
+  "Suppression is known before any supplier is counted against the limit.",
+);
+const loopBlock = planBlock.slice(planBlock.indexOf("for (const row of contacted)"));
+assert.ok(
+  loopBlock.indexOf("suppressionSkipMessage(suppressionReason)") < loopBlock.indexOf("targets.push({"),
+  "A suppressed supplier is skipped before it would occupy a target slot.",
+);
+assert.match(
+  loopBlock,
+  /reason: suppressionSkipMessage\(suppressionReason\)/,
+  "A suppressed supplier shows up in the skipped list with the deterministic reason.",
+);
+const runBlock = module.slice(module.indexOf("export async function runProcurementSupplierNudges"));
+assert.ok(
+  runBlock.indexOf("listSupplierNudgeTargets({") < runBlock.indexOf("reserveEmailSender("),
+  "The plan, and with it suppression, is settled before any sender is reserved.",
+);
+assert.doesNotMatch(
+  runBlock,
+  /planned\.targets\.filter/,
+  "The run does not re-filter a limited plan, which would let suppressed rows consume the limit.",
+);
+// A suppression written between planning and sending, including while the
+// sender was being reserved, must still stop the send.
+const sendLoop = runBlock.slice(runBlock.indexOf("for (const target of targets)"));
+const lateCheck = sendLoop.indexOf("listSuppressedEmails(order.officeId, [target.recipient])");
+const nudgeProviderSend = sendLoop.indexOf("provider.send(");
+assert.ok(lateCheck >= 0, "Each target is rechecked against the office suppression list inside the send loop.");
+assert.ok(
+  lateCheck > sendLoop.indexOf("reserveEmailSender(") && lateCheck < nudgeProviderSend,
+  "The recheck happens after the sender is reserved and before the provider call.",
+);
+const lateBlock = sendLoop.slice(lateCheck, nudgeProviderSend);
+assert.match(
+  lateBlock,
+  /releaseEmailSenderReservation\(\{ officeId: order\.officeId, reservationId: reservation\.reservationId \}\)/,
+  "A late suppression releases the reservation it just took.",
+);
+assert.match(
+  lateBlock,
+  /reason: suppressionSkipMessage\(lateSuppression\)/,
+  "A late suppression is recorded as a deterministic skip.",
+);
 
 assert.match(
   route,

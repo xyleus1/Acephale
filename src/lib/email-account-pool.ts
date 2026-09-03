@@ -15,7 +15,11 @@ export const SHARED_MAILBOX_POOL_FILTER = {
   ...CONNECTED_GMAIL_ACCOUNT_FILTER,
 } satisfies Prisma.EmailAccountWhereInput;
 
+// A mailbox paused by sender protection (bounce or complaint spike) stays in
+// the mailbox pool for inbound sync but leaves the sender pool until an
+// operator resumes it.
 export const SHARED_SENDER_POOL_FILTER = {
   ...SHARED_MAILBOX_POOL_FILTER,
   sendEnabled: true,
+  sendPausedAt: null,
 } satisfies Prisma.EmailAccountWhereInput;

@@ -11,6 +11,7 @@ import { buildReviewedFieldChanges, type ReviewedFieldChange } from "@/lib/agent
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { CLOSED_INQUIRY_STATUSES } from "@/lib/inquiry-status";
 import { activateCampaign } from "@/lib/outreach-campaigns";
+import { claimOutreachProposal, finalizeOutreachClaim, releaseOutreachClaim } from "@/lib/outreach-proposal-review";
 
 export type AgentProposalApplyResult = {
   ok: boolean;
@@ -26,7 +27,13 @@ type ApplyJobProposalInput = {
   requestedId?: string;
   proposalId?: string;
   acceptedFields?: string[] | null;
+  /** Review any pending proposal in the office, not only the caller's own; userId then records the reviewer. */
+  officeWide?: boolean;
+  /** Only match proposals of this kind, so a surface built for one approval type cannot decide another. */
+  kind?: string;
 };
+
+export const NO_LONGER_PENDING_MESSAGE = "This proposal is no longer pending. Nothing changed.";
 
 type JobActionProposalType =
   | "ADD_MILESTONE"
@@ -51,7 +58,8 @@ function proposalWhere(input: ApplyJobProposalInput): Prisma.AgentProposalWhereI
     officeId: input.officeId,
     status: "PENDING",
   };
-  if (input.userId) where.userId = input.userId;
+  if (input.userId && !input.officeWide) where.userId = input.userId;
+  if (input.kind) where.kind = input.kind;
   if (input.proposalId) {
     where.id = input.proposalId;
   } else if (input.requestedId) {
@@ -698,13 +706,26 @@ async function applyPendingBulkActionProposal(input: ApplyJobProposalInput, prop
   } else if (action === "START_OUTREACH_CAMPAIGN") {
     const campaignId = typeof actionInput.campaignId === "string" ? actionInput.campaignId : "";
     if (!campaignId) return { ok: false, proposalId: proposal.id, message: "Outreach campaign proposal has no campaign id. Nothing changed." };
-    const activation = await activateCampaign({
-      officeId: input.officeId,
-      campaignId,
-      userId: input.userId ?? null,
-      expectedRevisionHash: typeof actionInput.revisionHash === "string" ? actionInput.revisionHash : undefined,
-    });
+    const claim = { proposalId: proposal.id, officeId: input.officeId, claimedAt: new Date() };
+    const claimed = await claimOutreachProposal(prisma, claim, input.userId ?? null);
+    if (!claimed) return { ok: false, proposalId: proposal.id, message: NO_LONGER_PENDING_MESSAGE };
+    const activationNote = `Activated outreach campaign ${campaignId.slice(0, 8)}. Sending starts on the next batch.`;
+    note = activationNote;
+    let activation: Awaited<ReturnType<typeof activateCampaign>>;
+    try {
+      activation = await activateCampaign({
+        officeId: input.officeId,
+        campaignId,
+        userId: input.userId ?? null,
+        expectedRevisionHash: typeof actionInput.revisionHash === "string" ? actionInput.revisionHash : undefined,
+        finalize: (tx) => finalizeOutreachClaim(tx, claim, { userId: input.userId ?? null, note: activationNote }),
+      });
+    } catch (error) {
+      await releaseOutreachClaim(prisma, claim);
+      throw error;
+    }
     if (!activation.activated) {
+      await releaseOutreachClaim(prisma, claim);
       return {
         ok: false,
         proposalId: proposal.id,
@@ -712,22 +733,23 @@ async function applyPendingBulkActionProposal(input: ApplyJobProposalInput, prop
       };
     }
     affectedRecords = [`campaign:${campaignId}`];
-    note = `Activated outreach campaign ${campaignId.slice(0, 8)}. Sending starts on the next batch.`;
   } else {
     return { ok: false, proposalId: proposal.id, message: `Unsupported bulk proposal "${action}". Nothing changed.` };
   }
 
-  await prisma.agentProposal.updateMany({
-    where: { id: proposal.id, officeId: input.officeId },
-    data: {
-      status: "APPLIED",
-      appliedAt: new Date(),
-      reviewedByUserId: input.userId ?? null,
-      reviewedAt: new Date(),
-      reviewDecision: "APPLY_BULK_ACTION",
-      reviewNote: note,
-    },
-  });
+  if (action !== "START_OUTREACH_CAMPAIGN") {
+    await prisma.agentProposal.updateMany({
+      where: { id: proposal.id, officeId: input.officeId, status: "PENDING" },
+      data: {
+        status: "APPLIED",
+        appliedAt: new Date(),
+        reviewedByUserId: input.userId ?? null,
+        reviewedAt: new Date(),
+        reviewDecision: "APPLY_BULK_ACTION",
+        reviewNote: note,
+      },
+    });
+  }
   await recordProposalReviewEvent({
     officeId: input.officeId,
     userId: input.userId,
@@ -1089,12 +1111,14 @@ export async function discardPendingAgentProposal(input: {
   proposalId: string;
   jobId?: string | null;
   inquiryId?: string | null;
+  kind?: string;
 }) {
   const proposal = await prisma.agentProposal.findFirst({
     where: {
       id: input.proposalId,
       officeId: input.officeId,
       status: "PENDING",
+      ...(input.kind ? { kind: input.kind } : {}),
     },
     select: { id: true, jobId: true, inquiryId: true, kind: true, sourceType: true, sourcePreview: true, payload: true },
   });
@@ -1103,8 +1127,8 @@ export async function discardPendingAgentProposal(input: {
   const proposalPayload = asRecord(proposal.payload);
   const storedDecisionImpact = asRecord(proposalPayload.decisionImpact);
   const reviewNote = "Discarded by reviewer.";
-  await prisma.agentProposal.updateMany({
-    where: { id: proposal.id, officeId: input.officeId },
+  const discarded = await prisma.agentProposal.updateMany({
+    where: { id: proposal.id, officeId: input.officeId, status: "PENDING" },
     data: {
       status: "DISCARDED",
       reviewedByUserId: input.userId ?? null,
@@ -1113,6 +1137,7 @@ export async function discardPendingAgentProposal(input: {
       reviewNote,
     },
   });
+  if (discarded.count === 0) return null;
   await recordProposalReviewEvent({
     officeId: input.officeId,
     userId: input.userId,

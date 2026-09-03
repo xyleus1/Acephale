@@ -15,6 +15,15 @@ import {
   type CampaignPersonalization,
 } from "@/lib/outreach-campaign-copy";
 import {
+  lockOutreachCampaignClaims,
+  outreachCampaignRemainingCapacity,
+  outreachUnknownDeliveryExpired,
+  OUTREACH_UNKNOWN_DELIVERY_TIMEOUT_HOURS,
+  runOutreachCampaignFollowUps,
+  settleOutreachReservationFailure,
+  type CampaignFollowUpBatchResult,
+} from "@/lib/outreach-campaign-follow-ups";
+import {
   completeCampaignIfDone,
 } from "@/lib/outreach-campaigns";
 import {
@@ -23,6 +32,8 @@ import {
 } from "@/lib/email-sender-pool";
 import { logEmailTouch } from "@/lib/crm/email-touch";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
+import { listSuppressedEmails } from "@/lib/email-delivery-events";
+import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { prisma } from "@/lib/prisma";
 import {
   gmailSupplierEmailProvider,
@@ -59,6 +70,7 @@ export type CampaignBatchResult = {
   poolExhausted: boolean;
   blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER" | "NO_AUDIENCE";
   outcomes: CampaignBatchSend[];
+  followUps?: CampaignFollowUpBatchResult;
 };
 
 export function outreachCampaignBatchLimit(limit: number | undefined, dailyCap: number, sentToday: number) {
@@ -221,6 +233,7 @@ type LoadedCampaign = {
   audienceRecordIds: Prisma.JsonValue | null;
   audiencePersonalization: Prisma.JsonValue | null;
   revisionHash: string | null;
+  followUps?: Prisma.JsonValue | null;
 };
 
 function jsonStrings(value: Prisma.JsonValue) {
@@ -426,6 +439,7 @@ async function reconcileUnknownCampaignSends(
   campaign: LoadedCampaign,
   provider: SupplierEmailProvider,
   now: Date,
+  release: typeof releaseEmailSenderReservation,
 ) {
   const unknowns = await db.outreachCampaignSend.findMany({
     where: {
@@ -440,6 +454,7 @@ async function reconcileUnknownCampaignSends(
       recipient: true,
       senderEmail: true,
       reservationId: true,
+      updatedAt: true,
     },
     orderBy: { createdAt: "asc" },
     take: 20,
@@ -448,7 +463,7 @@ async function reconcileUnknownCampaignSends(
     if (!send.reservationId || !send.senderEmail) continue;
     const reservation = await db.emailSenderReservation.findUnique({
       where: { id: send.reservationId, officeId: campaign.officeId, status: "RESERVED" },
-      select: { accountId: true },
+      select: { accountId: true, createdAt: true },
     });
     if (!reservation) continue;
     const receipt = await provider.reconcile({
@@ -457,6 +472,14 @@ async function reconcileUnknownCampaignSends(
       senderEmail: send.senderEmail,
       rfcMessageId: outreachCampaignRfcMessageId(campaign.id, send.recordId),
     });
+    if (receipt.state === "NOT_FOUND" && outreachUnknownDeliveryExpired(send.updatedAt, now)) {
+      await release({ officeId: campaign.officeId, reservationId: send.reservationId });
+      await db.outreachCampaignSend.updateMany({
+        where: { id: send.id, officeId: campaign.officeId, status: "UNKNOWN" },
+        data: { status: "REJECTED", error: `Delivery was not confirmed within ${OUTREACH_UNKNOWN_DELIVERY_TIMEOUT_HOURS} hours.` },
+      });
+      continue;
+    }
     if (receipt.state !== "SENT") continue;
     const personalization = jsonPersonalization(campaign.audiencePersonalization)[send.recordId];
     if (!personalization) continue;
@@ -484,10 +507,92 @@ async function reconcileUnknownCampaignSends(
       rfcMessageId: outreachCampaignRfcMessageId(campaign.id, send.recordId),
       providerMessageId: receipt.providerMessageId,
       providerThreadId: receipt.providerThreadId,
-      sentAt: now,
+      sentAt: reservation.createdAt,
       variantKey: variant?.key ?? null,
     });
   }
+}
+
+function campaignRowRecipient(campaign: LoadedCampaign, row: CampaignBatchRow) {
+  return String(row.data[campaign.emailField] ?? "").trim().toLowerCase();
+}
+
+// Suppressed recipients (bounced, complained, opted out, or manually blocked
+// for this office) are recorded as REJECTED before any claim, so they never
+// take a daily-cap slot or reach the sender pool. Returns the sendable rows.
+async function rejectSuppressedCampaignRows(
+  db: CampaignDb,
+  campaign: LoadedCampaign,
+  rows: CampaignBatchRow[],
+  output: CampaignBatchResult,
+) {
+  const suppressed = await listSuppressedEmails(
+    campaign.officeId,
+    rows.map((row) => campaignRowRecipient(campaign, row)),
+    db,
+  );
+  if (!suppressed.size) return rows;
+  const blocked = rows.filter((row) => suppressed.has(campaignRowRecipient(campaign, row)));
+  if (!blocked.length) return rows;
+  const existing = await db.outreachCampaignSend.findMany({
+    where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: { in: blocked.map((row) => row.id) } },
+    select: { recordId: true },
+  });
+  const handled = new Set(existing.map((row) => row.recordId));
+  const fresh = blocked.filter((row) => !handled.has(row.id));
+  if (fresh.length) {
+    await db.outreachCampaignSend.createMany({
+      data: fresh.map((row) => {
+        const recipient = campaignRowRecipient(campaign, row);
+        const reason = suppressed.get(recipient);
+        return {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          status: "REJECTED",
+          error: reason ? suppressionSkipMessage(reason) : suppressionSkipMessage("MANUAL"),
+        };
+      }),
+      skipDuplicates: true,
+    });
+    for (const row of fresh) {
+      const recipient = campaignRowRecipient(campaign, row);
+      const reason = suppressed.get(recipient);
+      output.rejected += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: row.id,
+        recipient,
+        state: "REJECTED",
+        senderEmail: null,
+        variantKey: null,
+        error: reason ? suppressionSkipMessage(reason) : suppressionSkipMessage("MANUAL"),
+      });
+    }
+  }
+  const blockedIds = new Set(blocked.map((row) => row.id));
+  return rows.filter((row) => !blockedIds.has(row.id));
+}
+
+// Walks the unhandled audience in run-sized chunks until `limit` sendable rows
+// are found, so suppressed rows are recorded as REJECTED without occupying a
+// slot of the run budget or the daily cap.
+async function selectSendableCampaignRows(
+  db: CampaignDb,
+  campaign: LoadedCampaign,
+  candidates: CampaignBatchRow[],
+  limit: number,
+  output: CampaignBatchResult,
+) {
+  const sendable: CampaignBatchRow[] = [];
+  const chunk = Math.max(1, limit);
+  for (let offset = 0; offset < candidates.length && sendable.length < limit; offset += chunk) {
+    const page = candidates.slice(offset, offset + chunk);
+    const rows = await rejectSuppressedCampaignRows(db, campaign, page, output);
+    sendable.push(...rows.slice(0, limit - sendable.length));
+  }
+  return sendable;
 }
 
 async function claimOutreachCampaignRows(
@@ -506,21 +611,13 @@ async function claimOutreachCampaignRows(
         createdAt: { lt: outreachCampaignReclaimBefore(now) },
       },
     });
+    await lockOutreachCampaignClaims(tx, campaign.id);
     const sends = await tx.outreachCampaignSend.findMany({
       where: { officeId: campaign.officeId, campaignId: campaign.id },
       select: { recordId: true, status: true },
     });
-    const { start, end } = utcDayBounds(now);
-    const sentToday = await tx.outreachCampaignSend.count({
-      where: {
-        officeId: campaign.officeId,
-        campaignId: campaign.id,
-        status: "SENT",
-        sentAt: { gte: start, lt: end },
-      },
-    });
-    const queuedToday = sends.filter((send) => send.status === "QUEUED").length;
-    const claimLimit = outreachCampaignClaimLimit(requestedLimit, campaign.dailyCap, sentToday, queuedToday);
+    const remaining = await outreachCampaignRemainingCapacity(tx, campaign, now);
+    const claimLimit = Math.max(0, Math.min(requestedLimit ?? campaign.dailyCap, remaining));
     const handled = new Set(sends.map((send) => send.recordId));
     const contacted = await tx.outreachCampaignSend.findMany({
       where: outreachCampaignContactedWhere({
@@ -606,6 +703,7 @@ export async function runOutreachCampaignBatch(input: {
       audienceRecordIds: true,
       audiencePersonalization: true,
       revisionHash: true,
+      followUps: true,
     },
   }) as LoadedCampaign | null;
   if (!campaign) throw new Error("Outreach campaign not found.");
@@ -623,7 +721,9 @@ export async function runOutreachCampaignBatch(input: {
   }
   if (!campaign.senderAccountId && !campaign.senderRotation) return { ...output, blocked: "NO_SENDER" };
   const sendProvider = input.provider ?? gmailSupplierEmailProvider;
-  await reconcileUnknownCampaignSends(db, campaign, sendProvider, now);
+  const reserveSender = input.reserve ?? reserveEmailSender;
+  const releaseReservation = input.release ?? releaseEmailSenderReservation;
+  await reconcileUnknownCampaignSends(db, campaign, sendProvider, now, releaseReservation);
   const records = await db.researchRecord.findMany({
     where: {
       officeId: input.officeId,
@@ -650,28 +750,65 @@ export async function runOutreachCampaignBatch(input: {
     emailField: campaign.emailField,
     companyField: campaign.companyField,
     countryField: campaign.countryField,
-    limit: undefined,
   });
-  const claimedRows = await claimOutreachCampaignRows(db, campaign, rows, input.limit, now);
+  const runFollowUps = (consumed: number) => runOutreachCampaignFollowUps({
+    db,
+    campaign: {
+      id: campaign.id,
+      officeId: campaign.officeId,
+      subject: campaign.subject,
+      senderAccountId: campaign.senderAccountId,
+      senderDisplayName: campaign.senderDisplayName,
+      dailyCap: campaign.dailyCap,
+      followUps: campaign.followUps ?? null,
+      variants: campaign.variants,
+      audiencePersonalization,
+    },
+    provider: sendProvider,
+    now,
+    limit: input.limit === undefined ? undefined : Math.max(0, input.limit - consumed),
+    pauseMs: input.pauseMs,
+    reserve: reserveSender,
+    release: releaseReservation,
+    statusAllowsSend: outreachCampaignStatusAllowsSend,
+  });
+  const sendableRows = await selectSendableCampaignRows(db, campaign, rows, input.limit ?? campaign.dailyCap, output);
+  const claimedRows = await claimOutreachCampaignRows(db, campaign, sendableRows, input.limit, now);
   if (claimedRows.length === 0) {
     const { start, end } = utcDayBounds(now);
     const sentToday = await db.outreachCampaignSend.count({
       where: { officeId: input.officeId, campaignId: campaign.id, status: "SENT", sentAt: { gte: start, lt: end } },
     });
+    output.followUps = await runFollowUps(0);
     await (input.complete ?? completeCampaignIfDone)({
       officeId: input.officeId,
       campaignId: input.campaignId,
     });
     return { ...output, blocked: sentToday >= campaign.dailyCap ? "DAILY_CAP" : undefined };
   }
-  const reserveSender = input.reserve ?? reserveEmailSender;
-  const releaseReservation = input.release ?? releaseEmailSenderReservation;
-  for (const row of claimedRows) {
+  // Claims this run will no longer attempt go back to the ledger immediately
+  // instead of holding cap capacity until the reclaim window passes.
+  const releaseClaimsFrom = async (index: number) => {
+    const recordIds = claimedRows.slice(index).map((row) => row.id);
+    if (!recordIds.length) return;
+    await db.outreachCampaignSend.deleteMany({
+      where: {
+        officeId: input.officeId,
+        campaignId: campaign.id,
+        recordId: { in: recordIds },
+        status: "QUEUED",
+      },
+    });
+  };
+  for (const [index, row] of claimedRows.entries()) {
     const current = await db.outreachCampaign.findFirst({
       where: { id: campaign.id, officeId: input.officeId },
       select: { status: true },
     });
-    if (!outreachCampaignStatusAllowsSend(current?.status)) break;
+    if (!outreachCampaignStatusAllowsSend(current?.status)) {
+      await releaseClaimsFrom(index);
+      break;
+    }
     const data = row.data;
     const recipient = String(data[campaign.emailField] ?? "").trim().toLowerCase();
     const variant = selectCampaignVariant({
@@ -695,29 +832,71 @@ export async function runOutreachCampaignBatch(input: {
       subject: email.subject,
       body: email.body,
     });
+    const idempotencyKey = outreachCampaignIdempotencyKey(campaign.id, row.id);
     const reservation = await reserveSender({
       officeId: input.officeId,
-      idempotencyKey: outreachCampaignIdempotencyKey(campaign.id, row.id),
+      idempotencyKey,
       requestHash,
       ...(campaign.senderRotation ? {} : { accountId: campaign.senderAccountId ?? undefined }),
       now,
     });
     if (!("ok" in reservation)) {
       const reservationOutcome = outreachCampaignReservationOutcome(reservation.code);
+      if (reservationOutcome.poolExhausted) {
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          state: reservationOutcome.state,
+          senderEmail: null,
+          variantKey: variant?.key ?? null,
+          error: reservation.error,
+        });
+        output.poolExhausted = true;
+        await releaseClaimsFrom(index);
+        break;
+      }
+      // A non-capacity refusal settles the claim in the ledger; leaving it
+      // QUEUED would only have it reclaimed and refused again next run.
+      const settlement = await settleOutreachReservationFailure(db, { officeId: input.officeId, idempotencyKey, code: reservation.code });
+      if (settlement.kind === "UNKNOWN") {
+        await recordOutcome(db, {
+          officeId: input.officeId,
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          status: "UNKNOWN",
+          senderEmail: settlement.senderEmail,
+          error: reservation.error,
+          reservationId: settlement.reservationId,
+          variantKey: variant?.key ?? null,
+        });
+        output.unknown += 1;
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          state: "UNKNOWN",
+          senderEmail: settlement.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: reservation.error,
+        });
+        continue;
+      }
+      await db.outreachCampaignSend.updateMany({
+        where: { officeId: input.officeId, campaignId: campaign.id, recordId: row.id, status: "QUEUED" },
+        data: { status: "REJECTED", error: reservation.error, variantKey: variant?.key ?? null },
+      });
+      output.rejected += 1;
       output.outcomes.push({
         campaignId: campaign.id,
         recordId: row.id,
         recipient,
-        state: reservationOutcome.state,
+        state: "REJECTED",
         senderEmail: null,
         variantKey: variant?.key ?? null,
         error: reservation.error,
       });
-      if (reservationOutcome.poolExhausted) {
-        output.poolExhausted = true;
-        break;
-      }
-      output.rejected += 1;
       continue;
     }
     output.attempted += 1;
@@ -732,8 +911,13 @@ export async function runOutreachCampaignBatch(input: {
         data: {
           status: "SENT",
           senderEmail: reservation.senderEmail,
+          reservationId: reservation.reservationId,
+          providerMessageId: reservation.providerMessageId,
+          providerThreadId: reservation.providerThreadId,
+          localThreadId: reservation.localThreadId,
+          error: null,
           variantKey: variant?.key ?? null,
-          sentAt: now,
+          sentAt: reservation.sentAt ?? now,
         },
       });
       output.alreadySent += 1;
@@ -763,15 +947,31 @@ export async function runOutreachCampaignBatch(input: {
     });
     if (!outreachCampaignStatusAllowsSend(beforeSend?.status)) {
       await releaseReservation({ officeId: input.officeId, reservationId: reservation.reservationId });
-      await db.outreachCampaignSend.deleteMany({
-        where: {
-          officeId: input.officeId,
-          campaignId: campaign.id,
-          recordId: row.id,
-          status: "QUEUED",
-        },
-      });
+      await releaseClaimsFrom(index);
       break;
+    }
+    // A bounce, complaint, or opt-out synced while this batch was running is
+    // honoured here, after the reservation and before the provider call, so
+    // the pre-batch suppression snapshot cannot go stale mid-run.
+    const lateSuppression = (await listSuppressedEmails(input.officeId, [recipient], db)).get(recipient);
+    if (lateSuppression) {
+      await releaseReservation({ officeId: input.officeId, reservationId: reservation.reservationId });
+      const error = suppressionSkipMessage(lateSuppression);
+      await db.outreachCampaignSend.updateMany({
+        where: { officeId: input.officeId, campaignId: campaign.id, recordId: row.id, status: "QUEUED" },
+        data: { status: "REJECTED", error, variantKey: variant?.key ?? null },
+      });
+      output.rejected += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: row.id,
+        recipient,
+        state: "REJECTED",
+        senderEmail: null,
+        variantKey: variant?.key ?? null,
+        error,
+      });
+      continue;
     }
     const rfcMessageId = outreachCampaignRfcMessageId(campaign.id, row.id);
     const receipt: SupplierEmailSendResult = await sendProvider.send({
@@ -859,6 +1059,7 @@ export async function runOutreachCampaignBatch(input: {
     }
     if ((input.pauseMs ?? 400) > 0) await new Promise((resolve) => setTimeout(resolve, input.pauseMs ?? 400));
   }
+  if (!output.poolExhausted) output.followUps = await runFollowUps(claimedRows.length);
   await (input.complete ?? completeCampaignIfDone)({
     officeId: input.officeId,
     campaignId: input.campaignId,

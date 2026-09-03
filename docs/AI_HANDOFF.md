@@ -1,5 +1,24 @@
 # AI Handoff
 
+## 2026-09-03: Follow-up reply detection, durable reservation refusals, cc fallback
+
+- `repliedThreadIds` (follow-ups) uses `humanReplyMessageFilter`: inbound,
+  `deliveryKind = null`, and `classification != DELIVERY_FEEDBACK`. Stored
+  feedback whose persistence has not finished (transient bounce, auto-reply)
+  no longer ends a sequence as `REPLIED`.
+- `settleOutreachReservationFailure` decides what a refused sender reservation
+  does to a claimed row, for first touches and follow-ups alike: pool capacity
+  refusals still release the claim; `DELIVERY_UNCERTAIN` with an open
+  `RESERVED` reservation under the row's idempotency key records `UNKNOWN`
+  with that reservation linked (reconciliation then confirms `SENT` or rejects
+  after the 24 hour window); any other refusal records `REJECTED`. Previously
+  follow-ups deleted the claim and first touches left it `QUEUED`, both of
+  which retried the same refusal every reclaim window.
+- `threadOutboundRecipients` (delivery feedback fallback for DSNs naming no
+  recipient) returns `toEmails` plus `ccEmails` of the last outbound message.
+- To test: `npm run test:outreach-campaign-follow-ups`,
+  `test:outreach-campaign-send`, `test:email-delivery-feedback`.
+
 ## 2026-09-03: Procurement campaign class convergence
 
 - Sourcing commands classify each request deterministically as
@@ -68,6 +87,241 @@
   `{ migration_id, confirmation }`, then use the same Production environment,
   latest committed migration check, pinned database identity checks, and
   verification SQL as manual runs.
+
+## 2026-09-02: Batch approval with spot checks (outreach and bulk RFQ)
+
+- `src/lib/batch-review.ts` is pure: `spotCheckSample` (3 head rows plus 7
+  seeded spot rows, deterministic for a given seed, bounded at 10),
+  `summarizeRecipientQuality` and `recipientQualityLines` (advisory counts and
+  warnings over the full audience), `batchRecipientHash` (order-independent
+  hash over `id:email`), `spotCheckLabel`.
+- Outreach: `planOutreachCampaign` returns `spotCheck` (rendered subject and
+  body per sampled recipient, seeded by the revision hash) and
+  `audienceQuality`. `plan_outreach_campaign` puts those on the
+  `START_OUTREACH_CAMPAIGN` proposal instead of the first ten rows and states
+  that approval covers every eligible recipient. New `exclude_emails` tool
+  input lands in `filters.excludeEmails`, so it is in the revision hash, the
+  draft audience snapshot, and activation's stale-plan check.
+- Procurement: `GET /api/admin/procurement-bulk-rfq` accepts `limit` and
+  `excludeVendorIds` and returns `batch` (hash, spot check with rendered RFQ
+  bodies, quality lines, and the exact POST body to send it). The hash is
+  `bulkRfqBatchHash(order, sendable, files)`: the vendor and address set,
+  each target's subject and body exactly as the send renders it (greeting
+  name included), and a digest of every attachment's bytes, so a changed
+  spec, note, vendor name, or swapped drawing is a stale batch too. A preview
+  whose file package fails to load is a 503, never a review of an RFQ without
+  files. `POST` accepts `excludeVendorIds` and
+  `expectedBatchHash`; `runProcurementBulkRfq` resolves the files, recomputes
+  the same hash, and throws `BulkRfqBatchChangedError` (route: 409) before any
+  sender reservation when it differs. Without the hash the route behaves as
+  before.
+- Outreach: `plan_outreach_campaign` pins `plan.revisionHash` on the proposal
+  (the revision the review items were rendered from) and returns a tool error
+  instead of a proposal when the saved draft landed on a different revision
+  because the list changed between the plan and the save.
+- Outreach review surface: `src/lib/outreach-proposal-review.ts` reads pending
+  office-scoped `OUTREACH_CAMPAIGN_START` proposals and splits each stored
+  review item into subject and body. The Outreach desk mounts
+  `SupplyOsOutreachApprovals` (Pending approvals panel) above the
+  conversation: action details, then every spot-check email in full with a
+  Read checkbox, then Discard and Start campaign. Start stays disabled until
+  every item is marked read, and `applyOutreachProposalAction` recomputes
+  unread items from the stored proposal before calling
+  `applyPendingJobAgentProposal`. Chat `apply <id>` and the greenlight phrase
+  no longer apply outreach proposals; they answer with the redirect copy and
+  nothing is sent. Procurement `excludeVendorIds` are lowercased at the route
+  and in `listUncontactedBulkRfqTargets`, so an uppercase uuid strikes the
+  vendor too.
+- Review scope and roles: the panel, the apply, the discard, and the chat
+  redirects are all office scoped (`applyPendingJobAgentProposal` takes
+  `officeWide: true` from the outreach action; `userId` still records the
+  reviewer). Any operator on the Outreach desk sees pending proposals; only
+  ADMIN and MANAGER can start or discard them (same roles as
+  `canApproveProcurement`), SALES plans and reads. Proposals saved before
+  spot checks were rendered (details like "Eligible research-list row.") or
+  with no review items carry a `blocker`: the panel shows the reason and only
+  Discard, and the server refuses the apply.
+- Decisions are atomic and typed: the outreach apply claims the proposal
+  (`PENDING` to `APPLYING` via `updateMany`) before `activateCampaign` and
+  releases the claim if activation is blocked or throws; discard is a
+  compare-and-set from `PENDING`. The loser of a concurrent Start/Discard
+  gets "no longer pending" and causes no side effect. Both outreach actions
+  pass `kind: OUTREACH_PROPOSAL_KIND`, so the Outreach desk cannot decide job,
+  inquiry, or inbox proposals. `canView`/`canApprove` come from the current
+  `User` row (`isActive`, stored role), not the session cookie.
+- Approval only starts a draft: `activateCampaign` refuses any campaign not in
+  `DRAFT` (cancelled, active, paused, completed) and its activation write is a
+  compare-and-set from `DRAFT` that stamps `approvedAt`. Interrupted approvals
+  recover: `reconcileStaleOutreachClaims` (run by
+  `listPendingOutreachProposals`) finalizes an `APPLYING` proposal older than
+  5 minutes as `APPLIED` when its campaign has `approvedAt`, and releases it to
+  `PENDING` when the campaign never activated.
+- A claim is owned, not just a status: `claimOutreachProposal` writes
+  `reviewedAt = claimedAt` and `releaseOutreachClaim` /
+  `finalizeOutreachClaim` match that exact value, so a claim released by
+  recovery or re-taken by a colleague is unreachable to the request that lost
+  it. `activateCampaign({ finalize })` runs the `DRAFT -> ACTIVE` write and
+  the proposal finalize in one transaction and rolls the activation back with
+  `CAMPAIGN_CLAIM_LOST_BLOCKER` when the claim is gone, so a paused approval
+  that resumes after a discard or a second Start cannot start the campaign.
+- Chat `apply <id>` and greenlight resolve `resolveOutreachReviewer` (shared
+  with the approval actions) before any office-wide lookup; a customer,
+  EMPLOYEE, or stale session is only matched against its own proposals and
+  learns nothing about pending office approvals. The approvals panel keeps a
+  `loadError` separate from access, so a failed initial load is shown instead
+  of rendering nothing.
+- Nothing in the review path bypasses suppression, sender reservation, or the
+  pre-reservation suppression recheck.
+- To test: `npm run test:batch-review`, `test:outreach-campaign-copy`,
+  `test:outreach-campaign-send`, `test:procurement-bulk-rfq`.
+- Open: the procurement workspace has no UI for the batch preview yet; it is
+  operator-driven through the admin route.
+
+## 2026-09-02: Delivery feedback hardening (second review pass)
+
+- `encodeStoredDeliveryFeedback` keeps the header decodable under the 500
+  character `classificationReason` budget: only the detail is cut, and
+  recipients that do not fit are dropped whole from the end. A stored address
+  is always a real affected address; omitted ones are simply not suppressed on
+  recovery.
+- `resolveUnroutedFeedbackOffices` reads `ccEmails` as well as `toEmails`, so
+  a bounce for a copied recipient still attributes to the office that wrote.
+- `runProcurementSupplierNudges` and `runProcurementBulkRfq` recheck the
+  office suppression list per target right before `reserveEmailSender`, so a
+  suppression written after the plan was read still blocks the send (skipped
+  or `BLOCKED` with the deterministic reason). Planning-time suppression is
+  unchanged, so suppressed rows still do not consume the run limit.
+- To test: `npm run test:email-delivery-feedback`, `test:procurement-bulk-rfq`,
+  `test:procurement-supplier-nudge`.
+
+## 2026-09-02: Delivery feedback hardening (review follow-up)
+
+- `deliveryKind` is now written only by `recordDeliveryFeedback`, at the end,
+  so a message classified `DELIVERY_FEEDBACK` with `deliveryKind = null` means
+  event, suppression, or sender pause did not finish. Gmail and IMAP sync
+  detect that on the next pass (`deliveryFeedbackNeedsRecovery`) and retry on
+  the stored message; the event upsert stays keyed by message id, so no
+  duplicates. A persistence failure still never aborts the mailbox sync.
+- Recovery does not depend on the provider fetch window. The parsed feedback
+  is stored in `classificationReason` (`encodeStoredDeliveryFeedback`), and
+  every mailbox sync ends with `recoverUnfinishedDeliveryFeedback`, which
+  queries stored `DELIVERY_FEEDBACK` rows with `deliveryKind = null` (50 per
+  sync, least recently attempted first), decodes the stored feedback (or
+  re-parses the stored body for rows written before the encoding), routes by
+  the stored thread, and calls `recordDeliveryFeedback`. So a row that failed
+  to persist is finished on a later sync even after `lastSyncAt` moved past it.
+  For these rows `classificationAt` is the last attempt time: every row that
+  does not finish (persistence failed, or nothing decodable) is stamped, so it
+  rotates to the back of the queue and cannot hold the batch forever.
+- Unthreaded shared-mailbox reports: `recordDeliveryFeedback` takes a
+  `routing` (`{ routed, officeId }` or `{ routed: false, fallbackOfficeId }`).
+  For unrouted reports it looks up which offices mailed the affected address
+  from that mailbox. Exactly one office: the event and suppression go there.
+  Several, or none: the event is parked on the connecting office and nobody is
+  suppressed. Sender pausing still applies because it is per mailbox.
+- Bulk RFQs (`selectBulkRfqBatch`) and supplier nudges apply suppression before
+  the run limit, so `limit` suppressed rows at the front no longer starve the
+  eligible suppliers behind them. Blocked or skipped rows are still reported.
+  The admin preview (`GET /api/admin/procurement-bulk-rfq`) uses the same
+  policy via `listBulkRfqTargets`, so its `recipients` are exactly what a send
+  can reach and suppressed suppliers are listed under `blocked`.
+- Parser: an explicit `Status: 4.x.x` or transient wording (mailbox full,
+  quota, delayed, greylist, rate limit) beats Gmail's generic Failure subject;
+  ARF `Original-Rcpt-To` and `Removal-Recipient` accept the `rfc822;` prefix.
+- To test: `npm run test:email-delivery-feedback` (failure injection at event,
+  suppression, and pause with recovery; stored-row recovery sweep with a
+  failing row, a legacy row, idempotent re-runs, and a full batch of poison
+  rows that rotates behind newer feedback; unique, ambiguous, and
+  unknown shared-mailbox origin; new parser fixtures), `test:procurement-bulk-rfq`,
+  `test:procurement-supplier-nudge`. Manual: connect one mailbox to two
+  offices' threads, mail the same address from both, bounce it, and confirm no
+  `EmailSuppression` row is created while the `EmailDeliveryEvent` exists.
+
+## 2026-09-02: Bounces and complaints suppress recipients and pause senders
+
+- Inbound Gmail and IMAP sync now run `classifyDeliveryFeedback`
+  (`src/lib/email-delivery-feedback.ts`) before the AI classifier. DSN bounces
+  (permanent vs transient by 5.x.x/4.x.x status or Gmail failure copy), ARF
+  complaints, auto-replies, and plain-language opt-outs are stored as
+  `EmailMessage.classification = DELIVERY_FEEDBACK` plus `deliveryKind`, and
+  `recordDeliveryFeedback` writes one `EmailDeliveryEvent` per message.
+- Permanent bounces, complaints, and opt-outs upsert an office-scoped
+  `EmailSuppression` (`reason` BOUNCED | COMPLAINED | OPTED_OUT | MANUAL). Every
+  outbound path checks it before reserving a sender: campaign first touches
+  record `REJECTED`, follow-ups skip with `BOUNCED` or `SUPPRESSED`, bulk RFQs
+  return `BLOCKED`, and supplier nudges list the address as skipped. Unknown
+  stored reasons are treated as `MANUAL` so a bad row still blocks.
+- The pre-batch snapshot is not trusted for the whole run: first touches,
+  follow-ups, and bulk RFQs look the recipient up again after the sender
+  reservation and right before the provider call. A suppression that landed
+  mid-run releases that reservation and records the same terminal outcome
+  (`REJECTED`, `SKIPPED`, `BLOCKED`) with `suppressionSkipMessage`.
+- DSN permanence is decided per recipient block, not per message. A report
+  with one 5.x.x and one 4.x.x recipient suppresses only the first; the second
+  is kept on `DeliveryFeedback.transientRecipients` (stored after a `|` in the
+  classificationReason recipient list). Numeric evidence outranks wording, so
+  "recipient address rejected" beside a 4.x.x greylisting code is transient.
+  `Feedback-Type: not-spam` is not a complaint. Opt-out wording in a `Re:` or
+  `Fwd:` subject is campaign copy, not the recipient's request; only the
+  unquoted body or a short standalone subject counts.
+- Sender protection: two complaints, or at least 5 percent permanent bounces on
+  10 or more sends, within 24 hours sets `EmailAccount.sendPausedAt` and
+  `sendPausedReason`. Paused mailboxes leave `SHARED_SENDER_POOL_FILTER` but
+  stay in `SHARED_MAILBOX_POOL_FILTER`, so they keep syncing inbound mail.
+  Resume is manual: clear `sendPausedAt` on the account.
+- Production needs migration `20260901000600_email_delivery_feedback`.
+- To test: `npm run test:email-delivery-feedback` (parser fixtures, persistence
+  idempotency, sender protection, lookup scoping, sync and pool contracts),
+  plus the send, follow-up, bulk RFQ, and nudge suites. Live: send to a known
+  bad address from one connected mailbox, sync, and confirm the address shows
+  in `EmailSuppression` and the next campaign row for it is `REJECTED`.
+
+## 2026-09-02: Outreach campaigns send follow-up sequences
+
+- `plan_outreach_campaign` accepts up to three `follow_ups` (wait days, optional
+  subject, body). They are normalized, hashed into the campaign revision, listed
+  in the review proposal, and stored on `OutreachCampaign.followUps`. Activation
+  blocks a step without an opt-out line or a wait outside 1 to 30 days.
+- `src/lib/outreach-campaign-follow-ups.ts` runs after each cron batch through
+  `runOutreachCampaignBatch`. It threads each step onto the first touch with
+  `providerThreadId` and `inReplyToRfcMessageId`, reuses the sender-pool
+  reservation, shares the campaign daily cap with first touches, and writes one
+  `OutreachCampaignFollowUp` ledger row per `(campaign, record, step)`.
+- A sequence stops on an inbound reply in the linked local thread, on a
+  rejected or unknown send, or when the recipient is suppressed. Skips are
+  recorded with a reason. Campaigns stay `ACTIVE` until every sequence is done
+  and no `UNKNOWN` delivery still holds a `RESERVED` reservation.
+- Claims in both ledgers are serialized per campaign and share one remaining
+  capacity count, `limit` is a total run budget across first touches and
+  follow-ups, replies are rechecked right before each provider call, and an
+  aborted batch releases all unprocessed claims.
+- A/B variants and follow-ups compose: the spot check renders each sampled
+  recipient with the variant `selectCampaignVariant` assigns for the saved
+  draft id (`plan.spotCheckCampaignId`; `plan_outreach_campaign` re-plans once
+  when the first plan predates the draft), and a follow-up's implied `Re:`
+  subject comes from that recipient's variant (`followUpInitialSubject`), not
+  the campaign-level subject.
+- Recovered `UNKNOWN` sends keep the reservation's `createdAt` as `sentAt`, so
+  the next step's wait counts from delivery, not from recovery. A pause or an
+  empty sender pool mid-batch releases the remaining `QUEUED` first-touch
+  claims of that run. The Gmail send lookups (OAuth and app password) refuse a
+  mailbox with `sendPausedAt` set right before delivery; that is a `REJECTED`
+  outcome without `needsReauth`, and reconciliation still works while paused.
+- Suppression and the run budget: `selectSendableCampaignRows` walks the
+  unhandled audience in run-sized chunks, records suppressed rows as
+  `REJECTED`, and stops once `limit` sendable rows are found, so a suppressed
+  row never displaces an eligible recipient from the run or the daily cap.
+  Every runner that sends supplier or prospect mail (first touch, follow-up,
+  bulk RFQ, supplier nudge) rechecks `listSuppressedEmails` after its sender
+  reservation and right before `provider.send`, releasing the reservation on a
+  hit. `CampaignFollowUpBatchResult.outstanding` is re-read from the ledger
+  after the run, so the run that sends a final step (or skips late) reports
+  the sequence as done.
+- Production needs migration `20260901000500_outreach_campaign_follow_ups`.
+- To test: `npm run test:outreach-campaign-copy` and
+  `npm run test:outreach-campaign-follow-ups`. Live: plan a campaign with one
+  follow-up at `wait_days: 1`, approve, and confirm the follow-up lands in the
+  same Gmail thread the next day and is skipped for a recipient who replied.
 
 ## 2026-09-02: Operator sign-in abuse resistance
 

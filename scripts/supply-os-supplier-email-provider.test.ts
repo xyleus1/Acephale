@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { createGmailSupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
+import { SENDER_PAUSED_ERROR, createGmailSupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 
 const input = {
   officeId: "office-1",
@@ -116,6 +116,22 @@ async function main() {
   assert.deepEqual(await disabled.send(input), { state: "REJECTED", error: "sender disabled for sending" });
   assert.equal(disabledRequestCalled, false, "A disabled sender must not reach Gmail delivery.");
   assert.equal((await disabled.reconcile(input)).state, "SENT", "Disabling delivery must not block reconciliation or reply monitoring.");
+
+  // A reputation pause that lands after the sender was reserved is still
+  // honored: the final account lookup refuses and Gmail is never called.
+  let pausedRequestCalled = false;
+  const paused = createGmailSupplierEmailProvider({
+    account: async () => ({ id: input.accountId, email: input.senderEmail }),
+    sendAccount: async () => { throw new Error(SENDER_PAUSED_ERROR); },
+    token: async () => "access-token",
+    request: async () => {
+      pausedRequestCalled = true;
+      return response(200, { messages: [{ id: "gmail-message-4", threadId: "gmail-thread-4" }] });
+    },
+  });
+  assert.deepEqual(await paused.send(input), { state: "REJECTED", error: SENDER_PAUSED_ERROR });
+  assert.equal(pausedRequestCalled, false, "A paused sender must not reach Gmail delivery.");
+  assert.equal((await paused.reconcile(input)).state, "SENT", "Pausing delivery must not block reconciliation of earlier sends.");
 
   console.log("Supply OS supplier email provider checks passed.");
 }

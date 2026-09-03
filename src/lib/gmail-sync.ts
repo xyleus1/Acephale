@@ -6,6 +6,17 @@ import { requireSession } from "./auth";
 import { requireEmailAccountAdminSession } from "./email-account-access";
 import { getValidAccessToken } from "./gmail-oauth";
 import { classifyInboundEmail } from "./email-classifier";
+import {
+  classifyDeliveryFeedback,
+  DELIVERY_FEEDBACK_CLASSIFICATION,
+  encodeStoredDeliveryFeedback,
+} from "./email-delivery-feedback";
+import {
+  deliveryFeedbackNeedsRecovery,
+  recordDeliveryFeedback,
+  recoverUnfinishedDeliveryFeedback,
+  type DeliveryFeedbackRouting,
+} from "./email-delivery-events";
 import { classifyEmailAttachments } from "./doc-classify";
 import { enqueueBackgroundJob } from "./background-jobs";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
@@ -275,6 +286,35 @@ async function _syncEmailAccountInternal({
         if (!existing.externalId) {
           await prisma.emailMessage.update({ where: { id: existing.id }, data: { externalId } }).catch(() => {});
         }
+        // A feedback message whose suppression or sender check failed after the
+        // message itself was stored is completed on the next sync.
+        if (deliveryFeedbackNeedsRecovery(existing)) {
+          const fromMatch = fromRaw.match(/<([^>]+)>/) ?? fromRaw.match(/([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/);
+          const feedback = classifyDeliveryFeedback({
+            fromEmail: fromMatch ? fromMatch[1] : fromRaw,
+            subject,
+            bodyText: extractPlainBody(msg.payload),
+            headers,
+            ownAddresses: [account.email],
+          });
+          const storedThread = await prisma.emailThread.findFirst({
+            where: { id: existing.threadId },
+            select: { officeId: true, autoLinkSkipReason: true },
+          });
+          if (feedback && storedThread) {
+            await recordDeliveryFeedback(prisma, {
+              routing: storedThread.autoLinkSkipReason === UNROUTED_MAIL_THREAD_MARKER
+                ? { routed: false, fallbackOfficeId: account.officeId }
+                : { routed: true, officeId: storedThread.officeId },
+              accountId: account.id,
+              messageId: existing.id,
+              threadId: existing.threadId,
+              occurredAt: existing.sentAt,
+              source: "GMAIL",
+              feedback,
+            }).catch(() => null);
+          }
+        }
         // If we don't have a local thread yet, adopt from existing message.
         if (!localThread) {
           localThread = await prisma.emailThread.findFirst({
@@ -319,13 +359,30 @@ async function _syncEmailAccountInternal({
       // thread is parked on the connecting office as hidden, admin-only mail.
       const targetOfficeId = routing.routed ? routing.officeId : account.officeId;
       if (unroutedMessage) unrouted++;
+      const feedbackRouting: DeliveryFeedbackRouting = routing.routed
+        ? { routed: true, officeId: routing.officeId }
+        : { routed: false, fallbackOfficeId: account.officeId };
+
+      // Bounces, complaints, auto-replies, and opt-outs are recognised
+      // deterministically and never reach the AI classifier.
+      const deliveryFeedback = direction === "INBOUND"
+        ? classifyDeliveryFeedback({
+          fromEmail,
+          subject,
+          bodyText: body,
+          headers,
+          ownAddresses: [account.email],
+        })
+        : null;
 
       // Per-message classification (lightweight; AI may match an existing job/inquiry).
-      let classificationLabel: string | null = null;
-      let classificationReason: string | null = null;
+      let classificationLabel: string | null = deliveryFeedback ? DELIVERY_FEEDBACK_CLASSIFICATION : null;
+      let classificationReason: string | null = deliveryFeedback
+        ? encodeStoredDeliveryFeedback(deliveryFeedback)
+        : null;
       let classifiedMatchJobId: string | null = null;
       let classifiedMatchInquiryId: string | null = null;
-      if (direction === "INBOUND" && !unroutedMessage) {
+      if (direction === "INBOUND" && !unroutedMessage && !deliveryFeedback) {
         try {
           const cls = await classifyInboundEmail({
             subject, fromEmail, bodyText: body, officeId: targetOfficeId,
@@ -385,6 +442,17 @@ async function _syncEmailAccountInternal({
           classificationAt: classificationLabel ? new Date() : null,
         },
       });
+      if (deliveryFeedback) {
+        await recordDeliveryFeedback(prisma, {
+          routing: feedbackRouting,
+          accountId: account.id,
+          messageId: createdMessage.id,
+          threadId: localThread.id,
+          occurredAt: sentAt,
+          source: "GMAIL",
+          feedback: deliveryFeedback,
+        }).catch(() => null);
+      }
       const workflowLabels = emailWorkflowLabelKeys({
         kind: classificationLabel,
         jobId: localThread.jobId,
@@ -494,6 +562,15 @@ async function _syncEmailAccountInternal({
   // the mail funnel and the Meta lead funnel land in Google Sheets, and the
   // sheet sync is the single automated source of new Inquiries. Operators can
   // still promote a thread manually from the inbox ("Create RFQ from thread").
+
+  // Feedback rows whose persistence failed on an earlier sync are outside the
+  // fetch window by now, so they are completed from the database instead.
+  await recoverUnfinishedDeliveryFeedback(prisma, {
+    accountId: account.id,
+    accountEmail: account.email,
+    fallbackOfficeId: account.officeId,
+    source: "GMAIL",
+  }).catch(() => null);
 
   // Pre-warm supplier-offer summaries out-of-band. This is AI-heavy work; it
   // should not live inside the Gmail sync request.

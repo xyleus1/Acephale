@@ -5,6 +5,8 @@ import {
   releaseEmailSenderReservation,
   reserveEmailSender,
 } from "@/lib/email-sender-pool";
+import { listSuppressedEmails } from "@/lib/email-delivery-events";
+import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
 import {
@@ -246,6 +248,9 @@ export async function listSupplierNudgeTargets(args: {
   const contacted = rows.filter((row): row is NudgeVendorRow & { contactEmail: string } =>
     Boolean(row.contactEmail?.includes("@")));
   if (!contacted.length) return { targets: [], skipped: [], blocked: null };
+  // A supplier whose address bounced, complained, or opted out after the first
+  // RFQ is not chased again, and it does not use up a slot of the run limit.
+  const suppressed = await listSuppressedEmails(args.order.officeId, contacted.map((row) => row.contactEmail));
   const reservations = await prisma.emailSenderReservation.findMany({
     where: {
       officeId: args.order.officeId,
@@ -339,6 +344,11 @@ export async function listSupplierNudgeTargets(args: {
         vendorName: row.name,
         reason: "The first RFQ has no recorded message id, so a follow up cannot stay on the thread.",
       });
+      continue;
+    }
+    const suppressionReason = suppressed.get(row.contactEmail.trim().toLowerCase());
+    if (suppressionReason) {
+      skipped.push({ vendorId: row.vendorId, vendorName: row.name, reason: suppressionSkipMessage(suppressionReason) });
       continue;
     }
     targets.push({
@@ -616,7 +626,8 @@ export async function runProcurementSupplierNudges(args: {
     ...(args.attachRequestFiles === false ? { attachRequestFiles: false } : {}),
     ...(args.loadFiles ? { loadFiles: args.loadFiles } : {}),
   });
-  const { targets, skipped, blocked } = await listSupplierNudgeTargets({ order, limit, now: args.now });
+  const planned = await listSupplierNudgeTargets({ order, limit, now: args.now });
+  const { targets, skipped, blocked } = planned;
   const files = args.attachRequestFiles === false
     ? EMPTY_RFQ_ATTACHMENT_PACKAGE
     : await (args.loadFiles ?? loadProcurementRfqAttachmentPackage)({
@@ -696,6 +707,20 @@ export async function runProcurementSupplierNudges(args: {
         senderEmail: reservation.senderEmail,
         providerMessageId: reservation.providerMessageId,
         error: null,
+      });
+      continue;
+    }
+    // A bounce, complaint, or opt-out recorded after the plan was read, up to
+    // and including while the sender was being reserved, must still keep the
+    // address away from the provider.
+    const lateSuppression = (await listSuppressedEmails(order.officeId, [target.recipient]))
+      .get(target.recipient.trim().toLowerCase());
+    if (lateSuppression) {
+      await releaseEmailSenderReservation({ officeId: order.officeId, reservationId: reservation.reservationId });
+      result.skipped.push({
+        vendorId: target.vendorId,
+        vendorName: target.vendorName,
+        reason: suppressionSkipMessage(lateSuppression),
       });
       continue;
     }

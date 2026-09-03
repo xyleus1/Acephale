@@ -340,3 +340,159 @@
     justify-content: flex-end;
   }
 }
+
+.approvals {
+  width: min(860px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.approvalsHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.approvalsHeader h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.approvalsHeader span {
+  color: var(--text-3);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.approvalsNotice {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.approval {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.approvalHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.approvalHeader span {
+  color: var(--text-3);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.approvalDetails {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.approvalItems {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approvalItem {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.approvalItemHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.approvalItemHead > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.approvalItemHead > div span {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.approvalItemHead label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 4px;
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.approvalSubject {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.approvalBody {
+  margin: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.approvalActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.approvalActions > div {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .approvalActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .approvalActions > div {
+    justify-content: flex-end;
+  }
+}

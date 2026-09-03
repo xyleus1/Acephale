@@ -21,6 +21,7 @@ import {
   CAMPAIGN_DESK_SCOPE,
   CAMPAIGN_GREENLIGHT_COMMAND,
 } from "@/lib/campaign-desk-scope";
+import { SupplyOsOutreachApprovals } from "./supply-os-outreach-approvals";
 import styles from "./supply-os-outreach.module.css";
 
 type CampaignChatItem = ChatMsg & {
@@ -31,7 +32,6 @@ type CampaignChatItem = ChatMsg & {
 const SUGGESTED_PROMPTS = [
   "Plan an outreach campaign for a research list",
   "List outreach campaigns",
-  "Greenlight the pending campaign",
 ] as const;
 
 const CAMPAIGN_MUTATING_TOOL_NAMES = new Set([
@@ -51,6 +51,7 @@ export function SupplyOsOutreach() {
   const [messages, setMessages] = useState<CampaignChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [approvalsRefresh, setApprovalsRefresh] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const latestMessageRef = useRef<HTMLDivElement | null>(null);
 
@@ -99,6 +100,7 @@ export function SupplyOsOutreach() {
       );
       if (refreshForCampaignCommand || refreshForCampaignTool) {
         router.refresh();
+        setApprovalsRefresh((value) => value + 1);
       }
       setMessages([
         ...nextMessages,
@@ -147,6 +149,7 @@ export function SupplyOsOutreach() {
         aria-label="Outreach conversation"
         aria-live="polite"
       >
+        <SupplyOsOutreachApprovals refreshKey={approvalsRefresh} />
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyMark}>
@@ -155,8 +158,9 @@ export function SupplyOsOutreach() {
             <span className={styles.emptyLabel}>Derya Outreach</span>
             <h2>What should we work on?</h2>
             <p>
-              Plan campaigns from office research lists, review the proposed
-              audience and message, then explicitly greenlight approved work.
+              Plan campaigns from office research lists. Each plan becomes a
+              pending approval here with its spot-check emails; sending starts
+              only after you read them and start the campaign.
             </p>
             <div
               className={styles.suggestions}

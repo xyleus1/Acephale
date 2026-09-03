@@ -119,7 +119,10 @@ jobs:
           npm run test:supply-os-atlas-sourcing
           npm run test:supply-os-saved-research-retry
           npm run test:outreach-campaign-copy
+          npm run test:batch-review
           npm run test:outreach-campaign-send
+          npm run test:outreach-campaign-follow-ups
+          npm run test:email-delivery-feedback
           npm run test:supply-os-supplier-research-failures
           npm run test:supply-os-supply-intelligence
           npm run test:supply-os-exa-retrieval

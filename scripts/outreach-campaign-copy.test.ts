@@ -6,8 +6,13 @@ import {
   campaignEmailFieldKey,
   excludeContactedRecipients,
   campaignActivationTransitionWhere,
+  campaignFollowUpBlockers,
+  campaignFollowUpDueAt,
+  campaignFollowUpSubject,
   campaignPersonalizationMap,
   campaignReplyCounts,
+  normalizeCampaignFollowUps,
+  planCampaignFollowUps,
   campaignRevisionHash,
   campaignRevisionMatches,
   campaignProgress,
@@ -445,6 +450,86 @@ assert.deepEqual(campaignProgress({ total: 2, sent: 4, rejected: 0, unknown: 0 }
   rejected: 0,
   unknown: 0,
   remaining: 0,
+});
+
+const followUps = normalizeCampaignFollowUps([
+  { wait_days: 3, body: "Still interested? Reply STOP to opt out." },
+  { waitDays: "5", subject: "Quick nudge \u2014 {{company}}", bodyTemplate: "Last check. Reply STOP to opt out." },
+  { waitDays: 2 },
+  "junk",
+]);
+assert.deepEqual(followUps, [
+  { waitDays: 3, subject: null, bodyTemplate: "Still interested? Reply STOP to opt out." },
+  { waitDays: 5, subject: "Quick nudge - {{company}}", bodyTemplate: "Last check. Reply STOP to opt out." },
+]);
+assert.deepEqual(normalizeCampaignFollowUps(null), []);
+assert.deepEqual(campaignFollowUpBlockers(followUps), []);
+assert.deepEqual(campaignFollowUpBlockers([
+  { waitDays: 0, subject: null, bodyTemplate: "Just checking in." },
+  { waitDays: 31, subject: null, bodyTemplate: "Reply STOP to opt out." },
+  { waitDays: 2, subject: null, bodyTemplate: "Reply STOP to opt out." },
+  { waitDays: 2, subject: null, bodyTemplate: "Reply STOP to opt out." },
+]), [
+  "At most 3 follow-up steps are allowed.",
+  "Follow-up 1 must wait between 1 and 30 days.",
+  "Follow-up 1 body must contain an opt-out line.",
+  "Follow-up 2 must wait between 1 and 30 days.",
+]);
+assert.equal(campaignFollowUpSubject({ waitDays: 1, subject: null, bodyTemplate: "x" }, "Hello Baker House"), "Re: Hello Baker House");
+assert.equal(campaignFollowUpSubject({ waitDays: 1, subject: null, bodyTemplate: "x" }, "Re: Hello"), "Re: Hello");
+assert.equal(campaignFollowUpSubject({ waitDays: 1, subject: "Custom", bodyTemplate: "x" }, "Hello"), "Custom");
+assert.equal(campaignFollowUpDueAt(new Date("2026-01-01T00:00:00Z"), 3).toISOString(), "2026-01-04T00:00:00.000Z");
+assert.notEqual(
+  campaignRevisionHash({ ...revisionInput, followUps: [] }),
+  campaignRevisionHash({ ...revisionInput, followUps }),
+);
+
+const sequenceSteps = [
+  { waitDays: 3, subject: null, bodyTemplate: "One. Reply STOP to opt out." },
+  { waitDays: 4, subject: null, bodyTemplate: "Two. Reply STOP to opt out." },
+];
+const day = (offset: number) => new Date(Date.UTC(2026, 0, 1 + offset, 9));
+const sends = [
+  { recordId: "r-late", recipient: "Late@Example.com", sentAt: day(0), localThreadId: "t-late", providerThreadId: "p-late" },
+  { recordId: "r-early", recipient: "early@example.com", sentAt: day(-4), localThreadId: "t-early", providerThreadId: "p-early" },
+  { recordId: "r-replied", recipient: "replied@example.com", sentAt: day(-6), localThreadId: "t-replied", providerThreadId: null },
+  { recordId: "r-bounced", recipient: "bounced@example.com", sentAt: day(-6), localThreadId: "t-bounced", providerThreadId: null },
+  { recordId: "r-suppressed", recipient: "gone@example.com", sentAt: day(-6), localThreadId: null, providerThreadId: null },
+  { recordId: "r-queued", recipient: "queued@example.com", sentAt: day(-6), localThreadId: "t-queued", providerThreadId: null },
+  { recordId: "r-rejected", recipient: "rejected@example.com", sentAt: day(-9), localThreadId: "t-rejected", providerThreadId: null },
+  { recordId: "r-step2", recipient: "step2@example.com", sentAt: day(-9), localThreadId: "t-step2", providerThreadId: "p-step2" },
+  { recordId: "r-done", recipient: "done@example.com", sentAt: day(-20), localThreadId: "t-done", providerThreadId: null },
+  { recordId: "r-unsent", recipient: "unsent@example.com", sentAt: null, localThreadId: null, providerThreadId: null },
+];
+const plan = planCampaignFollowUps({
+  steps: sequenceSteps,
+  sends,
+  followUps: [
+    { recordId: "r-queued", step: 1, status: "QUEUED", sentAt: null },
+    { recordId: "r-rejected", step: 1, status: "REJECTED", sentAt: null },
+    { recordId: "r-step2", step: 1, status: "SENT", sentAt: day(-5) },
+    { recordId: "r-done", step: 1, status: "SENT", sentAt: day(-15) },
+    { recordId: "r-done", step: 2, status: "SENT", sentAt: day(-10) },
+  ],
+  repliedThreadIds: new Set(["t-replied"]),
+  bouncedRecipients: new Set(["bounced@example.com"]),
+  suppressedRecipients: new Set(["gone@example.com"]),
+  now: day(0),
+});
+assert.deepEqual(plan.due.map((item) => [item.recordId, item.step, item.dueAt.toISOString(), item.providerThreadId]), [
+  ["r-step2", 2, day(-1).toISOString(), "p-step2"],
+  ["r-early", 1, day(-1).toISOString(), "p-early"],
+]);
+assert.deepEqual(plan.skips, [
+  { recordId: "r-bounced", recipient: "bounced@example.com", step: 1, reason: "BOUNCED" },
+  { recordId: "r-replied", recipient: "replied@example.com", step: 1, reason: "REPLIED" },
+  { recordId: "r-suppressed", recipient: "gone@example.com", step: 1, reason: "SUPPRESSED" },
+]);
+assert.equal(plan.outstanding, 4, "queued, step2, early, and late (not yet due) sequences remain outstanding");
+assert.deepEqual(planCampaignFollowUps({ steps: [], sends, followUps: [], repliedThreadIds: new Set(), now: day(0) }), {
+  due: [],
+  skips: [],
+  outstanding: 0,
 });
 
 console.log("Outreach campaign copy checks passed.");

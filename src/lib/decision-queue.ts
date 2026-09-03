@@ -694,7 +694,10 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       ? proposal.payload as Record<string, unknown>
       : {};
     const isBulkProposal = payload.entity === "bulk";
-    const titleTarget = proposal.job?.reference ?? proposal.inquiry?.subject ?? (isBulkProposal ? "Inbox bulk action" : proposal.id.slice(0, 8));
+    const isOutreachProposal = isBulkProposal && payload.action === "START_OUTREACH_CAMPAIGN";
+    const titleTarget = proposal.job?.reference
+      ?? proposal.inquiry?.subject
+      ?? (isOutreachProposal ? "Outreach campaign" : isBulkProposal ? "Inbox bulk action" : proposal.id.slice(0, 8));
     items.push({
       key: `agent-proposal-${proposal.id}`,
       tone: toneFromScore(88 + Math.min(age, 12)),
@@ -704,8 +707,14 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       title: `${isBulkProposal ? "Review agent bulk action" : "Review agent update"}: ${titleTarget}`,
       meta: `${proposal.kind} · waiting ${age < 1 ? "less than 1h" : `${age}h`}`,
       reason: "The agent has proposed a mutation. Nothing should change until a human accepts or rejects the diff.",
-      actionLabel: isBulkProposal ? "Review list" : "Review diff",
-      href: proposal.job ? `/dashboard/jobs/${proposal.job.id}` : proposal.inquiry ? `/dashboard/rfq/${proposal.inquiry.id}` : "/dashboard/inbox",
+      actionLabel: isOutreachProposal ? "Review spot check" : isBulkProposal ? "Review list" : "Review diff",
+      href: proposal.job
+        ? `/dashboard/jobs/${proposal.job.id}`
+        : proposal.inquiry
+          ? `/dashboard/rfq/${proposal.inquiry.id}`
+          : isOutreachProposal
+            ? "/dashboard/supply-os?materialsView=outreach"
+            : "/dashboard/inbox",
       score: 88 + Math.min(age, 12),
       ageHours: age,
       gateChecks: [

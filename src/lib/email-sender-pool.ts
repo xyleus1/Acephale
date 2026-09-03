@@ -104,6 +104,9 @@ type ReservedSender = {
   providerMessageId: string | null;
   providerThreadId: string | null;
   localThreadId: string | null;
+  // When the delivery already happened, the time it was sent (or recorded),
+  // so callers recovering a completed reservation keep the original timeline.
+  sentAt: Date | null;
 };
 
 type SenderPoolFailure = {
@@ -151,6 +154,7 @@ async function reserveEmailSenderAttempt(args: {
             externalId: true,
             gmailMessageId: true,
             threadId: true,
+            sentAt: true,
             thread: { select: { externalThreadId: true } },
           },
         },
@@ -196,6 +200,7 @@ async function reserveEmailSenderAttempt(args: {
         providerMessageId: recorded.providerMessageId,
         providerThreadId: recorded.providerThreadId,
         localThreadId: recorded.localThreadId,
+        sentAt: existing.message.sentAt,
       };
     }
 
@@ -212,6 +217,7 @@ async function reserveEmailSenderAttempt(args: {
         providerMessageId: existing.providerMessageId,
         providerThreadId: existing.providerThreadId,
         localThreadId: existing.localThreadId,
+        sentAt: existing.updatedAt,
       };
     }
 
@@ -286,6 +292,7 @@ async function reserveEmailSenderAttempt(args: {
       providerMessageId: null,
       providerThreadId: null,
       localThreadId: null,
+      sentAt: null,
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }

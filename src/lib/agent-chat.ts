@@ -13,6 +13,7 @@ import { TOOLS, dispatchTool } from "@/lib/agent-tools";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { createWithFileReference } from "@/lib/references";
 import { applyPendingJobAgentProposal } from "@/lib/agent-proposals";
+import { OUTREACH_CHAT_APPROVAL_REDIRECT, chatApplyTargetsOutreachProposal, resolveOutreachReviewer } from "@/lib/outreach-proposal-review";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
 import { buildReferenceDealOperatorPlaybook, getReferenceDealDecisions, getReferenceDealSummary } from "@/lib/reference-deals";
 import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
@@ -868,46 +869,39 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     return { reply: `Debug:\n· officeId: ${session.officeId}\n· scopeJobId: ${scopeJobId ?? "none"}\n· OPENAI_API_KEY: ${apiKey ? "set" : "MISSING"}\n· ${checks.join("\n· ")}` };
   }
 
+  // Outreach proposals are approved only on the review surface that shows
+  // every spot-check email; a chat command cannot stand in for that review.
   const applyMatch = userMessage.trim().match(CAMPAIGN_APPLY_COMMAND);
   if (applyMatch) {
-    if (session.accessKind === "customer" || session.role === "EMPLOYEE") {
-      const matches = await prisma.agentProposal.findMany({
-        where: {
-          officeId: session.officeId,
-          userId: session.userId,
-          status: "PENDING",
-          OR: [{ id: applyMatch[1] }, { id: { startsWith: applyMatch[1] } }],
-        },
-        select: { kind: true },
-      });
-      if (matches.some((proposal) => proposal.kind === "OUTREACH_CAMPAIGN_START")) {
+    const reviewer = await resolveOutreachReviewer(session);
+    const targetsOutreach = await chatApplyTargetsOutreachProposal({
+      officeId: session.officeId,
+      requestedId: applyMatch[1],
+      ownerUserId: reviewer.canView ? undefined : session.userId,
+    });
+    if (targetsOutreach) {
+      if (!reviewer.canView) {
         return { reply: "Outreach campaign approval is available only to operator accounts." };
       }
+      return { reply: OUTREACH_CHAT_APPROVAL_REDIRECT };
     }
     return applyAgentProposal(session.officeId, session.userId, applyMatch[1]);
   }
   const greenlightMatch = userMessage.trim().match(CAMPAIGN_GREENLIGHT_COMMAND);
   if (greenlightMatch) {
-    if (session.accessKind === "customer" || session.role === "EMPLOYEE") {
+    const reviewer = await resolveOutreachReviewer(session);
+    if (!reviewer.canView) {
       return { reply: "Outreach campaign approval is available only to operator accounts." };
     }
-    const proposals = await prisma.agentProposal.findMany({
+    const pending = await prisma.agentProposal.count({
       where: {
         officeId: session.officeId,
-        userId: session.userId,
         status: "PENDING",
         kind: "OUTREACH_CAMPAIGN_START",
       },
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
     });
-    if (proposals.length > 0) {
-      if (proposals.length > 1) {
-        return {
-          reply: `More than one outreach campaign is pending. Apply one by id: ${proposals.map((proposal) => proposal.id.slice(0, 8)).join(", ")}.`,
-        };
-      }
-      return applyAgentProposal(session.officeId, session.userId, proposals[0].id);
+    if (pending > 0) {
+      return { reply: OUTREACH_CHAT_APPROVAL_REDIRECT };
     }
   }
 
