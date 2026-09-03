@@ -8816,3 +8816,22 @@ Use this file for chronological implementation notes that future agents should s
 - The mailing list is to be imported as a research list via
   `POST /api/ops/research/import` with list slug `feast-south-england-cafes`,
   then reviewed before any outreach.
+
+## 2026-09-03: Supplier reply reachability diagnostics, review follow ups
+
+- `procurementInboxDiagnostics` pages the tagged message scan instead of taking
+  one capped slice and reports `truncated` when the ceiling bites, so a large
+  campaign's mailbox, supplier and stranded counts are whole rather than silently
+  partial.
+- An inbound message whose mailbox row was deleted is attributed to the mailbox
+  its thread was sent from, so a supplier address is never reported as one of our
+  mailboxes; an inbound message with no resolvable mailbox is bucketed instead.
+- A stranded reply with no subject at all now counts as stranded, since a SQL
+  null dropped out of the `NOT contains` comparison entirely.
+- `strandedSample` names the most recent stranded replies (sender, subject, time)
+  so an operator can tell a supplier answer that lost the RFQ tag from unrelated
+  mail on the same thread.
+- Production run on both HypnoDreamz requests: all 21 pool mailboxes ingest and
+  are fresh, 0 suppliers written to from an unreachable mailbox, but 22 (PCBA)
+  and 19 (foam) ingested inbound replies sit on our own RFQ threads without the
+  reference in the subject, so the request never counts them.
