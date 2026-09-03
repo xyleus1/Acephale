@@ -167,6 +167,36 @@ async function main() {
     (error: unknown) => error instanceof ProcurementReplyDraftError && error.code === "conflict" && /sender could not be verified/i.test(error.message),
   );
 
+  // A shop answers from whoever picks the enquiry up. The thread we mailed
+  // vouches for that address, so the reply is draftable and addressed to it.
+  const vouchedConversation = {
+    ...conversation,
+    source: "DERYA_EMAIL_RECORD" as const,
+    attributedSenders: ["mluna@bacircuits.com"],
+    messages: [
+      conversation.messages[0],
+      { ...conversation.messages[1], id: "colleague-inbound", fromEmail: "mluna@bacircuits.com" },
+    ],
+  };
+  const vouchedDraft = await draftProcurementSupplierReply({
+    order,
+    vendor,
+    conversation: vouchedConversation,
+    generateText: async () => "Thanks, files are attached.",
+  });
+  assert.equal(vouchedDraft.sourceMessageId, "colleague-inbound");
+  assert.equal(vouchedDraft.recipient, "mluna@bacircuits.com");
+  await assert.rejects(
+    draftProcurementSupplierReply({
+      order,
+      vendor,
+      conversation: { ...vouchedConversation, attributedSenders: [] },
+      generateText: async () => "unused",
+    }),
+    (error: unknown) => error instanceof ProcurementReplyDraftError && error.code === "conflict",
+    "An address the thread does not vouch for stays undraftable.",
+  );
+
   const boundedDraft = await draftProcurementSupplierReply({
     order,
     vendor,

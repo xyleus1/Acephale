@@ -1,7 +1,11 @@
 import "server-only";
 
 import Gpt56Client from "@/lib/gpt56-client";
-import type { ProcurementConversation, ProcurementConversationMessage } from "@/lib/procurement-conversation-model";
+import {
+  procurementSupplierSenderVouched,
+  type ProcurementConversation,
+  type ProcurementConversationMessage,
+} from "@/lib/procurement-conversation-model";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "@/lib/procurement-workflow";
 
 const MAX_DRAFT_CONTEXT_CHARACTERS = 14_000;
@@ -44,11 +48,17 @@ function replySubject(subject: string | null) {
   return clean(`Re: ${threadSubject}`, 240);
 }
 
-function latestInbound(messages: ProcurementConversationMessage[], requiredSenderEmail: string | null) {
-  const normalizedSender = requiredSenderEmail?.trim().toLowerCase() ?? null;
-  const latest = messages.at(-1);
+function latestInbound(args: {
+  conversation: ProcurementConversation;
+  contactEmail: string | null;
+}) {
+  const latest = args.conversation.messages.at(-1);
   if (!latest || latest.direction !== "INBOUND") return null;
-  return !normalizedSender || latest.fromEmail.trim().toLowerCase() === normalizedSender
+  return procurementSupplierSenderVouched({
+    conversation: args.conversation,
+    contactEmail: args.contactEmail,
+    senderEmail: latest.fromEmail,
+  })
     ? latest
     : null;
 }
@@ -99,13 +109,13 @@ export async function draftProcurementSupplierReply(input: {
   expectedSourceMessageId?: string;
   generateText?: ReplyDraftGenerator;
 }): Promise<ProcurementReplyDraft> {
-  const compatibilitySender = input.conversation.source === "BOURNE_LEDGER"
-    ? null
-    : input.vendor.contact?.email ?? null;
-  if (input.conversation.source !== "BOURNE_LEDGER" && !compatibilitySender) {
+  const contactEmail = input.vendor.contact?.email ?? null;
+  if (input.conversation.source !== "BOURNE_LEDGER"
+      && !contactEmail
+      && !input.conversation.attributedSenders?.length) {
     throw new ProcurementReplyDraftError("The supplier sender could not be verified for this thread.", "conflict");
   }
-  const inbound = latestInbound(input.conversation.messages, compatibilitySender);
+  const inbound = latestInbound({ conversation: input.conversation, contactEmail });
   if (!input.conversation.available || !inbound) {
     throw new ProcurementReplyDraftError("A supplier reply is required before drafting a response.", "conflict");
   }
