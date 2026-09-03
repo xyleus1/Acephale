@@ -92,6 +92,7 @@ export function profileFromProspectingDraft(draft: ProspectingDraft): LeadGenPro
     directorySeeds: [],
     positiveSignals: signals.positive,
     negativeSignals: signals.negative,
+    globalQueries: false,
   };
 }
 

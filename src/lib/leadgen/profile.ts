@@ -21,6 +21,8 @@ export type LeadGenProfile = {
   negativeSignals: readonly string[];
   /** Brand or company names that reject a lead outright when they appear in the company name or domain. */
   hardExclusions?: readonly string[];
+  /** When false, the plan only emits region-scoped queries. */
+  globalQueries?: boolean;
   queryLocales?: readonly import("./query-plan").QueryLocale[];
   sitePatterns?: readonly string[];
 };

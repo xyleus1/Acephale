@@ -58,6 +58,23 @@ assert.ok(internationalPlan.some((entry) => entry.shape === "exhibitor_list" && 
 assert.equal(buildQueryPlan(MANEKS_PROFILE, { limit: 30 }).map((entry) => entry.id).join("|"), buildQueryPlan(MANEKS_PROFILE, { limit: 30 }).map((entry) => entry.id).join("|"), "query ids must be stable");
 assert.equal(buildQueryPlan(MANEKS_PROFILE, { limit: 0 }).length, buildQueryPlan(MANEKS_PROFILE).length);
 assert.ok(buildQueryPlan(MANEKS_PROFILE, { limit: 0 }).length > 0);
+const draftScopedProfile = { ...MANEKS_PROFILE, regions: ["India", "Vietnam"], globalQueries: false };
+const draftScopedPlan = buildQueryPlan(draftScopedProfile);
+assert.ok(draftScopedPlan.length > 0);
+assert.ok(draftScopedPlan.every((entry) => entry.region !== null));
+assert.ok(draftScopedPlan.every((entry) => !/firma rehberi|uye listesi/i.test(entry.query)));
+const zeroRegionCapPlan = buildQueryPlan(draftScopedProfile, { maxRegionsPerSegment: 0 });
+assert.ok(zeroRegionCapPlan.length > 0);
+assert.equal(zeroRegionCapPlan[0]?.region, null);
+const legacyGlobalPlan = buildQueryPlan({ ...draftScopedProfile, globalQueries: undefined });
+assert.ok(legacyGlobalPlan.length > 0);
+assert.equal(legacyGlobalPlan[0]?.region, null);
+const firstRegionalQuery = legacyGlobalPlan.findIndex((entry) => entry.region !== null);
+assert.ok(firstRegionalQuery > 0);
+assert.ok(legacyGlobalPlan.slice(0, firstRegionalQuery).every((entry) => entry.region === null));
+const emptyRegionDraftPlan = buildQueryPlan({ ...MANEKS_PROFILE, regions: [], globalQueries: false });
+assert.ok(emptyRegionDraftPlan.length > 0);
+assert.equal(emptyRegionDraftPlan[0]?.region, null);
 
 const feastPlan = buildQueryPlan(FEAST_PROFILE, { limit: 500 });
 assert.equal(feastPlan.length, 500);

@@ -9448,6 +9448,8 @@ Use this file for chronological implementation notes that future agents should s
 
 ## 2026-09-03: Leadgen exclusions and balanced plans
 
+- Draft-derived leadgen profiles now skip region-less query plans when regions
+  are provided.
 - Added optional `hardExclusions` to leadgen profiles. Feast chain names now
   reject a lead only when they appear in its company name or domain, while
   mentions in page text remain allowed.

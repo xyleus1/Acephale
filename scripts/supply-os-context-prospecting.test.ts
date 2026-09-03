@@ -41,6 +41,7 @@ const draft = {
   rowTarget: 500,
 };
 const profile = profileFromProspectingDraft(draft);
+assert.equal(profile.globalQueries, false);
 assert.equal(clampAgentRowTarget(undefined), 500);
 assert.equal(clampAgentRowTarget(20), 500);
 assert.equal(clampAgentRowTarget(1200), 1200);
@@ -138,8 +139,7 @@ assert.equal(profile.segments[0]?.label, "steel fabricators");
 const regionPlan = buildQueryPlan(profile, { segmentKeys: [profile.segments[0]!.key] });
 assert.ok(regionPlan.some((query) => query.region === "Venezuela" && query.query.includes("company contact email")));
 assert.ok(regionPlan.some((query) => query.region === "Russia" && query.query.includes("buyers distributors")));
-assert.ok(regionPlan.some((query) => query.region === null && query.query.includes("firma iletisim")));
-assert.ok(regionPlan.some((query) => query.region === null && query.query.includes("company contact email")));
+assert.ok(regionPlan.every((query) => query.region !== null));
 const turkishPlan = buildQueryPlan({ ...profile, regions: ["Istanbul"] }, { segmentKeys: [profile.segments[0]!.key] });
 assert.ok(turkishPlan.some((query) => query.region === "Istanbul" && query.query.includes("firma iletisim")));
 assert.ok(turkishPlan.every((query) => query.region !== "Istanbul" || !query.query.includes("company contact email")));

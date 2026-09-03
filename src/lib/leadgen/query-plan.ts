@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { LeadGenProfile } from "./profile";
 
 // Bump when buildQueryPlan ordering changes so persisted offsets are not reused.
-export const QUERY_PLAN_VERSION = 2;
+export const QUERY_PLAN_VERSION = 3;
 
 export type QueryLocale =
   | "tr"
@@ -214,7 +214,9 @@ export function buildQueryPlan(profile: LeadGenProfile, options: BuildQueryPlanO
   }> = [];
 
   segments.forEach((segment, segmentIdx) => {
-    const regions = [null, ...profile.regions.slice(0, regionCap)] as (string | null)[];
+    const scopedRegions = profile.regions.slice(0, regionCap);
+    const regions = ((profile.globalQueries === false && scopedRegions.length ? [] : [null]) as (string | null)[])
+      .concat(scopedRegions);
     regions.forEach((region, regionIdx) => {
       queryLocalesForRegion(region, profile.queryLocales).forEach((locale, localeIdx) => {
         const shapes = ALL_SHAPES.filter((shape) => !requestedShapes || requestedShapes.has(shape));
