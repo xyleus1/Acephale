@@ -100,6 +100,19 @@ gh workflow run production-database-migration.yml \
   --field confirmation=APPLY_PRODUCTION_MIGRATION
 ```
 
+An automated operator can request the same protected workflow with a
+`repository_dispatch` event named `production-database-migration`, sending
+`migration_id` and `confirmation` in `client_payload`:
+
+```bash
+curl --fail-with-body \
+  -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://api.github.com/repos/mmturna/derya-crm/dispatches \
+  -d '{"event_type":"production-database-migration","client_payload":{"migration_id":"20260822000200_order_supplier_contact_compatibility","confirmation":"APPLY_PRODUCTION_MIGRATION"}}'
+```
+
 The migration adds the canonical contact columns, exposes them through the
 compatibility view, backfills explicit legacy `email` and
 `research.identity` contact values, and updates the insert trigger without

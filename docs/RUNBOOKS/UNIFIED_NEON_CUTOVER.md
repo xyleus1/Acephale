@@ -117,8 +117,20 @@ Keep these unchanged:
 - `AUTH_SECRET`
 
 Do not put the owner URL in Vercel. Run `npm run deploy:migrations` from a
-controlled owner session before deployment. `npm run build` never applies
-migrations.
+controlled owner session before deployment, or request the protected workflow
+with a `repository_dispatch` event:
+
+```bash
+curl --fail-with-body \
+  -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://api.github.com/repos/mmturna/derya-crm/dispatches \
+  -d '{"event_type":"production-database-migration","client_payload":{"migration_id":"20260902000100_outreach_campaign_ab_variants","confirmation":"APPLY_PRODUCTION_MIGRATION"}}'
+```
+
+The workflow still requires the latest committed migration and the exact
+confirmation phrase, and `npm run build` never applies migrations.
 
 Redeploy Production after the variables are saved. Existing cookies from the
 old database will not authorize a missing user in the new database, so sign in

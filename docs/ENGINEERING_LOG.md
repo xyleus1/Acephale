@@ -1,5 +1,14 @@
 # Engineering Log
 
+## 2026-09-02: Production migration workflow accepts automated dispatch
+
+- The protected production migration workflow now accepts
+  `repository_dispatch` events with type `production-database-migration` and
+  a `client_payload` of `{ migration_id, confirmation }`.
+- Manual and automated triggers share the Production environment, exact
+  confirmation phrase, latest-committed-migration check, pinned database
+  identity checks, and committed verification SQL.
+
 ## 2026-09-02 - Operator login throttling, daily code cap, generic errors
 
 - Unsolicited sign-in codes reached the founder mailbox because the only limit

@@ -12,6 +12,11 @@ on:
         required: true
         type: string
 
+  # Automated operators may request a migration this way; the confirmation
+  # phrase and latest committed migration check bind the request.
+  repository_dispatch:
+    types: [production-database-migration]
+
 permissions:
   contents: read
 
@@ -27,8 +32,8 @@ jobs:
     environment:
       name: Production
     env:
-      REQUESTED_MIGRATION_ID: ${{ inputs.migration_id }}
-      REQUEST_CONFIRMATION: ${{ inputs.confirmation }}
+      REQUESTED_MIGRATION_ID: ${{ inputs.migration_id || github.event.client_payload.migration_id }}
+      REQUEST_CONFIRMATION: ${{ inputs.confirmation || github.event.client_payload.confirmation }}
       PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=120000 -c idle_in_transaction_session_timeout=120000
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

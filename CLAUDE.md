@@ -18,6 +18,6 @@
 ### Production database migrations
 
 - Routine Vercel builds never run database migrations.
-- Dispatch `.github/workflows/production-database-migration.yml` from `main`.
+- Dispatch `.github/workflows/production-database-migration.yml` from `main`, manually or with a `repository_dispatch` event named `production-database-migration` carrying `migration_id` and `confirmation` in `client_payload`.
 - Supply the latest committed migration directory and the exact confirmation phrase.
 - The workflow uses the `Production` environment owner secret, verifies the exact database and role, runs Prisma migration deployment, and requires a committed read-only verification script.

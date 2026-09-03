@@ -787,7 +787,9 @@ Use this log for durable product and engineering decisions. Do not put every imp
   deployments depend on DDL privileges and blocked a navigation hotfix.
 - Decision: `npm run build` only generates the Prisma client and builds the
   application. Schema changes use the explicit `npm run deploy:migrations`
-  release step with the controlled owner connection before application rollout.
+  release step with the controlled owner connection, or the protected
+  production migration workflow through `workflow_dispatch` or
+  `repository_dispatch`, before application rollout.
 - Consequences: The runtime role stays least-privileged and ordinary code
   releases cannot mutate schema. Migration-bearing releases must prove the
   owner-run migration separately before production deployment. CI also requires
@@ -4205,12 +4207,14 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Context: Routine Vercel builds intentionally use a restricted application
   role and cannot run DDL. Manual local migration commands depended on a
   credential in one operator session and did not provide a durable audit path.
-- Decision: Production migrations run only through the manually dispatched
-  GitHub workflow on `main`. The job uses the `Production` environment owner
-  secret, requires an exact confirmation phrase and the latest committed
-  migration ID, verifies `derya_production` and `neondb_owner`, runs
-  `prisma migrate deploy`, and requires a committed read-only verification SQL
-  file for the selected migration.
+- Decision: Production migrations run only through the protected GitHub
+  workflow on `main`, using either `workflow_dispatch` or a
+  `repository_dispatch` event with type `production-database-migration`. The
+  job uses the `Production` environment owner secret, requires an exact
+  confirmation phrase and the latest committed migration ID, verifies
+  `derya_production` and `neondb_owner`, runs `prisma migrate deploy`, and
+  requires a committed read-only verification SQL file for the selected
+  migration.
 - Safety: The workflow token is read-only, concurrent migrations serialize,
   migration and verification paths cannot come from arbitrary input, and
   dependency lifecycle scripts cannot read the owner credential. Routine

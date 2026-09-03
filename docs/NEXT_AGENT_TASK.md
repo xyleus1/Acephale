@@ -186,4 +186,9 @@ In `src/lib/agent-chat.ts`, extend the existing command match so a bare greenlig
 
 ## Deployment note
 
-The new tables need the `Production database migration` workflow run on `main` after merge. Nothing in the feature may assume the tables exist before that, so surface a clear failure instead of a crash if a query hits a missing table.
+The new tables need the `Production database migration` workflow run on
+`main` after merge. It can be started manually or by sending a
+`repository_dispatch` event named `production-database-migration` with
+`migration_id` and `confirmation` in `client_payload`. Nothing in the feature
+may assume the tables exist before that, so surface a clear failure instead of
+a crash if a query hits a missing table.

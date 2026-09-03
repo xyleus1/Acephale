@@ -1,5 +1,16 @@
 # AI Handoff
 
+## 2026-09-02: Production migration workflow accepts automated dispatch
+
+- `.github/workflows/production-database-migration.yml` accepts the existing
+  `workflow_dispatch` trigger and `repository_dispatch` events with type
+  `production-database-migration`.
+- Automated requests pass `migration_id` and
+  `APPLY_PRODUCTION_MIGRATION` in a `client_payload` of
+  `{ migration_id, confirmation }`, then use the same Production environment,
+  latest committed migration check, pinned database identity checks, and
+  verification SQL as manual runs.
+
 ## 2026-09-02: Operator sign-in abuse resistance
 
 - Requesting a code, verifying a code, and password sign-in each consume a
@@ -411,8 +422,10 @@
   `20260901000200_leadgen_outreach_app_grants` grants `derya_app` the four new
   lead gen and outreach tables the same way `20260825000200` did for research
   lists. Its verification script checks the lead gen schema and the grants.
-  Dispatch `.github/workflows/production-database-migration.yml` from `main` to
-  unblock prospecting. It has not been dispatched yet.
+  Dispatch `.github/workflows/production-database-migration.yml` from `main`,
+  manually or through a `repository_dispatch` event with type
+  `production-database-migration` and `client_payload` fields for the migration
+  ID and confirmation, to unblock prospecting. It has not been dispatched yet.
 - `supplyErrorResponse` now logs unexpected failures and answers 503 with a
   migration message for P2021 and P2022, so a schema drift never looks like a
   generic Supply OS failure again.
@@ -1940,8 +1953,9 @@ Release requirement:
 - Production application connections use a restricted role without DDL access.
   The build now runs Prisma generation and Next.js only.
 - Schema rollout is an explicit `npm run deploy:migrations` step using the
-  controlled owner connection. This restores least-privilege production
-  deploys without weakening the database role.
+  controlled owner connection, or the protected production migration workflow
+  through `workflow_dispatch` or `repository_dispatch`. This restores
+  least-privilege production deploys without weakening the database role.
 - The deployment boundary test now rejects migration commands in the routine
   build script and requires the `derya_app` table allowlist to match every
   Prisma model.
