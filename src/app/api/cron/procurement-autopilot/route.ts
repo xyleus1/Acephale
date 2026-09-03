@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { runDueBackgroundJobs } from "@/lib/background-jobs";
-import { listAutopilotOrderIds, runProcurementAutopilot } from "@/lib/procurement-autopilot";
+import {
+  AUTOPILOT_MAX_ORDERS_PER_RUN,
+  listAutopilotOrderIds,
+  rotateAutopilotOrderIds,
+  runProcurementAutopilot,
+} from "@/lib/procurement-autopilot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,8 +17,16 @@ const responseHeaders = {
 };
 
 // The scheduled pass keeps every live sourcing request moving between operator
-// commands. Sending stays off here: the loop drafts, triages and reports, and
-// an operator confirms delivery through the admin command.
+// commands, and answers the supplier replies it finds: a reply that only an
+// operator command could answer stayed unanswered for as long as nobody ran
+// one. Commercial commitments are still not automated, because a question about
+// price, payment terms, or legal wording is escalated rather than answered.
+// Only replies that currently await an answer are delivered. A quiet thread
+// chase and a first contact nudge are unsolicited mail nobody asked us to
+// send, so this pass plans and reports them and an operator confirms them.
+const PASS_BUDGET_MS = 240_000;
+const REQUEST_SEND_LIMIT = 8;
+
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret) {
@@ -26,23 +39,64 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
   }
   try {
+    // The budget covers the whole invocation, so it starts before the sourcing
+    // slice: a wave can spend most of the invocation on its own, and a deadline
+    // measured after it would let one request run past the function limit.
+    const startedAt = Date.now();
+    const deadlineAt = startedAt + PASS_BUDGET_MS;
     // A sourcing wave asked for from the context chat runs in slices, so this
     // pass carries it forward instead of leaving it for the hourly job sweep.
     const waves = await runDueBackgroundJobs({ limit: 2, onlyTypes: ["PROCUREMENT_SOURCING_WAVE"] })
       .catch(() => null);
-    const orderIds = await listAutopilotOrderIds();
+    // Rotation covers the whole eligible queue, not the requests one pass can
+    // work: taking the first requests of an oldest first list every time is how
+    // a later request would never be worked at all.
+    const queue = rotateAutopilotOrderIds(await listAutopilotOrderIds(), startedAt);
+    const orderIds = queue.slice(0, AUTOPILOT_MAX_ORDERS_PER_RUN);
     const runs = [];
     let failed = 0;
+    let deferred = Math.max(0, queue.length - orderIds.length);
     for (const orderId of orderIds) {
+      // A pass killed at the invocation limit reports nothing and answers
+      // nothing, so it stops itself while it can still report, and the request
+      // it did not reach is first in the next rotation.
+      if (Date.now() >= deadlineAt) {
+        deferred += 1;
+        continue;
+      }
       try {
-        const run = await runProcurementAutopilot({ orderId, autoSend: false });
+        const run = await runProcurementAutopilot({
+          orderId,
+          autoSend: true,
+          sendFollowUps: false,
+          bestEffort: true,
+          limit: REQUEST_SEND_LIMIT,
+          // Starting a request in time is not the same as finishing it: one
+          // request runs a quote sweep, a draft batch, a thread scan and a send
+          // batch, so the deadline goes into the pass and stops it between
+          // those units of work rather than after the invocation is already
+          // over.
+          deadlineAt,
+        });
         if (run) {
+          // A request the pass could not finish is still owed work, so it is
+          // counted as deferred and led by a later rotation.
+          if (run.stoppedAtDeadline) deferred += 1;
           runs.push({
             orderId: run.orderId,
             material: run.material,
             stage: run.stage,
             quotes: run.quotes,
+            replied: run.replied,
             drafted: run.drafted,
+            sent: run.sent,
+            nudged: run.nudged,
+            // Named so a pass that withheld follow ups is visible in the
+            // response rather than looking like a queue with nothing to chase.
+            chaseCandidates: run.plan.filter((entry) => entry.action.kind === "CHASE").length,
+            nudgeCandidates: run.nudgeCandidates,
+            failed: run.failed,
+            stoppedAtDeadline: run.stoppedAtDeadline,
             escalations: run.escalations.length,
           });
         }
@@ -55,6 +109,7 @@ export async function GET(request: Request) {
       ranAt: new Date().toISOString(),
       sourcingWaves: waves?.scanned ?? 0,
       requests: runs.length,
+      deferred,
       failed,
       runs,
     }, { headers: responseHeaders });

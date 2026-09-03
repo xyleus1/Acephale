@@ -1,5 +1,78 @@
 # Engineering Log
 
+## 2026-09-03: Answering replies outlasted the invocation limit
+
+- A confirmed autopilot pass on a 424 supplier request returned 504
+  FUNCTION_INVOCATION_TIMEOUT: `vendorStates`, `draftTargets`, and the send
+  batch each walked every supplier row, reading a conversation (and, in the send
+  batch, rereading the request) per row. The scheduled pass hit the same wall
+  silently, so on any large campaign replies were never answered by the loop and
+  only a small operator command could catch up.
+- Every reply pass now scopes to `procurementRepliedVendors`, which overlays the
+  office email records onto the projected response counts, so cost tracks
+  replies received. The scheduled pass sends in best effort mode, stops at a
+  240s budget while it can still report, and rotates the request queue by pass
+  window.
+- The same production pass also failed sends with "The selected Gmail sender is
+  paused by sender protection.": the thread sender lookup accepted a paused
+  mailbox, which the provider then refuses. Paused mailboxes are excluded from
+  that lookup and the loop allows the pooled sender, so the answer leaves from a
+  mailbox that can send instead of failing forever.
+- Review found the send instruction was doing too much: one `autoSend` flag
+  covered answers to current replies, quiet thread chases, and nudges to
+  suppliers who never replied, so the scheduled pass would have mailed
+  unsolicited follow ups nobody confirmed. Sending is split, the scheduled pass
+  passes `sendFollowUps: false`, and it does not draft chases either, since a
+  saved chase draft is indistinguishable from a ready reply draft to a later
+  pass. Delivery is then restricted to threads whose newest message is the
+  supplier's.
+- Review then found the 240s budget only stopped the route from starting the
+  next request, while one request runs a quote sweep, a draft batch, a thread
+  scan per respondent and a send batch with no deadline of its own, so a slow
+  request could still be killed at the function limit and discard the whole
+  response. `runProcurementAutopilot` takes an absolute `deadlineAt`, checks it
+  before every phase and between threads and chase drafts, and reports
+  `stoppedAtDeadline`, which the route counts as deferred. Review then found two
+  holes in that first guard: a phase that started in time could still outlast
+  the deadline on its own, so the quote sweep stops between pages and the draft
+  batch between drafts; and a scan that spent the whole budget left no time to
+  send, so a request too large to scan in one pass would have answered nobody
+  forever. Reading now stops a send reserve before the deadline and respondents
+  rotate by window, so a partial scan sends what it collected and every thread
+  is eventually read.
+- Review then found two ways a reply could still never be answered. Respondent
+  scope came from the capped presentation summary, so once an order passed
+  1,000 mail records an older reply looked like no reply at all and its supplier
+  was dropped from every pass; respondents now come from a paged read of the
+  order's whole inbound history, scoped by office and request token, loading
+  inbound mail plus the addresses we mailed on its threads and no other bodies,
+  while the capped summary keeps serving the dashboard. And eight early draft
+  targets that failed on every attempt held the whole batch, so later replies
+  were never drafted; eligible targets now rotate by window like the queue, and
+  a failed draft is reported in the pass failures instead of being counted and
+  forgotten.
+- Review then found the full history read could itself consume a scheduled
+  invocation before a single reply was sent. The read now takes the caller's
+  `outOfTime`, stops between pages, and returns `complete: false`, which the
+  autopilot counts as `stoppedAtDeadline` so the request is deferred rather than
+  reported as finished with fewer repliers than it has. Pages run newest mail
+  first, so a read cut short still holds the replies waiting now, and the draft
+  batch and quote sweep pass the same deadline through their own candidate
+  selection.
+- Two leftovers from that round followed. The pass named failed drafts but did
+  not count them, so a pass whose every draft failed still reported zero
+  failures; the count now covers the draft and chase draft paths too. And quote
+  capture still chose its candidates from the capped presentation summary, so a
+  priced reply older than an order's newest mail records was never read; it now
+  takes the same full history reply scope the answer path uses, office and order
+  scoped, with the read budget and cursor unchanged.
+- Review also found that the mailbox filtering excluded the one mailbox that
+  could settle an uncertain delivery: a paused sender left a RUNNING attempt
+  unreconcilable, and the replacement sender changed the message hash, so the
+  attempt was refused as a different reply. Reconciliation now uses the sender
+  the attempt stored, including when no sender is available at all, and the
+  guard compares what the supplier reads rather than the full hash.
+
 ## 2026-09-03: A protection pause between reservation and delivery no longer drops the recipient
 
 - The Gmail send lookup refuses a mailbox whose `sendPausedAt` was set after

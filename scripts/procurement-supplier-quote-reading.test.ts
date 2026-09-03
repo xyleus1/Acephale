@@ -563,14 +563,15 @@ function capturePersistence() {
     source.includes('candidate.state === "COMPLETE"'),
     "Only a complete reading is recorded, so a partial answer never reports a request as quoted.",
   );
+  // The reply scope answers both: it keeps silent suppliers out of the read,
+  // and it identifies a locally synced respondent from the request's whole
+  // inbound history rather than the capped presentation summary, so a price in
+  // an older reply is still read.
   assert.ok(
-    source.includes("vendor.responseCount > 0"),
-    "Suppliers that never answered cost no conversation read, so a large request stays inside its budget.",
-  );
-  assert.ok(
-    source.includes("overlayVendorOutreach(vendor, outreach)")
-      && source.includes("localRfqOutreach(summary.officeId, summary.orderId)"),
-    "A reply that only the office email records saw still makes its supplier a candidate, and the overlay stays office and order scoped.",
+    /procurementRepliedVendors\(\{\s*officeId: summary\.officeId,\s*orderId: summary\.orderId,\s*vendors: order\.vendors,/
+      .test(source)
+      && !/localRfqOutreach\(/.test(source),
+    "Candidates are the request's actual repliers, read office and order scoped across its whole history.",
   );
   assert.ok(
     source.includes("quoteCapturePage("),
@@ -658,7 +659,7 @@ function onePassWalksPastTheFirstPage() {
 
   const autopilot = readFileSync(resolve(root, "src/lib/procurement-autopilot.ts"), "utf8");
   assert.ok(
-    autopilot.includes("sweepSupplierQuoteCapture({ orderId: args.orderId })")
+    autopilot.includes("sweepSupplierQuoteCapture({ orderId: args.orderId, outOfTime: outOfScanTime })")
       && !autopilot.includes("runSupplierQuoteCapture("),
     "The autopilot sweeps, so respondents beyond the first page are never starved of capture.",
   );

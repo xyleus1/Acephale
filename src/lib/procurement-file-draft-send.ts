@@ -8,6 +8,7 @@ import {
   procurementFileDraftSendDecision,
 } from "@/lib/procurement-file-delivery-draft";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
+import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import { sendProcurementSupplierReply } from "@/lib/procurement-reply-send";
 import { getProcurementRequest } from "@/lib/procurement-workflow";
 
@@ -51,9 +52,10 @@ export async function runProcurementFileDraftSendBatch(args: {
   // When present, only these suppliers may be delivered to. The sourcing loop
   // uses it so a thread it decided to escalate is never answered automatically.
   vendorIds?: readonly string[];
-  // When the mailbox that owns a thread is no longer connected, deliver from a
-  // shared pool mailbox instead of failing. Operator commands opt in; the
-  // sourcing loop never does, because it changes who the supplier hears from.
+  // When the mailbox that owns a thread can no longer send, because it was
+  // disconnected or paused by sender protection, deliver from a shared pool
+  // mailbox instead of failing. The supplier reads the same answer with the
+  // same files, threaded on its own message, from a different address.
   allowPooledSender?: boolean;
 }): Promise<FileSendRunResult | null> {
   const summary = await loadBulkRfqOrder(args.orderId);
@@ -65,7 +67,15 @@ export async function runProcurementFileDraftSendBatch(args: {
   const outcomes: FileSendOutcome[] = [];
   let drafts = 0;
   const allowed = args.vendorIds ? new Set(args.vendorIds) : null;
-  for (const listed of order.vendors) {
+  // A draft only exists where a supplier replied, and rereading the request per
+  // supplier row is what made a large campaign outlast its invocation limit, so
+  // the run walks the repliers rather than every row.
+  const candidates = await procurementRepliedVendors({
+    officeId: summary.officeId,
+    orderId: summary.orderId,
+    vendors: order.vendors,
+  });
+  for (const listed of candidates.vendors) {
     if (allowed && !allowed.has(listed.id)) continue;
     // A run can hold a request open for several deliveries, so the request is
     // reread here rather than at the top: the recheck below has to compare the

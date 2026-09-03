@@ -266,7 +266,7 @@ assert.match(
 const autopilot = readFileSync(resolve(root, "src/lib/procurement-autopilot.ts"), "utf8");
 assert.match(
   autopilot,
-  /failed: \(sendRun\?\.failed \?\? 0\) \+ \(nudgeRun\?\.failed \?\? 0\)/,
+  /failed: \(sendRun\?\.failed \?\? 0\)\s*\+ \(nudgeRun\?\.failed \?\? 0\)/,
   "Failed follow ups count toward the autopilot failure total.",
 );
 

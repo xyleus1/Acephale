@@ -341,6 +341,101 @@ async function main() {
     assert.equal(unknownSendCount, 1);
     assert.equal(unknownReconcileCount, 1);
 
+    // Only the mailbox that was handed a message knows what happened to it, so
+    // a mailbox paused by sender protection after an uncertain delivery still
+    // has to answer for it: asking any other mailbox would leave the delivery
+    // unresolved forever.
+    const pausedUnknown = fixture(workspace.id, `paused-unknown-${suffix}`);
+    const pausedReconciles: string[] = [];
+    let pausedUnknownSends = 0;
+    const pausedUnknownProvider: SupplierEmailProvider = {
+      send: async () => {
+        pausedUnknownSends += 1;
+        return { state: "UNKNOWN", error: "The test transport timed out." };
+      },
+      reconcile: async (input) => {
+        pausedReconciles.push(input.senderEmail);
+        return sentReceipt({
+          ...successfulSends[0]!,
+          accountId: input.accountId,
+          officeId: input.officeId,
+          senderEmail: input.senderEmail,
+          rfcMessageId: input.rfcMessageId,
+          providerThreadId: `thread-paused-unknown-${suffix}`,
+        });
+      },
+    };
+    await assert.rejects(
+      deliver({ context, fixture: pausedUnknown, provider: pausedUnknownProvider }),
+      /timed out/,
+    );
+    await prisma.emailAccount.updateMany({
+      where: { officeId: office.id, email: "operator@derya.ai" },
+      data: { sendPausedAt: new Date() },
+    });
+    const pausedReconciled = await deliver({
+      context,
+      fixture: pausedUnknown,
+      provider: pausedUnknownProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(pausedReconciled.alreadySent, false);
+    assert.equal(pausedUnknownSends, 1, "An uncertain delivery must reconcile before another send.");
+    assert.deepEqual(
+      pausedReconciles,
+      ["operator@derya.ai"],
+      "Reconciliation must ask the mailbox the attempt was made from, not its replacement.",
+    );
+    await prisma.emailAccount.updateMany({
+      where: { officeId: office.id, email: "operator@derya.ai" },
+      data: { sendPausedAt: null },
+    });
+
+    // The same holds without a pooled fallback, where no sender is available at
+    // all: the stored attempt is settled instead of asking for one.
+    const strandedUnknown = fixture(workspace.id, `stranded-unknown-${suffix}`);
+    const strandedReconciles: string[] = [];
+    const strandedProvider: SupplierEmailProvider = {
+      send: async () => ({ state: "UNKNOWN", error: "The test transport timed out." }),
+      reconcile: async (input) => {
+        strandedReconciles.push(input.senderEmail);
+        return sentReceipt({
+          ...successfulSends[0]!,
+          accountId: input.accountId,
+          officeId: input.officeId,
+          senderEmail: input.senderEmail,
+          rfcMessageId: input.rfcMessageId,
+          providerThreadId: `thread-stranded-unknown-${suffix}`,
+        });
+      },
+    };
+    await assert.rejects(
+      deliver({ context, fixture: strandedUnknown, provider: strandedProvider }),
+      /timed out/,
+    );
+    await prisma.emailAccount.updateMany({
+      where: { officeId: office.id, email: "operator@derya.ai" },
+      data: { sendPausedAt: new Date() },
+    });
+    const strandedReconciled = await deliver({
+      context,
+      fixture: strandedUnknown,
+      provider: strandedProvider,
+    });
+    assert.equal(strandedReconciled.alreadySent, false);
+    assert.deepEqual(strandedReconciles, ["operator@derya.ai"]);
+    const strandedReplay = await deliver({
+      context,
+      fixture: strandedUnknown,
+      provider: strandedProvider,
+    });
+    assert.equal(strandedReplay.alreadySent, true, "A settled delivery must be reported, not sent again.");
+    assert.equal(strandedReconciles.length, 1);
+    await prisma.emailAccount.updateMany({
+      where: { officeId: office.id, email: "operator@derya.ai" },
+      data: { sendPausedAt: null },
+    });
+
     // Attachment bytes are only needed by a fresh send, so a storage failure
     // must never block reconciliation of a delivery that is still unresolved.
     const attachmentCompany = await prisma.company.create({
@@ -479,6 +574,63 @@ async function main() {
     await deliver({ context, fixture: rejected, provider: rejectionProvider });
     assert.equal(rejectedIds.length, 2);
     assert.notEqual(rejectedIds[0], rejectedIds[1], "A definitive failed retry must use a new RFC Message-ID.");
+
+    // Sender protection can pause the thread mailbox after an attempt failed,
+    // and the replacement sender changes the delivery hash: the same reply from
+    // another mailbox is a retry, not a different reply attempt, or the
+    // supplier could never be answered again.
+    const pausedRetry = fixture(workspace.id, `paused-retry-${suffix}`);
+    const pausedSends: SupplierEmailSendInput[] = [];
+    let rejectFirstPaused = true;
+    const pausedProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        pausedSends.push(input);
+        if (rejectFirstPaused) {
+          rejectFirstPaused = false;
+          return { state: "REJECTED", error: "The test sender rejected the message." };
+        }
+        return sentReceipt(input);
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    await assert.rejects(deliver({ context, fixture: pausedRetry, provider: pausedProvider }), /rejected/);
+    assert.equal(pausedSends[0]!.senderEmail, "operator@derya.ai");
+    await prisma.emailAccount.updateMany({
+      where: { officeId: office.id, email: "operator@derya.ai" },
+      data: { sendPausedAt: new Date() },
+    });
+    await assert.rejects(
+      deliver({ context, fixture: pausedRetry, provider: pausedProvider }),
+      /disconnected or disabled/,
+      "A paused thread mailbox cannot send, and must not be chosen.",
+    );
+    const pausedDelivered = await deliver({
+      context,
+      fixture: pausedRetry,
+      provider: pausedProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(pausedDelivered.alreadySent, false);
+    assert.equal(pausedSends.length, 2);
+    assert.notEqual(
+      pausedSends[1]!.senderEmail,
+      "operator@derya.ai",
+      "A retry after a failed attempt must leave the paused mailbox behind.",
+    );
+    const pausedChanged = {
+      ...pausedRetry,
+      input: { ...pausedRetry.input, body: `${pausedRetry.input.body} Changed.` },
+    };
+    await assert.rejects(
+      deliver({ context, fixture: pausedChanged, provider: pausedProvider, allowPooledSender: true }),
+      /already/,
+      "A different reply text must not ride on a delivered attempt.",
+    );
+    assert.equal(pausedSends.length, 2, "A delivered reply must not be sent twice.");
+    await prisma.emailAccount.updateMany({
+      where: { officeId: office.id, email: "operator@derya.ai" },
+      data: { sendPausedAt: null },
+    });
 
     const concurrent = fixture(workspace.id, `concurrent-${suffix}`);
     let releaseFirst!: () => void;

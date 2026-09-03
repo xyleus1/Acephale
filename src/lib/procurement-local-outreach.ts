@@ -24,6 +24,9 @@ const RFQ_REFERENCE_PATTERN = "\\[rfq ([0-9a-f]{8})\\]";
 // cased so this request cannot claim that reply.
 const RFQ_SUBJECT_TAG = "[rfq ";
 const RECOVERY_THREAD_CHUNK = 400;
+// Respondent identification pages the order's whole inbound history, so the
+// page bounds one read without bounding what a pass can see.
+const LOCAL_RFQ_RESPONDENT_PAGE = 500;
 
 function subjectTokens(subject: string | null): string[] {
   if (!subject) return [];
@@ -280,6 +283,183 @@ export async function localRfqOutreachByOrder(
     orderId,
     summarizeLocalRfqOutreach(byToken.get(rfqSubjectReferenceToken(orderId)) ?? []),
   ]));
+}
+
+type LocalRfqInboundRow = {
+  id: string;
+  threadId: string;
+  fromEmail: string;
+  toEmails: string;
+  ccEmails: string | null;
+  subject: string | null;
+  bodyHead: string | null;
+  sentAt: Date;
+  accountEmail: string | null;
+};
+
+// Who answered decides which threads a pass reads, and the presentation summary
+// keeps only the newest messages of an order, so a reply older than that window
+// would drop a real respondent out of processing entirely. This reads the whole
+// history instead, and stays cheap by loading inbound mail only, plus the
+// addresses we mailed on the threads that inbound mail arrived on, which is
+// what attribution needs.
+export type LocalRfqRespondents = {
+  emails: string[];
+  // False when a caller's deadline stopped the read before the oldest mail, so
+  // the set is a prefix of the respondents rather than all of them.
+  complete: boolean;
+};
+
+export async function localRfqRespondentEmails(
+  officeId: string,
+  orderId: string,
+  options?: { outOfTime?: () => boolean },
+): Promise<LocalRfqRespondents> {
+  const token = rfqSubjectReferenceToken(orderId);
+  const responded = new Set<string>();
+  let cursor: { sentAt: Date; id: string } | null = null;
+  // Paged rather than capped: a cap would silently drop the oldest respondents
+  // out of every pass, which is the defect this replaces, while a page keeps a
+  // single read bounded. A history long enough to outlast a scheduled pass stops
+  // between pages instead of running the invocation out, and says so, so the
+  // caller reports an unfinished pass rather than a request with no repliers.
+  // Pages run newest mail first, so a read the deadline cut short still holds
+  // the suppliers whose answers are waiting now, and the caller rotating its own
+  // queue by window is what carries the rest into later passes.
+  for (;;) {
+    const inbound = await respondentInboundPage({ officeId, token, cursor });
+    if (!inbound.length) break;
+    for (const email of await respondentEmailsOf(officeId, inbound)) responded.add(email);
+    const last = inbound[inbound.length - 1];
+    if (inbound.length < LOCAL_RFQ_RESPONDENT_PAGE) break;
+    cursor = { sentAt: last.sentAt, id: last.id };
+    if (options?.outOfTime?.()) {
+      return { emails: [...responded], complete: false };
+    }
+  }
+  return { emails: [...responded], complete: true };
+}
+
+async function respondentInboundPage(args: {
+  officeId: string;
+  token: string;
+  cursor: { sentAt: Date; id: string } | null;
+}): Promise<LocalRfqInboundRow[]> {
+  const officeId = args.officeId;
+  const token = args.token;
+  const after = args.cursor?.sentAt ?? null;
+  const afterId = args.cursor?.id ?? "";
+  return prisma.$queryRaw<LocalRfqInboundRow[]>`
+    WITH referenced AS (
+      SELECT
+        message."id",
+        message."threadId",
+        reference."token"
+      FROM "EmailMessage" AS message
+      JOIN "EmailThread" AS thread ON thread."id" = message."threadId"
+      CROSS JOIN LATERAL (
+        SELECT DISTINCT (found)[1] AS "token"
+        FROM regexp_matches(lower(message."subject"), ${RFQ_REFERENCE_PATTERN}, 'g') AS found
+      ) AS reference
+      WHERE thread."officeId" = ${officeId}
+    ), tagged AS (
+      SELECT * FROM referenced WHERE "token" = ${token}
+    ), anchored AS (
+      -- A thread carrying two requests' references anchors neither of them.
+      SELECT "threadId"
+      FROM referenced
+      WHERE "threadId" IN (SELECT "threadId" FROM tagged)
+      GROUP BY "threadId"
+      HAVING count(DISTINCT "token") = 1
+    )
+    SELECT
+      message."id",
+      message."threadId",
+      message."fromEmail",
+      message."toEmails",
+      message."ccEmails",
+      message."subject",
+      left(message."bodyText", ${LOCAL_RFQ_BODY_HEAD_CHARS}::int) AS "bodyHead",
+      message."sentAt",
+      account."email" AS "accountEmail"
+    FROM "EmailMessage" AS message
+    JOIN "EmailThread" AS thread ON thread."id" = message."threadId"
+    LEFT JOIN "EmailAccount" AS account ON account."id" = message."accountId"
+    WHERE thread."officeId" = ${officeId}
+      AND message."direction" = 'INBOUND'
+      AND (
+        message."id" IN (SELECT "id" FROM tagged)
+        OR message."threadId" IN (SELECT "threadId" FROM anchored)
+      )
+      AND (
+        ${after}::timestamptz IS NULL
+        OR (message."sentAt", message."id") < (${after}::timestamptz, ${afterId})
+      )
+    ORDER BY message."sentAt" DESC, message."id" DESC
+    LIMIT ${LOCAL_RFQ_RESPONDENT_PAGE}::int
+  `;
+}
+
+// Attribution is per thread, so a page of inbound mail is vouched for by the
+// addresses we mailed on its own threads, and nothing else has to be loaded.
+async function respondentEmailsOf(
+  officeId: string,
+  inbound: readonly LocalRfqInboundRow[],
+): Promise<string[]> {
+  const threadIds = [...new Set(inbound.map((message) => message.threadId))];
+  const outbound: LocalRfqMessage[] = [];
+  for (let index = 0; index < threadIds.length; index += RECOVERY_THREAD_CHUNK) {
+    const rows = await prisma.emailMessage.findMany({
+      where: {
+        thread: { officeId },
+        threadId: { in: threadIds.slice(index, index + RECOVERY_THREAD_CHUNK) },
+        direction: "OUTBOUND",
+      },
+      select: {
+        id: true,
+        threadId: true,
+        fromEmail: true,
+        toEmails: true,
+        ccEmails: true,
+        sentAt: true,
+        account: { select: { email: true } },
+      },
+    });
+    for (const row of rows) {
+      outbound.push({
+        id: row.id,
+        threadId: row.threadId,
+        direction: "OUTBOUND",
+        fromEmail: row.fromEmail,
+        fromName: null,
+        toEmails: jsonEmails(row.toEmails),
+        ccEmails: jsonEmails(row.ccEmails),
+        subject: null,
+        body: "",
+        sentAt: row.sentAt.toISOString(),
+        accountEmail: row.account?.email ?? null,
+        externalThreadId: null,
+      });
+    }
+  }
+  const messages: LocalRfqMessage[] = [
+    ...outbound,
+    ...inbound.map((message) => ({
+      id: message.id,
+      threadId: message.threadId,
+      direction: "INBOUND",
+      fromEmail: message.fromEmail,
+      fromName: null,
+      toEmails: jsonEmails(message.toEmails),
+      ccEmails: jsonEmails(message.ccEmails),
+      subject: message.subject,
+      body: message.bodyHead ?? "",
+      sentAt: message.sentAt.toISOString(),
+      accountEmail: message.accountEmail,
+      externalThreadId: null,
+    })),
+  ];
+  return summarizeLocalRfqOutreach(messages).respondedEmails;
 }
 
 export async function localRfqOutreach(

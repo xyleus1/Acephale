@@ -5,6 +5,8 @@ import {
   autopilotFailures,
   autopilotRequestStage,
   planAutopilotVendorAction,
+  rotateAutopilotOrderIds,
+  rotateAutopilotQueue,
   type AutopilotAction,
   type AutopilotStage,
   type AutopilotVendorState,
@@ -16,6 +18,7 @@ import {
   saveProcurementFileDeliveryDraft,
 } from "@/lib/procurement-file-delivery-draft";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
+import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import { chasesSentAfterLastReply } from "@/lib/procurement-supplier-chase";
 import {
   listSupplierNudgeTargets,
@@ -39,12 +42,16 @@ import {
 // did, without an operator restating the context.
 
 export const AUTOPILOT_MAX_PER_RUN = 25;
+// How many requests one pass can hope to work. The queue it chooses from is
+// larger, because a pass that only ever saw the first requests of an oldest
+// first list would leave every later request unworked forever.
 export const AUTOPILOT_MAX_ORDERS_PER_RUN = 10;
+export const AUTOPILOT_MAX_QUEUE = 200;
 
 // Only requests that already reached suppliers can have a supplier thread to
 // work, and a closed request is never touched again.
-export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_ORDERS_PER_RUN): Promise<string[]> {
-  const bounded = Math.min(AUTOPILOT_MAX_ORDERS_PER_RUN, Math.max(1, Math.trunc(limit)));
+export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_QUEUE): Promise<string[]> {
+  const bounded = Math.min(AUTOPILOT_MAX_QUEUE, Math.max(1, Math.trunc(limit)));
   const rows = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{ orderId: string }>>(`
     SELECT DISTINCT orders.id AS "orderId", orders.created_at
     FROM orders
@@ -57,6 +64,12 @@ export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_ORDERS_PER_RUN
   `);
   return rows.map((row) => row.orderId);
 }
+
+export { rotateAutopilotOrderIds };
+
+// What the send batch needs at the end of a pass, so reading never consumes the
+// time answering requires.
+export const AUTOPILOT_SEND_RESERVE_MS = 60_000;
 
 export type AutopilotVendorPlan = {
   vendorId: string;
@@ -88,6 +101,15 @@ export type AutopilotRunResult = {
   failed: number;
   failures: Array<{ vendorId: string; vendorName: string; error: string }>;
   autoSend: boolean;
+  // False when the pass answered current replies but left quiet thread chases
+  // and first contact nudges planned and unsent, which is what a scheduled
+  // pass does.
+  sendFollowUps: boolean;
+  // True when the pass stopped starting work to stay inside the invocation it
+  // was given. What it did is reported and the rest is left for the next pass,
+  // which is the only outcome that reports anything at all: a pass killed at
+  // the function limit reports nothing and answers nothing.
+  stoppedAtDeadline: boolean;
   escalations: Array<{ vendorId: string; vendorName: string; reason: string }>;
   plan: AutopilotVendorPlan[];
 };
@@ -107,7 +129,15 @@ async function vendorStates(args: {
   // Best effort answers every question the request can speak to, so only price,
   // terms, and legal questions are left for the operator.
   bestEffort?: boolean;
-}): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor> }> {
+  // Reading a supplier thread is one bounded unit of work, so the scan stops
+  // between threads rather than running the invocation out. The suppliers it
+  // did not read are simply absent from the plan and are read by the next pass.
+  outOfTime?: () => boolean;
+  // When set, respondents are rotated by the window the pass belongs to, so a
+  // request whose respondents cannot all be read in one pass still has every
+  // one of them read by a later pass rather than the same prefix every time.
+  rotateFrom?: number | null;
+}): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor>; stopped: boolean }> {
   const facts = procurementReplyFacts({
     material: args.order.material,
     quantity: args.order.quantity,
@@ -118,7 +148,24 @@ async function vendorStates(args: {
   });
   const states: AutopilotVendorState[] = [];
   const anchors = new Map<string, ChaseAnchor>();
-  for (const vendor of args.order.vendors) {
+  // Every action this plan can take needs a supplier reply to work from, so the
+  // scan follows the replies rather than the supplier count. Suppliers that
+  // never answered are followed up through the nudge path, which selects them
+  // without reading a thread each.
+  const scanned = await procurementRepliedVendors({
+    officeId: args.officeId,
+    orderId: args.order.id,
+    vendors: args.order.vendors,
+    outOfTime: args.outOfTime,
+  });
+  const replied = typeof args.rotateFrom === "number"
+    ? rotateAutopilotQueue(scanned.vendors, args.rotateFrom)
+    : scanned.vendors;
+  // A history read cut short leaves repliers unseen, so the pass is unfinished
+  // even if every thread it did find is handled.
+  const stopped = !scanned.complete;
+  for (const vendor of replied) {
+    if (args.outOfTime?.()) return { states, anchors, stopped: true };
     const conversation = await procurementVendorConversation({
       officeId: args.officeId,
       customerId: args.customerId,
@@ -160,7 +207,7 @@ async function vendorStates(args: {
       chasesSent: chasesSentAfterLastReply(conversation.messages),
     });
   }
-  return { states, anchors };
+  return { states, anchors, stopped };
 }
 
 // A supplier that answered once and then went quiet gets the same files again
@@ -172,12 +219,14 @@ async function draftChases(args: {
   order: ProcurementOrderDetail;
   vendorIds: readonly string[];
   anchors: Map<string, ChaseAnchor>;
+  outOfTime?: () => boolean;
 }) {
   const drafted: string[] = [];
   const failures: AutopilotRunResult["failures"] = [];
-  if (!args.vendorIds.length) return { drafted, failures };
+  if (!args.vendorIds.length) return { drafted, failures, stopped: false };
   const access = await procurementOperatorAccess(args.officeId);
   for (const vendorId of args.vendorIds) {
+    if (args.outOfTime?.()) return { drafted, failures, stopped: true };
     const vendor = args.order.vendors.find((candidate) => candidate.id === vendorId);
     const anchor = args.anchors.get(vendorId);
     if (!vendor || !anchor) continue;
@@ -207,13 +256,33 @@ async function draftChases(args: {
 export async function runProcurementAutopilot(args: {
   orderId: string;
   autoSend?: boolean;
+  // Sending is split so an unattended pass can answer the replies that
+  // currently await an answer without also mailing unsolicited follow ups.
+  // Chases and nudges are the ones an operator confirms, so they default to
+  // the same instruction that turned sending on and are turned off separately.
+  sendFollowUps?: boolean;
   bestEffort?: boolean;
   limit?: number;
+  // Absolute time after which no further work is started. A pass runs several
+  // sequential phases over a request, so a caller bounded by a function limit
+  // cannot rely on starting in time: it has to be able to stop the pass in the
+  // middle and still get a report.
+  deadlineAt?: number;
 }): Promise<AutopilotRunResult | null> {
+  const deadlineAt = Number.isFinite(args.deadlineAt) ? Number(args.deadlineAt) : null;
+  const outOfTime = () => deadlineAt !== null && Date.now() >= deadlineAt;
+  // Reading and drafting stop earlier than the deadline itself, because a scan
+  // that spent the whole budget and then found no time to send would answer
+  // nobody: a request too large to scan in one pass would send nothing forever.
+  // The reserve is what the send batch needs, so a partial scan still delivers
+  // the answers it collected.
+  const scanDeadlineAt = deadlineAt === null ? null : deadlineAt - AUTOPILOT_SEND_RESERVE_MS;
+  const outOfScanTime = () => scanDeadlineAt !== null && Date.now() >= scanDeadlineAt;
   const summary = await loadBulkRfqOrder(args.orderId);
   if (!summary) return null;
   const limit = Math.min(AUTOPILOT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? AUTOPILOT_MAX_PER_RUN)));
   const autoSend = args.autoSend === true;
+  const sendFollowUps = autoSend && args.sendFollowUps !== false;
   // A priced answer is worth nothing until it is recorded against the supplier,
   // because the request reads its quotes, not its inbox. Recording mails nobody,
   // so it runs in draft only passes too and only writes supplier stated facts.
@@ -224,20 +293,33 @@ export async function runProcurementAutopilot(args: {
   // The sweep carries its own cursor across pages, so a request whose first
   // pages of respondents stay unquoted cannot hide the priced replies behind
   // them from every later pass.
-  const quoteRun = await sweepSupplierQuoteCapture({ orderId: args.orderId });
-  const draftRun = await runProcurementFileDraftBatch({
+  const quoteRun = outOfScanTime()
+    ? null
+    : await sweepSupplierQuoteCapture({ orderId: args.orderId, outOfTime: outOfScanTime });
+  // Each phase is entered only while there is time to finish it, and stops
+  // between its own units of work, so a pass that runs out reports what it did
+  // instead of being killed with nothing said.
+  const draftRun = outOfScanTime() ? null : await runProcurementFileDraftBatch({
     orderId: args.orderId,
     limit,
     bestEffort: args.bestEffort,
+    outOfTime: outOfScanTime,
+    rotateFrom: deadlineAt === null ? undefined : Date.now(),
   });
-  if (!draftRun) return null;
+  if (!draftRun && !outOfScanTime()) return null;
   const order = await getProcurementRequest(summary.customerId, args.orderId);
   if (!order) return null;
-  const { states, anchors } = await vendorStates({
+  const { states, anchors, stopped: scanStopped } = await vendorStates({
     officeId: summary.officeId,
     customerId: summary.customerId,
     order,
     bestEffort: args.bestEffort,
+    outOfTime: outOfScanTime,
+    // A scan that always starts at the same respondent could never reach the
+    // rest of a request it cannot finish in one pass, so respondents rotate by
+    // window exactly as the request queue does. Delivery stays idempotent, so
+    // revisiting a thread cannot mail it twice.
+    rotateFrom: deadlineAt === null ? null : Date.now(),
   });
   const plan = states.map((state) => ({
     vendorId: state.vendorId,
@@ -248,27 +330,52 @@ export async function runProcurementAutopilot(args: {
   // Drafts exist for threads the plan escalates, so delivery is restricted to
   // the suppliers the plan chose. The plan is therefore computed before the
   // send, never after it.
-  const chaseRun = await draftChases({
-    officeId: summary.officeId,
-    customerId: summary.customerId,
-    order,
-    vendorIds: plan.filter((entry) => entry.action.kind === "CHASE").map((entry) => entry.vendorId),
-    anchors,
-  });
+  // A chase draft is a saved reply like any other, so a pass that must not
+  // deliver chases does not write them either: a later pass would otherwise
+  // read them as a ready draft and send what was never confirmed. The plan
+  // still names every quiet thread, so nothing is hidden from the operator.
+  const chaseRun = sendFollowUps
+    ? await draftChases({
+      officeId: summary.officeId,
+      customerId: summary.customerId,
+      order,
+      vendorIds: plan.filter((entry) => entry.action.kind === "CHASE").map((entry) => entry.vendorId),
+      anchors,
+      outOfTime: outOfScanTime,
+    })
+    : { drafted: [] as string[], failures: [] as AutopilotRunResult["failures"], stopped: false };
   const deliverable = [
-    ...plan.filter((entry) => entry.action.kind === "SEND_DRAFT").map((entry) => entry.vendorId),
+    ...plan
+      .filter((entry) => entry.action.kind === "SEND_DRAFT"
+        // Without follow up sending, delivery is restricted to threads whose
+        // newest message is the supplier's, which is exactly a reply awaiting
+        // an answer. A chase draft saved by an earlier operator pass sits on a
+        // thread we spoke last on, so it stays behind its confirmation.
+        && (sendFollowUps || entry.state.lastDirection === "INBOUND"))
+      .map((entry) => entry.vendorId),
     ...chaseRun.drafted,
   ];
   // Suppliers that never replied have no inbound message to answer, so their
   // follow up rides on our own RFQ thread instead of being silently skipped.
-  const nudgeRun = autoSend
+  const nudgeRun = sendFollowUps && !outOfScanTime()
     ? await runProcurementSupplierNudges({ orderId: args.orderId, limit })
     : null;
-  const nudgePlan = nudgeRun
+  const nudgePlan = nudgeRun || outOfScanTime()
     ? null
     : await listSupplierNudgeTargets({ order: summary, limit });
-  const sendRun = autoSend && deliverable.length
-    ? await runProcurementFileDraftSendBatch({ orderId: args.orderId, limit, vendorIds: deliverable })
+  // Answering is the last phase to be given up, since a supplier is waiting on
+  // it, and an unsent draft is delivered by the next pass either way.
+  const sendRun = autoSend && deliverable.length && !outOfTime()
+    // A thread whose mailbox was disconnected or paused by sender protection
+    // can only be answered from another pooled mailbox, and leaving it unsent
+    // means a real supplier reply is never answered at all, so the loop allows
+    // the pooled sender rather than failing the delivery forever.
+    ? await runProcurementFileDraftSendBatch({
+      orderId: args.orderId,
+      limit,
+      vendorIds: deliverable,
+      allowPooledSender: true,
+    })
     : null;
   // Quotes recorded earlier in this pass are already on the vendor rows the
   // plan was built from, so counting the states counts them once.
@@ -279,7 +386,7 @@ export async function runProcurementAutopilot(args: {
     stage: autopilotRequestStage({ quotes }),
     quotes,
     replied: states.filter((state) => state.lastDirection === "INBOUND").length,
-    drafted: draftRun.drafted,
+    drafted: draftRun?.drafted ?? 0,
     chased: chaseRun.drafted.length,
     nudgeCandidates: nudgeRun?.candidates ?? nudgePlan?.targets.length ?? 0,
     nudged: nudgeRun?.sent ?? 0,
@@ -287,19 +394,27 @@ export async function runProcurementAutopilot(args: {
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
     refused: sendRun?.stale ?? 0,
-    // Both delivery paths count toward one failure total, so a run where every
-    // follow up failed cannot report zero.
-    failed: (sendRun?.failed ?? 0) + (nudgeRun?.failed ?? 0) + (quoteRun?.failed ?? 0),
+    // Every path that can fail counts toward one total, including the drafts
+    // and chase drafts a reply needs before it can be delivered at all, so a
+    // pass cannot report zero failures while naming failures.
+    failed: (sendRun?.failed ?? 0)
+      + (nudgeRun?.failed ?? 0)
+      + (quoteRun?.failed ?? 0)
+      + (draftRun?.failed ?? 0)
+      + chaseRun.failures.length,
     // A delivery that fails needs an operator, so it is reported next to the
     // escalations instead of being reduced to a count. A quote that cannot be
     // written counts too, since it leaves a priced reply invisible.
     failures: autopilotFailures({
       chase: chaseRun.failures,
+      draft: draftRun?.outcomes,
       nudge: nudgeRun?.outcomes,
       send: sendRun?.outcomes,
       quote: quoteRun?.outcomes,
     }),
     autoSend,
+    sendFollowUps,
+    stoppedAtDeadline: scanStopped || chaseRun.stopped || outOfTime(),
     escalations: autopilotEscalations(plan),
     plan,
   };

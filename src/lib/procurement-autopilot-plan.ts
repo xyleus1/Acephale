@@ -117,6 +117,7 @@ export type AutopilotOutcome = {
 // stored message is the opaque one, so a driver or provider error never leaks.
 export function autopilotFailures(args: {
   chase: readonly AutopilotFailure[];
+  draft?: readonly AutopilotOutcome[];
   nudge?: readonly AutopilotOutcome[];
   send?: readonly AutopilotOutcome[];
   quote?: readonly AutopilotOutcome[];
@@ -134,6 +135,14 @@ export function autopilotFailures(args: {
     }));
   return [
     ...args.chase,
+    // A reply that cannot even be drafted never reaches a supplier, and a
+    // target that fails every pass would otherwise be silent, so it is named
+    // here.
+    ...collected(
+      args.draft,
+      (state) => state === "FAILED",
+      "The supplier reply draft failed.",
+    ),
     ...collected(
       args.nudge,
       (state) => state !== "SENT" && state !== "ALREADY_SENT",
@@ -148,4 +157,25 @@ export function autopilotFailures(args: {
     ),
     ...collected(args.quote, (state) => state === "FAILED", "The supplier quote could not be recorded."),
   ];
+}
+
+// A scheduled pass cannot always reach every request inside one invocation, so
+// the queue is rotated by the window the pass belongs to: a request left behind
+// by one pass is worked first by a later one instead of never being reached.
+export const AUTOPILOT_ROTATION_WINDOW_MS = 900_000;
+
+// The queue advances by one request per window, whatever a pass managed to
+// work: a step the size of a pass would skip whatever the pass did not reach,
+// and a step sharing a factor with the queue length would visit only part of
+// the queue forever. One request per window visits every position in turn, so
+// every request leads a pass within one queue length of windows.
+export function rotateAutopilotQueue<T>(items: readonly T[], startedAt: number): T[] {
+  if (items.length < 2 || !Number.isFinite(startedAt)) return [...items];
+  const windows = Math.floor(Math.max(0, startedAt) / AUTOPILOT_ROTATION_WINDOW_MS);
+  const offset = windows % items.length;
+  return [...items.slice(offset), ...items.slice(0, offset)];
+}
+
+export function rotateAutopilotOrderIds(orderIds: readonly string[], startedAt: number): string[] {
+  return rotateAutopilotQueue(orderIds, startedAt);
 }

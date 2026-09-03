@@ -19,6 +19,8 @@ import {
 } from "@/lib/procurement-inbound-triage";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
+import { rotateAutopilotQueue } from "@/lib/procurement-autopilot-plan";
+import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import { getProcurementRequest, type ProcurementOrderDetail } from "@/lib/procurement-workflow";
 
 // Suppliers that replied to the RFQ campaign asked for the technical package.
@@ -122,6 +124,8 @@ async function vendorTarget(args: {
 async function draftTargets(
   context: NonNullable<Awaited<ReturnType<typeof loadContext>>>,
   bestEffort: boolean,
+  outOfTime?: () => boolean,
+  rotateFrom?: number,
 ) {
   const targets: Array<FileDraftTarget & { answers: string[] }> = [];
   const access = await procurementOperatorAccess(context.summary.officeId);
@@ -129,7 +133,28 @@ async function draftTargets(
     context: access,
     order: context.order,
   }).catch(() => null);
-  for (const vendor of context.order.vendors) {
+  // Walking every supplier row costs one conversation read each, which on a
+  // large campaign runs past the invocation limit before the repliers at the
+  // end are ever reached. Only a supplier that answered can hold a reply to
+  // draft against, so the scan is proportional to the replies received.
+  const replied = await procurementRepliedVendors({
+    officeId: context.summary.officeId,
+    orderId: context.summary.orderId,
+    vendors: context.order.vendors,
+    outOfTime,
+  });
+  // The read itself rotates, not only the targets it produced: a scan the
+  // deadline cuts short would otherwise read the same prefix of repliers on
+  // every pass, so the repliers past the cut would never become targets, never
+  // be drafted, and so never be answered.
+  const ordered = typeof rotateFrom === "number"
+    ? rotateAutopilotQueue(replied.vendors, rotateFrom)
+    : replied.vendors;
+  for (const vendor of ordered) {
+    // Reading a thread is a bounded unit like writing a draft, so the selection
+    // stops at the deadline too rather than spending the invocation before a
+    // single draft is written. What it did not reach is a candidate next pass.
+    if (outOfTime?.()) break;
     const target = await vendorTarget({
       officeId: context.summary.officeId,
       customerId: context.summary.customerId,
@@ -155,16 +180,31 @@ export async function runProcurementFileDraftBatch(args: {
   limit?: number;
   redraft?: boolean;
   bestEffort?: boolean;
+  // Writing one draft is a bounded unit of work, and a scheduled caller has a
+  // function limit to return inside, so the batch stops between drafts instead
+  // of running that limit out. The drafts it did not write are candidates again
+  // on the next pass.
+  outOfTime?: () => boolean;
+  // A scheduled caller passes the time its pass started. The repliers are then
+  // read in an order rotated by window, so a target that fails on every attempt,
+  // or a batch that never fits, cannot hold the same first replies forever while
+  // later ones are never drafted at all.
+  rotateFrom?: number;
 }): Promise<FileDraftRunResult | null> {
   const context = await loadContext(args.orderId);
   if (!context) return null;
-  const targets = await draftTargets(context, args.bestEffort === true);
+  const targets = await draftTargets(context, args.bestEffort === true, args.outOfTime, args.rotateFrom);
   const access = await procurementOperatorAccess(context.summary.officeId);
   const limit = Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? FILE_DRAFT_MAX_PER_RUN)));
+  // Rotation is applied once, on the reads inside `draftTargets`, and the
+  // eligible targets keep that order: rotating the same window twice would
+  // cancel itself out on some queue lengths and leave a replier undrafted for
+  // good, which is what a second rotation here used to do.
   const eligible = eligibleFileDraftTargets(targets, { redraft: args.redraft });
   const batch = eligible.slice(0, limit);
   const outcomes: FileDraftOutcome[] = [];
   for (const target of batch) {
+    if (args.outOfTime?.()) break;
     const vendor = context.order.vendors.find((candidate) => candidate.id === target.vendorId);
     if (!vendor) continue;
     try {

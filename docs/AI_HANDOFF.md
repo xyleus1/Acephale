@@ -1,5 +1,74 @@
 # AI Handoff
 
+## 2026-09-03: A reply pass follows the replies, not the supplier count
+
+- `procurementRepliedVendors` is the one scope every reply pass uses: the
+  suppliers the workflow projection or the office email records show as having
+  answered. The autopilot plan, the file draft batch, and the file draft send
+  batch all walk that scope, so a request with hundreds of silent suppliers
+  costs one conversation read per reply instead of one per row. Before this a
+  large campaign spent its whole invocation reading silent rows and the repliers
+  at the end of the list were never reached.
+- The scheduled pass (`/api/cron/procurement-autopilot`) now answers what it
+  finds (`autoSend`, `bestEffort`), stops itself before the invocation limit,
+  and rotates the request queue by pass window with `rotateAutopilotOrderIds`,
+  so a queue longer than one pass is worked in turn rather than truncated at the
+  same place forever. Price, payment terms, and legal questions are still
+  escalated, not answered.
+- The queue advances by one request per rotation window, not by the size of a
+  pass: a pass cannot know how many requests it will finish, so a larger step
+  skips whatever it did not reach, and a step sharing a factor with the queue
+  length would visit only part of the queue. One request per window visits every
+  position in turn.
+- A thread mailbox paused by sender protection is no longer treated as the
+  thread sender, and the loop allows the pooled sender, so a paused or
+  disconnected mailbox no longer leaves a real supplier reply permanently
+  unanswered. A retry may therefore change its sender, and nothing else: the
+  guard compares a sender independent hash of what the supplier reads, so a
+  replacement mailbox is a retry while an edited reply is still refused.
+- `runProcurementAutopilot` takes an absolute `deadlineAt` and stops starting
+  work at it: before the quote sweep, the draft batch, the nudges and the send
+  batch, and between supplier threads, quote pages, saved drafts and chase
+  drafts. Reading stops `AUTOPILOT_SEND_RESERVE_MS` earlier than the deadline
+  itself, so a partial scan still sends the answers it collected, and
+  respondents rotate by window like the request queue, so a request too large
+  to scan in one pass still reaches every thread. It reports
+  `stoppedAtDeadline`, which the scheduled route counts as a deferred request.
+- `procurementRepliedVendors` reads respondents from `localRfqRespondentEmails`,
+  which pages the order's whole inbound history by `(sentAt, id)` instead of
+  reading the capped presentation summary, so a reply older than the newest
+  1,000 mail records of an order still puts its supplier in scope. The capped
+  summary stays for dashboard presentation and conversation reconstruction.
+  Quote capture takes its candidates from the same scope, so an older priced
+  reply is read too.
+- That history read is deadline aware: every caller with an invocation limit
+  passes `outOfTime`, the read stops between pages, and the scope returns
+  `complete: false`. Pages run newest mail first, so a read cut short holds the
+  answers waiting now, and the autopilot treats an incomplete scan as
+  `stoppedAtDeadline` so the request is reported deferred and picked up again
+  rather than looking like a request whose suppliers went silent.
+- Eligible file draft targets rotate by window too, and a draft that could not
+  be written is reported in `runProcurementAutopilot.failures`, so a target that
+  fails on every attempt cannot hold the front of the batch and leave later
+  replies undrafted forever. `runProcurementAutopilot.failed` counts every path
+  that can fail, drafts and chase drafts included, so the number never disagrees
+  with the named failures.
+- Sending is split: `autoSend` covers answers to replies that currently await
+  one, and `sendFollowUps` covers quiet thread chases and first contact nudges.
+  The scheduled pass sets `sendFollowUps: false`, so unsolicited follow up mail
+  stays behind operator confirmation, is still planned and reported, and is not
+  even drafted, since a saved chase draft would otherwise be read as a ready
+  draft and delivered by a later pass. Without follow up sending, delivery is
+  restricted to threads whose newest message is the supplier's.
+- Reconciliation always uses the sender the unresolved attempt stored, since
+  only the mailbox that was handed a message knows what happened to it. A
+  mailbox paused after an uncertain delivery therefore still settles it, even
+  when it is no longer offered as a sender at all.
+- To test: `npm run test:procurement-autopilot-plan`,
+  `npm run test:procurement-local-outreach`,
+  `npm run test:procurement-reply-send-db` against a disposable
+  `derya_supply_reply_verify` database.
+
 ## 2026-09-03: A mailbox paused mid-send reroutes a first touch and defers a follow-up
 
 - The provider refuses a mailbox whose `sendPausedAt` was set between the

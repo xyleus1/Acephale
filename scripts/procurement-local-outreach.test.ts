@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   localRfqConversationFor,
   overlayRequestOutreach,
@@ -322,5 +324,67 @@ const mixedCase = summarizeLocalRfqOutreachByOrder(
   [orderId],
 );
 assert.equal(mixedCase.get(orderId)?.responded, 1, "reference matching ignores subject case");
+
+// Reading a conversation per supplier row is what pushed a large campaign past
+// its invocation limit and left real replies unanswered, so the reply passes
+// scan the repliers this overlay identifies, not the whole request.
+const replyScopeSource = readFileSync(resolve(__dirname, "../src/lib/procurement-reply-scope.ts"), "utf8");
+assert.ok(
+  /localRfqRespondentEmails/.test(replyScopeSource)
+    && /responseCount > 0/.test(replyScopeSource),
+  "the reply scope counts a locally synced reply as a reply",
+);
+// The presentation summary keeps only the newest messages of an order, so a
+// reply older than that window would drop its supplier out of processing
+// altogether. Respondents are read across the whole order history instead.
+const outreachSource = readFileSync(resolve(__dirname, "../src/lib/procurement-local-outreach.ts"), "utf8");
+assert.ok(
+  !/localRfqOutreach\(/.test(replyScopeSource)
+    && /export async function localRfqRespondentEmails/.test(outreachSource)
+    && /message\."direction" = 'INBOUND'/.test(outreachSource),
+  "respondents are read from the whole order history, not the capped summary",
+);
+assert.ok(
+  /LOCAL_RFQ_RESPONDENT_PAGE/.test(outreachSource)
+    && /message\."sentAt", message\."id"\) < /.test(outreachSource),
+  "the respondent read pages through the history rather than capping it",
+);
+// A history long enough to outlast a scheduled pass must not spend the whole
+// invocation before a single answer is sent, so the read stops at the caller's
+// deadline, newest mail first, and says the set is a prefix.
+assert.ok(
+  /options\?\: \{ outOfTime\?\: \(\) => boolean \}/.test(outreachSource)
+    && /if \(options\?\.outOfTime\?\.\(\)\) \{/.test(outreachSource)
+    && /complete: false/.test(outreachSource)
+    && /ORDER BY message\."sentAt" DESC/.test(outreachSource),
+  "the respondent read stops at the caller deadline and reads the newest mail first",
+);
+assert.ok(
+  /outOfTime\?\: \(\) => boolean/.test(replyScopeSource)
+    && /complete: respondents\.complete/.test(replyScopeSource),
+  "the reply scope carries the deadline in and the completeness out",
+);
+for (const [moduleName, expected] of [
+  ["procurement-autopilot", /const stopped = !scanned\.complete;/],
+  ["procurement-file-draft-batch", /outOfTime,/],
+  ["procurement-supplier-quote", /outOfTime: input\.outOfTime,/],
+] as const) {
+  const source = readFileSync(resolve(__dirname, `../src/lib/${moduleName}.ts`), "utf8");
+  assert.ok(
+    expected.test(source),
+    `${moduleName} treats a respondent read cut short as unfinished work`,
+  );
+}
+for (const moduleName of ["procurement-autopilot", "procurement-file-draft-batch"]) {
+  const source = readFileSync(resolve(__dirname, `../src/lib/${moduleName}.ts`), "utf8");
+  assert.ok(
+    /procurementRepliedVendors/.test(source),
+    `${moduleName} walks the suppliers that replied instead of every supplier row`,
+  );
+  assert.ok(
+    !/for \(const vendor of (context\.order|args\.order)\.vendors\)/.test(source),
+    `${moduleName} does not read a conversation for every supplier row`,
+  );
+}
 
 console.log("procurement-local-outreach: all assertions passed");

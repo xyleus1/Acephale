@@ -277,9 +277,10 @@ async function resolveReplyAnchor(args: {
   throw new SupplyPersistenceError("Sync this Gmail thread into Derya before sending a supplier reply.", "conflict");
 }
 
-// A thread whose original mailbox is no longer connected cannot be answered
-// from that address. The operator can allow a mailbox from the shared pool
-// instead: the supplier gets the same message and files from a new sender,
+// A thread whose original mailbox is no longer connected, or is paused by
+// sender protection, cannot be answered from that address. The caller can allow
+// a mailbox from the shared pool instead: the supplier gets the same message
+// and files from a new sender,
 // threaded through the supplier's own message id rather than a Gmail thread
 // that belongs to another mailbox.
 async function pooledReplySender(args: { workspaceId: string; taskScopeKey: string }) {
@@ -306,6 +307,18 @@ async function pooledReplySender(args: { workspaceId: string; taskScopeKey: stri
   const candidate = selectEmailSenderPoolCandidate(await listEmailSenderPoolAccounts());
   if (!candidate) return null;
   return { id: candidate.id, email: candidate.email };
+}
+
+// What the supplier reads, without the mailbox it leaves from. The stored
+// attempt keeps its whole message, so this can be computed for an attempt made
+// before this hash existed.
+function replyContentHash(message: Record<string, unknown>) {
+  return digest({
+    recipient: message.recipient,
+    subject: message.subject,
+    body: message.body,
+    ...(message.attachments ? { attachments: message.attachments } : {}),
+  });
 }
 
 function deliveryFromTask(task: { input: unknown; result: unknown }, alreadySent: boolean): ProcurementReplyDelivery {
@@ -554,11 +567,16 @@ export async function sendProcurementSupplierReply(args: {
   if (input.recipient !== anchor.recipient || inbound.fromEmail.trim().toLowerCase() !== anchor.recipient) {
     throw new SupplyPersistenceError("The supplier recipient changed. Refresh and generate a new reply draft.", "conflict");
   }
+  // A mailbox paused by sender protection refuses the send at the provider, so
+  // treating it as the thread sender turns an answerable reply into a permanent
+  // failure. It is left out here instead, which lets the pooled sender answer
+  // the supplier from a mailbox that can still send.
   const threadSender = await prisma.emailAccount.findFirst({
     where: {
       email: { equals: anchor.accountEmail, mode: "insensitive" },
       isActive: true,
       sendEnabled: true,
+      sendPausedAt: null,
       ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },
     select: { id: true, email: true },
@@ -574,6 +592,41 @@ export async function sendProcurementSupplierReply(args: {
   const sender = threadSender
     ?? (args.allowPooledSender ? await pooledReplySender({ workspaceId, taskScopeKey }) : null);
   if (!sender) {
+    // An attempt whose outcome is unknown still has to be reconciled, and the
+    // mailbox that holds the answer is the one no longer offered as a sender,
+    // so the stored attempt is settled from its own sender instead of asking
+    // for one it cannot get.
+    const unresolved = await prisma.supplyExecutionTask.findFirst({
+      where: {
+        officeId: access.officeId,
+        workspaceId,
+        taskType: PROCUREMENT_REPLY_EMAIL_TASK_TYPE,
+        taskKey: { startsWith: `${taskScopeKey}:` },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true, status: true, input: true, result: true },
+    });
+    if (unresolved?.status === "SUCCEEDED") return deliveryFromTask(unresolved, true);
+    if (unresolved?.status === "RUNNING") {
+      const stored = record(record(unresolved.input).message);
+      const storedRfcMessageId = requiredText(record(unresolved.result).rfcMessageId, "Stored supplier reply message ID", 500);
+      const reconciled = await dependencies.provider.reconcile({
+        officeId: access.officeId,
+        accountId: requiredText(stored.senderAccountId, "Stored supplier reply sender", 200),
+        senderEmail: requiredText(stored.senderEmail, "Stored supplier reply sender address", 320),
+        rfcMessageId: storedRfcMessageId,
+      });
+      if (reconciled.state === "SENT") {
+        return finalizeSent({
+          context: access,
+          workspaceId,
+          taskId: unresolved.id,
+          receipt: reconciled,
+          rfcMessageId: storedRfcMessageId,
+        });
+      }
+      throw new SupplyPersistenceError("Gmail delivery is still unresolved. Check Sent Mail before attempting another reply.", "conflict");
+    }
     throw new ProcurementReplySenderUnavailableError(anchor.accountEmail);
   }
   // A Gmail thread id belongs to the mailbox that holds it, so a pooled sender
@@ -612,16 +665,34 @@ export async function sendProcurementSupplierReply(args: {
     }
     const existingInput = record(existing?.input);
     const existingResult = record(existing?.result);
-    if (existing && existingInput.messageHash !== messageHash) {
+    // The sender is part of the message hash, and the mailbox an attempt used
+    // can since have been disconnected or paused. Comparing the whole hash
+    // would then read the same reply from its replacement mailbox as a
+    // different reply: a failed attempt could never be retried, and an
+    // unresolved one could never be reconciled. What the supplier reads is
+    // compared instead, so only genuinely different text is refused.
+    const sameReplyFromAnotherMailbox = Boolean(existing)
+      && replyContentHash(record(existingInput.message)) === replyContentHash(message);
+    if (existing && existingInput.messageHash !== messageHash && !sameReplyFromAnotherMailbox) {
       throw new SupplyPersistenceError("A different reply attempt already exists for this supplier message. Refresh before retrying.", "conflict");
     }
-    if (existing?.status === "SUCCEEDED") return { sent: deliveryFromTask(existing, true), taskId: null, rfcMessageId: null, reconcile: false };
+    if (existing?.status === "SUCCEEDED") {
+      return { sent: deliveryFromTask(existing, true), taskId: null, rfcMessageId: null, reconcile: false, reconcileSender: null };
+    }
     if (existing && existing.status === "RUNNING") {
+      // Only the mailbox that was handed the message can say what happened to
+      // it, so reconciliation uses the sender the attempt stored, whatever the
+      // pool or sender protection would pick for a fresh attempt now.
+      const runningMessage = record(existingInput.message);
       return {
         sent: null,
         taskId: existing.id,
         rfcMessageId: requiredText(existingResult.rfcMessageId, "Stored supplier reply message ID", 500),
         reconcile: true,
+        reconcileSender: {
+          accountId: requiredText(runningMessage.senderAccountId, "Stored supplier reply sender", 200),
+          senderEmail: requiredText(runningMessage.senderEmail, "Stored supplier reply sender address", 320),
+        },
       };
     }
     if (existing && existing.status !== "FAILED") {
@@ -690,7 +761,7 @@ export async function sendProcurementSupplierReply(args: {
       message: "An operator confirmed supplier reply delivery through connected Gmail.",
       payload: inputJson({ orderId: args.order.id, vendorId: args.vendor.id, sourceMessageId: input.sourceMessageId, messageHash, attempt, rfcMessageId }),
     });
-    return { sent: null, taskId, rfcMessageId, reconcile: false };
+    return { sent: null, taskId, rfcMessageId, reconcile: false, reconcileSender: null };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier reply delivery changed concurrently. Refresh before retrying.");
 
   if (claimed.sent) return claimed.sent;
@@ -702,8 +773,8 @@ export async function sendProcurementSupplierReply(args: {
     // handed over, so it must never depend on reading the files again.
     const reconciled = await dependencies.provider.reconcile({
       officeId: access.officeId,
-      accountId: sender.id,
-      senderEmail: message.senderEmail,
+      accountId: claimed.reconcileSender?.accountId ?? sender.id,
+      senderEmail: claimed.reconcileSender?.senderEmail ?? message.senderEmail,
       rfcMessageId: claimed.rfcMessageId,
     });
     if (reconciled.state === "SENT") {

@@ -2,8 +2,7 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { localRfqOutreach } from "@/lib/procurement-local-outreach";
-import { overlayVendorOutreach } from "@/lib/procurement-local-outreach-model";
+import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import {
   quoteCapturePage,
   quoteCursorBeforeFailures,
@@ -145,6 +144,10 @@ export async function listSupplierQuoteCandidates(input: {
   orderId: string;
   reads?: number;
   after?: string | null;
+  // A caller with a function limit stops the respondent history read at its
+  // deadline, so a long history cannot spend the invocation before a quote or an
+  // answer is written. The next pass reads it again from the newest mail.
+  outOfTime?: () => boolean;
 }): Promise<{
   orderId: string;
   customerId: string;
@@ -165,14 +168,17 @@ export async function listSupplierQuoteCandidates(input: {
   const candidates: SupplierQuoteCandidate[] = [];
   // A reply delivered by this app lands in the office email records, and the
   // workflow ledger may never see it, so the office records decide who answered
-  // alongside the projected count. Without this overlay a supplier who only
-  // ever replied locally would never be read for a quote.
-  const outreach = await localRfqOutreach(summary.officeId, summary.orderId);
-  // Only a supplier that answered can hold a price, so a request with hundreds
-  // of silent suppliers costs one conversation read per reply, not per row.
-  const replied = order.vendors
-    .map((vendor) => overlayVendorOutreach(vendor, outreach))
-    .filter((vendor) => vendor.responseCount > 0);
+  // alongside the projected count. That read covers the request's whole inbound
+  // history, so a price in a reply older than the newest mail records of a long
+  // running request is still read. Only a supplier that answered can hold a
+  // price, so a request with hundreds of silent suppliers costs one
+  // conversation read per reply, not per row.
+  const replied = (await procurementRepliedVendors({
+    officeId: summary.officeId,
+    orderId: summary.orderId,
+    vendors: order.vendors,
+    outOfTime: input.outOfTime,
+  })).vendors;
   const byId = new Map(replied.map((vendor) => [vendor.id, vendor]));
   const page = quoteCapturePage(
     replied.map((vendor) => ({
@@ -260,6 +266,10 @@ export async function sweepSupplierQuoteCapture(input: {
   limit?: number;
   reads?: number;
   pages?: number;
+  // A page is the bounded unit of work here, so a caller with a function limit
+  // to return inside stops the sweep between pages. The cursor of the next pass
+  // picks the sweep up where this one left it.
+  outOfTime?: () => boolean;
 }): Promise<SupplierQuoteCaptureResult | null> {
   const pages = Math.max(1, Math.trunc(input.pages ?? QUOTE_CAPTURE_MAX_PAGES_PER_SWEEP));
   const budget = Math.min(
@@ -270,10 +280,12 @@ export async function sweepSupplierQuoteCapture(input: {
   let cursor: string | null = null;
   let remaining = budget;
   for (let page = 0; page < pages; page += 1) {
+    if (page > 0 && input.outOfTime?.()) break;
     const run: SupplierQuoteCaptureResult | null = await runSupplierQuoteCapture({
       orderId: input.orderId,
       limit: remaining,
       reads: input.reads,
+      outOfTime: input.outOfTime,
       after: cursor,
     });
     if (!run) return swept;
@@ -301,11 +313,13 @@ export async function runSupplierQuoteCapture(input: {
   limit?: number;
   reads?: number;
   after?: string | null;
+  outOfTime?: () => boolean;
 }): Promise<SupplierQuoteCaptureResult | null> {
   const plan = await listSupplierQuoteCandidates({
     orderId: input.orderId,
     reads: input.reads,
     after: input.after,
+    outOfTime: input.outOfTime,
   });
   if (!plan) return null;
   const limit = Math.min(
