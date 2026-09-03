@@ -32,15 +32,22 @@ function subjectTokens(subject: string | null): string[] {
 
 type LocalRfqMessageRow = {
   id: string;
+  threadId: string;
   token: string;
   direction: string;
   fromEmail: string;
   toEmails: string;
   ccEmails: string | null;
   subject: string | null;
+  bodyHead: string | null;
   sentAt: Date;
   accountEmail: string | null;
 };
+
+// A mail system writes its failure report at the top of the message, so the
+// opening of the body is enough to tell a bounce from a supplier answering
+// while the batch scan stays cheap.
+const LOCAL_RFQ_BODY_HEAD_CHARS = 2_000;
 
 function jsonEmails(value: string | null) {
   if (!value) return [];
@@ -133,6 +140,7 @@ export async function loadLocalRfqMessages(
     .slice(0, LOCAL_RFQ_MESSAGE_LIMIT);
   return messages.map((message) => ({
     id: message.id,
+    threadId: message.threadId,
     direction: message.direction,
     fromEmail: message.fromEmail,
     fromName: message.fromName,
@@ -152,11 +160,12 @@ export async function localRfqOutreachByOrder(
 ): Promise<Map<string, LocalRfqOutreach>> {
   const requested = [...new Set(orderIds)].slice(0, LOCAL_RFQ_BATCH_ORDER_LIMIT);
   if (!requested.length) return new Map();
-  // One scan for the whole list, with bodies left out because counting only
-  // needs the request token, the direction, and the addresses. The row cap is
-  // per order, so a busy order cannot starve the others. An inbound message
-  // whose subject lost the reference is claimed by the request whose thread it
-  // arrived on, which is the only claim on it there is.
+  // One scan for the whole list, carrying the request token, the direction, the
+  // addresses, and only the opening of each body, which is where a delivery
+  // failure states itself. The row cap is per order, so a busy order cannot
+  // starve the others. An inbound message whose subject lost the reference is
+  // claimed by the request whose thread it arrived on, which is the only claim
+  // on it there is.
   const messages = await prisma.$queryRaw<LocalRfqMessageRow[]>`
     WITH referenced AS (
       -- Every reference the office's mail carries, including ones this call did
@@ -171,6 +180,7 @@ export async function localRfqOutreachByOrder(
         message."toEmails",
         message."ccEmails",
         message."subject",
+        left(message."bodyText", ${LOCAL_RFQ_BODY_HEAD_CHARS}::int) AS "bodyHead",
         message."sentAt",
         message."accountId"
       FROM "EmailMessage" AS message
@@ -205,6 +215,7 @@ export async function localRfqOutreachByOrder(
         message."toEmails",
         message."ccEmails",
         message."subject",
+        left(message."bodyText", ${LOCAL_RFQ_BODY_HEAD_CHARS}::int) AS "bodyHead",
         message."sentAt",
         message."accountId"
       FROM "EmailMessage" AS message
@@ -214,23 +225,27 @@ export async function localRfqOutreachByOrder(
     )
     SELECT
       scoped."id",
+      scoped."threadId",
       scoped."token",
       scoped."direction",
       scoped."fromEmail",
       scoped."toEmails",
       scoped."ccEmails",
       scoped."subject",
+      scoped."bodyHead",
       scoped."sentAt",
       scoped."accountEmail"
     FROM (
       SELECT
         claimed."id",
+        claimed."threadId",
         claimed."token",
         claimed."direction",
         claimed."fromEmail",
         claimed."toEmails",
         claimed."ccEmails",
         claimed."subject",
+        claimed."bodyHead",
         claimed."sentAt",
         account."email" AS "accountEmail",
         row_number() OVER (
@@ -247,13 +262,14 @@ export async function localRfqOutreachByOrder(
     const bucket = byToken.get(message.token) ?? [];
     bucket.push({
       id: message.id,
+      threadId: message.threadId,
       direction: message.direction,
       fromEmail: message.fromEmail,
       fromName: null,
       toEmails: jsonEmails(message.toEmails),
       ccEmails: jsonEmails(message.ccEmails),
       subject: message.subject,
-      body: "",
+      body: message.bodyHead ?? "",
       sentAt: message.sentAt.toISOString(),
       accountEmail: message.accountEmail,
       externalThreadId: null,

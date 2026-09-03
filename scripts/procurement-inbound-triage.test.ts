@@ -29,6 +29,35 @@ function classification() {
   );
   assert.equal(supplierInboundKind("Re: RFQ", "What quantity do you need?"), "QUESTION");
   assert.equal(supplierInboundKind("Re: RFQ", "Thanks, we will review and revert."), "STATEMENT");
+  assert.equal(supplierInboundKind("Delivery failure", "Address not found"), "BOUNCE");
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Unit price USD 41.20, and delivery failed inspections are re-worked at our cost."),
+    "STATEMENT",
+    "a supplier writing about failed inspections is not a bounce",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "The samples you sent were returned to sender by our warehouse, please resend."),
+    "STATEMENT",
+    "a supplier writing about a returned shipment is not a bounce",
+  );
+  assert.equal(
+    supplierInboundKind("Returned to sender", "The address is unreachable."),
+    "BOUNCE",
+    "a returned mail report is still a bounce",
+  );
+  for (const report of [
+    "Your message wasn't delivered to sales@supplier.test.",
+    "Your message was not delivered.",
+    "Your message hasn't been delivered because the domain does not exist.",
+    "Your email has not been delivered.",
+  ]) {
+    assert.equal(supplierInboundKind("Re: RFQ", report), "BOUNCE", report);
+  }
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Your email has not delivered enough detail for us to price the board."),
+    "STATEMENT",
+    "a supplier saying our mail lacked detail is not a bounce",
+  );
 }
 
 function questionExtraction() {

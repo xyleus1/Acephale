@@ -1,5 +1,21 @@
 # AI Handoff
 
+## 2026-09-03: A supplier reply is attributed by thread, not only by sender address
+
+- Shops answer from a colleague, a helpdesk, or a ticketing address, and such a
+  reply matched no supplier row, so it counted as no response, never reached the
+  supplier's conversation or quote reading, and the supplier was chased anyway.
+- An inbound reply now also answers for the addresses we mailed on its own
+  thread: the ones sharing the sender's domain, or the single address we mailed
+  there. A thread mailed to several unrelated addresses attributes nothing.
+- Our own addresses include the sender of every outbound message, so a pooled
+  mailbox with no account row cannot have its synced sent copy read as a reply.
+- A delivery notice is never an answer, so a bounce cannot fake a response or
+  stop a follow up: `mailer-daemon`/`postmaster` senders plus `supplierBounceText`,
+  the same subject and body rule inbound triage uses.
+- Verified by `npm run test:procurement-local-outreach` and, against a migrated
+  database, `npm run test:procurement-local-outreach-db`.
+
 ## 2026-09-03: Follow-up reply detection, durable reservation refusals, cc fallback
 
 - `repliedThreadIds` (follow-ups) uses `humanReplyMessageFilter`: inbound,

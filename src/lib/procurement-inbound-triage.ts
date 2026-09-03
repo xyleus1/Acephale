@@ -52,9 +52,23 @@ export type ProcurementInboundTriage = {
   unanswered: UnansweredQuestion[];
 };
 
-const BOUNCE = /mail delivery (sub)?system|delivery status notification|undeliverable|address not found|failure notice|recipient (address )?rejected/i;
+// Wording only a mail system writes, so it is bounce evidence wherever it sits.
+const BOUNCE_REPORT = /mail delivery (sub)?system|delivery status notification|undeliverable|failure notice|delivery to the following recipients? failed|(your )?(message|email|mail) ((could not|couldn't|was not|wasn't) (be )?|(has not|hasn't|have not|haven't) been )(delivered|received)/i;
+// Wording a supplier also writes in ordinary prose ("delivery failed
+// inspections are re-worked at our cost", "the samples were returned to
+// sender"), so it counts only where a mail system puts it: the subject, or the
+// head of a report line.
+const BOUNCE_HEADLINE = /^(re: |fwd?: )*(delivery (failure|failed|incomplete|delayed)|address not found|recipient (address )?rejected|delivery has failed|returned to sender)/i;
 const AUTO_REPLY = /out of (the )?office|automatic reply|auto[- ]?reply|on vacation|annual leave|currently away/i;
 const WRONG_RECIPIENT = /wrong (email|address|person|department)|not the right (person|contact|address)|no longer (with|at)|please (contact|redirect|forward) (our|the)/i;
+
+// Delivery reporting is the mail system speaking, so callers that only need to
+// know whether a message is the supplier answering share this one rule.
+export function supplierBounceText(subject: string, body: string) {
+  if (BOUNCE_REPORT.test(`${subject}\n${body}`)) return true;
+  if (BOUNCE_HEADLINE.test(subject.trim())) return true;
+  return body.split("\n").some((line) => BOUNCE_HEADLINE.test(line.trim()));
+}
 
 const QUESTION_LEAD = /^(what|which|when|where|who|how|can|could|would|will|do|does|did|is|are|may|should|please (confirm|advise|share|send|let)|kindly (confirm|advise|share|send))\b/i;
 
@@ -108,7 +122,7 @@ function normalizeBody(body: string) {
 
 export function supplierInboundKind(subject: string, body: string): SupplierInboundKind {
   const text = `${subject}\n${body}`;
-  if (BOUNCE.test(text)) return "BOUNCE";
+  if (supplierBounceText(subject, body)) return "BOUNCE";
   if (AUTO_REPLY.test(text)) return "AUTO_REPLY";
   if (WRONG_RECIPIENT.test(text)) return "WRONG_RECIPIENT";
   return supplierQuestions(body).length > 0 ? "QUESTION" : "STATEMENT";

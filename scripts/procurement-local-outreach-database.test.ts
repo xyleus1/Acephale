@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/prisma";
 import {
   loadLocalRfqMessages,
   localRfqOutreachByOrder,
+  localRfqVendorConversation,
 } from "../src/lib/procurement-local-outreach";
 import { rfqSubjectReference } from "../src/lib/procurement-local-outreach-model";
 
@@ -33,6 +34,7 @@ async function message(
   fromEmail: string,
   subject: string | null,
   sentAt: string,
+  bodyText = "body",
 ) {
   return prisma.emailMessage.create({
     data: {
@@ -41,7 +43,7 @@ async function message(
       fromEmail,
       toEmails: JSON.stringify(direction === "OUTBOUND" ? [fromEmail === "desk@derya.ai" ? "sales@supplier.test" : "desk@derya.ai"] : ["desk@derya.ai"]),
       subject,
-      bodyText: "body",
+      bodyText,
       sentAt: new Date(sentAt),
     },
   });
@@ -57,6 +59,20 @@ async function main() {
   // answer to the request.
   const stranded = await message(rfqThread.id, "INBOUND", "sales@supplier.test", "Your Support Request Has Been Received", "2026-08-21T10:00:00.000Z");
   const subjectless = await message(rfqThread.id, "INBOUND", "quotes@supplier.test", null, "2026-08-22T10:00:00.000Z");
+  // The shop answers from a colleague's address, and a bounce arrives from the
+  // mail system: one is the supplier answering, the other never is.
+  await message(rfqThread.id, "INBOUND", "colleague@supplier.test", "Re: your enquiry", "2026-08-22T11:00:00.000Z");
+  await message(rfqThread.id, "INBOUND", "mailer-daemon@googlemail.com", "Delivery Status Notification (Failure)", "2026-08-22T12:00:00.000Z");
+  // A mail service that states the failure only in the body, from an address
+  // that looks like anyone else's, is still not the supplier answering.
+  await message(
+    rfqThread.id,
+    "INBOUND",
+    "noreply@mailservice.test",
+    "Re: your enquiry",
+    "2026-08-22T12:30:00.000Z",
+    "Delivery failure\nAddress not found: sales@supplier.test",
+  );
   // A reply that kept another request's reference belongs to that request.
   const otherRfqThread = await thread(office.id, `${otherReference} Printed circuit boards`);
   await message(otherRfqThread.id, "INBOUND", "mixed@supplier.test", `${otherReference} Printed circuit boards`, "2026-08-23T10:00:00.000Z");
@@ -124,8 +140,18 @@ async function main() {
     assert.ok(summary, "the request has an outreach summary");
     assert.deepEqual(
       [...summary.respondedEmails].sort(),
-      ["both@supplier.test", "quotes@supplier.test", "sales@supplier.test"],
+      [
+        "both@supplier.test",
+        "colleague@supplier.test",
+        "quotes@supplier.test",
+        "sales@supplier.test",
+      ],
       "stranded replies count as responses for the request that owns the thread",
+    );
+    assert.equal(
+      summary.responded,
+      1,
+      "every reply came from the one shop we wrote to, and a bounce is not a reply",
     );
     assert.equal(summary.contacted, 1, "contacted still counts only the suppliers written to");
 
@@ -136,10 +162,29 @@ async function main() {
       "a tagged reply stays with its own request however it is cased",
     );
 
+    const conversation = await localRfqVendorConversation(office.id, orderId, "sales@supplier.test");
+    assert.deepEqual(
+      [...new Set(conversation?.messages.map((entry) => entry.fromEmail) ?? [])].sort(),
+      [
+        "both@supplier.test",
+        "colleague@supplier.test",
+        "desk@derya.ai",
+        "quotes@supplier.test",
+        "sales@supplier.test",
+      ],
+      "a reply from the shop's other addresses is read as its own conversation",
+    );
+    assert.ok(
+      conversation?.messages.every((entry) => (
+        entry.fromEmail === "desk@derya.ai" ? entry.direction === "OUTBOUND" : entry.direction === "INBOUND"
+      )),
+      "a recovered reply keeps its own direction",
+    );
+
     const foreignOutreach = await localRfqOutreachByOrder(foreign.id, [orderId]);
     assert.deepEqual(
-      foreignOutreach.get(orderId)?.respondedEmails,
-      ["foreign@supplier.test"],
+      [...(foreignOutreach.get(orderId)?.respondedEmails ?? [])].sort(),
+      ["foreign@supplier.test", "sales@supplier.test"],
       "office scoping holds on both sides",
     );
 

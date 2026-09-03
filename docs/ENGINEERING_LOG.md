@@ -1,5 +1,44 @@
 # Engineering Log
 
+## 2026-09-03 - Replies from an address we never mailed
+
+- Recovering a reply by thread was not enough: attribution to a supplier still
+  compared the sender address against the supplier's recorded contact, so a
+  reply from `mluna@mfg-one.com` to an RFQ sent to that shop's sales address
+  answered for nobody. In production this hid genuine answers from MFG One,
+  Summit Interconnect, Dallas Foam, Witmold, and Attractive Plastics: no
+  response counted, the vendor conversation stayed empty, quote reading never
+  saw the message, and the follow up loop kept the supplier on the chase list.
+- `summarizeLocalRfqOutreach` and `localRfqConversationFor` now build the
+  addresses we mailed per thread and attribute an inbound message to the ones
+  sharing the sender's domain, falling back to the single address mailed on that
+  thread. A thread mailed to several unrelated addresses attributes nothing,
+  because the reply could belong to any of them, and the sender address stays in
+  the responded set so a supplier row recorded under it keeps matching. The
+  response count keys on the mailed addresses, so one shop writing from two
+  addresses is one response.
+- Our own addresses are the account emails plus the sender of every outbound
+  message, because a pooled mailbox can have no account row and its synced sent
+  copy would otherwise read as the supplier answering with our own text.
+- A delivery notice is excluded from attribution and from the response count:
+  treating a bounce as an answer would both invent a response and suppress the
+  follow up the failed delivery should trigger. Bounce wording is decided by
+  `supplierBounceText`, exported from inbound triage. Wording only a mail system
+  writes ("Mail delivery subsystem", "Undeliverable") counts anywhere, while
+  generic wording ("Delivery failure", "Address not found") counts only in the
+  subject or at the head of a body line, so a supplier writing "delivery failed
+  inspections are re-worked at our cost" stays a real answer. The batched
+  outreach query carries the first 2000 characters of each body so a service
+  that states the failure only in the body is still caught.
+- Attribution is thread scoped, so it cannot reach across requests or offices,
+  and a recovered message keeps its stored direction rather than being inferred
+  from the sender.
+- `scripts/procurement-local-outreach.test.ts` covers the colleague reply, the
+  forwarder, the ambiguous multi recipient thread, the provider bounce with
+  body-only evidence, an outbound copy with no account row, and the daemon
+  bounce; `scripts/procurement-local-outreach-database.test.ts` proves the same
+  against a migrated database including the vendor conversation.
+
 ## 2026-09-03: Feedback is not a reply, refused reservations settle the claim, cc in the DSN fallback
 
 - Follow-up reply detection matched inbound rows with `deliveryKind = null`,

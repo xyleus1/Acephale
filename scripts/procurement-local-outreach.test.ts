@@ -16,6 +16,7 @@ const reference = rfqSubjectReference(orderId);
 function message(overrides: Partial<LocalRfqMessage>): LocalRfqMessage {
   return {
     id: "message-1",
+    threadId: "thread-1",
     direction: "OUTBOUND",
     fromEmail: "desk@derya.ai",
     fromName: "Derya Desk",
@@ -99,6 +100,186 @@ assert.equal(
   localRfqConversationFor(messages, "nobody@example.com"),
   null,
   "an uncontacted supplier has no conversation",
+);
+
+// A shop answers from whoever picks the enquiry up, so the reply carries a
+// different address than the one we mailed while staying on our thread.
+const colleagueReply = [
+  message({ threadId: "thread-2", toEmails: ["sales@mfg-one.com"] }),
+  message({
+    id: "message-8",
+    threadId: "thread-2",
+    direction: "INBOUND",
+    fromEmail: "mluna@mfg-one.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Re: HypnoDreamz Manufacturing Opportunity",
+    body: "We can build this.",
+    sentAt: "2026-08-22T09:00:00.000Z",
+  }),
+];
+const colleague = summarizeLocalRfqOutreach(colleagueReply);
+assert.deepEqual(
+  [...colleague.respondedEmails].sort(),
+  ["mluna@mfg-one.com", "sales@mfg-one.com"],
+  "a reply from another address at the shop we mailed answers for that shop",
+);
+assert.equal(colleague.responded, 1, "one shop answering once is one response");
+assert.equal(
+  overlayVendorOutreach(
+    { contacted: false, responseCount: 0, contact: { email: "sales@mfg-one.com" } },
+    colleague,
+  ).responseCount,
+  1,
+);
+const colleagueConversation = localRfqConversationFor(colleagueReply, "sales@mfg-one.com");
+assert.deepEqual(
+  colleagueConversation?.messages.map((entry) => [entry.direction, entry.fromEmail]),
+  [["OUTBOUND", "desk@derya.ai"], ["INBOUND", "mluna@mfg-one.com"]],
+  "the reply reaches the supplier's conversation so it can be read for a quote",
+);
+
+const bounced = [
+  message({ threadId: "thread-3", toEmails: ["sales@closedshop.com"] }),
+  message({
+    id: "message-9",
+    threadId: "thread-3",
+    direction: "INBOUND",
+    fromEmail: "mailer-daemon@googlemail.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery Status Notification (Failure)",
+    body: "Address not found.",
+    sentAt: "2026-08-22T10:00:00.000Z",
+  }),
+];
+const bounce = summarizeLocalRfqOutreach(bounced);
+assert.equal(bounce.responded, 0, "a bounce is the mail system speaking, not the supplier");
+assert.deepEqual(bounce.respondedEmails, []);
+assert.equal(
+  localRfqConversationFor(bounced, "sales@closedshop.com")?.messages.length,
+  1,
+  "only our own send belongs to a supplier that never answered",
+);
+
+// A provider reports the failure in its own words from its own address, and a
+// pooled mailbox with no account row still syncs a copy of our own send back.
+const providerBounce = summarizeLocalRfqOutreach([
+  message({ threadId: "thread-6", accountEmail: null, toEmails: ["sales@goneshop.com"] }),
+  message({
+    id: "message-12",
+    threadId: "thread-6",
+    direction: "INBOUND",
+    accountEmail: null,
+    fromEmail: "postmaster@mailrelay.example",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery failure",
+    body: "Address not found for sales@goneshop.com.",
+    sentAt: "2026-08-22T13:00:00.000Z",
+  }),
+  message({
+    id: "message-13",
+    threadId: "thread-6",
+    direction: "INBOUND",
+    accountEmail: null,
+    fromEmail: "desk@derya.ai",
+    toEmails: ["sales@goneshop.com"],
+    body: "Synced copy of our own send from a mailbox with no account row.",
+    sentAt: "2026-08-22T14:00:00.000Z",
+  }),
+]);
+assert.equal(providerBounce.responded, 0, "a bounce and our own synced send are not answers");
+assert.deepEqual(providerBounce.respondedEmails, []);
+assert.equal(
+  localRfqConversationFor(
+    [
+      message({ threadId: "thread-6", accountEmail: null, toEmails: ["sales@goneshop.com"] }),
+      message({
+        id: "message-12",
+        threadId: "thread-6",
+        direction: "INBOUND",
+        accountEmail: null,
+        fromEmail: "postmaster@mailrelay.example",
+        toEmails: ["desk@derya.ai"],
+        subject: "Delivery failure",
+        body: "Address not found for sales@goneshop.com.",
+        sentAt: "2026-08-22T13:00:00.000Z",
+      }),
+    ],
+    "sales@goneshop.com",
+  )?.messages.length,
+  1,
+  "a bounce never enters the supplier's conversation",
+);
+
+// A supplier writing about failed inspections uses the same words a bounce
+// does, so wording only counts where a mail system puts it.
+const commercial = summarizeLocalRfqOutreach([
+  message({ threadId: "thread-7", toEmails: ["sales@realshop.com"] }),
+  message({
+    id: "message-14",
+    threadId: "thread-7",
+    direction: "INBOUND",
+    fromEmail: "sales@realshop.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Re: your enquiry",
+    body: "Unit price USD 41.20, and delivery failed inspections are re-worked at our cost.",
+    sentAt: "2026-08-22T15:00:00.000Z",
+  }),
+]);
+assert.equal(commercial.responded, 1, "commercial prose about failed inspections is a real answer");
+
+// A service that reports the failure in its own words, from an address that
+// looks like anyone else's, is still the mail system speaking.
+const wordedBounce = summarizeLocalRfqOutreach([
+  message({ threadId: "thread-8", toEmails: ["sales@deadshop.com"] }),
+  message({
+    id: "message-15",
+    threadId: "thread-8",
+    direction: "INBOUND",
+    fromEmail: "noreply@mailservice.test",
+    toEmails: ["desk@derya.ai"],
+    subject: "Re: your enquiry",
+    body: "Your message wasn't delivered to sales@deadshop.com because the domain does not exist.",
+    sentAt: "2026-08-22T16:00:00.000Z",
+  }),
+]);
+assert.equal(wordedBounce.responded, 0, "a provider failure report is never an answer");
+
+const forwarded = summarizeLocalRfqOutreach([
+  message({ threadId: "thread-4", toEmails: ["sales@moldshop.com"] }),
+  message({
+    id: "message-10",
+    threadId: "thread-4",
+    direction: "INBOUND",
+    fromEmail: "tickets@helpdesk.example",
+    toEmails: ["desk@derya.ai"],
+    subject: "Your enquiry",
+    body: "Our molder will follow up.",
+    sentAt: "2026-08-22T11:00:00.000Z",
+  }),
+]);
+assert.deepEqual(
+  [...forwarded.respondedEmails].sort(),
+  ["sales@moldshop.com", "tickets@helpdesk.example"],
+  "a forwarder answering for the single shop we mailed answers for it",
+);
+
+const shared = summarizeLocalRfqOutreach([
+  message({ threadId: "thread-5", toEmails: ["sales@shopone.com", "sales@shoptwo.com"] }),
+  message({
+    id: "message-11",
+    threadId: "thread-5",
+    direction: "INBOUND",
+    fromEmail: "tickets@helpdesk.example",
+    toEmails: ["desk@derya.ai"],
+    subject: "Your enquiry",
+    body: "Noted.",
+    sentAt: "2026-08-22T12:00:00.000Z",
+  }),
+]);
+assert.deepEqual(
+  shared.respondedEmails,
+  ["tickets@helpdesk.example"],
+  "a thread mailed to two unrelated shops answers for neither",
 );
 
 const otherOrderId = "24cb31bd-d974-4040-939c-cd8e76dd8967";

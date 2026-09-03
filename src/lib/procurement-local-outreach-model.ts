@@ -4,6 +4,7 @@ import {
   procurementConversationEmailAddresses,
   type ProcurementConversation,
 } from "@/lib/procurement-conversation-model";
+import { supplierBounceText } from "@/lib/procurement-inbound-triage";
 
 export const LOCAL_RFQ_MESSAGE_LIMIT = 4_000;
 export const LOCAL_RFQ_BATCH_MESSAGES_PER_ORDER = 1_000;
@@ -11,6 +12,7 @@ export const LOCAL_RFQ_BATCH_ORDER_LIMIT = 50;
 
 export type LocalRfqMessage = {
   id: string;
+  threadId: string;
   direction: string;
   fromEmail: string;
   fromName: string | null;
@@ -49,23 +51,89 @@ function recipientEmails(message: LocalRfqMessage) {
     .filter(Boolean);
 }
 
+// A delivery notice is the mail system speaking, not the supplier, so it never
+// counts as an answer: doing so would both invent a response and cancel the
+// follow up that a failed delivery should provoke.
+// Bounce wording is read with the same rule inbound triage uses, so a provider
+// that reports the failure from its own address is caught either way.
+const DELIVERY_SYSTEM_SENDER = /^(mailer-daemon|mail-daemon|postmaster)@/i;
+
+function deliveryNotice(message: LocalRfqMessage) {
+  return DELIVERY_SYSTEM_SENDER.test(normalize(message.fromEmail))
+    || supplierBounceText(message.subject ?? "", message.body);
+}
+
+// Our own mail is not a supplier answering, and a pooled mailbox that has no
+// account row still writes its address on everything it sends, so a synced copy
+// of our own send cannot be read as a reply.
+function ourEmails(messages: LocalRfqMessage[]) {
+  return new Set(messages.flatMap((message) => [
+    normalize(message.accountEmail),
+    message.direction === "OUTBOUND" ? normalize(message.fromEmail) : "",
+  ]).filter(Boolean));
+}
+
+function contactsByThread(messages: LocalRfqMessage[]) {
+  const byThread = new Map<string, Set<string>>();
+  for (const message of messages) {
+    if (message.direction !== "OUTBOUND") continue;
+    const bucket = byThread.get(message.threadId) ?? new Set<string>();
+    for (const recipient of recipientEmails(message)) bucket.add(recipient);
+    byThread.set(message.threadId, bucket);
+  }
+  return byThread;
+}
+
+// A supplier answers from whatever address its shop uses: a colleague, a
+// helpdesk, a ticketing system. The addresses we mailed on that same thread are
+// the only claim on such a reply, so it is attributed to the ones sharing the
+// sender's domain, or to the single address we mailed there when a forwarder
+// answers from elsewhere. A thread we mailed to several unrelated addresses
+// attributes nothing, because the reply could belong to any of them.
+function attributedContacts(
+  message: LocalRfqMessage,
+  contacts: Map<string, Set<string>>,
+  accountEmails: Set<string>,
+): string[] {
+  const sender = normalize(message.fromEmail);
+  if (!sender || accountEmails.has(sender) || deliveryNotice(message)) return [];
+  const onThread = [...(contacts.get(message.threadId) ?? [])]
+    .filter((email) => !accountEmails.has(email));
+  if (!onThread.length) return [];
+  const domain = sender.split("@")[1] ?? "";
+  const sameDomain = domain ? onThread.filter((email) => email.endsWith(`@${domain}`)) : [];
+  if (sameDomain.length) return sameDomain;
+  return onThread.length === 1 ? onThread : [];
+}
+
 // The workflow database receipt column is read-only for the dashboard role, so
 // supplier contact is also derived from the office's own sent RFQ records.
 export function summarizeLocalRfqOutreach(messages: LocalRfqMessage[]): LocalRfqOutreach {
   const contacted = new Set<string>();
   const responded = new Set<string>();
-  const accountEmails = new Set(messages.map((message) => normalize(message.accountEmail)).filter(Boolean));
+  // One supplier answering from two addresses, or on two threads, is one
+  // response, so the count keys on the addresses we mailed rather than on who
+  // happened to type the reply.
+  const respondents = new Set<string>();
+  const accountEmails = ourEmails(messages);
+  const contacts = contactsByThread(messages);
   for (const message of messages) {
     if (message.direction === "OUTBOUND") {
       for (const recipient of recipientEmails(message)) contacted.add(recipient);
       continue;
     }
     const sender = normalize(message.fromEmail);
-    if (sender && !accountEmails.has(sender)) responded.add(sender);
+    if (!sender || accountEmails.has(sender) || deliveryNotice(message)) continue;
+    // The sender stays in the set as well, so a supplier row recorded under the
+    // address that actually wrote to us keeps matching.
+    const attributed = attributedContacts(message, contacts, accountEmails);
+    for (const email of attributed) responded.add(email);
+    responded.add(sender);
+    respondents.add(attributed.length ? [...attributed].sort().join(",") : sender);
   }
   return {
     contacted: contacted.size,
-    responded: responded.size,
+    responded: respondents.size,
     contactedEmails: [...contacted],
     respondedEmails: [...responded],
   };
@@ -133,10 +201,13 @@ export function localRfqConversationFor(
 ): ProcurementConversation | null {
   const contact = normalize(contactEmail);
   if (!contact) return null;
-  const related = messages.filter((message) => (
-    normalize(message.fromEmail) === contact
-    || (message.direction === "OUTBOUND" && recipientEmails(message).includes(contact))
-  )).slice(-MAX_PROCUREMENT_CONVERSATION_MESSAGES);
+  const accountEmails = ourEmails(messages);
+  const contacts = contactsByThread(messages);
+  const related = messages.filter((message) => {
+    if (message.direction === "OUTBOUND") return recipientEmails(message).includes(contact);
+    if (normalize(message.fromEmail) === contact) return true;
+    return attributedContacts(message, contacts, accountEmails).includes(contact);
+  }).slice(-MAX_PROCUREMENT_CONVERSATION_MESSAGES);
   if (!related.length) return null;
   const accountEmail = related.find((message) => message.accountEmail)?.accountEmail ?? null;
   const externalThreadId = related.find((message) => message.externalThreadId)?.externalThreadId ?? null;
@@ -149,7 +220,9 @@ export function localRfqConversationFor(
     accountEmail,
     messages: boundProcurementConversationMessages(related.map((message) => ({
       id: message.id,
-      direction: normalize(message.fromEmail) === contact ? "INBOUND" : "OUTBOUND",
+      direction: message.direction === "INBOUND" || normalize(message.fromEmail) === contact
+        ? "INBOUND"
+        : "OUTBOUND",
       fromEmail: message.fromEmail,
       fromName: message.fromName,
       toEmails: message.toEmails,
