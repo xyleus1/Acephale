@@ -97,6 +97,9 @@ const FEAST_NEGATIVE_SIGNALS = [
   "hotel group",
   "cinema",
   "petrol station",
+] as const;
+
+const FEAST_HARD_EXCLUSIONS = [
   "Costa",
   "Starbucks",
   "Caffe Nero",
@@ -108,6 +111,7 @@ const FEAST_NEGATIVE_SIGNALS = [
   "Muffin Break",
   "Boston Tea Party",
   "Wetherspoon",
+  "Costa Coffee",
 ] as const;
 
 export const FEAST_PROFILE: LeadGenProfile = {
@@ -120,5 +124,6 @@ export const FEAST_PROFILE: LeadGenProfile = {
   directorySeeds: [],
   positiveSignals: FEAST_POSITIVE_SIGNALS,
   negativeSignals: FEAST_NEGATIVE_SIGNALS,
+  hardExclusions: FEAST_HARD_EXCLUSIONS,
   queryLocales: ["en"],
 };

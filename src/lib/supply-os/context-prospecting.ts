@@ -33,6 +33,7 @@ import { createLeadGenRun, finishLeadGenRun, recordLeadDiscoveries } from "@/lib
 import type { VerifyOptions } from "@/lib/leadgen/verify";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
 import { lockCompanyContextAction, type CompanyContextCitation } from "@/lib/company-context";
+import { QUERY_PLAN_VERSION } from "@/lib/leadgen/query-plan";
 import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
 export { STALE_RUN_MS };
 
@@ -83,6 +84,7 @@ export type StoredProspectingAction = {
   runningStartedAt: string | null;
   hiddenAt: string | null;
   stats: ProspectingStats;
+  planVersion: number;
   nextQueryOffset: number;
   exhausted: boolean;
   autoContinue: boolean;
@@ -187,6 +189,7 @@ function decodeAction(payload: unknown) {
       rowsCreated: number(statsValue.rowsCreated),
       rowsUpdated: number(statsValue.rowsUpdated),
     },
+    planVersion: number(value.planVersion),
     nextQueryOffset: number(value.nextQueryOffset),
     exhausted: value.exhausted === true,
     autoContinue: value.autoContinue === true,
@@ -266,6 +269,7 @@ export async function createCompanyContextProspectingActions(args: {
     runningStartedAt: null,
     hiddenAt: null,
     stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
+    planVersion: QUERY_PLAN_VERSION,
     nextQueryOffset: 0,
     exhausted: false,
     autoContinue: false,
@@ -556,7 +560,7 @@ async function executeProspectingAction(args: {
     leadGenRunId = leadGenRun.id;
     const result = await (args.runBatch ?? runProspectingBatch)({
       profile,
-      queryOffset: args.action.nextQueryOffset,
+      queryOffset: args.action.planVersion === QUERY_PLAN_VERSION ? args.action.nextQueryOffset : 0,
       search: args.search ?? defaultProspectingSearch,
       fetchPage: args.fetchPage ?? defaultFetcher,
       resolveMx: args.resolveMx,
@@ -575,6 +579,7 @@ async function executeProspectingAction(args: {
         rowsCreated: args.action.stats.rowsCreated + persisted.created,
         rowsUpdated: args.action.stats.rowsUpdated + persisted.updated,
       },
+      planVersion: QUERY_PLAN_VERSION,
       nextQueryOffset: result.nextQueryOffset,
       exhausted: result.exhausted,
       attempts: args.backgroundNow === undefined ? args.action.attempts : 0,

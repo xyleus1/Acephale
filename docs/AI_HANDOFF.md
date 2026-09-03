@@ -11728,6 +11728,16 @@ Verification caveat:
   `POST /api/ops/research/import` with list slug `feast-south-england-cafes`,
   then reviewed before any outreach.
 
+## 2026-09-03: Leadgen exclusions and balanced plans
+
+- Added optional `hardExclusions` to leadgen profiles. Feast chain names now
+  reject a lead only when they appear in its company name or domain, while
+  mentions in page text remain allowed.
+- Limited query plans are now interleaved across keywords, regions, segments,
+  locales, and shapes so bounded runs retain broad coverage.
+- Query plan ordering is versioned, so legacy prospecting actions restart from
+  offset zero while actions created with the current plan version resume safely.
+
 ## 2026-08-31: Supplier file replies refuse stale sends server side
 
 - A saved supplier file bearing draft now carries a state fingerprint of the

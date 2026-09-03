@@ -19,6 +19,8 @@ export type LeadGenProfile = {
   positiveSignals: readonly string[];
   /** Terms that mark a page as the wrong side of the trade or pure noise. */
   negativeSignals: readonly string[];
+  /** Brand or company names that reject a lead outright when they appear in the company name or domain. */
+  hardExclusions?: readonly string[];
   queryLocales?: readonly import("./query-plan").QueryLocale[];
   sitePatterns?: readonly string[];
 };

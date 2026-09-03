@@ -13,6 +13,8 @@ Add a profile next to `MANEKS_PROFILE` in `src/lib/leadgen/profile.ts`:
 - `regions`: the cities or provinces to sweep
 - `positiveSignals` / `negativeSignals`: page vocabulary that qualifies or
   disqualifies a company
+- `hardExclusions`: brand or company names that reject a lead based on its
+  company name or domain
 - `directorySeeds`: chamber, OSB and association member lists worth expanding
 
 Everything downstream (queries, scoring, persistence tags) is derived from the

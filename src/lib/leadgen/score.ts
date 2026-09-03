@@ -25,8 +25,37 @@ const MAX_SIGNAL_POINTS = 60;
 const SEGMENT_POINTS = 25;
 const CONTACT_POINTS = 15;
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function foldBrand(value: string) {
+  return normalizeTurkish(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export function scoreLead(profile: LeadGenProfile, input: LeadFitInput): LeadFitResult {
   const haystack = normalizeTurkish(`${input.companyName} ${input.domain} ${input.pageText}`);
+  const identity = foldBrand(`${input.companyName} ${input.domain}`);
+  const normalizedDomain = foldBrand(input.domain).replace(/[.-]+/g, " ");
+  const hardExclusion = profile.hardExclusions?.find((exclusion) => {
+    const normalized = foldBrand(exclusion).trim();
+    if (!normalized) return false;
+    const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalized)}($|[^a-z0-9])`);
+    const compact = normalized.replace(/[^a-z0-9]/g, "");
+    const domainLabels = foldBrand(input.domain).split(/[.-]+/);
+    return pattern.test(identity)
+      || pattern.test(normalizedDomain)
+      || domainLabels.some((label) => label === compact);
+  });
+  if (hardExclusion) {
+    return {
+      score: 0,
+      tier: "reject",
+      matchedSignals: [],
+      matchedSegments: [],
+      rejectionReason: `excluded brand (${hardExclusion})`,
+    };
+  }
 
   const matchedSignals = profile.positiveSignals.filter((signal) =>
     haystack.includes(normalizeTurkish(signal)),

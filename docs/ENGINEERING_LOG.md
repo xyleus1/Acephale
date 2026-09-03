@@ -8857,3 +8857,13 @@ Use this file for chronological implementation notes that future agents should s
   are fresh, 0 suppliers written to from an unreachable mailbox, but 22 (PCBA)
   and 19 (foam) ingested inbound replies sit on our own RFQ threads without the
   reference in the subject, so the request never counts them.
+
+## 2026-09-03: Leadgen exclusions and balanced plans
+
+- Added optional `hardExclusions` to leadgen profiles. Feast chain names now
+  reject a lead only when they appear in its company name or domain, while
+  mentions in page text remain allowed.
+- Limited query plans are now interleaved across keywords, regions, segments,
+  locales, and shapes so bounded runs retain broad coverage.
+- Query plan ordering is versioned, so legacy prospecting actions restart from
+  offset zero while actions created with the current plan version resume safely.

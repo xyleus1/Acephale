@@ -5,6 +5,9 @@
 import { createHash } from "node:crypto";
 import type { LeadGenProfile } from "./profile";
 
+// Bump when buildQueryPlan ordering changes so persisted offsets are not reused.
+export const QUERY_PLAN_VERSION = 2;
+
 export type QueryLocale =
   | "tr"
   | "es"
@@ -195,32 +198,56 @@ const ALL_SHAPES: readonly LeadGenQueryShape[] = [
   "exhibitor_list", "association_members",
 ];
 
+// The plan is interleaved so bounded plans stay balanced across segments and regions.
 export function buildQueryPlan(profile: LeadGenProfile, options: BuildQueryPlanOptions = {}): LeadGenQuery[] {
   const requestedShapes = options.shapes?.length ? new Set(options.shapes) : null;
   const segments = options.segmentKeys?.length ? profile.segments.filter((segment) => options.segmentKeys?.includes(segment.key)) : profile.segments;
   const regionCap = options.maxRegionsPerSegment ?? profile.regions.length;
   const seen = new Set<string>();
-  const plan: LeadGenQuery[] = [];
+  const entries: Array<{
+    query: LeadGenQuery;
+    keywordIdx: number;
+    regionIdx: number;
+    segmentIdx: number;
+    localeIdx: number;
+    shapeIdx: number;
+  }> = [];
 
-  for (const segment of segments) {
-    for (const region of [null, ...profile.regions.slice(0, regionCap)] as (string | null)[]) {
-      for (const locale of queryLocalesForRegion(region, profile.queryLocales)) {
+  segments.forEach((segment, segmentIdx) => {
+    const regions = [null, ...profile.regions.slice(0, regionCap)] as (string | null)[];
+    regions.forEach((region, regionIdx) => {
+      queryLocalesForRegion(region, profile.queryLocales).forEach((locale, localeIdx) => {
         const shapes = ALL_SHAPES.filter((shape) => !requestedShapes || requestedShapes.has(shape));
         const keywords = segment.keywordsByLocale?.[locale] ?? segment.keywords;
-        for (const keyword of keywords) {
-          for (const shape of shapes) {
+        keywords.forEach((keyword, keywordIdx) => {
+          shapes.forEach((shape, shapeIdx) => {
             const query = buildShape(shape, keyword, region, locale, profile).replace(/\s+/g, " ").trim();
             const key = `${shape}:${locale}:${query.toLowerCase()}`;
-            if (seen.has(key)) continue;
+            if (seen.has(key)) return;
             seen.add(key);
             const input = [profile.slug, segment.key, region ?? "all", locale, keyword, shape, query].join("|");
             const id = `${profile.slug}-${createHash("sha256").update(input).digest("hex").slice(0, 16)}`;
-            plan.push({ id, query, segmentKey: segment.key, region, locale, shape });
-            if (options.limit && plan.length >= options.limit) return plan;
-          }
-        }
-      }
-    }
-  }
-  return plan;
+            entries.push({
+              query: { id, query, segmentKey: segment.key, region, locale, shape },
+              keywordIdx,
+              regionIdx,
+              segmentIdx,
+              localeIdx,
+              shapeIdx,
+            });
+          });
+        });
+      });
+    });
+  });
+  entries.sort((a, b) =>
+    a.keywordIdx - b.keywordIdx
+    || a.regionIdx - b.regionIdx
+    || a.segmentIdx - b.segmentIdx
+    || a.localeIdx - b.localeIdx
+    || a.shapeIdx - b.shapeIdx,
+  );
+  const plan = entries.map((entry) => entry.query);
+  if (!options.limit) return plan;
+  return plan.slice(0, Math.max(1, Math.ceil(options.limit)));
 }

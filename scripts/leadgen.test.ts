@@ -11,6 +11,7 @@ import {
   signalsFromProductFocus,
 } from "../src/lib/leadgen/profile";
 import { WENS_PROFILE } from "../src/lib/leadgen/profile-wens";
+import { FEAST_PROFILE } from "../src/lib/leadgen/profile-feast";
 import { resolveLeadGenProfile } from "../src/lib/leadgen/registry";
 import {
   createSerperSearchProvider,
@@ -55,6 +56,71 @@ const brazilPlan = buildQueryPlan({ ...MANEKS_PROFILE, regions: ["Brazil"] }, { 
 assert.ok(brazilPlan.some((entry) => entry.locale === "pt" && entry.query.includes("lista de membros")), "Brazil must use Portuguese directory queries");
 assert.ok(internationalPlan.some((entry) => entry.shape === "exhibitor_list" && entry.query.includes("filetype:pdf")), "exhibitor searches must hunt documents");
 assert.equal(buildQueryPlan(MANEKS_PROFILE, { limit: 30 }).map((entry) => entry.id).join("|"), buildQueryPlan(MANEKS_PROFILE, { limit: 30 }).map((entry) => entry.id).join("|"), "query ids must be stable");
+assert.equal(buildQueryPlan(MANEKS_PROFILE, { limit: 0 }).length, buildQueryPlan(MANEKS_PROFILE).length);
+assert.ok(buildQueryPlan(MANEKS_PROFILE, { limit: 0 }).length > 0);
+
+const feastPlan = buildQueryPlan(FEAST_PROFILE, { limit: 500 });
+assert.equal(feastPlan.length, 500);
+assert.deepEqual(new Set(feastPlan.map((entry) => entry.segmentKey)), new Set(FEAST_PROFILE.segments.map((segment) => segment.key)));
+assert.equal(new Set(feastPlan.map((entry) => entry.shape)).size, 10);
+assert.ok(new Set(feastPlan.map((entry) => entry.region)).size >= 10);
+assert.deepEqual(new Set(buildQueryPlan(FEAST_PROFILE).map((entry) => entry.region).filter((region): region is string => region !== null)), new Set(FEAST_PROFILE.regions));
+assert.equal(new Set(feastPlan.slice(0, 50).map((entry) => entry.segmentKey)).size, 5);
+
+const excludedCosta = scoreLead(FEAST_PROFILE, {
+  companyName: "Costa Coffee Brighton",
+  domain: "costa.co.uk",
+  pageText: "coffee cake pastries brunch",
+  segmentKey: "coffee_shop",
+  emailCount: 1,
+  hasPhone: true,
+});
+assert.equal(excludedCosta.tier, "reject");
+assert.ok(excludedCosta.rejectionReason?.startsWith("excluded brand"));
+const excludedStarbucks = scoreLead(FEAST_PROFILE, {
+  companyName: "Starbucks",
+  domain: "starbucks.co.uk",
+  pageText: "coffee cake pastries brunch",
+  segmentKey: "coffee_shop",
+  emailCount: 1,
+  hasPhone: true,
+});
+assert.equal(excludedStarbucks.tier, "reject");
+assert.ok(excludedStarbucks.rejectionReason?.startsWith("excluded brand"));
+for (const [companyName, domain] of [
+  ["Black Sheep Coffee Brighton", "blacksheepcoffee.co.uk"],
+  ["BTP Exeter", "bostonteaparty.co.uk"],
+  ["Caffè Nero", "caffenero.com"],
+  ["Caffè Nero", "example-cafe.co.uk"],
+  ["Coffee #1 Bath", "coffee1.co.uk"],
+] as const) {
+  const result = scoreLead(FEAST_PROFILE, {
+    companyName,
+    domain,
+    pageText: "coffee cake pastries brunch",
+    segmentKey: "coffee_shop",
+    emailCount: 1,
+    hasPhone: true,
+  });
+  assert.equal(result.tier, "reject");
+  assert.ok(result.rejectionReason?.startsWith("excluded brand"));
+}
+assert.notEqual(scoreLead(FEAST_PROFILE, {
+  companyName: "Little Bird Cafe",
+  domain: "littlebirdcafe.co.uk",
+  pageText: "independent coffee shop, brunch, cakes and pastries, opposite Starbucks",
+  segmentKey: "coffee_shop",
+  emailCount: 1,
+  hasPhone: true,
+}).tier, "reject");
+assert.notEqual(scoreLead(FEAST_PROFILE, {
+  companyName: "Acosta Cafe",
+  domain: "acostacafe.co.uk",
+  pageText: "coffee shop cakes pastries brunch",
+  segmentKey: "coffee_shop",
+  emailCount: 1,
+  hasPhone: true,
+}).tier, "reject");
 
 const scoped = buildQueryPlan(MANEKS_PROFILE, { segmentKeys: ["fabricator"], maxRegionsPerSegment: 2 });
 assert.ok(scoped.every((entry) => entry.segmentKey === "fabricator"), "segment filter must hold");

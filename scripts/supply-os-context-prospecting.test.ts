@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
-import { buildQueryPlan } from "../src/lib/leadgen/query-plan";
+import { buildQueryPlan, QUERY_PLAN_VERSION } from "../src/lib/leadgen/query-plan";
 import {
   profileFromProspectingDraft,
   runProspectingBatch,
@@ -57,6 +57,7 @@ const backgroundAction: StoredProspectingAction = {
   runningStartedAt: null,
   hiddenAt: null,
   stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
+  planVersion: 0,
   nextQueryOffset: 0,
   exhausted: false,
   autoContinue: true,
@@ -383,6 +384,56 @@ async function main() {
     });
     assert.equal(completed.status, "COMPLETED");
     assert.equal(completed.stats.rowsCreated, 1);
+    assert.equal(completed.planVersion, QUERY_PLAN_VERSION);
+    const legacyResumeAction = await createBackgroundAction(`plan-version-legacy-${suffix}`);
+    await setActionPayload(legacyResumeAction.id, {
+      status: "COMPLETED",
+      planVersion: 0,
+      nextQueryOffset: 30,
+      exhausted: false,
+      autoContinue: false,
+    }, "COMPLETED");
+    let legacyQueryOffset = -1;
+    const legacyCompleted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: legacyResumeAction.id,
+      runBatch: async ({ queryOffset }) => {
+        legacyQueryOffset = queryOffset;
+        return {
+          candidates: [],
+          stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 },
+          nextQueryOffset: 31,
+          exhausted: true,
+        };
+      },
+    });
+    assert.equal(legacyQueryOffset, 0);
+    assert.equal(legacyCompleted.planVersion, QUERY_PLAN_VERSION);
+    const currentResumeAction = await createBackgroundAction(`plan-version-current-${suffix}`);
+    await setActionPayload(currentResumeAction.id, {
+      status: "COMPLETED",
+      planVersion: QUERY_PLAN_VERSION,
+      nextQueryOffset: 30,
+      exhausted: false,
+      autoContinue: false,
+    }, "COMPLETED");
+    let currentQueryOffset = -1;
+    await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: currentResumeAction.id,
+      runBatch: async ({ queryOffset }) => {
+        currentQueryOffset = queryOffset;
+        return {
+          candidates: [],
+          stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 },
+          nextQueryOffset: 31,
+          exhausted: true,
+        };
+      },
+    });
+    assert.equal(currentQueryOffset, 30);
     const list = await prisma.researchList.findFirst({
       where: { officeId: office.id, slug: lifecycleDraft.listSlug },
       include: { records: true },
