@@ -37,6 +37,7 @@ import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { prisma } from "@/lib/prisma";
 import {
   gmailSupplierEmailProvider,
+  SENDER_PAUSED_ERROR,
   type SupplierEmailProvider,
   type SupplierEmailSendResult,
 } from "@/lib/supply-os/supplier-email-provider";
@@ -67,6 +68,7 @@ export type CampaignBatchResult = {
   alreadySent: number;
   rejected: number;
   unknown: number;
+  rerouted: number;
   poolExhausted: boolean;
   blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER" | "NO_AUDIENCE";
   outcomes: CampaignBatchSend[];
@@ -204,6 +206,19 @@ export function outreachCampaignDeliveryOutcome(
     return { state: "REJECTED" as const, releaseReservation: true, error: result.error };
   }
   return { state: "UNKNOWN" as const, releaseReservation: false, error: result.error };
+}
+
+// A mailbox paused by sender protection between the reservation and the
+// provider call has not reached the recipient yet. A rotated first touch is
+// not tied to that mailbox, so it moves to another ready one once per run; a
+// pinned campaign keeps its operator-chosen mailbox and waits for the resume.
+export function outreachCampaignPausedSenderAction(input: {
+  error: string;
+  rotated: boolean;
+  rerouted: boolean;
+}): "SETTLE" | "REROUTE" | "WAIT" {
+  if (input.error !== SENDER_PAUSED_ERROR) return "SETTLE";
+  return input.rotated && !input.rerouted ? "REROUTE" : "WAIT";
 }
 
 export function outreachCampaignReservationOutcome(code: string) {
@@ -429,6 +444,7 @@ function result(campaignId: string): CampaignBatchResult {
     alreadySent: 0,
     rejected: 0,
     unknown: 0,
+    rerouted: 0,
     poolExhausted: false,
     outcomes: [],
   };
@@ -800,7 +816,9 @@ export async function runOutreachCampaignBatch(input: {
       },
     });
   };
-  for (const [index, row] of claimedRows.entries()) {
+  const reroutedRecords = new Set<string>();
+  for (let index = 0; index < claimedRows.length; index += 1) {
+    const row = claimedRows[index];
     const current = await db.outreachCampaign.findFirst({
       where: { id: campaign.id, officeId: input.officeId },
       select: { status: true },
@@ -1013,6 +1031,34 @@ export async function runOutreachCampaignBatch(input: {
       });
     } else if (receipt.state === "REJECTED") {
       await releaseReservation({ officeId: input.officeId, reservationId: reservation.reservationId });
+      const pausedAction = outreachCampaignPausedSenderAction({
+        error: receipt.error,
+        rotated: campaign.senderRotation,
+        rerouted: reroutedRecords.has(row.id),
+      });
+      if (pausedAction === "REROUTE") {
+        // The released reservation is re-reserved under the same idempotency
+        // key; the pool filter excludes the paused mailbox, so the retry lands
+        // on another ready mailbox or reports the pool as exhausted.
+        reroutedRecords.add(row.id);
+        output.rerouted += 1;
+        index -= 1;
+        continue;
+      }
+      if (pausedAction === "WAIT") {
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          state: "POOL_EXHAUSTED",
+          senderEmail: reservation.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: receipt.error,
+        });
+        output.poolExhausted = true;
+        await releaseClaimsFrom(index);
+        break;
+      }
       await recordOutcome(db, {
         officeId: input.officeId,
         campaignId: campaign.id,

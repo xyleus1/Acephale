@@ -1,5 +1,40 @@
 # Engineering Log
 
+## 2026-09-03: A protection pause between reservation and delivery no longer drops the recipient
+
+- The Gmail send lookup refuses a mailbox whose `sendPausedAt` was set after
+  the sender-pool reservation (`SENDER_PAUSED_ERROR`). Both campaign runners
+  recorded that as a permanent `REJECTED`, so a reviewed recipient was lost to
+  a bounce spike on a mailbox that would be resumed by an operator anyway.
+- First touches (`runOutreachCampaignBatch`): the refusal now goes through
+  `outreachCampaignPausedSenderAction`. In a rotated campaign the reservation
+  is released and the loop repeats the same row, so `reserveEmailSender` runs
+  again under the same idempotency key and request hash. The released
+  reservation row is updated in place with the newly selected account, and
+  `SHARED_SENDER_POOL_FILTER` (`sendPausedAt: null`) keeps the paused mailbox
+  out of the selection, so the message leaves once from another ready mailbox.
+  A recipient is rerouted at most once per run: a second pause, like any pause
+  in a pinned campaign (operator-chosen mailbox), releases the claim as
+  `POOL_EXHAUSTED` and stops the run, and the recipient is reclaimed later.
+  Any other provider rejection still settles `REJECTED`.
+- Follow-ups (`runOutreachCampaignFollowUps`): the step is never rerouted
+  because the reply has to leave from the mailbox that owns the recipient's
+  provider thread. `deferPaused` handles both a pause seen before the
+  reservation and one returned by the provider after it: release the
+  reservation and the claim, record a `POOL_EXHAUSTED` outcome, backfill the
+  slot for rotated campaigns, stop the run for pinned ones. Before deferring it
+  rechecks `threadReplied`, so a human reply that arrived while the mailbox was
+  paused skips the step as `REPLIED` instead of parking it.
+- Tests: rotated first touch paused on the first mailbox is re-reserved with the
+  same key and sent from the second (one release, no `REJECTED`, no claim
+  deletion); both mailboxes paused releases the claim without a third attempt;
+  a pinned campaign never asks the pool for another account. Follow-up paused
+  after reservation keeps the reservation pinned to the first-touch account,
+  releases it once, and the recipient behind it on another mailbox still sends;
+  a pinned follow-up run stops at the first pause with every claim released; a
+  paused recipient whose thread gets a reply is skipped `REPLIED` on the next
+  run.
+
 ## 2026-09-03: Alternate supplier senders could be read but not answered
 
 - A confirmed autopilot pass failed 23 PCBA reply sends with "The supplier

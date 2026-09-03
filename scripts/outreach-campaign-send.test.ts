@@ -18,8 +18,10 @@ async function main() {
     outreachCampaignStatusAllowsSend,
     outreachCampaignRunNowLimitValid,
     outreachCampaignUtcDayBounds,
+    outreachCampaignPausedSenderAction,
     runOutreachCampaignBatch,
   } = await import("../src/lib/outreach-campaign-send");
+  const { SENDER_PAUSED_ERROR } = await import("../src/lib/supply-os/supplier-email-provider");
   const { renderCampaignEmail, selectCampaignVariant } = await import("../src/lib/outreach-campaign-copy");
   const rows = [
     { id: "late", status: "new", data: { email: "late@example.com" }, createdAt: new Date("2026-01-02") },
@@ -1043,6 +1045,141 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     assert.equal(run.sent, 1, `day ${day} should send exactly one first touch`);
   }
   assert.deepEqual(sentRecipients, ["record-1@example.com", "record-2@example.com", "record-3@example.com"]);
+
+  // A mailbox paused by sender protection between the reservation and the
+  // provider call: a rotated first touch moves to another ready mailbox once,
+  // a pinned campaign waits for its mailbox, and any other refusal settles.
+  assert.equal(outreachCampaignPausedSenderAction({ error: SENDER_PAUSED_ERROR, rotated: true, rerouted: false }), "REROUTE");
+  assert.equal(outreachCampaignPausedSenderAction({ error: SENDER_PAUSED_ERROR, rotated: true, rerouted: true }), "WAIT");
+  assert.equal(outreachCampaignPausedSenderAction({ error: SENDER_PAUSED_ERROR, rotated: false, rerouted: false }), "WAIT");
+  assert.equal(outreachCampaignPausedSenderAction({ error: "mailbox rejected the message", rotated: true, rerouted: false }), "SETTLE");
+
+  // Rotated first touch: the paused mailbox's reservation is released and the
+  // same recipient is re-reserved under the same idempotency key, so the pool
+  // picks another ready mailbox and the message is delivered exactly once.
+  const rerouteUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+  const rerouteBase = fakeDatabase({ senderAccountId: null, senderRotation: true });
+  const rerouteDb = {
+    ...rerouteBase,
+    outreachCampaignSend: {
+      ...rerouteBase.outreachCampaignSend,
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => { rerouteUpdates.push(args); },
+      deleteMany: async () => { throw new Error("a rerouted first touch must keep its claim"); },
+    },
+  };
+  const rerouteReservations: Array<{ idempotencyKey: string; requestHash: string; accountId?: string }> = [];
+  const rerouteSends: string[] = [];
+  let rerouteReleases = 0;
+  const rerouteRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: rerouteDb as never,
+    provider: {
+      ...provider,
+      send: async (input: Record<string, unknown>) => {
+        rerouteSends.push(String(input.accountId));
+        return input.accountId === "account-1"
+          ? { state: "REJECTED" as const, error: SENDER_PAUSED_ERROR }
+          : provider.send(input);
+      },
+    },
+    reserve: async (input) => {
+      rerouteReservations.push({ idempotencyKey: input.idempotencyKey, requestHash: input.requestHash, accountId: input.accountId });
+      return rerouteReservations.length === 1
+        ? reservation
+        : { ...reservation, accountId: "account-2", senderEmail: "second@example.com" };
+    },
+    release: async () => { rerouteReleases += 1; },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.deepEqual(rerouteSends, ["account-1", "account-2"]);
+  assert.equal(rerouteReservations.length, 2);
+  assert.equal(rerouteReservations[0].idempotencyKey, rerouteReservations[1].idempotencyKey, "the retry reuses the idempotency key");
+  assert.equal(rerouteReservations[0].requestHash, rerouteReservations[1].requestHash);
+  assert.equal(rerouteReservations[1].accountId, undefined, "the pool picks the replacement mailbox");
+  assert.equal(rerouteReleases, 1, "the paused mailbox's reservation is released before the retry");
+  assert.equal(rerouteRun.rerouted, 1);
+  assert.equal(rerouteRun.sent, 1);
+  assert.equal(rerouteRun.rejected, 0);
+  assert.equal(rerouteRun.poolExhausted, false);
+  assert.equal(rerouteUpdates.filter((update) => update.data.status === "REJECTED").length, 0, "a pause is not a durable rejection");
+  assert.deepEqual(rerouteRun.outcomes.map((outcome) => [outcome.state, outcome.senderEmail]), [["SENT", "second@example.com"]]);
+
+  // The replacement mailbox pausing too is not retried again in this run: the
+  // claim is released and the recipient waits for the next run.
+  const doublePauseDeletes: Array<{ recordId?: string | { in: string[] }; status?: string }> = [];
+  const doublePauseDb = {
+    ...rerouteBase,
+    outreachCampaignSend: {
+      ...rerouteBase.outreachCampaignSend,
+      updateMany: async (args: { data: Record<string, unknown> }) => {
+        if (args.data.status === "REJECTED") throw new Error("a pause must not settle the recipient as REJECTED");
+      },
+      deleteMany: async (args: { where: { recordId?: string | { in: string[] }; status?: string } }) => { doublePauseDeletes.push(args.where); },
+    },
+  };
+  let doublePauseSends = 0;
+  const doublePauseRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: doublePauseDb as never,
+    provider: {
+      ...provider,
+      send: async () => {
+        doublePauseSends += 1;
+        return { state: "REJECTED" as const, error: SENDER_PAUSED_ERROR };
+      },
+    },
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.equal(doublePauseSends, 2);
+  assert.equal(doublePauseRun.rerouted, 1);
+  assert.equal(doublePauseRun.sent, 0);
+  assert.equal(doublePauseRun.rejected, 0);
+  assert.equal(doublePauseRun.poolExhausted, true);
+  assert.equal(doublePauseRun.outcomes.at(-1)?.state, "POOL_EXHAUSTED");
+  const doublePauseReleased = doublePauseDeletes.find((where) => typeof where.recordId === "object" && where.status === "QUEUED");
+  assert.deepEqual(doublePauseReleased && typeof doublePauseReleased.recordId === "object" ? doublePauseReleased.recordId.in : [], ["record-1"]);
+
+  // A pinned campaign keeps the operator's mailbox: no reroute, the claim is
+  // released and the first touch waits for the mailbox to resume.
+  const pinnedPauseDeletes: Array<{ recordId?: string | { in: string[] }; status?: string }> = [];
+  const pinnedPauseBase = fakeDatabase();
+  const pinnedPauseDb = {
+    ...pinnedPauseBase,
+    outreachCampaignSend: {
+      ...pinnedPauseBase.outreachCampaignSend,
+      updateMany: async (args: { data: Record<string, unknown> }) => {
+        if (args.data.status === "REJECTED") throw new Error("a pause must not settle the recipient as REJECTED");
+      },
+      deleteMany: async (args: { where: { recordId?: string | { in: string[] }; status?: string } }) => { pinnedPauseDeletes.push(args.where); },
+    },
+  };
+  const pinnedPauseReservations: Array<string | undefined> = [];
+  const pinnedPauseRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: pinnedPauseDb as never,
+    provider: {
+      ...provider,
+      send: async () => ({ state: "REJECTED" as const, error: SENDER_PAUSED_ERROR }),
+    },
+    reserve: async (input) => {
+      pinnedPauseReservations.push(input.accountId);
+      return reservation;
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.deepEqual(pinnedPauseReservations, ["account-1"], "a pinned campaign never asks the pool for another mailbox");
+  assert.equal(pinnedPauseRun.rerouted, 0);
+  assert.equal(pinnedPauseRun.rejected, 0);
+  assert.equal(pinnedPauseRun.poolExhausted, true);
+  const pinnedPauseReleased = pinnedPauseDeletes.find((where) => typeof where.recordId === "object" && where.status === "QUEUED");
+  assert.deepEqual(pinnedPauseReleased && typeof pinnedPauseReleased.recordId === "object" ? pinnedPauseReleased.recordId.in : [], ["record-1"]);
   console.log("Outreach campaign send checks passed.");
 }
 

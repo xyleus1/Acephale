@@ -1,5 +1,27 @@
 # AI Handoff
 
+## 2026-09-03: A mailbox paused mid-send reroutes a first touch and defers a follow-up
+
+- The provider refuses a mailbox whose `sendPausedAt` was set between the
+  sender-pool reservation and delivery (`SENDER_PAUSED_ERROR`). That refusal
+  is no longer a permanent `REJECTED` for the recipient.
+- First touch in a rotated campaign: `outreachCampaignPausedSenderAction`
+  returns `REROUTE`, the reservation is released and the same recipient is
+  reserved again under the same idempotency key and request hash; the pool
+  filter excludes the paused mailbox, so another ready mailbox sends it once.
+  The reroute happens at most once per recipient per run
+  (`CampaignBatchResult.rerouted` counts them); a second pause, or any pause in
+  a pinned campaign, returns `WAIT`: the claim is released with a
+  `POOL_EXHAUSTED` outcome and the recipient is retried on a later run.
+- Follow-up: never rerouted, because the reply must leave from the mailbox
+  that owns the recipient's thread. A pause seen before the reservation or
+  returned by the provider after it releases the claim and defers the step
+  (`deferPaused`); rotated campaigns backfill the freed slot as before, pinned
+  campaigns stop the run. A human reply on the thread found at that moment
+  skips the step as `REPLIED` instead of waiting.
+- To test: `npm run test:outreach-campaign-send`,
+  `npm run test:outreach-campaign-follow-ups`.
+
 ## 2026-09-03: A vouched alternate sender can be answered
 
 - `ProcurementConversation` now carries `attributedSenders`, the addresses a
@@ -353,7 +375,9 @@
   empty sender pool mid-batch releases the remaining `QUEUED` first-touch
   claims of that run. The Gmail send lookups (OAuth and app password) refuse a
   mailbox with `sendPausedAt` set right before delivery; that is a `REJECTED`
-  outcome without `needsReauth`, and reconciliation still works while paused.
+  provider result without `needsReauth` (the campaign runners reroute or defer
+  it, see the 2026-09-03 entry above), and reconciliation still works while
+  paused.
 - Suppression and the run budget: `selectSendableCampaignRows` walks the
   unhandled audience in run-sized chunks, records suppressed rows as
   `REJECTED`, and stops once `limit` sendable rows are found, so a suppressed

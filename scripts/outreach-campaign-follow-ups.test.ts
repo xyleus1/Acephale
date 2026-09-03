@@ -10,6 +10,7 @@ import {
   runOutreachCampaignFollowUps,
   unresolvedOutreachCampaignDeliveries,
 } from "../src/lib/outreach-campaign-follow-ups";
+import { SENDER_PAUSED_ERROR } from "../src/lib/supply-os/supplier-email-provider";
 import { outreachCampaignStatusAllowsSend } from "../src/lib/outreach-campaign-send";
 import { SHARED_MAILBOX_POOL_FILTER } from "../src/lib/email-account-pool";
 
@@ -1188,6 +1189,115 @@ async function main() {
     assert.equal(duplicateDb.followUps.find((row) => row.recordId === "record-1"), undefined, `${order}: the claim is released for the next run`);
     assert.equal(duplicateRun.outcomes.find((outcome) => outcome.recordId === "record-1")?.state, "POOL_EXHAUSTED", order);
   }
+
+  // A mailbox paused by sender protection after the reservation but before the
+  // provider call: the follow-up must keep the recipient's thread, so it is not
+  // rerouted to another mailbox. The claim is released and waits for the resume,
+  // and the recipient behind it on another mailbox still sends.
+  const pausedLateDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    emailAccounts: [
+      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+    ],
+    now,
+  });
+  const pausedLateReservations: Array<string | undefined> = [];
+  let pausedLateReleases = 0;
+  const pausedLateRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    limit: 1,
+    campaign: { ...campaign, senderAccountId: null },
+    db: pausedLateDb as never,
+    provider: {
+      ...provider,
+      send: async (input: Record<string, unknown>) => (input.accountId === "account-alpha"
+        ? { state: "REJECTED" as const, error: SENDER_PAUSED_ERROR }
+        : provider.send(input)),
+    },
+    reserve: async (input: { accountId?: string }) => {
+      pausedLateReservations.push(input.accountId);
+      return { ...reservation, reservationId: `reservation-${input.accountId}`, accountId: input.accountId ?? "", senderEmail: `${input.accountId?.replace("account-", "")}@example.com` };
+    },
+    release: async () => { pausedLateReleases += 1; },
+  });
+  assert.deepEqual(pausedLateReservations, ["account-alpha", "account-beta"], "the paused first-touch mailbox is never swapped for another one");
+  assert.equal(pausedLateReleases, 1);
+  assert.equal(pausedLateRun.rejected, 0, "a pause after reservation is not a durable rejection");
+  assert.equal(pausedLateRun.sent, 1);
+  assert.equal(pausedLateDb.followUps.find((row) => row.recordId === "record-1"), undefined, "the paused recipient's claim is released for the next run");
+  assert.equal(pausedLateDb.followUps.find((row) => row.recordId === "record-2")?.status, "SENT");
+  assert.equal(pausedLateRun.outcomes.find((outcome) => outcome.recordId === "record-1")?.state, "POOL_EXHAUSTED");
+  assert.equal(pausedLateRun.outstanding, 2, "the deferred follow-up is still due alongside the sent recipient's next step");
+
+  // A pinned campaign has no other mailbox to wait on, so the run stops and
+  // every remaining claim goes back for the next run.
+  const pausedPinnedDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    now,
+  });
+  let pausedPinnedSends = 0;
+  const pausedPinnedRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    db: pausedPinnedDb as never,
+    provider: {
+      ...provider,
+      send: async () => {
+        pausedPinnedSends += 1;
+        return { state: "REJECTED" as const, error: SENDER_PAUSED_ERROR };
+      },
+    },
+  });
+  assert.equal(pausedPinnedSends, 1, "the run stops at the first paused refusal");
+  assert.equal(pausedPinnedRun.poolExhausted, true);
+  assert.equal(pausedPinnedRun.rejected, 0);
+  assert.equal(pausedPinnedDb.followUps.filter((row) => row.status === "QUEUED").length, 0, "both claims are released");
+  assert.equal(pausedPinnedRun.outstanding, 2);
+
+  // A reply that landed while the mailbox was paused ends the sequence instead
+  // of leaving the step waiting for the resume.
+  const pausedRepliedDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "paused@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+    ],
+    emailAccounts: [
+      { id: "account-paused", email: "paused@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+    ],
+    now,
+  });
+  const pausedRepliedRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: { ...campaign, senderAccountId: null },
+    db: pausedRepliedDb as never,
+    reserve: async () => {
+      // The planning snapshot did not see the reply; it arrives before the claim is handled.
+      throw new Error("a paused mailbox must not reserve");
+    },
+    provider: {
+      ...provider,
+      send: async () => { throw new Error("a paused mailbox must not send"); },
+    },
+  });
+  assert.equal(pausedRepliedRun.outcomes.find((outcome) => outcome.recordId === "record-1")?.state, "POOL_EXHAUSTED", "without a reply the step waits");
+  pausedRepliedDb.repliedThreads.add("thread-1");
+  const pausedRepliedRerun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: { ...campaign, senderAccountId: null },
+    db: pausedRepliedDb as never,
+    reserve: async () => { throw new Error("a replied thread must not reserve"); },
+    provider: {
+      ...provider,
+      send: async () => { throw new Error("a replied thread must not send"); },
+    },
+  });
+  assert.equal(pausedRepliedRerun.skipped, 1);
+  assert.equal(pausedRepliedRerun.outstanding, 0, "a human reply ends the sequence; nothing is rerouted");
   console.log("Outreach campaign follow-up checks passed.");
 }
 

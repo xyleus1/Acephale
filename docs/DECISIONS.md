@@ -1,5 +1,34 @@
 # Decisions
 
+## A mailbox paused mid-send reroutes a first touch and defers a follow-up
+
+Date: 2026-09-03
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: A sender-protection pause that lands between the sender-pool
+  reservation and the provider call (`SENDER_PAUSED_ERROR`) is a mailbox
+  problem, not a recipient problem, so it never settles the recipient as
+  `REJECTED`. What happens next depends on whether the recipient already has a
+  thread with a specific mailbox.
+- First touch: no thread exists yet, so in a rotated campaign the message moves
+  to another ready mailbox in the pool, once per run, under the same
+  idempotency key and request hash (the released reservation is re-reserved, so
+  the message cannot be delivered twice). A pinned campaign keeps the
+  operator-chosen mailbox and waits: the claim is released and the recipient is
+  reclaimed on a later run. A second pause in the same run also waits.
+- Follow-up: the recipient's thread belongs to the mailbox that sent the first
+  touch, so a follow-up is never rerouted. A paused first-touch mailbox defers
+  the step until an operator resumes it; rotated campaigns keep sending other
+  recipients, pinned campaigns stop the run.
+- Reply boundary: a human reply on the thread ends the sequence, so it is
+  checked before deferring. A replied recipient is skipped `REPLIED`, never
+  parked and never rerouted. Delivery feedback, auto-replies, and bounce
+  reports do not count as a reply.
+- Consequences: `CampaignBatchResult.rerouted` reports first-touch reroutes.
+  Reviewed recipients survive a bounce spike on one mailbox instead of being
+  dropped, and a recipient never receives the same campaign from two mailboxes.
+
 ## Deterministic campaign targets own sourcing convergence
 
 Date: 2026-09-03
@@ -4909,9 +4938,11 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Pause boundary: The sender-pool reservation is not the last check. The
   provider's send-account lookup refuses a mailbox whose `sendPausedAt` is set,
   so a reputation pause that lands between reservation and delivery still stops
-  the email. That refusal is a `REJECTED` outcome (reservation released, row
-  recorded) and never a reauthentication prompt; reconciliation of earlier sends
-  stays available while the mailbox is paused.
+  the email. That refusal releases the reservation and is never a
+  reauthentication prompt; reconciliation of earlier sends stays available
+  while the mailbox is paused. How the recipient is handled afterwards (first
+  touch rerouted, follow-up deferred) is the 2026-09-03 decision above; it is
+  not a `REJECTED` outcome.
 
 ## 2026-09-02: Ops campaign actions reuse human approval
 

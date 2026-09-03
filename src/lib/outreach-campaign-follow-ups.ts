@@ -23,6 +23,7 @@ import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import { DELIVERY_FEEDBACK_CLASSIFICATION } from "@/lib/email-delivery-feedback";
 import {
+  SENDER_PAUSED_ERROR,
   type SupplierEmailProvider,
   type SupplierEmailSendResult,
 } from "@/lib/supply-os/supplier-email-provider";
@@ -736,10 +737,26 @@ export async function runOutreachCampaignFollowUps(input: {
       output.outcomes.push({ ...base, state: "REJECTED", senderEmail: null, error });
       continue;
     }
-    if (senderAccount.state === "PAUSED") {
+    // A follow-up stays on the first-touch mailbox so the recipient keeps one
+    // thread, so a paused mailbox defers it instead of rerouting it. A reply
+    // that arrived meanwhile ends the sequence right away rather than waiting.
+    const deferPaused = async (error: string): Promise<"CONTINUE" | "STOP"> => {
+      if (await threadReplied(db, campaign.officeId, candidate.localThreadId)) {
+        await skipClaimed(candidate, "REPLIED");
+        return "CONTINUE";
+      }
       await dropQueued(candidate);
-      output.outcomes.push({ ...base, state: "POOL_EXHAUSTED", senderEmail: null, error: "The mailbox that sent the first touch is paused by sender protection." });
-      await deferRotated(candidate);
+      output.outcomes.push({ ...base, state: "POOL_EXHAUSTED", senderEmail: null, error });
+      if (!campaign.senderAccountId) {
+        await deferRotated(candidate);
+        return "CONTINUE";
+      }
+      output.poolExhausted = true;
+      await releaseUnprocessedClaims();
+      return "STOP";
+    };
+    if (senderAccount.state === "PAUSED") {
+      if (await deferPaused("The mailbox that sent the first touch is paused by sender protection.") === "STOP") break;
       continue;
     }
     const reservation = await reserveSender({
@@ -857,6 +874,10 @@ export async function runOutreachCampaignFollowUps(input: {
       output.outcomes.push({ ...base, state: "SENT", senderEmail: reservation.senderEmail, error: null });
     } else if (receipt.state === "REJECTED") {
       await releaseReservation({ officeId: campaign.officeId, reservationId: reservation.reservationId });
+      if (receipt.error === SENDER_PAUSED_ERROR) {
+        if (await deferPaused(receipt.error) === "STOP") break;
+        continue;
+      }
       await recordOutcome(candidate, { status: "REJECTED", senderEmail: reservation.senderEmail, reservationId: reservation.reservationId, error: receipt.error });
       output.rejected += 1;
       output.outcomes.push({ ...base, state: "REJECTED", senderEmail: reservation.senderEmail, error: receipt.error });
