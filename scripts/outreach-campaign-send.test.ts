@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Prisma } from "@prisma/client";
 
 process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/test?sslmode=require";
 
@@ -301,6 +302,142 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   });
   assert.equal(sentRun.sent, 1);
   assert.equal(sentProviderInput?.senderDisplayName, "Wens");
+  let reservationMarkerInput: { where?: Record<string, unknown>; data?: Record<string, unknown> } | undefined;
+  const reservationMarkerDb = fakeDatabase() as unknown as {
+    outreachCampaignSend: {
+      updateMany: (input: typeof reservationMarkerInput) => Promise<void>;
+    };
+  };
+  reservationMarkerDb.outreachCampaignSend.updateMany = async (input: typeof reservationMarkerInput) => {
+    reservationMarkerInput = input;
+  };
+  await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: reservationMarkerDb as never,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.deepEqual(reservationMarkerInput, {
+    where: {
+      officeId: "office-1",
+      campaignId: "campaign-1",
+      recordId: "record-1",
+      status: "QUEUED",
+    },
+    data: { reservationId: "reservation-1" },
+  });
+  const rotationDb = fakeDatabase({ senderAccountId: null, senderRotation: true }) as never;
+  let rotationReservationInput: Record<string, unknown> | undefined;
+  const rotationRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: rotationDb,
+    provider,
+    reserve: async (input) => {
+      rotationReservationInput = input as unknown as Record<string, unknown>;
+      return reservation;
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.equal(rotationRun.sent, 1);
+  assert.equal("accountId" in (rotationReservationInput ?? {}), false);
+
+  const serializationError = () => new Prisma.PrismaClientKnownRequestError(
+    "serialization conflict",
+    { code: "P2034", clientVersion: Prisma.prismaVersion.client },
+  );
+  type TransactionDb = {
+    $transaction: (
+      callback: (tx: unknown) => Promise<unknown>,
+      options?: unknown,
+    ) => Promise<unknown>;
+  };
+  const retryDb = fakeDatabase() as unknown as TransactionDb;
+  const baseTransaction = retryDb.$transaction;
+  let retryAttempts = 0;
+  retryDb.$transaction = async (callback, options) => {
+    retryAttempts += 1;
+    if (retryAttempts === 1) throw serializationError();
+    return baseTransaction(callback, options);
+  };
+  const retryRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: retryDb,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.equal(retryAttempts, 3);
+  assert.equal(retryRun.sent, 1);
+  const exhaustedDb = fakeDatabase() as unknown as TransactionDb;
+  let exhaustedAttempts = 0;
+  exhaustedDb.$transaction = async () => {
+    exhaustedAttempts += 1;
+    throw serializationError();
+  };
+  const serializationExhaustedRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: exhaustedDb,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+  });
+  assert.equal(exhaustedAttempts, 2);
+  assert.equal(serializationExhaustedRun.sent, 0);
+
+  async function runWithContactedStatus(status: string) {
+    let createdRows = 0;
+    const base = fakeDatabase() as any;
+    const sendModel = {
+      ...base.outreachCampaignSend,
+      findMany: async (args: { where?: { campaignId?: { not?: string } } }) => (
+        args.where?.campaignId?.not
+          ? (status === "REJECTED" ? [] : [{ recipient: " BUYER@example.com " }])
+          : []
+      ),
+      createMany: async (args: { data: unknown[] }) => {
+        createdRows = args.data.length;
+      },
+    };
+    const db = {
+      ...base,
+      outreachCampaignSend: sendModel,
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+        emailMessage: {
+          findFirst: async () => null,
+          create: async () => ({ id: "message-1" }),
+        },
+        emailThread: { create: async () => ({ id: "thread-1" }) },
+        emailSenderReservation: { updateMany: async () => undefined },
+        outreachCampaignSend: sendModel,
+        outreachCampaign: { updateMany: async () => undefined },
+      }),
+    };
+    const run = await runOutreachCampaignBatch({
+      officeId: "office-1",
+      campaignId: "campaign-1",
+      db,
+      provider,
+      reserve: async () => reservation,
+      complete: async () => ({ completed: false }),
+      pauseMs: 0,
+    });
+    return { run, createdRows };
+  }
+  const sentElsewhere = await runWithContactedStatus("SENT");
+  assert.equal(sentElsewhere.run.sent, 0);
+  assert.equal(sentElsewhere.createdRows, 0);
+  const rejectedElsewhere = await runWithContactedStatus("REJECTED");
+  assert.equal(rejectedElsewhere.run.sent, 1);
+  assert.equal(rejectedElsewhere.createdRows, 1);
   const variantCampaign = fakeDatabase({
     variants: [
       { key: "A", subject: "Variant A {{company}}", bodyTemplate: "A body {{company}}. Reply STOP to opt out." },

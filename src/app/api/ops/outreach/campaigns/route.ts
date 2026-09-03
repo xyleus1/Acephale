@@ -29,6 +29,7 @@ type CampaignOpsBody = {
   officeSlug?: unknown;
   list?: unknown;
   senderMailbox?: unknown;
+  senderRotation?: unknown;
   senderDisplayName?: unknown;
   emailField?: unknown;
   companyField?: unknown;
@@ -160,12 +161,16 @@ export async function POST(request: NextRequest) {
     const office = await resolveOffice(body?.officeId ?? body?.officeSlug);
     if (action === "plan") {
       const senderMailbox = boundedText(body?.senderMailbox, 320);
+      const senderRotation = body?.senderRotation === true;
+      if (senderMailbox && senderRotation) {
+        return NextResponse.json({ error: "Pick either a sender mailbox or rotation, not both." }, { status: 400 });
+      }
       const mailboxes = await listEmailSenderPoolAccounts();
       const sender = senderMailbox
         ? mailboxes.find((mailbox) => mailbox.id === senderMailbox
           || mailbox.email.toLowerCase() === senderMailbox.toLowerCase())
         : null;
-      if (!sender) return NextResponse.json({ error: "Sender mailbox was not found in the shared sending pool." }, { status: 404 });
+      if (!sender && !senderRotation) return NextResponse.json({ error: "Sender mailbox was not found in the shared sending pool." }, { status: 404 });
       const campaignInput = {
         officeId: office.id,
         list: boundedText(body?.list, 120) ?? "",
@@ -176,7 +181,8 @@ export async function POST(request: NextRequest) {
         statuses: boundedStringArray(body?.statuses, 120),
         countries: boundedStringArray(body?.countries, 120),
         segments: boundedStringArray(body?.segments, 120),
-        senderAccountId: sender.id,
+        senderAccountId: sender?.id ?? null,
+        senderRotation,
         senderDisplayName: boundedText(body?.senderDisplayName, 160) ?? null,
         dailyCap: typeof body?.dailyCap === "number" ? body.dailyCap : undefined,
         campaignName: boundedText(body?.campaignName, 160),

@@ -33,7 +33,11 @@ export async function ActiveCampaignBanner() {
           </div>
           <div>
             <div className={styles.label}>Sender</div>
-            <div className={styles.value}>{campaign.senderEmail ?? "no mailbox connected"}</div>
+            <div className={styles.value}>
+              {campaign.senderRotation
+                ? `Rotating across ${campaign.mailboxesAvailable} mailboxes, ${campaign.poolCapacityToday} sends available today`
+                : campaign.senderEmail ?? "no mailbox connected"}
+            </div>
           </div>
           <div>
             <div className={styles.label}>Delivery</div>

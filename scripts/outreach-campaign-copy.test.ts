@@ -4,6 +4,7 @@ import {
   campaignDefaultName,
   campaignDraftOnlyBlocker,
   campaignEmailFieldKey,
+  excludeContactedRecipients,
   campaignActivationTransitionWhere,
   campaignPersonalizationMap,
   campaignReplyCounts,
@@ -14,6 +15,9 @@ import {
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
+  dedupeRecipients,
+  outreachCampaignContactedWhere,
+  outreachCampaignReclaimBefore,
   normalizeResearchListQuery,
   asciiCampaignSenderDisplayName,
   buildCampaignFromHeader,
@@ -202,6 +206,7 @@ const revisionInput = {
   filters: { countries: ["United Kingdom"] },
   dailyCap: 40,
   senderAccountId: "account-1",
+  senderRotation: false,
   senderDisplayName: null,
   variants: null,
   audienceRecordIds: ["record-1", "record-2"],
@@ -249,6 +254,10 @@ assert.notEqual(campaignRevisionHash({
   ...revisionInput,
   senderDisplayName: "Wens",
 }), revision);
+assert.notEqual(campaignRevisionHash({
+  ...revisionInput,
+  senderRotation: true,
+}), revision);
 assert.deepEqual(campaignPersonalizationMap({
   rows: [{
     id: "record-1",
@@ -273,6 +282,23 @@ assert.deepEqual(campaignSnapshotOutstandingRecordIds({
   statuses: ["new"],
   attemptedRecordIds: new Set(),
 }), []);
+const contactedWhereNow = new Date("2026-09-03T12:00:00.000Z");
+assert.deepEqual(outreachCampaignContactedWhere({
+  officeId: "office-1",
+  campaignId: "campaign-1",
+  now: contactedWhereNow,
+}), {
+  officeId: "office-1",
+  campaignId: { not: "campaign-1" },
+  OR: [
+    { status: { in: ["SENT", "UNKNOWN"] } },
+    {
+      status: "QUEUED",
+      createdAt: { gte: outreachCampaignReclaimBefore(contactedWhereNow) },
+      campaign: { status: { not: "CANCELLED" } },
+    },
+  ],
+});
 assert.deepEqual(campaignSnapshotOutstandingRecordIds({
   rows: [{ id: "queued", status: "new" }],
   audienceRecordIds: ["queued"],
@@ -282,6 +308,27 @@ assert.deepEqual(campaignSnapshotOutstandingRecordIds({
   statuses: ["new"],
   attemptedRecordIds: new Set(),
 }), ["queued"]);
+assert.deepEqual(dedupeRecipients({
+  rows: [
+    { id: "first", email: " Buyer@Example.com " },
+    { id: "second", email: "buyer@example.com" },
+    { id: "third", email: "other@example.com" },
+  ],
+  recipientOf: (item) => item.email,
+}), [
+  { id: "first", email: " Buyer@Example.com " },
+  { id: "third", email: "other@example.com" },
+]);
+assert.deepEqual(campaignSnapshotOutstandingRecordIds({
+  rows: [{ id: "blocked", status: "new" }],
+  audienceRecordIds: ["blocked"],
+  audiencePersonalization: {
+    blocked: { email: "blocked@example.com" },
+  },
+  statuses: ["new"],
+  attemptedRecordIds: new Set(),
+  blockedRecipients: new Set([" BLOCKED@EXAMPLE.COM ".trim().toLowerCase()]),
+}), []);
 assert.equal(campaignDefaultName("Outreach: Wens", new Set()), "Outreach: Wens");
 assert.equal(campaignDefaultName("Outreach: Wens", new Set(["Outreach: Wens", "Outreach: Wens (2)"])), "Outreach: Wens (3)");
 assert.equal(campaignSendCountsAsAttempt("QUEUED"), false);
@@ -292,7 +339,9 @@ assert.equal(campaignSendCountsAsAttempt("UNKNOWN"), true);
 assert.deepEqual(campaignBlockers({
   eligible: 0,
   mailboxesAvailable: 0,
+  poolCapacityToday: 0,
   senderPinned: false,
+  senderRotation: false,
   subject: "",
   bodyTemplate: "Hello",
   dailyCap: 201,
@@ -306,7 +355,9 @@ assert.deepEqual(campaignBlockers({
 assert.deepEqual(campaignBlockers({
   eligible: 1,
   mailboxesAvailable: 1,
+  poolCapacityToday: 30,
   senderPinned: false,
+  senderRotation: false,
   subject: "Subject",
   bodyTemplate: "Reply STOP to opt out.",
   dailyCap: 40,
@@ -314,7 +365,9 @@ assert.deepEqual(campaignBlockers({
 assert.deepEqual(campaignBlockers({
   eligible: 1,
   mailboxesAvailable: 1,
+  poolCapacityToday: 30,
   senderPinned: true,
+  senderRotation: false,
   subject: "A",
   bodyTemplate: "A body. Reply STOP to opt out.",
   dailyCap: 40,
@@ -326,7 +379,9 @@ assert.deepEqual(campaignBlockers({
 assert.deepEqual(campaignBlockers({
   eligible: 1,
   mailboxesAvailable: 1,
+  poolCapacityToday: 30,
   senderPinned: true,
+  senderRotation: false,
   subject: "A",
   bodyTemplate: "A body. Reply STOP to opt out.",
   dailyCap: 40,
@@ -335,6 +390,55 @@ assert.deepEqual(campaignBlockers({
     { key: "B", subject: "B", bodyTemplate: "B body. Reply STOP to opt out." },
   ],
 }), []);
+assert.deepEqual(campaignBlockers({
+  eligible: 1,
+  mailboxesAvailable: 1,
+  poolCapacityToday: 30,
+  senderPinned: true,
+  senderRotation: true,
+  subject: "A",
+  bodyTemplate: "A body. Reply STOP to opt out.",
+  dailyCap: 40,
+}), ["Pick either a sender mailbox or rotation, not both."]);
+assert.deepEqual(campaignBlockers({
+  eligible: 1,
+  mailboxesAvailable: 0,
+  poolCapacityToday: 0,
+  senderPinned: false,
+  senderRotation: true,
+  subject: "A",
+  bodyTemplate: "A body. Reply STOP to opt out.",
+  dailyCap: 40,
+}), ["No mailbox in the shared pool has capacity today."]);
+assert.deepEqual(campaignBlockers({
+  eligible: 1,
+  mailboxesAvailable: 1,
+  poolCapacityToday: 30,
+  senderPinned: false,
+  senderRotation: true,
+  subject: "A",
+  bodyTemplate: "A body. Reply STOP to opt out.",
+  dailyCap: 500,
+}), []);
+assert.deepEqual(campaignBlockers({
+  eligible: 1,
+  mailboxesAvailable: 1,
+  poolCapacityToday: 30,
+  senderPinned: false,
+  senderRotation: true,
+  subject: "A",
+  bodyTemplate: "A body. Reply STOP to opt out.",
+  dailyCap: 501,
+}), ["Daily cap must be between 1 and 500."]);
+assert.deepEqual(excludeContactedRecipients({
+  rows: [
+    { id: "one", email: " First@Example.com " },
+    { id: "two", email: "second@example.com" },
+    { id: "three", email: "third@example.com" },
+  ],
+  recipientOf: (row) => row.email,
+  contacted: new Set(["first@example.com", " THIRD@example.com "].map((email) => email.trim().toLowerCase())),
+}), [{ id: "two", email: "second@example.com" }]);
 assert.deepEqual(campaignProgress({ total: 2, sent: 4, rejected: 0, unknown: 0 }), {
   total: 2,
   sent: 4,

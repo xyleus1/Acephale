@@ -20,6 +20,57 @@ export function campaignEmailFieldKey(
     || "email";
 }
 
+export function excludeContactedRecipients<T extends { id: string }>(input: {
+  rows: readonly T[];
+  recipientOf: (row: T) => string;
+  contacted: ReadonlySet<string>;
+}): T[] {
+  const contacted = new Set([...input.contacted].map(normalizeCampaignRecipient));
+  return input.rows.filter((row) => !contacted.has(normalizeCampaignRecipient(input.recipientOf(row))));
+}
+
+export const OUTREACH_CAMPAIGN_RECLAIM_MINUTES = 30;
+
+export function outreachCampaignReclaimBefore(now: Date) {
+  return new Date(now.getTime() - OUTREACH_CAMPAIGN_RECLAIM_MINUTES * 60_000);
+}
+
+export function outreachCampaignContactedWhere(input: {
+  officeId: string;
+  campaignId?: string | null;
+  now: Date;
+}) {
+  return {
+    officeId: input.officeId,
+    ...(input.campaignId ? { campaignId: { not: input.campaignId } } : {}),
+    OR: [
+      { status: { in: ["SENT", "UNKNOWN"] } },
+      {
+        status: "QUEUED",
+        createdAt: { gte: outreachCampaignReclaimBefore(input.now) },
+        campaign: { status: { not: "CANCELLED" } },
+      },
+    ],
+  };
+}
+
+function normalizeCampaignRecipient(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function dedupeRecipients<T extends { id: string }>(input: {
+  rows: readonly T[];
+  recipientOf: (row: T) => string;
+}): T[] {
+  const seen = new Set<string>();
+  return input.rows.filter((row) => {
+    const recipient = normalizeCampaignRecipient(input.recipientOf(row));
+    if (seen.has(recipient)) return false;
+    seen.add(recipient);
+    return true;
+  });
+}
+
 export function normalizeCampaignSenderDisplayName(value: string | null | undefined): string | null {
   const cleaned = stripEmDashes(value ?? "")
     .replace(/[\r\n]+/g, " ")
@@ -254,15 +305,22 @@ export function campaignSnapshotOutstandingRecordIds(input: {
   audiencePersonalization: Readonly<Record<string, unknown>>;
   statuses: readonly string[];
   attemptedRecordIds: ReadonlySet<string>;
+  blockedRecipients?: ReadonlySet<string>;
 }) {
   const rowsById = new Map(input.rows.map((row) => [row.id, row]));
+  const blockedRecipients = new Set([...input.blockedRecipients ?? []].map(normalizeCampaignRecipient));
   return input.audienceRecordIds.filter((recordId) => {
     const row = rowsById.get(recordId);
+    const personalization = input.audiencePersonalization[recordId];
+    const recipient = personalization && typeof personalization === "object" && !Array.isArray(personalization)
+      ? normalizeCampaignRecipient(String((personalization as Record<string, unknown>).email ?? ""))
+      : "";
     return campaignSnapshotRowSendable({
       row,
       statuses: input.statuses,
       personalization: input.audiencePersonalization[recordId],
-    }) && !input.attemptedRecordIds.has(recordId);
+    }) && !input.attemptedRecordIds.has(recordId)
+      && !blockedRecipients.has(recipient);
   });
 }
 
@@ -274,6 +332,7 @@ export function campaignRevisionHash(input: {
   filters: Record<string, unknown>;
   dailyCap: number;
   senderAccountId: string | null;
+  senderRotation: boolean;
   senderDisplayName: string | null;
   variants: readonly CampaignVariant[] | null;
   audienceRecordIds: readonly string[];
@@ -296,6 +355,7 @@ export function campaignRevisionHash(input: {
     filters: input.filters,
     dailyCap: input.dailyCap,
     senderAccountId: input.senderAccountId,
+    senderRotation: input.senderRotation,
     senderDisplayName: input.senderDisplayName,
     variants,
     audienceRecordIds: [...input.audienceRecordIds].sort(),
@@ -355,7 +415,9 @@ export function campaignSendCountsAsAttempt(status: string) {
 export function campaignBlockers(input: {
   eligible: number;
   mailboxesAvailable: number;
+  poolCapacityToday: number;
   senderPinned: boolean;
+  senderRotation: boolean;
   subject: string;
   bodyTemplate: string;
   dailyCap: number;
@@ -376,14 +438,19 @@ export function campaignBlockers(input: {
   for (const variant of input.variants?.slice(1) ?? []) {
     copyBlockers(variant.subject, variant.bodyTemplate, variant.key);
   }
-  if (input.mailboxesAvailable === 0) {
+  if (input.senderRotation && input.senderPinned) {
+    blockers.push("Pick either a sender mailbox or rotation, not both.");
+  } else if (input.senderRotation && (input.mailboxesAvailable === 0 || input.poolCapacityToday <= 0)) {
+    blockers.push("No mailbox in the shared pool has capacity today.");
+  } else if (!input.senderRotation && input.mailboxesAvailable === 0) {
     blockers.push("No mailbox is connected for sending.");
-  } else if (!input.senderPinned) {
+  } else if (!input.senderRotation && !input.senderPinned) {
     blockers.push("Select a sender mailbox.");
   }
   if (input.eligible === 0) blockers.push("No eligible rows in this list.");
-  if (!Number.isInteger(input.dailyCap) || input.dailyCap < 1 || input.dailyCap > 200) {
-    blockers.push("Daily cap must be between 1 and 200.");
+  const maxDailyCap = input.senderRotation ? 500 : 200;
+  if (!Number.isInteger(input.dailyCap) || input.dailyCap < 1 || input.dailyCap > maxDailyCap) {
+    blockers.push(`Daily cap must be between 1 and ${maxDailyCap}.`);
   }
   return blockers;
 }

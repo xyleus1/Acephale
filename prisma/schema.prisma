@@ -3326,6 +3326,7 @@ model OutreachCampaign {
   filters          Json?
   senderAccountId  String?
   senderDisplayName String?
+  senderRotation   Boolean  @default(false)
   variants         Json?
   audienceTotal    Int      @default(0)
   audienceRecordIds Json?

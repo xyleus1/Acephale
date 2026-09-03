@@ -1,5 +1,35 @@
 # Decisions
 
+## Outreach rotation uses reservations and office-wide recipient dedupe
+
+Date: 2026-09-03
+
+Rotation campaigns select from the enabled shared sender pool through the
+existing sender reservation service. Reservations retain the selected mailbox
+for each recipient and enforce per-account daily caps, while the plan reports
+the mailbox count and total pool capacity available today. A rotation campaign
+still requires an explicit human approval before sending.
+
+Recipient dedupe is scoped to the office rather than the campaign. Planning
+first keeps one row per normalized recipient within the campaign, then excludes
+recipients with `SENT`, `QUEUED`, or `UNKNOWN` attempts from another campaign.
+Transactional claiming repeats both filters before applying the daily limit so
+concurrent campaigns cannot claim the same recipient. A `QUEUED` row blocks only
+while its campaign is not cancelled and its claim is within the reclaim window.
+Cancellation releases queued claims in the same transaction as the status
+change. A `REJECTED` attempt does not block a later campaign, and recipients
+blocked by another live claim count as resolved when completion checks the
+approved snapshot. A successful sender reservation marks a queued row in flight
+before the provider call, so cancellation releases only unreserved queued
+rows. Provider rejection releases the sender reservation and records a
+non-blocking `REJECTED` row. A reserved queued row remains eligible for the
+existing reclaim threshold if the provider never completes.
+
+Activation uses the saved audience snapshot rather than recomputing office-wide
+dedupe, which would spuriously invalidate an approved revision. Send-time status
+checks still prevent delivery to rows that are no longer eligible, and
+personalization remains part of the revision hash.
+
 ## Every sign-in surface shares one hashed attempt counter
 
 Date: 2026-09-02

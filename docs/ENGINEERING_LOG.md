@@ -1,5 +1,27 @@
 # Engineering Log
 
+## 2026-09-03: Outreach sender rotation and office recipient dedupe
+
+- Campaign plans can rotate across enabled shared-pool mailboxes and report
+  the available pool capacity, while reservations continue enforcing
+  per-account caps.
+- Planning first keeps one row per normalized address within a campaign, then
+  excludes recipients contacted by another campaign in the office. Claiming
+  repeats both filters inside a transaction. `SENT`, `QUEUED`, and `UNKNOWN`
+  block later contact, while `REJECTED` does not. A `QUEUED` row blocks only
+  while its campaign is not cancelled and the claim is within the reclaim
+  window. Cancellation releases queued claims, and completion treats
+  recipients blocked by another live claim as resolved. Human approval is
+  unchanged. A successful sender reservation marks a queued row in flight
+  before the provider call, so cancellation releases only unreserved queued
+  rows. Provider rejection releases the sender reservation and records a
+  non-blocking `REJECTED` row.
+- Serializable claim conflicts are retried once on `P2034`, then treated as an
+  empty claim if the retry conflicts again.
+- Activation keeps the approved audience snapshot to avoid rerunning
+  office-wide dedupe, while send-time status checks and personalization hashing
+  continue to protect delivery.
+
 ## 2026-09-02: Production migration workflow accepts automated dispatch
 
 - The protected production migration workflow now accepts

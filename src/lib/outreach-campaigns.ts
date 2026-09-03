@@ -9,6 +9,7 @@ import {
   campaignDefaultName,
   campaignDraftOnlyBlocker,
   campaignActivationTransitionWhere,
+  excludeContactedRecipients,
   campaignPersonalizationMap,
   campaignRevisionHash,
   campaignRevisionMatches,
@@ -16,7 +17,9 @@ import {
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
+  dedupeRecipients,
   campaignReplyCounts,
+  outreachCampaignContactedWhere,
   normalizeResearchListQuery,
   normalizeCampaignSenderDisplayName,
   normalizeCampaignVariants,
@@ -65,6 +68,7 @@ type CampaignWithList = {
   filters: Prisma.JsonValue | null;
   senderAccountId: string | null;
   senderDisplayName: string | null;
+  senderRotation: boolean;
   variants: Prisma.JsonValue | null;
   dailyCap: number;
   audienceTotal: number;
@@ -103,6 +107,9 @@ export type CampaignPlan = {
   renderedBody: string;
   senderEmail: string | null;
   senderDisplayName: string | null;
+  senderRotation: boolean;
+  poolCapacityToday: number;
+  alreadyContactedElsewhere: number;
   variants: CampaignVariant[] | null;
   blockers: string[];
 };
@@ -122,6 +129,7 @@ export type PlanOutreachCampaignInput = {
   campaignName?: string;
   senderAccountId?: string | null;
   senderDisplayName?: string | null;
+  senderRotation?: boolean;
   variants?: readonly CampaignVariant[] | null;
   companyField?: string;
   createdByUserId?: string;
@@ -231,6 +239,7 @@ async function loadCampaign(officeId: string, campaignId: string): Promise<Campa
       filters: true,
       senderAccountId: true,
       senderDisplayName: true,
+      senderRotation: true,
       variants: true,
       dailyCap: true,
       audienceTotal: true,
@@ -305,10 +314,17 @@ async function senderDetails(senderAccountId: string | null, requestedDisplayNam
     email,
     displayName,
     mailboxesAvailable: mailboxes.length,
+    poolCapacityToday: mailboxes.reduce(
+      (total, mailbox) => total + Math.max(0, mailbox.dailySendLimit - mailbox.sentToday - mailbox.reservedToday),
+      0,
+    ),
   };
 }
 
 export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Promise<CampaignPlan> {
+  if (input.senderRotation === true && input.senderAccountId) {
+    throw new Error("Pick either a sender mailbox or rotation, not both.");
+  }
   const list = await resolveResearchList(input.officeId, input.list);
   const fields = validateResearchFields(list.fields);
   const emailField = campaignEmailFieldKey(fields, input.emailField);
@@ -329,29 +345,52 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     segments: input.segments,
     segmentField: input.segmentField,
   };
-  const eligible = records.filter((record) => campaignRowEligible({
-    row: recordRow({ ...record, data: record.data as ResearchRecordData }),
-    statuses,
-    countries: input.countries,
-    segments: input.segments,
-    emailField,
-    countryField: input.countryField,
-    segmentField: input.segmentField,
-  }));
-  const missingEmail = records.filter((record) => {
-    const data = record.data as Record<string, unknown>;
-    return !String(data[emailField] ?? "").trim();
-  }).length;
+  const eligible = dedupeRecipients({
+    rows: records.filter((record) => campaignRowEligible({
+      row: recordRow({ ...record, data: record.data as ResearchRecordData }),
+      statuses,
+      countries: input.countries,
+      segments: input.segments,
+      emailField,
+      countryField: input.countryField,
+      segmentField: input.segmentField,
+    })),
+    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
+  });
   const draft = await prisma.outreachCampaign.findFirst({
     where: { officeId: input.officeId, listId: list.id, status: "DRAFT" },
     select: { id: true },
   });
+  const now = new Date();
+  const contactedElsewhere = await prisma.outreachCampaignSend.findMany({
+    where: outreachCampaignContactedWhere({
+      officeId: input.officeId,
+      campaignId: draft?.id,
+      now,
+    }),
+    select: { recipient: true },
+  });
+  const eligibleWithoutContacted = excludeContactedRecipients({
+    rows: eligible,
+    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
+    contacted: new Set(contactedElsewhere.map((send) => send.recipient.trim().toLowerCase())),
+  });
+  const alreadyContactedElsewhere = eligible.length - eligibleWithoutContacted.length;
+  const missingEmail = records.filter((record) => {
+    const data = record.data as Record<string, unknown>;
+    return !String(data[emailField] ?? "").trim();
+  }).length;
   const alreadySent = draft
     ? await prisma.outreachCampaignSend.count({
-      where: { officeId: input.officeId, campaignId: draft.id, status: "SENT", recordId: { in: eligible.map((record) => record.id) } },
+      where: {
+        officeId: input.officeId,
+        campaignId: draft.id,
+        status: "SENT",
+        recordId: { in: eligibleWithoutContacted.map((record) => record.id) },
+      },
     })
     : 0;
-  const previewRow = eligible[0] ? renderRow(eligible[0].data as ResearchRecordData, {
+  const previewRow = eligibleWithoutContacted[0] ? renderRow(eligibleWithoutContacted[0].data as ResearchRecordData, {
     emailField,
     companyField: input.companyField,
     countryField: input.countryField,
@@ -361,10 +400,10 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     bodyTemplate: campaignBodyTemplate,
     row: previewRow,
   });
-  const sample = eligible[0] ? renderedSample.body.slice(0, 400) : "";
+  const sample = eligibleWithoutContacted[0] ? renderedSample.body.slice(0, 400) : "";
   const dailyCap = input.dailyCap ?? 40;
   const senderDisplayName = normalizeCampaignSenderDisplayName(input.senderDisplayName);
-  const sender = await senderDetails(input.senderAccountId ?? null, senderDisplayName);
+  const sender = await senderDetails(input.senderRotation ? null : input.senderAccountId ?? null, senderDisplayName);
   const revisionHash = campaignRevisionHash({
     subject: campaignSubject,
     bodyTemplate: campaignBodyTemplate,
@@ -372,46 +411,52 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     rowStatuses: statuses,
     filters,
     dailyCap,
-    senderAccountId: input.senderAccountId ?? null,
+    senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
+    senderRotation: input.senderRotation === true,
     senderDisplayName,
     variants,
-    audienceRecordIds: eligible.map((record) => record.id),
+    audienceRecordIds: eligibleWithoutContacted.map((record) => record.id),
     audiencePersonalization: campaignPersonalizationMap({
-      rows: eligible.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
+      rows: eligibleWithoutContacted.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
       emailField,
       companyField: input.companyField,
       countryField: input.countryField,
     }),
   });
   const sampleRecipients = campaignSampleRecipients({
-    rows: eligible.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
+    rows: eligibleWithoutContacted.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
     emailField,
     companyField: input.companyField,
     countryField: input.countryField,
   });
   return {
     list: { name: list.name, slug: list.slug },
-    eligible: eligible.length,
+    eligible: eligibleWithoutContacted.length,
     alreadySent,
-    remaining: Math.max(0, eligible.length - alreadySent),
+    remaining: Math.max(0, eligibleWithoutContacted.length - alreadySent),
     missingEmail,
-    audienceTotal: eligible.length,
+    audienceTotal: eligibleWithoutContacted.length,
     revisionHash,
     filters,
     dailyCap,
-    subject: eligible[0] ? renderedSample.subject : campaignSubject,
+    subject: eligibleWithoutContacted[0] ? renderedSample.subject : campaignSubject,
     sampleBody: sample,
     renderedBody: renderedSample.body,
     senderEmail: sender.email,
     senderDisplayName: sender.displayName,
+    senderRotation: input.senderRotation === true,
+    poolCapacityToday: sender.poolCapacityToday,
+    alreadyContactedElsewhere,
     variants,
     mailboxesAvailable: sender.mailboxesAvailable,
     emailField,
     sampleRecipients,
     blockers: campaignBlockers({
-      eligible: eligible.length,
+      eligible: eligibleWithoutContacted.length,
       mailboxesAvailable: sender.mailboxesAvailable,
+      poolCapacityToday: sender.poolCapacityToday,
       senderPinned: Boolean(input.senderAccountId),
+      senderRotation: input.senderRotation === true,
       subject: campaignSubject,
       bodyTemplate: campaignBodyTemplate,
       dailyCap,
@@ -423,6 +468,9 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
 export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
   listId?: string;
 }) {
+  if (input.senderRotation === true && input.senderAccountId) {
+    throw new Error("Pick either a sender mailbox or rotation, not both.");
+  }
   const variants = normalizeCampaignVariants(input.variants);
   const campaignSubject = variants?.[0]?.subject ?? input.subject;
   const campaignBodyTemplate = variants?.[0]?.bodyTemplate ?? input.bodyTemplate;
@@ -452,21 +500,39 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
   const records = await prisma.researchRecord.findMany({
     where: { officeId: input.officeId, listId: list.id },
     select: { id: true, status: true, data: true, createdAt: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const filters = {
     countries: input.countries,
     segments: input.segments,
     segmentField: input.segmentField,
   };
-  const audienceRecordIds = records.filter((record) => campaignRowEligible({
-    row: recordRow({ ...record, data: record.data as ResearchRecordData }),
-    statuses: input.statuses?.length ? input.statuses : ["new", "reviewed"],
-    countries: input.countries,
-    segments: input.segments,
-    emailField,
-    countryField: input.countryField,
-    segmentField: input.segmentField,
-  })).map((record) => record.id);
+  const eligibleRecords = dedupeRecipients({
+    rows: records.filter((record) => campaignRowEligible({
+      row: recordRow({ ...record, data: record.data as ResearchRecordData }),
+      statuses: input.statuses?.length ? input.statuses : ["new", "reviewed"],
+      countries: input.countries,
+      segments: input.segments,
+      emailField,
+      countryField: input.countryField,
+      segmentField: input.segmentField,
+    })),
+    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
+  });
+  const now = new Date();
+  const contactedElsewhere = await prisma.outreachCampaignSend.findMany({
+    where: outreachCampaignContactedWhere({
+      officeId: input.officeId,
+      campaignId: existing?.id,
+      now,
+    }),
+    select: { recipient: true },
+  });
+  const audienceRecordIds = excludeContactedRecipients({
+    rows: eligibleRecords,
+    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
+    contacted: new Set(contactedElsewhere.map((send) => send.recipient.trim().toLowerCase())),
+  }).map((record) => record.id);
   const audiencePersonalization = campaignPersonalizationMap({
     rows: records
       .filter((record) => audienceRecordIds.includes(record.id))
@@ -483,7 +549,8 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     rowStatuses: input.statuses?.length ? input.statuses : ["new", "reviewed"],
     filters,
     dailyCap: input.dailyCap ?? 40,
-    senderAccountId: input.senderAccountId ?? null,
+    senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
+    senderRotation: input.senderRotation === true,
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
     variants,
     audienceRecordIds,
@@ -503,8 +570,9 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     audiencePersonalization: audiencePersonalization as Prisma.InputJsonValue,
     revisionHash,
     dailyCap: input.dailyCap ?? 40,
-    senderAccountId: input.senderAccountId ?? null,
+    senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
+    senderRotation: input.senderRotation === true,
     variants: variants ? variants as Prisma.InputJsonValue : Prisma.DbNull,
     createdByUserId: input.createdByUserId ?? null,
   };
@@ -532,7 +600,10 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
   const campaign = await loadCampaign(input.officeId, input.campaignId);
   const draftOnlyBlocker = campaignDraftOnlyBlocker(campaign.status);
   if (draftOnlyBlocker) return { activated: false, blockers: [draftOnlyBlocker] };
-  const { records, filters } = await eligibleRecords(campaign);
+  // Activate from the approved snapshot: recomputing would rerun office-wide dedupe
+  // and spuriously invalidate the approved revision. Send-time status checks and
+  // personalization in the revision hash still protect delivery.
+  const { records, filters } = await eligibleRecords(campaign, true);
   const variants = normalizeCampaignVariants(campaign.variants);
   const audiencePersonalization = campaignPersonalizationMap({
     rows: records.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
@@ -548,6 +619,7 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
     filters,
     dailyCap: campaign.dailyCap,
     senderAccountId: campaign.senderAccountId,
+    senderRotation: campaign.senderRotation,
     senderDisplayName: campaign.senderDisplayName,
     variants,
     audienceRecordIds: records.map((record) => record.id),
@@ -559,11 +631,16 @@ export async function activateCampaign(input: { officeId: string; campaignId: st
   ) {
     return { activated: false, blockers: ["This campaign changed after it was proposed. Plan it again."] };
   }
-  const sender = await senderDetails(campaign.senderAccountId, campaign.senderDisplayName);
+  const sender = await senderDetails(
+    campaign.senderRotation ? null : campaign.senderAccountId,
+    campaign.senderDisplayName,
+  );
   const blockers = campaignBlockers({
     eligible: records.length,
     mailboxesAvailable: sender.mailboxesAvailable,
+    poolCapacityToday: sender.poolCapacityToday,
     senderPinned: Boolean(campaign.senderAccountId),
+    senderRotation: campaign.senderRotation,
     subject: campaign.subject,
     bodyTemplate: campaign.bodyTemplate,
     dailyCap: campaign.dailyCap,
@@ -621,9 +698,22 @@ export async function resumeCampaign(input: { officeId: string; campaignId: stri
 }
 
 export async function cancelCampaign(input: { officeId: string; campaignId: string }) {
-  return prisma.outreachCampaign.updateMany({
-    where: { id: input.campaignId, officeId: input.officeId, status: { in: ["DRAFT", "ACTIVE", "PAUSED"] } },
-    data: { status: "CANCELLED" },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.outreachCampaign.updateMany({
+      where: { id: input.campaignId, officeId: input.officeId, status: { in: ["DRAFT", "ACTIVE", "PAUSED"] } },
+      data: { status: "CANCELLED" },
+    });
+    if (updated.count > 0) {
+      await tx.outreachCampaignSend.deleteMany({
+        where: {
+          officeId: input.officeId,
+          campaignId: input.campaignId,
+          status: "QUEUED",
+          reservationId: null,
+        },
+      });
+    }
+    return updated;
   });
 }
 
@@ -640,6 +730,9 @@ export type CampaignSummary = {
   replies: number;
   dailyCap: number;
   senderEmail: string | null;
+  senderRotation: boolean;
+  mailboxesAvailable: number;
+  poolCapacityToday: number;
   variants: Array<{ key: string; sent: number; replies: number }>;
   lastRunAt: Date | null;
 };
@@ -658,6 +751,7 @@ export async function listCampaignSummaries(
         audienceTotal: true,
         dailyCap: true,
         senderAccountId: true,
+        senderRotation: true,
         variants: true,
         lastRunAt: true,
         list: { select: { name: true, slug: true } },
@@ -698,6 +792,10 @@ export async function listCampaignSummaries(
     });
     const mailboxes = await listEmailSenderPoolAccounts();
     const senderEmails = new Map(mailboxes.map((mailbox) => [mailbox.id, mailbox.email]));
+    const poolCapacityToday = mailboxes.reduce(
+      (total, mailbox) => total + Math.max(0, mailbox.dailySendLimit - mailbox.sentToday - mailbox.reservedToday),
+      0,
+    );
     return campaigns.map((campaign) => {
       const campaignSends = sends.filter((row) => row.campaignId === campaign.id);
       const counts = new Map<string, number>();
@@ -718,6 +816,9 @@ export async function listCampaignSummaries(
         replies: replyCounts.totals.get(campaign.id) ?? 0,
         dailyCap: campaign.dailyCap,
         senderEmail: campaign.senderAccountId ? senderEmails.get(campaign.senderAccountId) ?? null : null,
+        senderRotation: campaign.senderRotation,
+        mailboxesAvailable: mailboxes.length,
+        poolCapacityToday,
         variants: variants.map((variant) => ({
           key: variant.key,
           sent: campaignSends
@@ -751,12 +852,22 @@ export async function completeCampaignIfDone(input: { officeId: string; campaign
     where: { officeId: input.officeId, campaignId: input.campaignId },
     select: { recordId: true, status: true },
   })).filter((row) => campaignSendCountsAsAttempt(row.status)).map((row) => row.recordId));
+  const now = new Date();
+  const contactedElsewhere = await prisma.outreachCampaignSend.findMany({
+    where: outreachCampaignContactedWhere({
+      officeId: input.officeId,
+      campaignId: input.campaignId,
+      now,
+    }),
+    select: { recipient: true },
+  });
   const unsentEligible = campaignSnapshotOutstandingRecordIds({
     rows: records,
     audienceRecordIds,
     audiencePersonalization,
     statuses: jsonStrings(campaign.rowStatuses),
     attemptedRecordIds: attemptedIds,
+    blockedRecipients: new Set(contactedElsewhere.map((row) => row.recipient.trim().toLowerCase())),
   });
   if (unsentEligible.length > 0) return { completed: false };
   await prisma.outreachCampaign.updateMany({

@@ -951,6 +951,7 @@ export const TOOLS = [
         body: { type: "string" },
         campaign_name: { type: "string" },
         sender_mailbox: { type: "string", description: "Sender mailbox email address or account id" },
+        senderRotation: { type: "boolean", description: "Rotate across enabled shared-pool mailboxes instead of pinning one sender mailbox." },
         sender_display_name: { type: "string", description: "Name recipients will see in the From header. Defaults to the mailbox's own name when omitted." },
         variants: {
           type: "array",
@@ -4231,6 +4232,10 @@ export async function dispatchTool(
       }
       case "plan_outreach_campaign": {
         const requestedSender = typeof input.sender_mailbox === "string" ? input.sender_mailbox.trim() : "";
+        const senderRotation = input.senderRotation === true;
+        if (requestedSender && senderRotation) {
+          return { ok: false, error: "Pick either a sender mailbox or rotation, not both." };
+        }
         const mailboxes = await listEmailSenderPoolAccounts();
         const sender = requestedSender
           ? mailboxes.find((mailbox) => mailbox.id === requestedSender || mailbox.email.toLowerCase() === requestedSender.toLowerCase())
@@ -4258,6 +4263,7 @@ export async function dispatchTool(
           bodyTemplate: body,
           campaignName: typeof input.campaign_name === "string" ? input.campaign_name : undefined,
           senderAccountId: sender?.id ?? null,
+          senderRotation,
           senderDisplayName: typeof input.sender_display_name === "string" ? input.sender_display_name : null,
           variants: Array.isArray(input.variants)
             ? input.variants.map((variant, index) => {
@@ -4304,8 +4310,12 @@ export async function dispatchTool(
             actionInput: { campaignId, revisionHash: campaign.revisionHash },
             actionLabel: `Start outreach campaign for ${plan.list.name}, ${plan.eligible} recipients`,
             actionDetails: [
-              `Sender display name: ${plan.senderDisplayName ?? "none, the address only"}`,
-              `Sender email: ${plan.senderEmail ?? "no mailbox connected"}`,
+              ...(plan.senderRotation
+                ? [`Rotating across ${plan.mailboxesAvailable} mailboxes, ${plan.poolCapacityToday} sends available today`]
+                : [
+                  `Sender display name: ${plan.senderDisplayName ?? "none, the address only"}`,
+                  `Sender email: ${plan.senderEmail ?? "no mailbox connected"}`,
+                ]),
               `Daily cap: ${plan.dailyCap}`,
               `Filters: ${JSON.stringify(plan.filters)}`,
               ...(plan.variants ?? []).map((variant) => `Variant ${variant.key} subject: ${variant.subject}`),

@@ -1,5 +1,27 @@
 # AI Handoff
 
+## 2026-09-03: Outreach sender rotation and office recipient dedupe
+
+- Outreach campaigns can rotate across enabled shared-pool mailboxes. Sender
+  reservations continue enforcing each account's daily cap, and plans expose
+  mailbox count and total pool capacity for today.
+- Recipient dedupe keeps the first row for each normalized address within a
+  campaign, then applies office-wide blocking during planning and transactional
+  claiming. `SENT`, `QUEUED`, and `UNKNOWN` attempts block later campaigns,
+  while `REJECTED` attempts do not. A `QUEUED` attempt blocks only while its
+  campaign is not cancelled and the claim is within the reclaim window.
+  Completion treats recipients blocked by another live claim as resolved.
+  A successful sender reservation marks the queued row in flight before the
+  provider call, so cancellation releases only unreserved queued rows. Provider
+  rejection releases the sender reservation and records a non-blocking
+  `REJECTED` row.
+  Human approval remains required before sending.
+- Serializable claim conflicts (`P2034`) retry once as a lost race, then return
+  an empty claim if the retry also conflicts.
+- Activation uses the approved audience snapshot so office-wide dedupe is not
+  recomputed against the revision. Send-time status checks and personalization
+  hashing still protect delivery.
+
 ## 2026-09-02: Production migration workflow accepts automated dispatch
 
 - `.github/workflows/production-database-migration.yml` accepts the existing

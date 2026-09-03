@@ -5,6 +5,10 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   campaignRowEligible,
   campaignSnapshotRowSendable,
+  dedupeRecipients,
+  excludeContactedRecipients,
+  outreachCampaignContactedWhere,
+  outreachCampaignReclaimBefore,
   renderCampaignEmail,
   selectCampaignVariant,
   storedCampaignVariants,
@@ -44,8 +48,6 @@ export type CampaignBatchSend = {
   variantKey: string | null;
   error: string | null;
 };
-
-export const OUTREACH_CAMPAIGN_RECLAIM_MINUTES = 30;
 
 export type CampaignBatchResult = {
   campaignId: string;
@@ -104,7 +106,7 @@ export function selectOutreachCampaignSnapshotRows(input: {
   emailField: string;
   companyField?: string | null;
   countryField?: string | null;
-  limit: number;
+  limit?: number;
 }) {
   const rowsById = new Map(input.rows.map((row) => [row.id, row]));
   return input.audienceRecordIds
@@ -131,7 +133,7 @@ export function selectOutreachCampaignSnapshotRows(input: {
       personalization: input.audiencePersonalization[row.id],
     }))
     .filter((row) => !input.sentRecordIds?.has(row.id))
-    .slice(0, input.limit);
+    .slice(0, input.limit ?? Number.MAX_SAFE_INTEGER);
 }
 
 export function outreachCampaignStatusAllowsSend(status: string | null | undefined) {
@@ -165,9 +167,7 @@ export function outreachCampaignRfcMessageId(campaignId: string, recordId: strin
   return `<outreach-${clean(campaignId.slice(0, 8))}-${clean(recordId)}@derya.ai>`;
 }
 
-export function outreachCampaignReclaimBefore(now: Date) {
-  return new Date(now.getTime() - OUTREACH_CAMPAIGN_RECLAIM_MINUTES * 60_000);
-}
+export { outreachCampaignReclaimBefore };
 
 export function outreachCampaignClaimLimit(
   limit: number | undefined,
@@ -213,6 +213,7 @@ type LoadedCampaign = {
   filters: Prisma.JsonValue | null;
   senderAccountId: string | null;
   senderDisplayName: string | null;
+  senderRotation: boolean;
   variants: Prisma.JsonValue | null;
   dailyCap: number;
   listId: string;
@@ -496,8 +497,7 @@ async function claimOutreachCampaignRows(
   requestedLimit: number | undefined,
   now: Date,
 ) {
-  try {
-    return await db.$transaction(async (tx) => {
+  const claim = () => db.$transaction(async (tx) => {
     await tx.outreachCampaignSend.deleteMany({
       where: {
         officeId: campaign.officeId,
@@ -522,7 +522,22 @@ async function claimOutreachCampaignRows(
     const queuedToday = sends.filter((send) => send.status === "QUEUED").length;
     const claimLimit = outreachCampaignClaimLimit(requestedLimit, campaign.dailyCap, sentToday, queuedToday);
     const handled = new Set(sends.map((send) => send.recordId));
-    const candidates = records.filter((record) => !handled.has(record.id)).slice(0, claimLimit);
+    const contacted = await tx.outreachCampaignSend.findMany({
+      where: outreachCampaignContactedWhere({
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        now,
+      }),
+      select: { recipient: true },
+    });
+    const candidates = dedupeRecipients({
+      rows: excludeContactedRecipients({
+        rows: records.filter((record) => !handled.has(record.id)),
+        recipientOf: (record) => String(record.data[campaign.emailField] ?? ""),
+        contacted: new Set(contacted.map((send) => send.recipient.trim().toLowerCase())),
+      }),
+      recipientOf: (record) => String(record.data[campaign.emailField] ?? ""),
+    }).slice(0, claimLimit);
     if (!candidates.length) return [];
     await tx.outreachCampaignSend.createMany({
       data: candidates.map((row) => ({
@@ -539,11 +554,21 @@ async function claimOutreachCampaignRows(
       })),
     });
     return candidates;
-    });
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return [];
-    throw error;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await claim();
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError)) throw error;
+      if (error.code === "P2002") return [];
+      if (error.code === "P2034") {
+        if (attempt === 0) continue;
+        return [];
+      }
+      throw error;
+    }
   }
+  return [];
 }
 
 export async function runOutreachCampaignBatch(input: {
@@ -574,6 +599,7 @@ export async function runOutreachCampaignBatch(input: {
       filters: true,
       senderAccountId: true,
       senderDisplayName: true,
+      senderRotation: true,
       variants: true,
       dailyCap: true,
       listId: true,
@@ -595,7 +621,7 @@ export async function runOutreachCampaignBatch(input: {
   if (!audienceRecordIds.length || !Object.keys(audiencePersonalization).length) {
     return { ...output, blocked: "NO_AUDIENCE" };
   }
-  if (!campaign.senderAccountId) return { ...output, blocked: "NO_SENDER" };
+  if (!campaign.senderAccountId && !campaign.senderRotation) return { ...output, blocked: "NO_SENDER" };
   const sendProvider = input.provider ?? gmailSupplierEmailProvider;
   await reconcileUnknownCampaignSends(db, campaign, sendProvider, now);
   const records = await db.researchRecord.findMany({
@@ -624,7 +650,7 @@ export async function runOutreachCampaignBatch(input: {
     emailField: campaign.emailField,
     companyField: campaign.companyField,
     countryField: campaign.countryField,
-    limit: input.limit ?? campaign.dailyCap,
+    limit: undefined,
   });
   const claimedRows = await claimOutreachCampaignRows(db, campaign, rows, input.limit, now);
   if (claimedRows.length === 0) {
@@ -673,7 +699,7 @@ export async function runOutreachCampaignBatch(input: {
       officeId: input.officeId,
       idempotencyKey: outreachCampaignIdempotencyKey(campaign.id, row.id),
       requestHash,
-      accountId: campaign.senderAccountId,
+      ...(campaign.senderRotation ? {} : { accountId: campaign.senderAccountId ?? undefined }),
       now,
     });
     if (!("ok" in reservation)) {
@@ -722,6 +748,15 @@ export async function runOutreachCampaignBatch(input: {
       });
       continue;
     }
+    await db.outreachCampaignSend.updateMany({
+      where: {
+        officeId: input.officeId,
+        campaignId: campaign.id,
+        recordId: row.id,
+        status: "QUEUED",
+      },
+      data: { reservationId: reservation.reservationId },
+    });
     const beforeSend = await db.outreachCampaign.findFirst({
       where: { id: campaign.id, officeId: input.officeId },
       select: { status: true },
