@@ -1,5 +1,13 @@
 # Engineering Log
 
+## 2026-09-03: Deterministic procurement campaign convergence
+
+- Added pure campaign classification, bounded operator overrides, stored-plan
+  validation, and convergence helpers.
+- Sourcing command jobs now read good-lead and quote progress, cap each slice
+  to the remaining target, and record why a campaign stopped before queueing
+  another slice.
+
 ## 2026-09-03 - Research projects group prospect lists
 
 - Added office-scoped research projects with optional list assignment and

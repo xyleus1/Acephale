@@ -42,6 +42,7 @@ async function main() {
   } = await import("../src/lib/supply-os/supplier-sourcing-category");
   const {
     parseSourcingCommand,
+    queueSourcingCommandFromChat,
     planSourcingCommand,
     runSourcingCommand,
     runQueuedSourcingWaveJob,
@@ -51,6 +52,7 @@ async function main() {
     SOURCING_OUTAGE_RETRIES,
   } = await import("../src/lib/procurement-sourcing-command");
   const { MAX_DISCOVERY_CALL_MS } = await import("../src/lib/procurement-supplier-sourcing");
+  const { CAMPAIGN_CLASS_DEFAULTS } = await import("../src/lib/procurement-campaign-class");
 
   // The exact operator phrase, plus the wording variants around it.
   const exact = parseSourcingCommand("find 100 more in each category and send");
@@ -81,6 +83,51 @@ async function main() {
   );
   assert.equal(parseSourcingCommand("find 30 more in each category and send the RFQs")?.send, true);
   assert.equal(parseSourcingCommand(42), null, "only text can be a command");
+
+  const queuedCampaignPayloads: Array<Record<string, unknown>> = [];
+  const queuedCampaign = await queueSourcingCommandFromChat({
+    officeId: "office-1",
+    customerId: "customer-1",
+    workspaceId: "workspace-1",
+    instruction: "find 100 more in each category",
+    requestedByUserId: "user-1",
+    dependencies: {
+      plan: async () => [{ orderId: "order-pcba", material: "PCBA", category: "pcba" as const }],
+      order: async () => ({
+        orderId: "order-pcba",
+        customerId: "customer-1",
+        officeId: "office-1",
+        companyName: "Demo",
+        material: "PCBA",
+        specification: "A PCBA build",
+        quantity: "100",
+        unit: "units",
+        neededBy: null,
+        notes: null,
+      }),
+      classify: () => ({
+        classKey: "specialist" as const,
+        label: "Specialist",
+        ...CAMPAIGN_CLASS_DEFAULTS.specialist,
+        reasons: ["PCBA"],
+      }),
+      progress: async () => ({ goodLeads: 25, quotesRecorded: 0 }),
+      enqueue: async (input) => {
+        queuedCampaignPayloads.push(input.payload);
+        return { id: "job-campaign" };
+      },
+    },
+  });
+  assert.equal(
+    (queuedCampaign?.campaign.targetGoodCompanies),
+    125,
+    "the campaign target is current good leads plus the requested increment",
+  );
+  assert.equal(
+    (queuedCampaignPayloads[0]!.campaign as { targetGoodCompanies: number }).targetGoodCompanies,
+    125,
+    "the absolute campaign target is stored on the queued payload",
+  );
 
   // Category classification and the capability gate.
   const pcba = classifySupplierSourcingCategory({ material: "Turnkey 4-layer PCBA", specification: null, notes: null });
@@ -348,6 +395,304 @@ async function main() {
     enqueueCalls.push({ dedupeKey: input.dedupeKey, ignoreJobId: input.ignoreJobId });
     return { id: `job-${enqueued.length}` };
   };
+
+  const campaignPlan = {
+    classKey: "specialist" as const,
+    label: "Specialist",
+    targetGoodCompanies: 100,
+    contactsPerCompany: 2,
+    quoteGoal: 5,
+    reasons: ["PCBA"],
+  };
+  let campaignRuns = 0;
+  const campaignRecords: Array<Record<string, unknown>> = [];
+  const campaignEnqueued: Array<Record<string, unknown>> = [];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    jobId: "job-campaign-converged",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 20,
+      campaign: campaignPlan,
+    },
+    dependencies: {
+      plan: async () => [{ orderId: "order-pcba", material: "PCBA", category: "pcba" as const }],
+      progress: async () => ({ goodLeads: 100, quotesRecorded: 0 }),
+      run: async () => {
+        campaignRuns += 1;
+        throw new Error("a converged campaign must not run");
+      },
+      enqueue: (async (input: { payload: Record<string, unknown> }) => {
+        campaignEnqueued.push(input.payload);
+        return { id: "job-campaign-continuation" };
+      }) as never,
+      record: async (input) => {
+        campaignRecords.push(input.patch);
+      },
+    },
+  });
+  assert.equal(campaignRuns, 0, "a converged campaign skips the sourcing slice");
+  assert.deepEqual(campaignRecords, [{
+    campaignStops: { pcba: "good_lead_target_reached" },
+    lastStop: "good_lead_target_reached",
+  }]);
+  assert.equal(campaignEnqueued.length, 0, "a converged campaign does not enqueue a continuation");
+
+  const campaignRunTargets: Array<Record<string, number>> = [];
+  const campaignProgressReads = [
+    { goodLeads: 80, quotesRecorded: 0 },
+    { goodLeads: 80, quotesRecorded: 0 },
+  ];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    jobId: "job-campaign-cap",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 100,
+      remaining: { pcba: 100 },
+      campaign: campaignPlan,
+    },
+    dependencies: {
+      plan: async () => [{ orderId: "order-pcba", material: "PCBA", category: "pcba" as const }],
+      progress: async () => campaignProgressReads.shift()!,
+      run: async (input) => {
+        campaignRunTargets.push(input.categoryTargets as Record<string, number>);
+        return {
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "pcba" as const,
+            orderId: "order-pcba",
+            material: "PCBA",
+            wave: { added: 1, discoveryExhausted: false, nextRound: 1 } as never,
+            send: null,
+            error: null,
+          }],
+          added: 1,
+          sent: 0,
+          skipped: [],
+        };
+      },
+      enqueue: enqueue as never,
+    },
+  });
+  assert.deepEqual(campaignRunTargets, [{ pcba: 20 }], "owed work is capped by remaining good leads");
+
+  const quoteStopRecords: Array<Record<string, unknown>> = [];
+  const quoteProgressReads = [
+    { goodLeads: 0, quotesRecorded: 0 },
+    { goodLeads: 1, quotesRecorded: 5 },
+  ];
+  const quoteStopEnqueued: Array<Record<string, unknown>> = [];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    jobId: "job-campaign-quotes",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 20,
+      campaign: campaignPlan,
+    },
+    dependencies: {
+      plan: async () => [{ orderId: "order-pcba", material: "PCBA", category: "pcba" as const }],
+      progress: async () => quoteProgressReads.shift()!,
+      run: async () => ({
+        perCategory: SOURCING_COMMAND_SLICE,
+        send: false,
+        categories: [{
+          category: "pcba" as const,
+          orderId: "order-pcba",
+          material: "PCBA",
+          wave: { added: 1, discoveryExhausted: false, nextRound: 1 } as never,
+          send: null,
+          error: null,
+        }],
+        added: 1,
+        sent: 0,
+        skipped: [],
+      }),
+      enqueue: (async (input: { payload: Record<string, unknown> }) => {
+        quoteStopEnqueued.push(input.payload);
+        return { id: "job-quote-stop" };
+      }) as never,
+      record: async (input) => {
+        quoteStopRecords.push(input.patch);
+      },
+    },
+  });
+  assert.deepEqual(quoteStopRecords, [{
+    campaignStops: { pcba: "quote_goal_reached" },
+    lastStop: "quote_goal_reached",
+  }]);
+  assert.equal(quoteStopEnqueued.length, 0, "a quote goal reached after a slice stops continuation");
+
+  const campaignOutageEnqueued: Array<Record<string, unknown>> = [];
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    jobId: "job-campaign-outage",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 20,
+      campaign: campaignPlan,
+    },
+    dependencies: {
+      plan: async () => [{ orderId: "order-pcba", material: "PCBA", category: "pcba" as const }],
+      progress: async () => ({ goodLeads: 0, quotesRecorded: 0 }),
+      run: async () => ({
+        perCategory: SOURCING_COMMAND_SLICE,
+        send: false,
+        categories: [{
+          category: "pcba" as const,
+          orderId: "order-pcba",
+          material: "PCBA",
+          wave: {
+            added: 0,
+            timedOut: false,
+            discoveryExhausted: true,
+            providerFailures: ["exa"],
+          } as never,
+          send: null,
+          error: null,
+        }],
+        added: 0,
+        sent: 0,
+        skipped: [],
+      }),
+      enqueue: (async (input: { payload: Record<string, unknown> }) => {
+        campaignOutageEnqueued.push(input.payload);
+        return { id: "job-campaign-outage-retry" };
+      }) as never,
+    },
+  });
+  assert.equal(campaignOutageEnqueued.length, 1, "provider failure remains retryable under a campaign");
+
+  const multiCampaignPlan = {
+    ...campaignPlan,
+    targetGoodCompanies: 20,
+  };
+  const multiCampaignProgress = new Map<string, Array<{ goodLeads: number; quotesRecorded: number }>>([
+    ["order-pcba", [{ goodLeads: 0, quotesRecorded: 0 }, { goodLeads: 0, quotesRecorded: 0 }]],
+    ["order-foam", [
+      { goodLeads: 0, quotesRecorded: 0 },
+      { goodLeads: 1, quotesRecorded: 0 },
+      { goodLeads: 19, quotesRecorded: 0 },
+      { goodLeads: 20, quotesRecorded: 0 },
+    ]],
+  ]);
+  const multiCampaignEnqueued: Array<Record<string, unknown>> = [];
+  const multiCampaignRecords: Array<Record<string, unknown>> = [];
+  let multiCampaignSlice = 0;
+  const multiCampaignDependencies = {
+    plan: async () => [
+      { orderId: "order-pcba", material: "PCBA", category: "pcba" as const },
+      { orderId: "order-foam", material: "Foam", category: "molded-foam" as const },
+    ],
+    progress: async (orderId: string) => multiCampaignProgress.get(orderId)!.shift()!,
+    run: async () => {
+      multiCampaignSlice += 1;
+      return multiCampaignSlice === 1
+        ? {
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [
+            {
+              category: "pcba" as const,
+              orderId: "order-pcba",
+              material: "PCBA",
+              wave: {
+                added: 0,
+                discoveryExhausted: true,
+                timedOut: false,
+                providerFailures: [],
+                nextRound: 1,
+              } as never,
+              send: null,
+              error: null,
+            },
+            {
+              category: "molded-foam" as const,
+              orderId: "order-foam",
+              material: "Foam",
+              wave: {
+                added: 1,
+                discoveryExhausted: false,
+                timedOut: false,
+                providerFailures: [],
+                nextRound: 1,
+              } as never,
+              send: null,
+              error: null,
+            },
+          ],
+          added: 1,
+          sent: 0,
+          skipped: [],
+        }
+        : {
+          perCategory: SOURCING_COMMAND_SLICE,
+          send: false,
+          categories: [{
+            category: "molded-foam" as const,
+            orderId: "order-foam",
+            material: "Foam",
+            wave: {
+              added: 1,
+              discoveryExhausted: false,
+              timedOut: false,
+              providerFailures: [],
+              nextRound: 2,
+            } as never,
+            send: null,
+            error: null,
+          }],
+          added: 1,
+          sent: 0,
+          skipped: [],
+        };
+    },
+    enqueue: async (input: { payload: Record<string, unknown> }) => {
+      multiCampaignEnqueued.push(input.payload);
+      return { id: `job-multi-campaign-${multiCampaignEnqueued.length}` };
+    },
+    record: async (input: { patch: Record<string, unknown> }) => {
+      multiCampaignRecords.push(input.patch);
+    },
+  };
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    jobId: "job-multi-campaign-1",
+    payload: {
+      customerId: "customer-1",
+      workspaceId: "workspace-1",
+      perCategory: 20,
+      campaign: multiCampaignPlan,
+    },
+    dependencies: multiCampaignDependencies as never,
+  });
+  assert.deepEqual(
+    (multiCampaignEnqueued[0]!.campaignStops as Record<string, unknown>).pcba,
+    "discovery_exhausted",
+    "an exhausted category remains terminal on the continuation payload",
+  );
+  await runQueuedSourcingWaveJob({
+    officeId: "office-1",
+    jobId: "job-multi-campaign-2",
+    payload: multiCampaignEnqueued[0]!,
+    dependencies: multiCampaignDependencies as never,
+  });
+  assert.equal(multiCampaignEnqueued.length, 1, "the final converged slice does not enqueue");
+  assert.equal(multiCampaignRecords.length, 1, "the final converged slice records its stop");
+  assert.equal(multiCampaignRecords[0]!.lastStop, "discovery_exhausted");
+  assert.equal(
+    (multiCampaignRecords[0]!.campaignStops as Record<string, unknown>)["molded-foam"],
+    "good_lead_target_reached",
+  );
+
+  enqueued.length = 0;
+  enqueueCalls.length = 0;
   let sliceTarget = 0;
   await runQueuedSourcingWaveJob({
     officeId: "office-1",
@@ -663,8 +1008,8 @@ async function main() {
   // A slice that qualified suppliers and could not store them keeps its count
   // and its cursor, instead of spending fresh phrases on unsaved work.
   enqueued.length = 0;
-  const recorded: Array<{ lastFailure: string }> = [];
-  const record = async (input: { lastFailure: string }) => {
+  const recorded: Array<{ patch: Record<string, unknown> }> = [];
+  const record = async (input: { patch: Record<string, unknown> }) => {
     recorded.push(input);
   };
   const saveOutage = async (retries: number, added = 0) => {
@@ -725,7 +1070,10 @@ async function main() {
   await saveOutage(SOURCING_OUTAGE_RETRIES);
   assert.equal(enqueued.length, 0, "a database that stays down stops the wave once the retries are spent");
   assert.equal(recorded.length, 1, "the terminal reason is written where the status can read it");
-  assert.match(recorded[0]!.lastFailure, /pcba: qualified suppliers could not be saved/);
+  assert.match(
+    String(recorded[0]!.patch.lastFailure ?? ""),
+    /pcba: qualified suppliers could not be saved/,
+  );
 
   // A database that fails partway through a slice leaves suppliers stored, and
   // the retry must be charged for them or the wave would overshoot the target.

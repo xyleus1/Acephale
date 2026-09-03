@@ -1,5 +1,11 @@
 # Decisions
 
+## Deterministic campaign targets own sourcing convergence
+
+Date: 2026-09-03
+
+A sourcing wave targets good suppliers by campaign class (narrow-high-value, specialist, broad-commodity), decided deterministically from the request; it stops on the quote goal, the good-lead target, or exhausted discovery. Bourne's four-supplier shortlist and Inbox approval are not the product's model; Derya owns convergence.
+
 ## Research projects group prospect lists by workflow
 
 Date: 2026-09-03

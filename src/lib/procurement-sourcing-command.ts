@@ -1,12 +1,25 @@
 import "server-only";
 
+import type { Prisma } from "@prisma/client";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { prisma } from "@/lib/prisma";
 import {
   BULK_RFQ_MAX_PER_RUN,
+  loadBulkRfqOrder,
   runProcurementBulkRfq,
   type BulkRfqRunResult,
 } from "@/lib/procurement-bulk-rfq";
+import {
+  applyCampaignOverrides,
+  classifyCampaign,
+  readCampaignPlan,
+  type CampaignPlan,
+} from "@/lib/procurement-campaign-class";
+import {
+  campaignConvergence,
+  type CampaignConvergence,
+  type CampaignProgress,
+} from "@/lib/procurement-campaign-convergence";
 import {
   MAX_DISCOVERY_CALL_MS,
   runProcurementSupplierSourcingWave,
@@ -110,6 +123,32 @@ export type SourcingCommandPlanEntry = {
   category: SupplierSourcingCategoryKey;
 };
 
+export async function loadCampaignProgress(
+  orderId: string,
+): Promise<Omit<CampaignProgress, "discoveryExhausted">> {
+  const rows = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{
+    goodLeads: number;
+    quotesRecorded: number;
+  }>>(`
+    SELECT
+      count(*) FILTER (
+        WHERE jsonb_typeof(research->'capabilityEvidence') = 'array'
+          AND jsonb_array_length(research->'capabilityEvidence') > 0
+      )::int AS "goodLeads",
+      count(*) FILTER (
+        WHERE jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+          AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
+      )::int AS "quotesRecorded"
+    FROM order_vendors
+    WHERE order_id = $1::uuid
+  `, orderId);
+  const row = rows.at(0);
+  return {
+    goodLeads: typeof row?.goodLeads === "number" ? row.goodLeads : 0,
+    quotesRecorded: typeof row?.quotesRecorded === "number" ? row.quotesRecorded : 0,
+  };
+}
+
 /**
  * One request per category. When a workspace has two requests in the same
  * category the newest is used, because a wave is scoped to a single request and
@@ -142,6 +181,7 @@ export type QueuedSourcingWave = {
   perCategory: number;
   send: boolean;
   plan: SourcingCommandPlanEntry[];
+  campaign: CampaignPlan;
 };
 
 /**
@@ -159,6 +199,9 @@ export async function queueSourcingCommandFromChat(args: {
   dependencies?: {
     plan?: typeof planSourcingCommand;
     enqueue?: typeof enqueueBackgroundJob;
+    order?: typeof loadBulkRfqOrder;
+    classify?: typeof classifyCampaign;
+    progress?: typeof loadCampaignProgress;
   };
 }): Promise<QueuedSourcingWave | null> {
   const intent = parseSourcingCommand(args.instruction);
@@ -168,6 +211,21 @@ export async function queueSourcingCommandFromChat(args: {
     workspaceId: args.workspaceId,
   });
   if (!plan.length) return null;
+  const order = await (args.dependencies?.order ?? loadBulkRfqOrder)(plan[0]!.orderId);
+  if (!order) return null;
+  const campaign = applyCampaignOverrides(
+    (args.dependencies?.classify ?? classifyCampaign)({
+      material: order.material,
+      specification: order.specification,
+      notes: order.notes,
+      quantity: order.quantity,
+    }),
+    {
+      targetGoodCompanies: (
+        await (args.dependencies?.progress ?? loadCampaignProgress)(order.orderId)
+      ).goodLeads + intent.perCategory,
+    },
+  );
   const enqueue = args.dependencies?.enqueue ?? enqueueBackgroundJob;
   const job = await enqueue({
     officeId: args.officeId,
@@ -184,13 +242,14 @@ export async function queueSourcingCommandFromChat(args: {
       confirmed: intent.send,
       requestedByUserId: args.requestedByUserId,
       instruction: typeof args.instruction === "string" ? args.instruction.slice(0, 500) : "",
+      campaign,
     },
     // One wave per workspace at a time, so a repeated phrase does not double
     // the crawl or the outreach.
     dedupeKey: `procurement-sourcing-wave:${args.workspaceId}`,
     maxAttempts: 1,
   });
-  return { jobId: job.id, perCategory: intent.perCategory, send: intent.send, plan };
+  return { jobId: job.id, perCategory: intent.perCategory, send: intent.send, plan, campaign };
 }
 
 function readStartRounds(value: unknown): Partial<Record<SupplierSourcingCategoryKey, number>> {
@@ -217,6 +276,25 @@ function readCategoryCounts(value: unknown): Partial<Record<SupplierSourcingCate
     }
   }
   return counts;
+}
+
+function readCampaignStops(
+  value: unknown,
+): Partial<Record<SupplierSourcingCategoryKey, CampaignStopReason>> {
+  const stops: Partial<Record<SupplierSourcingCategoryKey, CampaignStopReason>> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return stops;
+  const record = value as Record<string, unknown>;
+  for (const key of ["pcba", "molded-foam"] as const) {
+    const reason = record[key];
+    if (
+      reason === "quote_goal_reached"
+      || reason === "good_lead_target_reached"
+      || reason === "discovery_exhausted"
+    ) {
+      stops[key] = reason;
+    }
+  }
+  return stops;
 }
 
 /**
@@ -249,17 +327,41 @@ function queuedRemainingByCategory(
  * explain it. The reason is written onto the job payload, and the status reads
  * the last finished job as well as the active ones.
  */
-async function recordSourcingWaveFailure(args: {
+async function recordSourcingWavePayload(args: {
   jobId: string | null;
   officeId: string;
   payload: Record<string, unknown>;
-  lastFailure: string;
+  patch: Record<string, unknown>;
 }) {
   if (!args.jobId) return;
   await prisma.backgroundJob.updateMany({
     where: { id: args.jobId, officeId: args.officeId },
-    data: { payload: { ...args.payload, lastFailure: args.lastFailure } },
+    data: { payload: { ...args.payload, ...args.patch } as Prisma.InputJsonValue },
   });
+}
+
+function isSpentSourcingWave(
+  wave: Pick<SourcingWaveResult, "discoveryExhausted" | "timedOut" | "added" | "providerFailures"> | null | undefined,
+): boolean {
+  return Boolean(
+    wave?.discoveryExhausted
+      && !wave.timedOut
+      && wave.added === 0
+      && (wave.providerFailures?.length ?? 0) === 0,
+  );
+}
+
+type CampaignStopReason = Exclude<CampaignConvergence["reason"], "collecting">;
+
+function firstCampaignStopReason(
+  entries: readonly SourcingCommandPlanEntry[],
+  stops: Partial<Record<SupplierSourcingCategoryKey, CampaignStopReason>>,
+): CampaignStopReason | null {
+  for (const entry of entries) {
+    const reason = stops[entry.category];
+    if (reason) return reason;
+  }
+  return null;
 }
 
 export async function runQueuedSourcingWaveJob(args: {
@@ -271,7 +373,9 @@ export async function runQueuedSourcingWaveJob(args: {
   dependencies?: {
     run?: typeof runSourcingCommand;
     enqueue?: typeof enqueueBackgroundJob;
-    record?: typeof recordSourcingWaveFailure;
+    record?: typeof recordSourcingWavePayload;
+    plan?: typeof planSourcingCommand;
+    progress?: typeof loadCampaignProgress;
   };
 }) {
   const payload = args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
@@ -295,6 +399,59 @@ export async function runQueuedSourcingWaveJob(args: {
   // single shared remainder would let the category that ran spend the other
   // category's suppliers and both would stop around half the target.
   const owedByCategory = readCategoryCounts(payload.remaining);
+  const campaign = readCampaignPlan(payload.campaign);
+  const campaignStops = readCampaignStops(payload.campaignStops);
+  const campaignStopPayload = campaign ? { campaignStops } : {};
+  const campaignEntries = campaign
+    ? (await (args.dependencies?.plan ?? planSourcingCommand)({
+      customerId,
+      workspaceId,
+    })).filter((entry) => !onlyCategory || entry.category === onlyCategory)
+    : [];
+  const campaignProgress = args.dependencies?.progress ?? loadCampaignProgress;
+  const preConvergence = new Map<SupplierSourcingCategoryKey, ReturnType<typeof campaignConvergence>>();
+  if (campaign && campaignEntries.length) {
+    for (const entry of campaignEntries) {
+      const stoppedReason = campaignStops[entry.category];
+      if (stoppedReason) {
+        preConvergence.set(entry.category, {
+          done: true,
+          reason: stoppedReason,
+          remainingGoodLeads: 0,
+        });
+        owedByCategory[entry.category] = 0;
+        continue;
+      }
+      const progress = await campaignProgress(entry.orderId);
+      const convergence = campaignConvergence(campaign, {
+        ...progress,
+        discoveryExhausted: false,
+      });
+      preConvergence.set(entry.category, convergence);
+      if (convergence.done) campaignStops[entry.category] = convergence.reason;
+      owedByCategory[entry.category] = convergence.done
+        ? 0
+        : Math.min(owedByCategory[entry.category] ?? remaining, convergence.remainingGoodLeads);
+    }
+    if ([...preConvergence.values()].every((convergence) => convergence.done)) {
+      const reason = firstCampaignStopReason(campaignEntries, campaignStops)
+        ?? "discovery_exhausted";
+      await (args.dependencies?.record ?? recordSourcingWavePayload)({
+        jobId: args.jobId ?? null,
+        officeId: args.officeId,
+        payload,
+        patch: { campaignStops, lastStop: reason },
+      });
+      return {
+        perCategory: slice,
+        send: payload.send === true && payload.confirmed === true,
+        categories: [],
+        added: 0,
+        sent: 0,
+        skipped: [],
+      };
+    }
+  }
   const result = await (args.dependencies?.run ?? runSourcingCommand)({
     customerId,
     workspaceId,
@@ -350,12 +507,7 @@ export async function runQueuedSourcingWaveJob(args: {
     // A category that ran out of curated phrases is owed nothing more, but a
     // barren round where the providers themselves failed is an outage, not an
     // exhausted category, so its count survives for the retry.
-    const exhausted = entry.wave
-      ? entry.wave.discoveryExhausted
-        && !entry.wave.timedOut
-        && entry.wave.added === 0
-        && (entry.wave.providerFailures?.length ?? 0) === 0
-      : false;
+    const exhausted = isSpentSourcingWave(entry.wave);
     // A category that failed the same way forever is owed nothing either, so a
     // wave kept alive by its other category stops re-running the failure.
     const permanent = !entry.wave && !entry.errorRetryable;
@@ -363,6 +515,37 @@ export async function runQueuedSourcingWaveJob(args: {
   }
   for (const category of skipped) {
     nextOwed[category] = nextOwed[category] ?? remaining;
+  }
+  let postStopReason: ReturnType<typeof campaignConvergence>["reason"] | null = null;
+  if (campaign && campaignEntries.length) {
+    const postConvergence = new Map<SupplierSourcingCategoryKey, ReturnType<typeof campaignConvergence>>();
+    for (const entry of campaignEntries) {
+      const stoppedReason = campaignStops[entry.category];
+      if (stoppedReason) {
+        postConvergence.set(entry.category, {
+          done: true,
+          reason: stoppedReason,
+          remainingGoodLeads: 0,
+        });
+        nextOwed[entry.category] = 0;
+        continue;
+      }
+      const categoryResult = result.categories.find((candidate) => candidate.category === entry.category);
+      const progress = await campaignProgress(entry.orderId);
+      const convergence = campaignConvergence(campaign, {
+        ...progress,
+        discoveryExhausted: isSpentSourcingWave(categoryResult?.wave),
+      });
+      postConvergence.set(entry.category, convergence);
+      if (convergence.done) campaignStops[entry.category] = convergence.reason;
+      nextOwed[entry.category] = convergence.done
+        ? 0
+        : Math.min(nextOwed[entry.category] ?? remaining, convergence.remainingGoodLeads);
+    }
+    if ([...postConvergence.values()].every((convergence) => convergence.done)) {
+      postStopReason = firstCampaignStopReason(campaignEntries, campaignStops)
+        ?? "discovery_exhausted";
+    }
   }
   const left = Math.max(0, ...Object.values(nextOwed));
   // A slice where every discovery provider threw, or where a category threw
@@ -396,15 +579,22 @@ export async function runQueuedSourcingWaveJob(args: {
   const retryOutage = outage && retriesUsed < SOURCING_OUTAGE_RETRIES;
   // An outage retry keeps the count and the cursor, so it takes precedence over
   // a normal continuation that would move the cursor past unsaved work.
-  const continues = left > 0 && (retryOutage || (stillFinding && !saveOutage));
-  if (!continues && lastFailure) {
-    // The chain stops here, and a job that stops is filtered out of the queue
-    // view, so the reason is written where the status can still read it.
-    await (args.dependencies?.record ?? recordSourcingWaveFailure)({
+  const continues = !postStopReason && left > 0 && (retryOutage || (stillFinding && !saveOutage));
+  if (postStopReason) {
+    await (args.dependencies?.record ?? recordSourcingWavePayload)({
       jobId: args.jobId ?? null,
       officeId: args.officeId,
       payload,
-      lastFailure,
+      patch: { campaignStops, lastStop: postStopReason },
+    });
+  } else if (!continues && lastFailure) {
+    // The chain stops here, and a job that stops is filtered out of the queue
+    // view, so the reason is written where the status can still read it.
+    await (args.dependencies?.record ?? recordSourcingWavePayload)({
+      jobId: args.jobId ?? null,
+      officeId: args.officeId,
+      payload,
+      patch: { lastFailure },
     });
   }
   if (continues) {
@@ -424,6 +614,7 @@ export async function runQueuedSourcingWaveJob(args: {
           providerRetries: retriesUsed + 1,
           startRounds,
           lastFailure,
+          ...campaignStopPayload,
         }
         : {
           ...payload,
@@ -435,6 +626,7 @@ export async function runQueuedSourcingWaveJob(args: {
           // Hand the budget to the category that lost it, otherwise the plan
           // order alone decides and the second category is never sourced.
           firstCategory: skipped.at(0) ?? null,
+          ...campaignStopPayload,
         },
       runAfter: retryOutage ? new Date(Date.now() + SOURCING_OUTAGE_RETRY_DELAY_MS) : undefined,
       dedupeKey: typeof payload.workspaceId === "string"
@@ -689,6 +881,8 @@ export type SourcingCommandStatus = {
     // Why the previous slice failed, if it did. A slice failure is handled
     // inside the job, so it never reaches `lastError`.
     lastFailure: string | null;
+    lastStop: string | null;
+    campaign: CampaignPlan | null;
   }>;
 };
 
@@ -758,6 +952,8 @@ export async function sourcingCommandStatus(args: {
         runAfter: job.runAfter.toISOString(),
         lastError: job.lastError,
         lastFailure: typeof payload.lastFailure === "string" ? payload.lastFailure : null,
+        lastStop: typeof payload.lastStop === "string" ? payload.lastStop : null,
+        campaign: readCampaignPlan(payload.campaign),
       };
     }),
   };

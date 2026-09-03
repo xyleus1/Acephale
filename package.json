@@ -45,6 +45,7 @@
     "test:procurement-autopilot-plan": "tsx scripts/procurement-autopilot-plan.test.ts",
     "test:procurement-supplier-nudge": "tsx scripts/procurement-supplier-nudge.test.ts",
     "test:procurement-supplier-quote-reading": "tsx scripts/procurement-supplier-quote-reading.test.ts",
+    "test:procurement-campaign-class": "tsx scripts/procurement-campaign-class.test.ts",
     "test:procurement-sourcing-command": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-sourcing-command.test.ts",
     "test:procurement-sourcing-wave": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-sourcing-wave.test.ts",
     "test:procurement-request-document-merge": "tsx scripts/procurement-request-document-merge.test.ts",

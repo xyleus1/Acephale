@@ -1,5 +1,19 @@
 # AI Handoff
 
+## 2026-09-03: Procurement campaign class convergence
+
+- Sourcing commands classify each request deterministically as
+  narrow-high-value, specialist, or broad-commodity and store the resulting
+  campaign plan on the queued wave.
+- A campaign target starts at current good suppliers plus the requested
+  increment. Each wave caps owed work by the remaining good-lead target and
+  stops on the quote goal, good-lead target, or exhausted discovery.
+- The plan is classified from the newest request of the first planned category
+  and its good-lead baseline, then applied to every category in the wave;
+  per-category plans are a follow-up.
+- This is a Derya research convergence rule. It does not add approval steps or
+  change supplier send behavior or the UI.
+
 ## 2026-09-03: Research projects for prospect workflows
 
 - Research lists can be grouped under office-scoped projects. Lists without a
