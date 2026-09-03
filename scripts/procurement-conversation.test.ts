@@ -4,6 +4,7 @@ import {
   mergeProcurementConversationMessages,
   procurementConversationFromLedger,
   procurementConversationFromGmailThread,
+  procurementSupplierSenderVouched,
   resolveProcurementVendorConversation,
   type ProcurementLedgerConversationMessage,
   type ProcurementConversationMessage,
@@ -236,6 +237,56 @@ async function main() {
     assert.deepEqual(fallback, fallbackConversation);
     assert.equal(referenceCalls, 1);
     assert.equal(compatibilityCalls, 1);
+  }
+
+  {
+    // A shop answering from a colleague address is answerable only when the
+    // conversation attributes that address to the supplier we mailed.
+    const local = {
+      available: true,
+      source: "DERYA_EMAIL_RECORD" as const,
+      sourceUrl: null,
+      accountEmail: "desk@derya.ai",
+      messages: [],
+      unavailableReason: null,
+      attributedSenders: ["mluna@mfg-one.com"],
+    };
+    assert.equal(
+      procurementSupplierSenderVouched({
+        conversation: local,
+        contactEmail: "sales@mfg-one.com",
+        senderEmail: "Mluna@MFG-One.com",
+      }),
+      true,
+      "the attributed colleague address can be answered",
+    );
+    assert.equal(
+      procurementSupplierSenderVouched({
+        conversation: local,
+        contactEmail: "sales@mfg-one.com",
+        senderEmail: "sales@mfg-one.com",
+      }),
+      true,
+      "the address we mailed can be answered",
+    );
+    assert.equal(
+      procurementSupplierSenderVouched({
+        conversation: local,
+        contactEmail: "sales@mfg-one.com",
+        senderEmail: "stranger@elsewhere.test",
+      }),
+      false,
+      "an address the thread does not vouch for is never answered",
+    );
+    assert.equal(
+      procurementSupplierSenderVouched({
+        conversation: { ...local, attributedSenders: undefined },
+        contactEmail: null,
+        senderEmail: "mluna@mfg-one.com",
+      }),
+      false,
+      "a source that establishes nothing vouches for nobody",
+    );
   }
 
   console.log("Procurement conversation normalization, bounds, and source precedence passed.");

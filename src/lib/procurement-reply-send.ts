@@ -6,7 +6,10 @@ import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
 import { SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { selectEmailSenderPoolCandidate } from "@/lib/email-sender-pool-policy";
-import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
+import {
+  procurementSupplierSenderVouched,
+  type ProcurementConversation,
+} from "@/lib/procurement-conversation-model";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import { chasesSentAfterLastReply, supplierChaseDecision } from "@/lib/procurement-supplier-chase";
 import {
@@ -187,8 +190,11 @@ function requireQuietThread(args: {
   if (!decision.chase) {
     throw new SupplyPersistenceError(`No follow up is sent: ${decision.reason}`, "conflict");
   }
-  const expectedSupplier = args.vendor.contact?.email?.trim().toLowerCase() ?? null;
-  if (args.conversation.source !== "BOURNE_LEDGER" && (!expectedSupplier || inbound.fromEmail.trim().toLowerCase() !== expectedSupplier)) {
+  if (!procurementSupplierSenderVouched({
+    conversation: args.conversation,
+    contactEmail: args.vendor.contact?.email ?? null,
+    senderEmail: inbound.fromEmail,
+  })) {
     throw new SupplyPersistenceError("The supplier sender could not be verified for this thread.", "conflict");
   }
   return { inbound, latest };
@@ -206,8 +212,11 @@ function requireCurrentInbound(args: {
   if (latest.id !== args.sourceMessageId) {
     throw new SupplyPersistenceError("A newer supplier message arrived. Review the refreshed conversation before sending.", "conflict");
   }
-  const expectedSupplier = args.vendor.contact?.email?.trim().toLowerCase() ?? null;
-  if (args.conversation.source !== "BOURNE_LEDGER" && (!expectedSupplier || latest.fromEmail.trim().toLowerCase() !== expectedSupplier)) {
+  if (!procurementSupplierSenderVouched({
+    conversation: args.conversation,
+    contactEmail: args.vendor.contact?.email ?? null,
+    senderEmail: latest.fromEmail,
+  })) {
     throw new SupplyPersistenceError("The supplier sender could not be verified for this thread.", "conflict");
   }
   return latest;

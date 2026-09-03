@@ -209,6 +209,13 @@ export function localRfqConversationFor(
     return attributedContacts(message, contacts, accountEmails).includes(contact);
   }).slice(-MAX_PROCUREMENT_CONVERSATION_MESSAGES);
   if (!related.length) return null;
+  // Answering such a reply means answering the address that wrote it, so the
+  // conversation states which senders its own threads attribute to this
+  // supplier rather than leaving the send path to guess.
+  const attributedSenders = [...new Set(related
+    .filter((message) => normalize(message.fromEmail) !== contact
+      && attributedContacts(message, contacts, accountEmails).includes(contact))
+    .map((message) => normalize(message.fromEmail)))];
   const accountEmail = related.find((message) => message.accountEmail)?.accountEmail ?? null;
   const externalThreadId = related.find((message) => message.externalThreadId)?.externalThreadId ?? null;
   return {
@@ -233,5 +240,6 @@ export function localRfqConversationFor(
       truncated: false,
     }))),
     unavailableReason: null,
+    attributedSenders,
   } satisfies ProcurementConversation;
 }

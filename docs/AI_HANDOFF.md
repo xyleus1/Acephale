@@ -1,5 +1,20 @@
 # AI Handoff
 
+## 2026-09-03: A vouched alternate sender can be answered
+
+- `ProcurementConversation` now carries `attributedSenders`, the addresses a
+  conversation's own threads attribute to the recorded supplier contact. The
+  local RFQ conversation populates it from the outbound recipients on the same
+  thread; sources that cannot establish attribution leave it absent.
+- Supplier reply sending verifies the current inbound sender with
+  `procurementSupplierSenderVouched` instead of demanding equality with the
+  recorded contact address, so a shop answering from a colleague or helpdesk
+  address is answerable while a stranger on the thread stays refused. The reply
+  still goes to the sender that wrote last.
+- To test: `npm run test:procurement-conversation`,
+  `npm run test:procurement-local-outreach`,
+  `npm run test:procurement-reply-draft`.
+
 ## 2026-09-03: Follow-ups for sender-rotation campaigns
 
 - Rotated campaigns (`senderRotation = true`, `senderAccountId = null`) now

@@ -1,5 +1,20 @@
 # Engineering Log
 
+## 2026-09-03: Alternate supplier senders could be read but not answered
+
+- A confirmed autopilot pass failed 23 PCBA reply sends with "The supplier
+  sender could not be verified for this thread." Thread attribution made those
+  replies visible and quotable, but `requireQuietThread` and
+  `requireCurrentInbound` still compared the newest inbound sender against
+  `vendor.contact.email`, so every reply from a colleague or helpdesk address
+  was refused at send time and the supplier kept getting chased instead of
+  answered.
+- The conversation, not the send path, decides who counts: the local RFQ
+  conversation exports `attributedSenders` from the outbound recipients on its
+  own thread, and both guards call `procurementSupplierSenderVouched`. Nothing
+  operator supplied widens the set, an unattributed sender is still a conflict,
+  and bounces never reach attribution.
+
 ## 2026-09-03: Follow-ups for rotated campaigns leave from the first-touch mailbox
 
 - `runOutreachCampaignFollowUps` returned early when `senderAccountId` was

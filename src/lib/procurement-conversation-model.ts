@@ -61,7 +61,29 @@ export type ProcurementConversation = {
   accountEmail: string | null;
   messages: ProcurementConversationMessage[];
   unavailableReason: string | null;
+  // Addresses the thread itself vouches for: a colleague, helpdesk, or
+  // ticketing sender that answered on a thread where we mailed the supplier's
+  // recorded address. Left absent by sources that cannot establish it.
+  attributedSenders?: string[];
 };
+
+// A reply is answerable when the supplier's own recorded address wrote it, or
+// when the conversation attributes the sender to that address from the outbound
+// mail on its own thread. Operator input never widens this: the attribution is
+// derived from what we sent, so a stranger on the thread stays unanswerable.
+export function procurementSupplierSenderVouched(args: {
+  conversation: ProcurementConversation;
+  contactEmail: string | null;
+  senderEmail: string;
+}) {
+  const sender = args.senderEmail.trim().toLowerCase();
+  if (!sender) return false;
+  if (args.conversation.source === "BOURNE_LEDGER") return true;
+  const expected = args.contactEmail?.trim().toLowerCase() ?? "";
+  if (expected && sender === expected) return true;
+  return (args.conversation.attributedSenders ?? [])
+    .some((email) => email.trim().toLowerCase() === sender);
+}
 
 export type ProcurementConversationMergeCandidate = {
   message: ProcurementConversationMessage;

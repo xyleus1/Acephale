@@ -137,6 +137,16 @@ assert.deepEqual(
   [["OUTBOUND", "desk@derya.ai"], ["INBOUND", "mluna@mfg-one.com"]],
   "the reply reaches the supplier's conversation so it can be read for a quote",
 );
+assert.deepEqual(
+  colleagueConversation?.attributedSenders,
+  ["mluna@mfg-one.com"],
+  "the conversation vouches for the colleague address so the answer can be sent to it",
+);
+assert.deepEqual(
+  localRfqConversationFor(colleagueReply, "mluna@mfg-one.com")?.attributedSenders,
+  [],
+  "a supplier recorded under the address that wrote to us needs no vouching",
+);
 
 const bounced = [
   message({ threadId: "thread-3", toEmails: ["sales@closedshop.com"] }),
