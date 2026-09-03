@@ -18,6 +18,7 @@ import {
   releaseEmailSenderReservation,
   reserveEmailSender,
 } from "@/lib/email-sender-pool";
+import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import { DELIVERY_FEEDBACK_CLASSIFICATION } from "@/lib/email-delivery-feedback";
@@ -264,7 +265,7 @@ async function loadSequenceState(db: FollowUpDb, campaign: FollowUpCampaign, now
   });
   const sends = await db.outreachCampaignSend.findMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id, status: "SENT", sentAt: { not: null } },
-    select: { recordId: true, recipient: true, sentAt: true, localThreadId: true, providerThreadId: true },
+    select: { recordId: true, recipient: true, sentAt: true, senderEmail: true, localThreadId: true, providerThreadId: true },
   });
   const followUps = await db.outreachCampaignFollowUp.findMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id },
@@ -284,6 +285,54 @@ async function loadSequenceState(db: FollowUpDb, campaign: FollowUpCampaign, now
     (reason === "BOUNCED" ? bounced : suppressed).add(email);
   }
   return { sends, followUps, replied, bounced, suppressed };
+}
+
+export type FollowUpSenderAccount = {
+  accountId: string;
+  // READY: in the sender pool. PAUSED: sender protection paused it, an operator
+  // resumes it, so the step waits. DISABLED: an operator removed it from the
+  // sender pool, so the step cannot leave from this mailbox.
+  state: "READY" | "PAUSED" | "DISABLED";
+};
+
+const SENDER_STATE_RANK: Record<FollowUpSenderAccount["state"], number> = { READY: 0, PAUSED: 1, DISABLED: 2 };
+
+// A follow-up continues the recipient's thread, so it must leave from the
+// mailbox that sent the first touch. Pinned campaigns already name it; rotated
+// campaigns recover it from the first-touch ledger. Mailboxes are one pool for
+// the whole app, so the lookup is by email, not by the campaign's office.
+export async function followUpSenderAccounts(
+  db: FollowUpDb,
+  campaign: Pick<FollowUpCampaign, "senderAccountId">,
+  sends: readonly { recordId: string; senderEmail: string | null }[],
+) {
+  const byRecord = new Map<string, FollowUpSenderAccount>();
+  if (campaign.senderAccountId) {
+    for (const send of sends) byRecord.set(send.recordId, { accountId: campaign.senderAccountId, state: "READY" });
+    return byRecord;
+  }
+  const normalize = (email: string) => email.trim().toLowerCase();
+  const rawEmails = sends.map((send) => send.senderEmail?.trim()).filter((email): email is string => Boolean(email));
+  const emails = [...new Set([...rawEmails, ...rawEmails.map(normalize)])];
+  if (!emails.length) return byRecord;
+  const accounts = await db.emailAccount.findMany({
+    where: { ...SHARED_MAILBOX_POOL_FILTER, email: { in: emails } },
+    select: { id: true, email: true, sendEnabled: true, sendPausedAt: true },
+  });
+  const byEmail = new Map<string, FollowUpSenderAccount>();
+  for (const account of accounts) {
+    const state: FollowUpSenderAccount["state"] = !account.sendEnabled ? "DISABLED" : account.sendPausedAt ? "PAUSED" : "READY";
+    const key = normalize(account.email);
+    const current = byEmail.get(key);
+    // The same address can be connected more than once; prefer a usable row,
+    // then a resumable one, regardless of query order.
+    if (!current || SENDER_STATE_RANK[state] < SENDER_STATE_RANK[current.state]) byEmail.set(key, { accountId: account.id, state });
+  }
+  for (const send of sends) {
+    const account = byEmail.get(normalize(send.senderEmail ?? ""));
+    if (account) byRecord.set(send.recordId, account);
+  }
+  return byRecord;
 }
 
 function mergeSuppressed(persisted: ReadonlySet<string>, extra: ReadonlySet<string> | undefined) {
@@ -333,6 +382,8 @@ async function recordSkips(
   });
 }
 
+const claimKey = (row: { recordId: string; step: number }) => `${row.recordId}:${row.step}`;
+
 async function claimFollowUps(
   db: FollowUpDb,
   campaign: FollowUpCampaign,
@@ -354,9 +405,9 @@ async function claimFollowUps(
         select: { recordId: true, step: true, status: true },
       });
       const claimLimit = Math.max(0, Math.min(limit ?? campaign.dailyCap, remaining));
-      const taken = new Set(existing.map((row) => `${row.recordId}:${row.step}`));
+      const taken = new Set(existing.map(claimKey));
       const claimable = candidates
-        .filter((candidate) => !taken.has(`${candidate.recordId}:${candidate.step}`))
+        .filter((candidate) => !taken.has(claimKey(candidate)))
         .slice(0, claimLimit);
       if (!claimable.length) return [];
       await tx.outreachCampaignFollowUp.createMany({
@@ -559,7 +610,7 @@ export async function runOutreachCampaignFollowUps(input: {
   const { db, campaign, now } = input;
   const steps = normalizeCampaignFollowUps(campaign.followUps);
   const output = emptyFollowUpResult(steps.length);
-  if (!steps.length || !campaign.senderAccountId) return output;
+  if (!steps.length) return output;
   const stepStatus = async () => (await db.outreachCampaign.findFirst({
     where: { id: campaign.id, officeId: campaign.officeId },
     select: { status: true },
@@ -593,6 +644,7 @@ export async function runOutreachCampaignFollowUps(input: {
   }
   const claimed = await claimFollowUps(db, campaign, plan.due, input.limit, now);
   if (!claimed.length) return output;
+  const senderAccounts = await followUpSenderAccounts(db, campaign, state.sends);
   const reserveSender = input.reserve ?? reserveEmailSender;
   const releaseReservation = input.release ?? releaseEmailSenderReservation;
   const dropQueued = (candidate: CampaignFollowUpCandidate) => db.outreachCampaignFollowUp.deleteMany({
@@ -620,11 +672,40 @@ export async function runOutreachCampaignFollowUps(input: {
       error: null,
     });
   };
+  const queue = [...claimed];
+  const claimedKeys = new Set(queue.map(claimKey));
+  let pending = plan.due.filter((candidate) => !claimedKeys.has(claimKey(candidate)));
+  const blockedAccounts = new Set<string>();
+  let backfill = true;
+  // A rotated campaign releases the claim of a recipient whose mailbox is paused
+  // or at capacity, then refills the freed slot from the remaining due
+  // recipients on mailboxes that have not refused in this run, so blocked
+  // recipients at the front of the plan cannot starve the rest. Each refilled
+  // recipient that defers blocks one more mailbox, so the chain is bounded by
+  // the number of distinct first-touch mailboxes, and every refill goes through
+  // claimFollowUps so the daily cap still applies.
+  const deferRotated = async (candidate: CampaignFollowUpCandidate) => {
+    const account = senderAccounts.get(candidate.recordId);
+    if (account) blockedAccounts.add(account.accountId);
+    if (!backfill) return;
+    pending = pending.filter((next) => {
+      const nextAccount = senderAccounts.get(next.recordId);
+      return !nextAccount || !blockedAccounts.has(nextAccount.accountId);
+    });
+    const [next] = await claimFollowUps(db, campaign, pending, 1, now);
+    if (!next) {
+      backfill = false;
+      return;
+    }
+    pending = pending.filter((row) => claimKey(row) !== claimKey(next));
+    queue.push(next);
+  };
   let processed = 0;
   const releaseUnprocessedClaims = async () => {
-    for (const candidate of claimed.slice(processed)) await dropQueued(candidate);
+    for (const candidate of queue.slice(processed)) await dropQueued(candidate);
   };
-  for (const candidate of claimed) {
+  for (let index = 0; index < queue.length; index += 1) {
+    const candidate = queue[index];
     if (!input.statusAllowsSend(await stepStatus())) {
       await releaseUnprocessedClaims();
       break;
@@ -637,7 +718,30 @@ export async function runOutreachCampaignFollowUps(input: {
       continue;
     }
     const email = renderFollowUpEmail({ step, campaignSubject: followUpInitialSubject(campaign, candidate.recordId), personalization });
+    const base = {
+      campaignId: campaign.id,
+      recordId: candidate.recordId,
+      recipient: candidate.recipient,
+      step: candidate.step,
+      skipReason: null,
+    };
     const idempotencyKey = outreachFollowUpIdempotencyKey(campaign.id, candidate.recordId, candidate.step);
+    const senderAccount = senderAccounts.get(candidate.recordId);
+    if (!senderAccount || senderAccount.state === "DISABLED") {
+      const error = senderAccount
+        ? "The mailbox that sent the first touch is no longer enabled for sending."
+        : "The mailbox that sent the first touch is no longer connected.";
+      await recordOutcome(candidate, { status: "REJECTED", error });
+      output.rejected += 1;
+      output.outcomes.push({ ...base, state: "REJECTED", senderEmail: null, error });
+      continue;
+    }
+    if (senderAccount.state === "PAUSED") {
+      await dropQueued(candidate);
+      output.outcomes.push({ ...base, state: "POOL_EXHAUSTED", senderEmail: null, error: "The mailbox that sent the first touch is paused by sender protection." });
+      await deferRotated(candidate);
+      continue;
+    }
     const reservation = await reserveSender({
       officeId: campaign.officeId,
       idempotencyKey,
@@ -649,21 +753,20 @@ export async function runOutreachCampaignFollowUps(input: {
         subject: email.subject,
         body: email.body,
       }),
-      accountId: campaign.senderAccountId,
+      accountId: senderAccount.accountId,
       now,
     });
-    const base = {
-      campaignId: campaign.id,
-      recordId: candidate.recordId,
-      recipient: candidate.recipient,
-      step: candidate.step,
-      skipReason: null,
-    };
     if (!("ok" in reservation)) {
       const settlement = await settleOutreachReservationFailure(db, { officeId: campaign.officeId, idempotencyKey, code: reservation.code });
       if (settlement.kind === "RELEASE_CLAIM") {
         await dropQueued(candidate);
         output.outcomes.push({ ...base, state: "POOL_EXHAUSTED", senderEmail: null, error: reservation.error });
+        // A rotated campaign threads each recipient through its own first-touch
+        // mailbox, so one exhausted or paused mailbox only defers its recipients.
+        if (!campaign.senderAccountId) {
+          await deferRotated(candidate);
+          continue;
+        }
         output.poolExhausted = true;
         await releaseUnprocessedClaims();
         break;

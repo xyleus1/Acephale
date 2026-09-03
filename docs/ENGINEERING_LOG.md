@@ -1,5 +1,34 @@
 # Engineering Log
 
+## 2026-09-03: Follow-ups for rotated campaigns leave from the first-touch mailbox
+
+- `runOutreachCampaignFollowUps` returned early when `senderAccountId` was
+  null, which is exactly the shape sender rotation stores, so rotated campaigns
+  stayed `ACTIVE` and never sent a follow-up. The runner now resolves each
+  recipient's sender through `followUpSenderAccounts`: the pinned account for
+  pinned campaigns, otherwise the connected `EmailAccount`
+  (`SHARED_MAILBOX_POOL_FILTER`) whose email sent the first touch. Mailboxes
+  are one app-wide pool, so the lookup is by email and not by the campaign's
+  office. The reservation is pinned to that account so the reply stays in the
+  recipient's provider thread. In a rotated campaign the step is settled per
+  mailbox state: `sendPausedAt` set (sender protection, operator resumes)
+  releases the claim and the run continues, as does a capacity refusal;
+  disconnected or `sendEnabled = false` settles `REJECTED` without a
+  reservation attempt. An address connected more than once is ranked READY,
+  then PAUSED, then DISABLED regardless of row order, so a stale disabled row
+  cannot turn a resumable step into `REJECTED`. A released rotated claim is refilled from the remaining
+  due recipients whose mailbox has not refused in this run (each deferral
+  blocks one more mailbox, so the chain is bounded by the number of distinct
+  first-touch mailboxes, and every refill goes through `claimFollowUps` so the
+  daily cap holds), so blocked mailboxes at the front of the plan cannot hold
+  every slot on every run. Tests: two recipients on mailboxes from two offices reserve their own
+  account, one exhausted mailbox defers one recipient while the other sends
+  with its original `providerThreadId`; missing, disconnected, and disabled
+  mailboxes yield `REJECTED`, a paused mailbox releases its claim; with
+  `limit: 1` an exhausted or paused mailbox at the front still lets the ready
+  recipient behind it send; a duplicated address that is disabled in one row
+  and paused in another waits in both row orders.
+
 ## 2026-09-03 - Replies from an address we never mailed
 
 - Recovering a reply by thread was not enough: attribution to a supplier still

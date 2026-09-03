@@ -11,6 +11,7 @@ import {
   unresolvedOutreachCampaignDeliveries,
 } from "../src/lib/outreach-campaign-follow-ups";
 import { outreachCampaignStatusAllowsSend } from "../src/lib/outreach-campaign-send";
+import { SHARED_MAILBOX_POOL_FILTER } from "../src/lib/email-account-pool";
 
 type FollowUpRow = {
   officeId: string;
@@ -53,7 +54,10 @@ function matches(row: Record<string, unknown>, where: Where | undefined) {
 
 function fakeDatabase(input: {
   status?: string;
-  sends: Array<{ recordId: string; recipient: string; sentAt: Date; localThreadId: string | null; providerThreadId: string | null }>;
+  sends: Array<{ recordId: string; recipient: string; sentAt: Date; senderEmail?: string | null; localThreadId: string | null; providerThreadId: string | null }>;
+  // Mailbox rows for rotated campaigns. `connected` stands for the
+  // SHARED_MAILBOX_POOL_FILTER match (active with credentials).
+  emailAccounts?: Array<{ id: string; email: string; officeId: string; connected: boolean; sendEnabled: boolean; sendPausedAt: Date | null }>;
   queuedSends?: number;
   followUps?: FollowUpRow[];
   repliedThreadIds?: string[];
@@ -183,6 +187,16 @@ function fakeDatabase(input: {
         return id && reservedIds.has(id) ? { id, account: { email: "sender@example.com" } } : null;
       },
       count: async (args: { where: { id: { in: string[] } } }) => args.where.id.in.filter((id) => reservedIds.has(id)).length,
+    },
+    emailAccount: {
+      findMany: async (args: { where: Record<string, unknown> & { email: { in: string[] } } }) => {
+        const { email, ...filter } = args.where;
+        // Mailboxes are one app-wide pool: the lookup must not scope by office.
+        assert.deepEqual(filter, SHARED_MAILBOX_POOL_FILTER);
+        return (input.emailAccounts ?? [])
+          .filter((account) => account.connected && email.in.includes(account.email))
+          .map(({ id, email: address, sendEnabled, sendPausedAt }) => ({ id, email: address, sendEnabled, sendPausedAt }));
+      },
     },
     emailSuppression: {
       findMany: async (args: { where: { officeId: string; email: { in: string[] } } }) => suppressions
@@ -934,6 +948,246 @@ async function main() {
   assert.match(summaryBody, /prisma\.outreachCampaignSend\.groupBy\(\{ by: \["campaignId"\], where: todayScope/);
   assert.match(summaryBody, /prisma\.outreachCampaignFollowUp\.groupBy\(\{ by: \["campaignId"\], where: todayScope/);
   assert.match(summaryBody, /sentToday: sentToday\.get\(campaign\.id\) \?\? 0/);
+
+  // A rotated campaign has no pinned sender. Each follow-up leaves from the
+  // mailbox that sent that recipient's first touch, so the thread stays intact,
+  // and one mailbox at its cap only defers its own recipients. Mailboxes are an
+  // app-wide pool, so a first touch sent from a mailbox connected by another
+  // office still resolves.
+  const rotatedDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    emailAccounts: [
+      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@example.com", officeId: "office-2", connected: true, sendEnabled: true, sendPausedAt: null },
+    ],
+    now,
+  });
+  const rotatedReservations: Array<string | undefined> = [];
+  const rotatedProviderCalls: Array<Record<string, unknown>> = [];
+  const rotatedRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: { ...campaign, senderAccountId: null },
+    db: rotatedDb as never,
+    provider: {
+      ...provider,
+      send: async (input: Record<string, unknown>) => {
+        rotatedProviderCalls.push(input);
+        return provider.send(input);
+      },
+    },
+    reserve: async (input: { accountId?: string }) => {
+      rotatedReservations.push(input.accountId);
+      if (input.accountId === "account-alpha") {
+        return { error: "mailbox at its daily limit", code: "POOL_EXHAUSTED" as const };
+      }
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+    },
+  });
+  assert.deepEqual(rotatedReservations, ["account-alpha", "account-beta"], "each follow-up reserves its first-touch mailbox");
+  assert.equal(rotatedRun.sent, 1, "the other mailbox still sends");
+  assert.equal(rotatedRun.poolExhausted, false, "one exhausted mailbox does not stop a rotated campaign");
+  assert.equal(rotatedProviderCalls[0]?.accountId, "account-beta");
+  assert.equal(rotatedProviderCalls[0]?.providerThreadId, "provider-thread-2");
+  assert.equal(rotatedDb.followUps.find((row) => row.recordId === "record-2")?.status, "SENT");
+  assert.equal(rotatedDb.followUps.find((row) => row.recordId === "record-1"), undefined, "the deferred claim is released for the next run");
+  // record-1 step 1 is still due, and record-2 step 2 follows later.
+  assert.equal(rotatedRun.outstanding, 2);
+
+  // With a run limit smaller than the due set, a blocked mailbox at the front
+  // of the plan must not hold the only slot forever: its released claim is
+  // refilled from later recipients on other mailboxes, and recipients on the
+  // same blocked mailbox are not refilled in this run.
+  const starvedDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-3", recipient: "third@example.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "alpha@example.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: new Date(day(-4).getTime() + 120_000), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    emailAccounts: [
+      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+    ],
+    now,
+  });
+  const starvedReservations: Array<string | undefined> = [];
+  const starvedRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    limit: 1,
+    campaign: {
+      ...campaign,
+      senderAccountId: null,
+      audiencePersonalization: {
+        ...campaign.audiencePersonalization,
+        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
+      },
+    },
+    db: starvedDb as never,
+    reserve: async (input: { accountId?: string }) => {
+      starvedReservations.push(input.accountId);
+      if (input.accountId === "account-alpha") {
+        return { error: "mailbox at its daily limit", code: "POOL_EXHAUSTED" as const };
+      }
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+    },
+  });
+  assert.deepEqual(starvedReservations, ["account-alpha", "account-beta"], "the freed slot goes to a recipient on another mailbox");
+  assert.equal(starvedRun.sent, 1);
+  assert.equal(starvedDb.followUps.find((row) => row.recordId === "record-2")?.status, "SENT");
+  assert.equal(starvedDb.followUps.filter((row) => row.status === "QUEUED").length, 0, "no claim is left behind");
+  assert.equal(starvedRun.outstanding, 3, "record-1 and record-3 wait for their mailbox, record-2 step 2 follows later");
+
+  // More blocked mailboxes than initial claims: the refill chain continues
+  // past each newly blocked mailbox until it reaches the ready recipient.
+  const chainDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-3", recipient: "third@example.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "gamma@example.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-4", recipient: "fourth@example.com", sentAt: new Date(day(-4).getTime() + 120_000), senderEmail: "delta@example.com", localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: new Date(day(-4).getTime() + 180_000), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    emailAccounts: [
+      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-gamma", email: "gamma@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+      { id: "account-delta", email: "delta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+    ],
+    now,
+  });
+  const chainReservations: Array<string | undefined> = [];
+  const chainRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    limit: 1,
+    campaign: {
+      ...campaign,
+      senderAccountId: null,
+      audiencePersonalization: {
+        ...campaign.audiencePersonalization,
+        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
+        "record-4": { email: "fourth@example.com", company: "Fourth Co", country: "IT" },
+      },
+    },
+    db: chainDb as never,
+    reserve: async (input: { accountId?: string }) => {
+      chainReservations.push(input.accountId);
+      if (input.accountId === "account-alpha" || input.accountId === "account-delta") {
+        return { error: "mailbox at its daily limit", code: "POOL_EXHAUSTED" as const };
+      }
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+    },
+  });
+  assert.deepEqual(chainReservations, ["account-alpha", "account-delta", "account-beta"], "the chain skips the paused mailbox and continues past each refusal");
+  assert.equal(chainRun.sent, 1);
+  assert.equal(chainDb.followUps.find((row) => row.recordId === "record-2")?.status, "SENT");
+  assert.equal(chainDb.followUps.filter((row) => row.status === "QUEUED").length, 0);
+
+  // The same with a paused first-touch mailbox: the paused recipient releases
+  // its claim without a reservation and the ready recipient behind it sends.
+  const pausedFrontDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    emailAccounts: [
+      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+    ],
+    now,
+  });
+  const pausedFrontReservations: Array<string | undefined> = [];
+  const pausedFrontRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    limit: 1,
+    campaign: { ...campaign, senderAccountId: null },
+    db: pausedFrontDb as never,
+    reserve: async (input: { accountId?: string }) => {
+      pausedFrontReservations.push(input.accountId);
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+    },
+  });
+  assert.deepEqual(pausedFrontReservations, ["account-beta"]);
+  assert.equal(pausedFrontRun.sent, 1);
+  assert.equal(pausedFrontDb.followUps.find((row) => row.recordId === "record-2")?.status, "SENT");
+  assert.equal(pausedFrontDb.followUps.find((row) => row.recordId === "record-1"), undefined);
+
+  // A first-touch mailbox that is gone (row deleted or credentials removed) or
+  // that an operator disabled for sending cannot continue the thread: the step
+  // settles as REJECTED instead of being reclaimed forever. A mailbox paused by
+  // sender protection is resumed by an operator, so its step waits without a
+  // reservation attempt.
+  const unusableDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "gone@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), senderEmail: "disconnected@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-3", recipient: "third@example.com", sentAt: day(-4), senderEmail: "disabled@example.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-4", recipient: "fourth@example.com", sentAt: day(-4), senderEmail: "paused@example.com", localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
+    ],
+    emailAccounts: [
+      { id: "account-disconnected", email: "disconnected@example.com", officeId: "office-1", connected: false, sendEnabled: true, sendPausedAt: null },
+      { id: "account-disabled", email: "disabled@example.com", officeId: "office-1", connected: true, sendEnabled: false, sendPausedAt: null },
+      { id: "account-paused", email: "paused@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+    ],
+    now,
+  });
+  let unusableReserveCalls = 0;
+  const unusableRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: {
+      ...campaign,
+      senderAccountId: null,
+      audiencePersonalization: {
+        ...campaign.audiencePersonalization,
+        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
+        "record-4": { email: "fourth@example.com", company: "Fourth Co", country: "ES" },
+      },
+    },
+    db: unusableDb as never,
+    reserve: async () => {
+      unusableReserveCalls += 1;
+      return reservation;
+    },
+  });
+  assert.equal(unusableReserveCalls, 0);
+  assert.equal(unusableRun.rejected, 3);
+  assert.equal(unusableRun.poolExhausted, false);
+  for (const recordId of ["record-1", "record-2", "record-3"]) {
+    assert.equal(unusableDb.followUps.find((row) => row.recordId === recordId)?.status, "REJECTED", `${recordId} settles durably`);
+  }
+  assert.equal(unusableDb.followUps.find((row) => row.recordId === "record-4"), undefined, "the paused mailbox's claim is released for the next run");
+  assert.equal(unusableRun.outcomes.find((outcome) => outcome.recordId === "record-4")?.state, "POOL_EXHAUSTED");
+  assert.equal(unusableRun.outstanding, 1, "only the paused recipient is still due");
+
+  // The same address connected twice, once disabled and once paused: the
+  // resumable row wins whatever order the rows come back in, so the step waits
+  // instead of settling as REJECTED.
+  const disabledRow = { id: "account-dup-disabled", email: "dup@example.com", officeId: "office-1", connected: true, sendEnabled: false, sendPausedAt: null };
+  const pausedRow = { id: "account-dup-paused", email: "dup@example.com", officeId: "office-2", connected: true, sendEnabled: true, sendPausedAt: day(-1) };
+  for (const emailAccounts of [[disabledRow, pausedRow], [pausedRow, disabledRow]]) {
+    const duplicateDb = fakeDatabase({
+      sends: [
+        { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "dup@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      ],
+      emailAccounts,
+      now,
+    });
+    let duplicateReserveCalls = 0;
+    const duplicateRun = await runOutreachCampaignFollowUps({
+      ...baseInput,
+      campaign: { ...campaign, senderAccountId: null },
+      db: duplicateDb as never,
+      reserve: async () => {
+        duplicateReserveCalls += 1;
+        return reservation;
+      },
+    });
+    const order = emailAccounts.map((row) => row.id).join(",");
+    assert.equal(duplicateReserveCalls, 0, order);
+    assert.equal(duplicateRun.rejected, 0, `${order}: the paused duplicate outranks the disabled one`);
+    assert.equal(duplicateDb.followUps.find((row) => row.recordId === "record-1"), undefined, `${order}: the claim is released for the next run`);
+    assert.equal(duplicateRun.outcomes.find((outcome) => outcome.recordId === "record-1")?.state, "POOL_EXHAUSTED", order);
+  }
   console.log("Outreach campaign follow-up checks passed.");
 }
 

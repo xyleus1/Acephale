@@ -1,5 +1,21 @@
 # AI Handoff
 
+## 2026-09-03: Follow-ups for sender-rotation campaigns
+
+- Rotated campaigns (`senderRotation = true`, `senderAccountId = null`) now
+  send follow-ups. `followUpSenderAccounts` maps each recipient to the
+  connected `EmailAccount` whose email sent the first touch, across the
+  app-wide mailbox pool (not the campaign office); pinned campaigns keep the
+  pinned account. The follow-up reservation is pinned to it so the reply stays
+  in the recipient's provider thread.
+- In a rotated campaign a capacity refusal or a protection-paused first-touch
+  mailbox releases only that recipient's claim and the run continues (pinned
+  campaigns still stop the run as `poolExhausted`). The freed slot is refilled
+  from later due recipients on other mailboxes, so a blocked mailbox at the
+  front of the plan does not starve the rest. A first-touch mailbox that is
+  disconnected or has `sendEnabled = false` settles the step as `REJECTED`.
+- To test: `npm run test:outreach-campaign-follow-ups`.
+
 ## 2026-09-03: A supplier reply is attributed by thread, not only by sender address
 
 - Shops answer from a colleague, a helpdesk, or a ticketing address, and such a
