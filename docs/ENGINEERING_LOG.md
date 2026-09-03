@@ -19,6 +19,11 @@
 - Verified with Prisma validation and the research and Context prospecting
   contract suites.
 
+## 2026-09-03 - Preserve list tails in project collisions
+
+- Project-scoped list slugs reserve space for the original list tail and use a
+  project-id suffix when the primary slug is already occupied.
+
 ## 2026-09-03: Outreach sender rotation and office recipient dedupe
 
 - Campaign plans can rotate across enabled shared-pool mailboxes and report

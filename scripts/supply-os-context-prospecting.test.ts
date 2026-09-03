@@ -11,6 +11,8 @@ import {
 } from "../src/lib/leadgen/run";
 import { finishLeadGenRun } from "../src/lib/leadgen/persist";
 import type { FetchedPage } from "../src/lib/leadgen/harvest";
+import { createResearchList, slugify } from "../src/lib/research-lists";
+import { ensureResearchProject } from "../src/lib/research-projects";
 import { clampAgentRowTarget } from "../src/lib/supply-os/context-agent";
 import {
   createCompanyContextProspectingActions,
@@ -509,6 +511,133 @@ async function main() {
         campaignTag: secondProjectList.slug,
       },
     }));
+    const fixtureFields = [{ key: "company_name", label: "Company name", type: "text" }] as const;
+    const collisionBlocker = await ensureResearchProject(office.id, {
+      name: `Collision blocker ${suffix}`,
+      companyId: company.id,
+    });
+    const longProjectName = `${"long-project-".repeat(10)}${suffix}`;
+    const longProject = await ensureResearchProject(office.id, {
+      name: longProjectName,
+      companyId: company.id,
+    });
+    assert.equal(longProject.slug.length, 80);
+    const longDrafts = [
+      { ...lifecycleDraft, projectName: longProjectName, listSlug: `workflow-alpha-${suffix}` },
+      { ...lifecycleDraft, projectName: longProjectName, listSlug: `workflow-beta-${suffix}` },
+    ];
+    for (const longDraft of longDrafts) {
+      await createResearchList(office.id, {
+        name: `Blocked ${longDraft.listSlug}`,
+        slug: longDraft.listSlug,
+        fields: fixtureFields,
+        projectId: collisionBlocker.id,
+      });
+      const longAction = (await createCompanyContextProspectingActions({
+        context,
+        workspaceId: workspace.id,
+        items: [{ draft: longDraft, citations: [] }],
+        requestMessageId: `message:${longDraft.listSlug}`,
+        requestBody: "Find long workflow prospects.",
+        requestCreatedAt: new Date(),
+      }))[0]!;
+      await runCompanyContextProspectingAction({
+        context,
+        workspaceId: workspace.id,
+        actionId: longAction.id,
+        runBatch: async () => ({
+          candidates: [],
+          stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 },
+          nextQueryOffset: 1,
+          exhausted: true,
+        }),
+      });
+    }
+    const longProjectLists = await prisma.researchList.findMany({
+      where: { officeId: office.id, projectId: longProject.id },
+      select: { slug: true },
+    });
+    assert.equal(longProjectLists.length, longDrafts.length);
+    for (const longDraft of longDrafts) {
+      assert(longProjectLists.some((item) => item.slug.endsWith(longDraft.listSlug)));
+    }
+    const fallbackProjectName = `Fallback target ${suffix}`;
+    const fallbackProject = await ensureResearchProject(office.id, {
+      name: fallbackProjectName,
+      companyId: company.id,
+    });
+    const fallbackBlocker = await ensureResearchProject(office.id, {
+      name: `Fallback blocker ${suffix}`,
+      companyId: company.id,
+    });
+    const fallbackThird = await ensureResearchProject(office.id, {
+      name: `Fallback third ${suffix}`,
+      companyId: company.id,
+    });
+    const fallbackDraft = {
+      ...lifecycleDraft,
+      projectName: fallbackProjectName,
+      listSlug: `fallback-workflow-${suffix}`,
+    };
+    const fallbackRoom = Math.max(8, 79 - fallbackDraft.listSlug.length);
+    const fallbackPrimary = slugify(`${fallbackProject.slug.slice(0, fallbackRoom)}-${fallbackDraft.listSlug}`);
+    const fallbackIdRoom = Math.max(1, 79 - fallbackProject.id.length);
+    const fallbackSlug = slugify(`${fallbackDraft.listSlug.slice(0, fallbackIdRoom)}-${fallbackProject.id}`);
+    await createResearchList(office.id, {
+      name: `Blocked ${fallbackDraft.listSlug}`,
+      slug: fallbackDraft.listSlug,
+      fields: fixtureFields,
+      projectId: fallbackBlocker.id,
+    });
+    await createResearchList(office.id, {
+      name: `Occupied ${fallbackPrimary}`,
+      slug: fallbackPrimary,
+      fields: fixtureFields,
+      projectId: fallbackThird.id,
+    });
+    const fallbackAction = (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: fallbackDraft, citations: [] }],
+      requestMessageId: "message:fallback-project",
+      requestBody: "Find fallback workflow prospects.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const fallbackCompleted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: fallbackAction.id,
+      runBatch: async () => ({
+        candidates: [],
+        stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 },
+        nextQueryOffset: 1,
+        exhausted: true,
+      }),
+    });
+    assert.equal(fallbackCompleted.draft.listSlug, fallbackSlug);
+    const fallbackRerunAction = (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: fallbackDraft, citations: [] }],
+      requestMessageId: "message:fallback-project-rerun",
+      requestBody: "Find fallback workflow prospects again.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const fallbackRerun = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: fallbackRerunAction.id,
+      runBatch: async () => ({
+        candidates: [],
+        stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 },
+        nextQueryOffset: 1,
+        exhausted: true,
+      }),
+    });
+    assert.equal(fallbackRerun.draft.listSlug, fallbackSlug);
+    assert.equal(await prisma.researchList.count({
+      where: { officeId: office.id, projectId: fallbackProject.id, slug: fallbackSlug },
+    }), 1);
     const directoryAction = (await createCompanyContextProspectingActions({
       context,
       workspaceId: workspace.id,

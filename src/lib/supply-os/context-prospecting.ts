@@ -301,6 +301,14 @@ export async function createCompanyContextProspectingActions(args: {
   return actions as ContextProspectingAction[];
 }
 
+function projectScopedListSlug(projectSlug: string, listSlug: string, projectId: string) {
+  const room = Math.max(8, 79 - listSlug.length);
+  const primary = slugify(`${projectSlug.slice(0, room)}-${listSlug}`);
+  const idRoom = Math.max(1, 79 - projectId.length);
+  const fallback = slugify(`${listSlug.slice(0, idRoom)}-${projectId}`);
+  return { primary, fallback };
+}
+
 async function ensureResearchList(officeId: string, companyId: string, draft: ProspectingDraft) {
   const project = draft.projectName
     ? await ensureResearchProject(officeId, { name: draft.projectName, companyId })
@@ -309,8 +317,13 @@ async function ensureResearchList(officeId: string, companyId: string, draft: Pr
   let listSlug = draft.listSlug;
   let existing = lists.find((list) => list.slug === listSlug);
   if (existing && project && existing.projectId !== null && existing.projectId !== project.id) {
-    listSlug = slugify(`${project.slug}-${draft.listSlug}`).slice(0, 80);
+    const scopedSlugs = projectScopedListSlug(project.slug, draft.listSlug, project.id);
+    listSlug = scopedSlugs.primary;
     existing = lists.find((list) => list.slug === listSlug);
+    if (existing && existing.projectId !== null && existing.projectId !== project.id) {
+      listSlug = scopedSlugs.fallback;
+      existing = lists.find((list) => list.slug === listSlug);
+    }
   }
   if (existing && (!project || existing.projectId === null || existing.projectId === project.id)) {
     if (project && existing.projectId === null) {
