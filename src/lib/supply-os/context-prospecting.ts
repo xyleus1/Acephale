@@ -11,6 +11,7 @@ import {
 } from "@/lib/customer-context-access";
 import {
   createResearchList,
+  assignResearchListProject,
   listResearchLists,
   RESEARCH_MAX_ROWS,
   slugify,
@@ -18,6 +19,7 @@ import {
   type ParsedResearchRow,
   type ResearchInputRow,
 } from "@/lib/research-lists";
+import { ensureResearchProject } from "@/lib/research-projects";
 import {
   defaultProspectingSearch,
   profileFromProspectingDraft,
@@ -113,13 +115,14 @@ export function normalizeProspectingDraft(value: unknown): ProspectingDraft | nu
   const segments = list(input.segments, 200);
   const regions = list(input.regions, 160);
   const productFocus = text(input.productFocus, 500);
+  const projectName = text(input.projectName, 120);
   const listSlug = slugify(text(input.listSlug, 80) || objective);
   const notes = text(input.notes, 2_000);
   const rowTarget = typeof input.rowTarget === "number" && Number.isFinite(input.rowTarget)
     ? Math.min(5_000, Math.max(50, Math.floor(input.rowTarget)))
     : 500;
   if (!objective || !segments.length || !regions.length || !productFocus || !listSlug) return null;
-  return { objective, segments, regions, productFocus, listSlug, notes, rowTarget };
+  return { objective, segments, regions, productFocus, projectName, listSlug, notes, rowTarget };
 }
 
 function customerAccess(context: CompanyContextAccess) {
@@ -298,19 +301,40 @@ export async function createCompanyContextProspectingActions(args: {
   return actions as ContextProspectingAction[];
 }
 
-async function ensureResearchList(officeId: string, draft: ProspectingDraft) {
-  const existing = (await listResearchLists(officeId)).find((list) => list.slug === draft.listSlug);
-  if (existing) return existing;
+async function ensureResearchList(officeId: string, companyId: string, draft: ProspectingDraft) {
+  const project = draft.projectName
+    ? await ensureResearchProject(officeId, { name: draft.projectName, companyId })
+    : null;
+  const lists = await listResearchLists(officeId);
+  let listSlug = draft.listSlug;
+  let existing = lists.find((list) => list.slug === listSlug);
+  if (existing && project && existing.projectId !== null && existing.projectId !== project.id) {
+    listSlug = slugify(`${project.slug}-${draft.listSlug}`).slice(0, 80);
+    existing = lists.find((list) => list.slug === listSlug);
+  }
+  if (existing && (!project || existing.projectId === null || existing.projectId === project.id)) {
+    if (project && existing.projectId === null) {
+      return assignResearchListProject(officeId, existing.id, project.id);
+    }
+    return existing;
+  }
   try {
     return await createResearchList(officeId, {
-      name: draft.listSlug.replace(/-/g, " "),
-      slug: draft.listSlug,
+      name: listSlug.replace(/-/g, " "),
+      slug: listSlug,
       description: draft.objective,
       fields: LIST_FIELDS,
+      projectId: project?.id,
     });
   } catch (error) {
-    const retry = (await listResearchLists(officeId)).find((list) => list.slug === draft.listSlug);
-    if (retry) return retry;
+    const retry = (await listResearchLists(officeId)).find((list) => list.slug === listSlug);
+    if (retry) {
+      if (project && retry.projectId === null) {
+        return assignResearchListProject(officeId, retry.id, project.id);
+      }
+      if (project && retry.projectId !== project.id) throw error;
+      return retry;
+    }
     throw error;
   }
 }
@@ -387,15 +411,14 @@ export function groupProspectingResearchRows(items: readonly ProspectingResearch
   return groups;
 }
 
-async function persistCandidates(officeId: string, draft: ProspectingDraft, records: readonly ProspectingBatchCandidate[]) {
-  await ensureResearchList(officeId, draft);
+async function persistCandidates(officeId: string, listSlug: string, records: readonly ProspectingBatchCandidate[]) {
   const groups = groupProspectingResearchRows([...candidateRows(records), ...directoryInputRows(records)]);
   let created = 0;
   let updated = 0;
   const persistedRecordIndexes = new Set<number>();
   for (const [field, rows] of groups) {
     for (let index = 0; index < rows.length; index += RESEARCH_MAX_ROWS) {
-      const result = await upsertResearchRecords(officeId, draft.listSlug, rows.slice(index, index + RESEARCH_MAX_ROWS), {
+      const result = await upsertResearchRecords(officeId, listSlug, rows.slice(index, index + RESEARCH_MAX_ROWS), {
         dedupeField: field,
         resetStatus: false,
       });
@@ -550,11 +573,13 @@ async function executeProspectingAction(args: {
   const recordDiscoveries = args.bookkeeping?.recordLeadDiscoveries ?? recordLeadDiscoveries;
   const finishRun = args.bookkeeping?.finishLeadGenRun ?? finishLeadGenRun;
   try {
-    const profile = profileFromProspectingDraft(args.action.draft);
+    const list = await ensureResearchList(args.context.officeId, args.workspace.companyId, args.action.draft);
+    const draft = { ...args.action.draft, listSlug: list.slug };
+    const profile = profileFromProspectingDraft(draft);
     const leadGenRun = await createLeadGenRun(prisma, {
       officeId: args.context.officeId,
       profileSlug: profile.slug,
-      campaignTag: args.action.draft.listSlug,
+      campaignTag: draft.listSlug,
       workspaceId: args.workspaceId,
     });
     leadGenRunId = leadGenRun.id;
@@ -567,9 +592,10 @@ async function executeProspectingAction(args: {
       budgetMs: args.batchBudgetMs,
     });
     batchStats = result.stats;
-    const persisted = await persistCandidates(args.context.officeId, args.action.draft, result.candidates);
+    const persisted = await persistCandidates(args.context.officeId, draft.listSlug, result.candidates);
     const completed: StoredProspectingAction = {
       ...args.action,
+      draft,
       status: "COMPLETED",
       runningStartedAt: null,
       stats: {
@@ -588,7 +614,7 @@ async function executeProspectingAction(args: {
         ? args.action.lastBackgroundRunAt
         : new Date(args.backgroundNow).toISOString(),
       autoContinue: result.exhausted ||
-        args.action.stats.rowsCreated + persisted.created >= args.action.draft.rowTarget
+        args.action.stats.rowsCreated + persisted.created >= draft.rowTarget
         ? false
         : args.action.autoContinue,
     };
@@ -611,7 +637,7 @@ async function executeProspectingAction(args: {
       await recordDiscoveries(prisma, {
         officeId: args.context.officeId,
         runId: leadGenRunId,
-        campaignTag: args.action.draft.listSlug,
+        campaignTag: draft.listSlug,
         profileSlug: profile.slug,
         records: result.candidates.map((record, index) => ({
           ...record,

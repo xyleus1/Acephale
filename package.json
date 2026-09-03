@@ -65,6 +65,7 @@
     "test:procurement-bulk-rfq": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-bulk-rfq.test.ts",
     "test:procurement-local-outreach": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-local-outreach.test.ts",
     "test:research-lists": "NODE_OPTIONS='--conditions=react-server' tsx scripts/research-lists.test.ts",
+    "test:research-projects": "NODE_OPTIONS='--conditions=react-server' tsx scripts/research-projects.test.ts",
     "leadgen": "tsx scripts/leadgen-run.ts",
     "test:supply-os-active-sourcing": "node --import tsx scripts/supply-os-active-sourcing.test.ts",
     "test:supply-os-materials-layout": "node --import tsx scripts/supply-os-materials-layout.test.ts",

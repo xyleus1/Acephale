@@ -106,6 +106,7 @@ type ContextProspectingAction = {
     segments: string[];
     regions: string[];
     productFocus: string;
+    projectName: string;
     listSlug: string;
     notes: string;
     rowTarget: number;
@@ -1132,6 +1133,7 @@ export function SupplyOsContext({
                 <div><dt>Segments</dt><dd>{action.draft.segments.join(", ")}</dd></div>
                 <div><dt>Regions</dt><dd>{action.draft.regions.join(", ")}</dd></div>
                 <div><dt>Product</dt><dd>{action.draft.productFocus}</dd></div>
+                {action.draft.projectName ? <div><dt>Project</dt><dd>{action.draft.projectName}</dd></div> : null}
                 <div><dt>List</dt><dd>{action.draft.listSlug}</dd></div>
               </dl>
               <dl>

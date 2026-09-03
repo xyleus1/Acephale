@@ -146,6 +146,7 @@ model Office {
   leadDiscoveries      LeadDiscovery[]
   customerPortalUsers       CustomerPortalUser[]
   researchLists        ResearchList[]
+  researchProjects     ResearchProject[]
   customerPortalMemberships CustomerPortalMembership[]
   customerPortalLoginCodes  CustomerPortalLoginCode[]
   customerPortalActions     CustomerPortalAction[]
@@ -3273,9 +3274,29 @@ model SupplyExecutionEvent {
   @@index([capabilityRunId])
 }
 
+model ResearchProject {
+  id          String   @id @default(cuid())
+  officeId    String
+  companyId   String?
+  slug        String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  office Office         @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  lists  ResearchList[]
+
+  @@unique([officeId, slug])
+  @@unique([id, officeId])
+  @@index([officeId])
+  @@index([officeId, companyId])
+}
+
 model ResearchList {
   id          String   @id @default(cuid())
   officeId    String
+  projectId   String?
   slug        String
   name        String
   description String?
@@ -3284,12 +3305,14 @@ model ResearchList {
   updatedAt   DateTime @updatedAt
 
   office  Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  project ResearchProject? @relation(fields: [projectId, officeId], references: [id, officeId], onDelete: Restrict, map: "ResearchList_projectId_fkey")
   records ResearchRecord[]
   outreachCampaigns OutreachCampaign[]
 
   @@unique([officeId, slug])
   @@unique([id, officeId])
   @@index([officeId])
+  @@index([officeId, projectId])
 }
 
 model ResearchRecord {

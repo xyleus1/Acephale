@@ -1,5 +1,16 @@
 # AI Handoff
 
+## 2026-09-03: Research projects for prospect workflows
+
+- Research lists can be grouped under office-scoped projects. Lists without a
+  project remain visible under Other lists.
+- Context prospecting drafts carry a project name. Existing projects are
+  reused by office and slug, and a project is attached when a run creates or
+  finds its list.
+- The Prospects surface selects project first, supports creating projects, and
+  no longer includes Import records.
+- No prospecting run promotes rows automatically into Companies or Contacts.
+
 ## 2026-09-03: Outreach sender rotation and office recipient dedupe
 
 - Outreach campaigns can rotate across enabled shared-pool mailboxes. Sender

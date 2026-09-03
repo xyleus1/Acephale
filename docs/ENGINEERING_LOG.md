@@ -1,5 +1,16 @@
 # Engineering Log
 
+## 2026-09-03 - Research projects group prospect lists
+
+- Added office-scoped research projects with optional list assignment and
+  project-aware list APIs.
+- Context prospecting drafts now name their workflow, and named projects are
+  reused when runs create or attach research lists.
+- Supply OS Prospects selects a project before a list, supports creating
+  projects, and removes the direct record import panel.
+- Verified with Prisma validation and the research and Context prospecting
+  contract suites.
+
 ## 2026-09-03: Outreach sender rotation and office recipient dedupe
 
 - Campaign plans can rotate across enabled shared-pool mailboxes and report

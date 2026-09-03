@@ -1,5 +1,18 @@
 # Decisions
 
+## Research projects group prospect lists by workflow
+
+Date: 2026-09-03
+
+Research projects group prospect lists per customer workflow; drafts name their
+project; lists without a project remain visible as Other lists; no automatic
+promotion into Companies/Contacts.
+
+Projects and lists are office scoped. A project slug is unique within its
+office, and a list can be assigned only to a project in the same office.
+Context prospecting reuses a named project and writes reviewable research rows
+without changing canonical Companies or Contacts.
+
 ## Outreach rotation uses reservations and office-wide recipient dedupe
 
 Date: 2026-09-03

@@ -33,6 +33,7 @@ const draft = {
   segments: ["steel fabricators"],
   regions: ["Venezuela", "Russia"],
   productFocus: "Non-bulk steel and ore",
+  projectName: "",
   listSlug: "steel-buyers",
   notes: "",
   rowTarget: 500,
@@ -109,6 +110,16 @@ assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: undefined })?.rowT
 assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: "invalid" })?.rowTarget, 500);
 assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: 10 })?.rowTarget, 50);
 assert.equal(normalizeProspectingDraft({ ...draft, rowTarget: 99999 })?.rowTarget, 5000);
+assert.equal(normalizeProspectingDraft({ ...draft, projectName: "Steel workflow" })?.projectName, "Steel workflow");
+assert.equal(normalizeProspectingDraft({
+  objective: draft.objective,
+  segments: draft.segments,
+  regions: draft.regions,
+  productFocus: draft.productFocus,
+  listSlug: draft.listSlug,
+  notes: draft.notes,
+  rowTarget: draft.rowTarget,
+})?.projectName, "");
 assert.equal(profileFromProspectingDraft({ ...draft, segments: [] }).segments.length, 0);
 assert.deepEqual(profile.regions, draft.regions);
 assert.equal(profile.offering, draft.productFocus);
@@ -290,7 +301,7 @@ async function main() {
       canViewWholeOffice: true,
     };
     const workspace = await createSupplyWorkspace(context, { name: company.name, companyId: company.id });
-    const lifecycleDraft = { ...draft, listSlug: `prospecting-test-${suffix}` };
+    const lifecycleDraft = { ...draft, projectName: `Steel buyers workflow ${suffix}`, listSlug: `prospecting-test-${suffix}` };
     const createBackgroundAction = async (listSlug: string) => (await createCompanyContextProspectingActions({
       context,
       workspaceId: workspace.id,
@@ -439,7 +450,65 @@ async function main() {
       include: { records: true },
     });
     assert.equal(list?.records.length, 1);
+    assert.equal(list?.projectId, (await prisma.researchProject.findFirst({
+      where: { officeId: office.id, name: lifecycleDraft.projectName },
+      select: { id: true },
+    }))?.id);
     assert.equal(list?.records[0]?.data && (list.records[0].data as Record<string, unknown>).country, "Venezuela");
+    const secondProjectDraft = {
+      ...lifecycleDraft,
+      projectName: `Aluminum buyers workflow ${suffix}`,
+    };
+    const secondAction = (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: secondProjectDraft, citations: [] }],
+      requestMessageId: "message:second-project",
+      requestBody: "Find aluminum buyers.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const secondCompleted = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: secondAction.id,
+      runBatch: async () => ({
+        candidates: [candidate],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
+        nextQueryOffset: 1,
+        exhausted: true,
+      }),
+      resolveMx,
+    });
+    assert.equal(secondCompleted.status, "COMPLETED");
+    const projectLists = await prisma.researchList.findMany({
+      where: { officeId: office.id },
+      include: { records: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const firstProject = await prisma.researchProject.findFirstOrThrow({
+      where: { officeId: office.id, name: lifecycleDraft.projectName },
+      select: { id: true },
+    });
+    const secondProject = await prisma.researchProject.findFirstOrThrow({
+      where: { officeId: office.id, name: secondProjectDraft.projectName },
+      select: { id: true, slug: true },
+    });
+    const firstProjectList = projectLists.find((item) => item.projectId === firstProject.id);
+    const secondProjectList = projectLists.find((item) => item.projectId === secondProject.id);
+    assert(firstProjectList);
+    assert(secondProjectList);
+    assert.equal(firstProjectList.records.length, 1);
+    assert.equal(secondProjectList.records.length, 1);
+    assert.equal(firstProjectList.slug, lifecycleDraft.listSlug);
+    assert.equal(secondProjectList.slug, `${secondProject.slug}-${secondProjectDraft.listSlug}`);
+    assert.equal(secondCompleted.draft.listSlug, secondProjectList.slug);
+    assert(await prisma.leadGenRun.findFirst({
+      where: {
+        officeId: office.id,
+        workspaceId: workspace.id,
+        campaignTag: secondProjectList.slug,
+      },
+    }));
     const directoryAction = (await createCompanyContextProspectingActions({
       context,
       workspaceId: workspace.id,

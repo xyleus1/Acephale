@@ -35,6 +35,7 @@ export type ParsedResearchRow = {
 export type ResearchListSummary = {
   id: string;
   officeId: string;
+  projectId: string | null;
   slug: string;
   name: string;
   description: string | null;
@@ -116,13 +117,20 @@ function fieldsFromJson(value: Prisma.JsonValue): ResearchField[] {
 
 export async function createResearchList(
   officeId: string,
-  input: { name: string; slug?: string; description?: string; fields: unknown },
+  input: { name: string; slug?: string; description?: string; fields: unknown; projectId?: string | null },
 ): Promise<ResearchListSummary> {
   const name = cleanText(input.name, 160);
   if (!name) throw new Error("List name is required.");
   const fields = validateResearchFields(input.fields);
   const slug = slugify(input.slug || name);
   if (!slug) throw new Error("List slug is invalid.");
+  if (input.projectId) {
+    const project = await defaultPrisma.researchProject.findFirst({
+      where: { id: input.projectId, officeId },
+      select: { id: true },
+    });
+    if (!project) throw new Error("Research project is invalid.");
+  }
 
   const [count, duplicate] = await Promise.all([
     defaultPrisma.researchList.count({ where: { officeId } }),
@@ -138,8 +146,9 @@ export async function createResearchList(
       name,
       description: cleanText(input.description, 1000) || null,
       fields: fields as unknown as Prisma.InputJsonValue,
+      projectId: input.projectId || null,
     },
-    select: { id: true, officeId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true, _count: { select: { records: true } } },
+    select: { id: true, officeId: true, projectId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true, _count: { select: { records: true } } },
   });
   return { ...list, fields: fieldsFromJson(list.fields), recordCount: list._count.records };
 }
@@ -148,7 +157,7 @@ export async function listResearchLists(officeId: string): Promise<ResearchListS
   const lists = await defaultPrisma.researchList.findMany({
     where: { officeId },
     orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
-    select: { id: true, officeId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true, _count: { select: { records: true } } },
+    select: { id: true, officeId: true, projectId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true, _count: { select: { records: true } } },
   });
   return lists.map((list) => ({ ...list, fields: fieldsFromJson(list.fields), recordCount: list._count.records }));
 }
@@ -156,10 +165,35 @@ export async function listResearchLists(officeId: string): Promise<ResearchListS
 async function loadList(officeId: string, slug: string, client: PrismaClient = defaultPrisma) {
   const list = await client.researchList.findUnique({
     where: { officeId_slug: { officeId, slug } },
-    select: { id: true, officeId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true },
+    select: { id: true, officeId: true, projectId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true },
   });
   if (!list) throw new Error("Research list not found.");
   return { ...list, fields: fieldsFromJson(list.fields) };
+}
+
+export async function assignResearchListProject(
+  officeId: string,
+  listId: string,
+  projectId: string | null,
+): Promise<ResearchListSummary> {
+  const list = await defaultPrisma.researchList.findFirst({
+    where: { id: listId, officeId },
+    select: { id: true },
+  });
+  if (!list) throw new Error("Research list not found.");
+  if (projectId) {
+    const project = await defaultPrisma.researchProject.findFirst({
+      where: { id: projectId, officeId },
+      select: { id: true },
+    });
+    if (!project) throw new Error("Research project is invalid.");
+  }
+  const updated = await defaultPrisma.researchList.update({
+    where: { id: listId },
+    data: { projectId },
+    select: { id: true, officeId: true, projectId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true, _count: { select: { records: true } } },
+  });
+  return { ...updated, fields: fieldsFromJson(updated.fields), recordCount: updated._count.records };
 }
 
 function asData(value: Prisma.JsonValue): ResearchRecordData {

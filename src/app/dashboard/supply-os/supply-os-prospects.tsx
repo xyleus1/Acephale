@@ -1,19 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ResearchField,
   ResearchListSummary,
   ResearchRecordRow,
   ResearchStatus,
 } from "@/lib/research-lists";
-import { ResearchImportPanel } from "../research/research-import-panel";
+import type { ResearchProjectSummary } from "@/lib/research-projects";
 import { ResearchStatusControl } from "../research/research-status-control";
 import styles from "./supply-os-logistics.module.css";
 
 type ResearchListResponse = Pick<
   ResearchListSummary,
-  "id" | "officeId" | "slug" | "name" | "description" | "fields" | "recordCount"
+  "id" | "officeId" | "projectId" | "slug" | "name" | "description" | "fields" | "recordCount"
 > & { createdAt: string; updatedAt: string };
 
 type ResearchRecordsResponse = ResearchListResponse & {
@@ -24,6 +24,7 @@ type ResearchRecordsResponse = ResearchListResponse & {
 };
 
 const statuses: Array<ResearchStatus | "all"> = ["all", "new", "reviewed", "rejected"];
+const OTHER_PROJECT = "__other__";
 
 function safeHttpUrl(value: string) {
   try {
@@ -48,7 +49,12 @@ export function SupplyOsProspects({
   initialPage?: number;
 }) {
   const listStorageKey = `derya:supply-os:prospects-list:${storageScope}`;
+  const projectStorageKey = `derya:supply-os:prospects-project:${storageScope}`;
   const [lists, setLists] = useState<ResearchListResponse[]>([]);
+  const [projects, setProjects] = useState<ResearchProjectSummary[]>([]);
+  const [listsLoaded, setListsLoaded] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const selectedProjectRef = useRef("");
   const [selectedSlug, setSelectedSlug] = useState(initialListSlug ?? "");
   const [records, setRecords] = useState<ResearchRecordsResponse | null>(null);
   const [query, setQuery] = useState(initialQuery);
@@ -62,14 +68,22 @@ export function SupplyOsProspects({
   const [newListSlug, setNewListSlug] = useState("");
   const [newListDescription, setNewListDescription] = useState("");
   const [newListFields, setNewListFields] = useState("");
+  const [newListProjectId, setNewListProjectId] = useState("");
   const [newListError, setNewListError] = useState("");
   const [newListBusy, setNewListBusy] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
+  const [newProjectError, setNewProjectError] = useState("");
+  const [newProjectBusy, setNewProjectBusy] = useState(false);
 
   const loadLists = useCallback(async () => {
     let storedListSlug: string | null = null;
+    let storedProjectId: string | null = null;
     if (!initialListSlug) {
       try {
         storedListSlug = window.localStorage.getItem(listStorageKey);
+        storedProjectId = window.localStorage.getItem(projectStorageKey);
       } catch {
         // Local storage is optional.
       }
@@ -78,25 +92,57 @@ export function SupplyOsProspects({
       cache: "no-store",
       headers: { accept: "application/json" },
     });
-    const body = await response.json().catch(() => ({})) as { lists?: ResearchListResponse[]; error?: string };
+    const body = await response.json().catch(() => ({})) as {
+      lists?: ResearchListResponse[];
+      projects?: ResearchProjectSummary[];
+      error?: string;
+    };
     if (!response.ok) throw new Error(body.error || "Prospect lists are unavailable.");
     const nextLists = body.lists ?? [];
+    const nextProjects = body.projects ?? [];
+    const preselectedList = initialListSlug
+      ? nextLists.find((list) => list.slug === initialListSlug)
+      : undefined;
+    const otherListsExist = nextLists.some((list) => list.projectId === null);
+    const nextProjectId = preselectedList
+      ? preselectedList.projectId ?? (otherListsExist ? OTHER_PROJECT : "")
+      : storedProjectId && (
+          storedProjectId === OTHER_PROJECT
+            ? otherListsExist
+            : nextProjects.some((project) => project.id === storedProjectId)
+        )
+        ? storedProjectId
+        : nextProjects.find((project) => nextLists.some((list) => list.projectId === project.id && list.recordCount > 0))?.id
+          ?? nextProjects[0]?.id
+          ?? (otherListsExist ? OTHER_PROJECT : "");
+    const currentProjectId = selectedProjectRef.current;
+    const currentProjectIsValid = currentProjectId && (
+      currentProjectId === OTHER_PROJECT
+        ? otherListsExist
+        : nextProjects.some((project) => project.id === currentProjectId)
+    );
+    const effectiveProjectId = currentProjectIsValid ? currentProjectId : nextProjectId;
     setLists(nextLists);
+    setProjects(nextProjects);
+    setListsLoaded(true);
+    selectedProjectRef.current = effectiveProjectId;
+    setSelectedProjectId(effectiveProjectId);
     setSelectedSlug((current) => {
-      if (current && nextLists.some((list) => list.slug === current)) return current;
-      if (initialListSlug && nextLists.some((list) => list.slug === initialListSlug)) return initialListSlug;
+      const currentList = nextLists.find((list) => list.slug === current);
+      if (currentList && (currentList.projectId ?? OTHER_PROJECT) === effectiveProjectId) return current;
+      if (preselectedList && (preselectedList.projectId ?? OTHER_PROJECT) === effectiveProjectId) return preselectedList.slug;
       const storedList = storedListSlug
         ? nextLists.find((list) => list.slug === storedListSlug)
         : undefined;
-      const hasRecords = nextLists.some((list) => list.recordCount > 0);
-      if (storedList && (storedList.recordCount > 0 || !hasRecords)) return storedList.slug;
-      const highestCountList = nextLists.reduce<ResearchListResponse | null>(
+      if (storedList && (storedList.projectId ?? OTHER_PROJECT) === effectiveProjectId) return storedList.slug;
+      const projectLists = nextLists.filter((list) => (list.projectId ?? OTHER_PROJECT) === effectiveProjectId);
+      const highestCountList = projectLists.reduce<ResearchListResponse | null>(
         (highest, list) => (!highest || list.recordCount > highest.recordCount ? list : highest),
         null,
       );
-      return highestCountList?.slug ?? nextLists[0]?.slug ?? "";
+      return highestCountList?.slug ?? projectLists[0]?.slug ?? "";
     });
-  }, [initialListSlug, listStorageKey]);
+  }, [initialListSlug, listStorageKey, projectStorageKey]);
 
   const loadRecords = useCallback(async (slug: string, nextPage: number, nextQuery: string, nextStatus: ResearchStatus | "all") => {
     if (!slug) {
@@ -125,28 +171,44 @@ export function SupplyOsProspects({
     });
   }, [loadLists]);
 
+  useEffect(() => {
+    selectedProjectRef.current = selectedProjectId;
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!newListProjectId && selectedProjectId) setNewListProjectId(selectedProjectId);
+  }, [newListProjectId, selectedProjectId]);
+
   const refreshData = useCallback(async () => {
     await loadLists();
     await loadRecords(selectedSlug, page, appliedQuery, status);
   }, [appliedQuery, loadLists, loadRecords, page, selectedSlug, status]);
 
   useEffect(() => {
-    if (!selectedSlug) return;
+    if (!selectedSlug && !listsLoaded) return;
     try {
-      window.localStorage.setItem(listStorageKey, selectedSlug);
+      if (selectedProjectId) window.localStorage.setItem(projectStorageKey, selectedProjectId);
+      if (selectedSlug) window.localStorage.setItem(listStorageKey, selectedSlug);
+      else window.localStorage.removeItem(listStorageKey);
     } catch {
       // Local storage is optional.
     }
     const params = new URLSearchParams(window.location.search);
     params.set("panel", "materials");
     params.set("materialsView", "prospects");
-    params.set("researchList", selectedSlug);
+    if (selectedSlug) params.set("researchList", selectedSlug);
+    else params.delete("researchList");
     window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
+    if (!selectedSlug) {
+      setRecords(null);
+      setState("ready");
+      return;
+    }
     void loadRecords(selectedSlug, page, appliedQuery, status).catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : "Prospects are unavailable.");
       setState("error");
     });
-  }, [appliedQuery, listStorageKey, loadRecords, page, selectedSlug, status]);
+  }, [appliedQuery, listStorageKey, listsLoaded, loadRecords, page, projectStorageKey, selectedProjectId, selectedSlug, status]);
 
   const selectedList = useMemo(
     () => records ?? lists.find((list) => list.slug === selectedSlug) ?? null,
@@ -165,6 +227,19 @@ export function SupplyOsProspects({
     setSelectedSlug(value);
     setRecords(null);
     setState("loading");
+    setPage(1);
+    setQuery("");
+    setAppliedQuery("");
+    setStatus("all");
+  }
+
+  function selectProject(value: string) {
+    selectedProjectRef.current = value;
+    setSelectedProjectId(value);
+    const projectLists = lists.filter((list) => (list.projectId ?? OTHER_PROJECT) === value);
+    setSelectedSlug(projectLists[0]?.slug ?? "");
+    setRecords(null);
+    setState("ready");
     setPage(1);
     setQuery("");
     setAppliedQuery("");
@@ -191,12 +266,14 @@ export function SupplyOsProspects({
           name: newListName,
           slug: newListSlug || undefined,
           description: newListDescription || undefined,
+          projectId: newListProjectId && newListProjectId !== OTHER_PROJECT ? newListProjectId : undefined,
           fields,
         }),
       });
       const body = await response.json().catch(() => ({})) as { list?: ResearchListResponse; error?: string };
       if (!response.ok || !body.list) throw new Error(body.error || "List could not be created.");
       setLists((current) => [body.list!, ...current.filter((list) => list.id !== body.list!.id)]);
+      setSelectedProjectId(body.list.projectId ?? OTHER_PROJECT);
       setSelectedSlug(body.list.slug);
       setRecords(null);
       setPage(1);
@@ -207,6 +284,7 @@ export function SupplyOsProspects({
       setNewListSlug("");
       setNewListDescription("");
       setNewListFields("");
+      setNewListProjectId(selectedProjectId);
       setNewListOpen(false);
     } catch (createError) {
       setNewListError(createError instanceof Error ? createError.message : "List could not be created.");
@@ -215,12 +293,42 @@ export function SupplyOsProspects({
     }
   }
 
+  async function createProject(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNewProjectBusy(true);
+    setNewProjectError("");
+    try {
+      const response = await fetch("/api/research/projects", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ name: newProjectName, description: newProjectDescription || undefined }),
+      });
+      const body = await response.json().catch(() => ({})) as { project?: ResearchProjectSummary; error?: string };
+      if (!response.ok || !body.project) throw new Error(body.error || "Project could not be created.");
+      setProjects((current) => [body.project!, ...current.filter((project) => project.id !== body.project!.id)]);
+      selectedProjectRef.current = body.project.id;
+      setSelectedProjectId(body.project.id);
+      setSelectedSlug("");
+      setRecords(null);
+      setNewListProjectId(body.project.id);
+      setNewProjectName("");
+      setNewProjectDescription("");
+      setNewProjectOpen(false);
+      await loadLists();
+      setSelectedProjectId(body.project.id);
+    } catch (createError) {
+      setNewProjectError(createError instanceof Error ? createError.message : "Project could not be created.");
+    } finally {
+      setNewProjectBusy(false);
+    }
+  }
+
   return (
     <section className={styles.prospectsWorkspace} aria-label="Prospects">
       <header className={styles.prospectsHeader}>
         <div>
           <h2>Prospects</h2>
-          <span>{records ? `${records.total} records` : `${lists.length} lists`}</span>
+          <span>{records ? `${records.total} records` : selectedSlug ? `${selectedList?.recordCount ?? 0} records` : `${projects.length} projects`}</span>
         </div>
         <a href="/dashboard/leads?directory=1">Leads</a>
       </header>
@@ -233,6 +341,15 @@ export function SupplyOsProspects({
             <label>
               <span>Name</span>
               <input value={newListName} onChange={(event) => setNewListName(event.target.value)} required maxLength={160} />
+            </label>
+            <label>
+              <span>Project</span>
+              <select value={newListProjectId} onChange={(event) => setNewListProjectId(event.target.value)}>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                {lists.some((list) => list.projectId === null) || newListProjectId === OTHER_PROJECT
+                  ? <option value={OTHER_PROJECT}>Other lists</option>
+                  : null}
+              </select>
             </label>
             <label>
               <span>Slug</span>
@@ -258,13 +375,43 @@ export function SupplyOsProspects({
             </button>
           </form>
         ) : null}
+        <button type="button" onClick={() => { setNewProjectOpen((open) => !open); setNewProjectError(""); }}>
+          {newProjectOpen ? "Close new project" : "New project"}
+        </button>
+        {newProjectOpen ? (
+          <form className={styles.newProjectForm} onSubmit={createProject}>
+            <label>
+              <span>Name</span>
+              <input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} required maxLength={160} />
+            </label>
+            <label>
+              <span>Description</span>
+              <input value={newProjectDescription} onChange={(event) => setNewProjectDescription(event.target.value)} maxLength={1000} />
+            </label>
+            {newProjectError ? <p className={styles.prospectsError}>{newProjectError}</p> : null}
+            <button type="submit" disabled={newProjectBusy}>
+              {newProjectBusy ? "Creating..." : "Create project"}
+            </button>
+          </form>
+        ) : null}
       </div>
-      {lists.length ? (
+      {lists.length || projects.length ? (
         <div className={styles.prospectsControls}>
           <label>
+            <span>Project</span>
+            <select value={selectedProjectId} onChange={(event) => selectProject(event.target.value)}>
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name} ({project.listCount})</option>)}
+              {lists.some((list) => list.projectId === null)
+                ? <option value={OTHER_PROJECT}>Other lists</option>
+                : null}
+            </select>
+          </label>
+          <label>
             <span>List</span>
-            <select value={selectedSlug} onChange={(event) => selectList(event.target.value)}>
-              {lists.map((list) => <option key={list.id} value={list.slug}>{list.name} ({list.recordCount})</option>)}
+            <select value={selectedSlug} onChange={(event) => selectList(event.target.value)} disabled={!selectedProjectId}>
+              {lists
+                .filter((list) => (list.projectId ?? OTHER_PROJECT) === selectedProjectId)
+                .map((list) => <option key={list.id} value={list.slug}>{list.name} ({list.recordCount})</option>)}
             </select>
           </label>
           <form onSubmit={applyFilters}>
@@ -296,7 +443,8 @@ export function SupplyOsProspects({
       {state === "loading" ? <p className={styles.prospectsState}>Loading prospects</p> : null}
       {state === "error" ? <p className={styles.prospectsError}>{error}</p> : null}
       {state === "ready" && !lists.length ? <p className={styles.prospectsState}>No prospect lists yet.</p> : null}
-      {state === "ready" && selectedList && records ? (
+      {state === "ready" && lists.length > 0 && !selectedSlug ? <p className={styles.prospectsState}>No lists in this project yet.</p> : null}
+      {state === "ready" && selectedSlug && selectedList && records ? (
         <>
           <div className={styles.prospectsTableRegion}>
             <table className={styles.prospectsTable}>
@@ -339,13 +487,6 @@ export function SupplyOsProspects({
               {records.page < records.pageCount ? <button type="button" onClick={() => setPage((value) => value + 1)}>Next</button> : null}
             </span>
           </nav>
-          <div className={styles.prospectsImport}>
-            <ResearchImportPanel
-              slug={selectedList.slug}
-              fields={selectedList.fields}
-              onChanged={refreshData}
-            />
-          </div>
         </>
       ) : null}
     </section>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { createResearchList, listResearchLists } from "@/lib/research-lists";
+import { listResearchProjects } from "@/lib/research-projects";
 
 export async function GET() {
   const session = await requireSession();
@@ -8,7 +9,10 @@ export async function GET() {
     return NextResponse.json({ error: "Not available for customer accounts." }, { status: 403 });
   }
   return NextResponse.json(
-    { lists: await listResearchLists(session.officeId) },
+    {
+      lists: await listResearchLists(session.officeId),
+      projects: await listResearchProjects(session.officeId),
+    },
     { headers: { "cache-control": "no-store" } },
   );
 }
@@ -24,6 +28,7 @@ export async function POST(request: Request) {
       slug: typeof body.slug === "string" ? body.slug.slice(0, 80) : undefined,
       description: typeof body.description === "string" ? body.description.slice(0, 1000) : undefined,
       fields: body.fields,
+      projectId: typeof body.projectId === "string" ? body.projectId : undefined,
     });
     return NextResponse.json({ list }, { status: 201 });
   } catch (error) {

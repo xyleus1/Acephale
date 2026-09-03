@@ -30,6 +30,7 @@ import {
   createCompanyContextProspectingActions,
   normalizeProspectingDraft,
 } from "@/lib/supply-os/context-prospecting";
+import { listResearchProjects } from "@/lib/research-projects";
 
 const MAX_QUESTION_ROUNDS = 2;
 
@@ -103,13 +104,14 @@ const CONTEXT_REPLY_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["citationIds", "objective", "segments", "regions", "productFocus", "listSlug", "notes", "rowTarget"],
+        required: ["citationIds", "objective", "segments", "regions", "productFocus", "projectName", "listSlug", "notes", "rowTarget"],
         properties: {
           citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
           objective: { type: "string" },
           segments: { type: "array", items: { type: "string" }, maxItems: 20 },
           regions: { type: "array", items: { type: "string" }, maxItems: 20 },
           productFocus: { type: "string" },
+          projectName: { type: "string" },
           listSlug: { type: "string" },
           notes: { type: "string" },
           rowTarget: { type: "number" },
@@ -277,6 +279,9 @@ export async function chatWithCompanyContext(args: {
     .catch(() => {
       throw new ContextAgentError("Open procurement requests could not be checked. Try again.", "unavailable", true);
     });
+  const existingResearchProjects = isCustomerContextAccess(args.context) || args.context.accessKind === "customer"
+    ? []
+    : await listResearchProjects(args.context.officeId).catch(() => []);
   const priorQuestionRounds = packet.messages.filter((message) => message.role === "AGENT" && message.questionCount > 0).length;
   const questionRoundsLeft = Math.max(0, MAX_QUESTION_ROUNDS - priorQuestionRounds);
   const allowedCitations = new Map<string, CompanyContextCitation>();
@@ -323,6 +328,7 @@ export async function chatWithCompanyContext(args: {
         "If and only if the operator explicitly asks to find buyers, prospects, customers, or a target list, prepare prospectingDrafts for human confirmation.",
         "Preparing prospectingDrafts does not run research or contact anyone. Separate confirmation is required before public-page research starts.",
         "A prospecting draft requires the operator to provide target segments and regions. Ask for missing segments or regions with clarifyingQuestions instead of guessing.",
+        `Set projectName to the customer's prospecting project (workflow) this task belongs to. When an existing project fits, reuse its name exactly. Existing projects: ${existingResearchProjects.map((project) => project.name).join(", ") || "none"}.`,
         "Set rowTarget to the volume the job deserves: 500 for a normal single-country segment ask, up to 2000 for a broad multi-country corridor sweep, and never a token number like 20 or 50.",
         "Public prospect research writes reviewable research-list rows only. It does not imply outreach or contact.",
         "Customer-access sessions must never create prospectingDrafts or prospecting actions.",

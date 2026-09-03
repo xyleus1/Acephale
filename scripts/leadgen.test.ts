@@ -203,6 +203,7 @@ const multilingualDraft = {
   segments: ["Large primary steel producers"],
   regions: ["India", "Vietnam"],
   productFocus: "Raw materials, semi-finished steel, and basic iron and steel products supplied to Turkiye's iron and steel sector, including relevant slab, billet, bloom, pig iron, DRI or HBI, hot-rolled coil, plate, wire rod, rebar",
+  projectName: "",
   listSlug: "india-vietnam-steel-producers",
   notes: "",
   rowTarget: 500,

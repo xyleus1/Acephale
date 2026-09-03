@@ -25,6 +25,7 @@ export type ProspectingDraft = {
   segments: string[];
   regions: string[];
   productFocus: string;
+  projectName: string;
   listSlug: string;
   notes: string;
   rowTarget: number;
