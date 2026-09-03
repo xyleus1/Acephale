@@ -33,6 +33,17 @@
   recomputed against the revision. Send-time status checks and personalization
   hashing still protect delivery.
 
+## 2026-09-03: Supplier replies are matched by thread, not only by subject tag
+
+- A supplier reply whose subject lost `[RFQ xxxxxxxx]` was invisible to the
+  request it answered. Replies on a request's own threads now count, unless the
+  subject carries another request's reference, read in any case, or the thread
+  carries two requests' references.
+- Nothing about quoting changed: a recovered message is triaged and read the
+  same way, so bounces and auto acknowledgements stay non commercial.
+- Verified against a migrated database by
+  `npm run test:procurement-local-outreach-db`.
+
 ## 2026-09-02: Production migration workflow accepts automated dispatch
 
 - `.github/workflows/production-database-migration.yml` accepts the existing

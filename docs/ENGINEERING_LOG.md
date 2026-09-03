@@ -33,6 +33,29 @@
   office-wide dedupe, while send-time status checks and personalization hashing
   continue to protect delivery.
 
+## 2026-09-03 - Supplier replies that lost the RFQ reference
+
+- Request level reply matching read only messages whose subject still contained
+  `[RFQ xxxxxxxx]`, so a supplier answering through a helpdesk, or a client that
+  rewrote the subject, left an answer that belonged to no request. Production
+  diagnostics found 41 such inbound messages across the two HypnoDreamz
+  requests.
+- `loadLocalRfqMessages` now also reads inbound messages on the threads the
+  request's tagged messages already occupy, and `localRfqOutreachByOrder`
+  claims them for the request that owns the thread. A subject that still
+  carries any reference is left to the request that owns that reference, and a
+  null subject counts as carrying none.
+- References are read case insensitively, so a client that recases
+  `[RFQ xxxxxxxx]` still resolves to the request that owns it, and a thread
+  carrying two requests' references anchors neither of them because an untagged
+  reply on it could answer either.
+- Recovered messages flow through the existing conversation, triage, and quote
+  reading paths unchanged, so a bounce stays a bounce and only supplier
+  authored price plus lead time still records a quote.
+- `scripts/procurement-local-outreach-database.test.ts` proves the recovery,
+  the office boundary, and that another request's tagged reply is not stolen,
+  against a migrated database in the supplier reply delivery CI step.
+
 ## 2026-09-02: Production migration workflow accepts automated dispatch
 
 - The protected production migration workflow now accepts

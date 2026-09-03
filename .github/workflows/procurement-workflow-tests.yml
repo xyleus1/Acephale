@@ -494,5 +494,7 @@ jobs:
           DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
             npm run test:procurement-reply-send-db
           DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
+            npm run test:procurement-local-outreach-db
+          DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
             DOCUMENT_STORAGE_LOCAL_ROOT=.local-uploads/ci-supplier-reply-documents \
             npm run test:procurement-file-draft-db

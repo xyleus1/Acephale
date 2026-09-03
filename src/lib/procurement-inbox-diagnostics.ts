@@ -186,7 +186,15 @@ async function scanTaggedMessages(officeId: string, reference: string) {
     if (page.length < MESSAGE_PAGE) return { messages, truncated: false };
     cursor = page[page.length - 1].id;
   }
-  return { messages, truncated: true };
+  // A campaign landing exactly on the ceiling is whole, so truncation is
+  // reported only when a further row actually exists.
+  const beyond = await prisma.emailMessage.findFirst({
+    where: { thread: { officeId }, subject: { contains: reference } },
+    orderBy: { id: "asc" },
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: { id: true },
+  });
+  return { messages, truncated: Boolean(beyond) };
 }
 
 export async function procurementInboxDiagnostics(
