@@ -8901,3 +8901,4 @@ Use this file for chronological implementation notes that future agents should s
   locales, and shapes so bounded runs retain broad coverage.
 - Query plan ordering is versioned, so legacy prospecting actions restart from
   offset zero while actions created with the current plan version resume safely.
+- Directory prospecting now drops hard-rejected rows before email verification or candidate accounting.

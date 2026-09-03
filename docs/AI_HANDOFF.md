@@ -11759,6 +11759,7 @@ Verification caveat:
   locales, and shapes so bounded runs retain broad coverage.
 - Query plan ordering is versioned, so legacy prospecting actions restart from
   offset zero while actions created with the current plan version resume safely.
+- Directory prospecting now drops hard-rejected rows before email verification or candidate accounting.
 
 ## 2026-08-31: Supplier file replies refuse stale sends server side
 

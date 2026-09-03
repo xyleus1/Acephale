@@ -673,6 +673,27 @@ assert.equal(documentBatch.stats.pagesFetched, 2);
 assert.equal(documentBatch.stats.candidatesFound, 4, "both documents on one host must expand independently");
 assert.equal(directoryMxCalls, 0, "names-only directory rows must not trigger email verification");
 
+const feastDirectoryBatch = await runProspectingBatch({
+  profile: FEAST_PROFILE,
+  maxQueries: 1,
+  maxPages: 1,
+  budgetMs: 10_000,
+  search: async () => [
+    { url: "https://chamber.example/cafes.pdf", domain: "chamber.example", engine: "brave", rank: 1 },
+  ],
+  fetchPage: async (url) => ({
+    url,
+    status: 200,
+    contentType: "application/pdf",
+    body: "Costa Coffee Brighton hello@costa.co.uk\nHarbour Lane Cafe Brighton hello@harbourlanecafe.co.uk\n",
+    isPdf: true,
+  }),
+  resolveMx: async () => [],
+});
+assert.equal(feastDirectoryBatch.candidates.length, 1);
+assert.ok(!feastDirectoryBatch.candidates[0]!.candidate.companyName.includes("Costa"));
+assert.equal(feastDirectoryBatch.stats.candidatesFound, 1);
+
 let deadlineMxCalls = 0;
 const deadlineBatch = await runProspectingBatch({
   profile: MANEKS_PROFILE,

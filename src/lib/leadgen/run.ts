@@ -304,6 +304,7 @@ export async function runProspectingBatch(args: {
         for (const row of harvested.slice(0, maxDirectoryRowsPerDocument)) {
           if (Date.now() >= deadline) break;
           const directoryCandidate = candidateFromDirectoryRow(args.profile, row, query, hit);
+          if (directoryCandidate.candidate.fit.tier === "reject") continue;
           directoryCandidate.verifications = await verifyEmails(row.emails, {
             companyDomain: row.domain ?? undefined,
             resolveMx: args.resolveMx,
