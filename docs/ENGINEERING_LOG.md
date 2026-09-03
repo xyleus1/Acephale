@@ -21,8 +21,8 @@
 
 ## 2026-09-03 - Preserve list tails in project collisions
 
-- Project-scoped list slugs reserve space for the original list tail and use a
-  project-id suffix when the primary slug is already occupied.
+- Project collision slugs now hash the full project and list identity, preserving
+  deterministic separation for long list slugs.
 
 ## 2026-09-03: Outreach sender rotation and office recipient dedupe
 

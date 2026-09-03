@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import {
   companyContextActorData,
@@ -301,12 +301,9 @@ export async function createCompanyContextProspectingActions(args: {
   return actions as ContextProspectingAction[];
 }
 
-function projectScopedListSlug(projectSlug: string, listSlug: string, projectId: string) {
-  const room = Math.max(8, 79 - listSlug.length);
-  const primary = slugify(`${projectSlug.slice(0, room)}-${listSlug}`);
-  const idRoom = Math.max(1, 79 - projectId.length);
-  const fallback = slugify(`${listSlug.slice(0, idRoom)}-${projectId}`);
-  return { primary, fallback };
+function projectScopedListSlug(projectId: string, listSlug: string) {
+  const digest = createHash("sha256").update(`${projectId}:${listSlug}`).digest("hex").slice(0, 10);
+  return slugify(`${listSlug.slice(0, 69)}-${digest}`);
 }
 
 async function ensureResearchList(officeId: string, companyId: string, draft: ProspectingDraft) {
@@ -317,13 +314,8 @@ async function ensureResearchList(officeId: string, companyId: string, draft: Pr
   let listSlug = draft.listSlug;
   let existing = lists.find((list) => list.slug === listSlug);
   if (existing && project && existing.projectId !== null && existing.projectId !== project.id) {
-    const scopedSlugs = projectScopedListSlug(project.slug, draft.listSlug, project.id);
-    listSlug = scopedSlugs.primary;
+    listSlug = projectScopedListSlug(project.id, draft.listSlug);
     existing = lists.find((list) => list.slug === listSlug);
-    if (existing && existing.projectId !== null && existing.projectId !== project.id) {
-      listSlug = scopedSlugs.fallback;
-      existing = lists.find((list) => list.slug === listSlug);
-    }
   }
   if (existing && (!project || existing.projectId === null || existing.projectId === project.id)) {
     if (project && existing.projectId === null) {
