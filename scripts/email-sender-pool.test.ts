@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   MAX_EMAIL_DAILY_SEND_LIMIT,
+  pinnedSenderUnavailableReason,
   rankEmailSenderPoolCandidates,
   selectEmailSenderPoolCandidate,
   utcDayBounds,
@@ -42,6 +43,11 @@ const settings = readFileSync("src/lib/email-sender-pool-settings.ts", "utf8");
 const allocator = readFileSync("src/lib/email-sender-pool.ts", "utf8");
 const gmailSend = readFileSync("src/lib/gmail-send.ts", "utf8");
 const supplierCommunication = readFileSync("src/lib/supply-os/supplier-communication-persistence.ts", "utf8");
+const nudge = readFileSync("src/lib/procurement-supplier-nudge.ts", "utf8");
+const bulkRfq = readFileSync("src/lib/procurement-bulk-rfq.ts", "utf8");
+const campaignSend = readFileSync("src/lib/outreach-campaign-send.ts", "utf8");
+const campaignFollowUps = readFileSync("src/lib/outreach-campaign-follow-ups.ts", "utf8");
+const diagnostics = readFileSync("src/lib/procurement-inbox-diagnostics.ts", "utf8");
 
 assert.match(schema, /dailySendLimit\s+Int\s+@default\(30\)/);
 assert.match(schema, /model EmailSenderReservation/);
@@ -104,5 +110,60 @@ assert.match(supplierCommunication, /SUPPLIER_EMAIL_RECONCILIATION_LEASE_MS/);
 for (const [name, source] of Object.entries({ migration, verification, page, component, actions, settings, allocator, gmailSend, supplierCommunication })) {
   assert.equal(source.includes("\u2014"), false, `${name} must not contain U+2014.`);
 }
+
+// A send that must leave from one named mailbox fails for a reason an operator
+// can act on: resume that mailbox, not connect a mailbox to an empty pool.
+assert.match(
+  pinnedSenderUnavailableReason({
+    isActive: true,
+    sendEnabled: true,
+    sendPausedAt: new Date("2026-09-04T00:00:00Z"),
+    sendPausedReason: "Permanent bounces spiked",
+  }),
+  /paused by sender protection: Permanent bounces spiked/,
+);
+assert.match(
+  pinnedSenderUnavailableReason({ isActive: true, sendEnabled: true, sendPausedAt: new Date(), sendPausedReason: null }),
+  /paused by sender protection\.$/,
+);
+assert.match(
+  pinnedSenderUnavailableReason({ isActive: true, sendEnabled: false, sendPausedAt: null, sendPausedReason: null }),
+  /Sending is turned off/,
+);
+assert.match(
+  pinnedSenderUnavailableReason({ isActive: false, sendEnabled: true, sendPausedAt: null, sendPausedReason: null }),
+  /is disabled/,
+);
+assert.match(pinnedSenderUnavailableReason(null), /no longer exists/);
+assert.match(
+  allocator,
+  /code: "SENDER_UNAVAILABLE"/,
+  "a pinned mailbox that cannot send must not be reported as an empty pool",
+);
+assert.match(
+  allocator,
+  /attempt < PINNED_SENDER_STATE_READS/,
+  "a mailbox resumed mid reservation must be read again, not deferred on a stale reason",
+);
+assert.match(
+  allocator,
+  /const PINNED_SENDER_STATE_READS = \d+;/,
+  "those rechecks must be bounded so a mailbox flipping state cannot hold the pool lock",
+);
+// A paused mailbox can be resumed, so every sender that pins one has to keep
+// the recipient retryable instead of settling it as refused.
+for (const [name, source] of Object.entries({ nudge, bulkRfq, campaignSend, campaignFollowUps })) {
+  assert.match(
+    source,
+    /SENDER_UNAVAILABLE/,
+    `${name} must defer a send whose pinned mailbox is paused instead of refusing it`,
+  );
+}
+assert.match(
+  diagnostics,
+  /pausedMailboxes/,
+  "the read only diagnostic must name the mailboxes sender protection paused",
+);
+assert.match(diagnostics, /sendPausedReason/);
 
 console.log("Email sender pool policy and UI contracts passed.");

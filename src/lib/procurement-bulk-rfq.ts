@@ -651,7 +651,11 @@ export async function runProcurementBulkRfq(input: {
       requestHash: hash,
     });
     if (!("ok" in reservation)) {
-      const exhausted = reservation.code === "POOL_EXHAUSTED" || reservation.code === "POOL_EMPTY";
+      const exhausted = reservation.code === "POOL_EXHAUSTED"
+        || reservation.code === "POOL_EMPTY"
+        // A pinned mailbox that is paused or gone is capacity this outreach can
+        // get back, so the supplier is retried instead of counted as refused.
+        || reservation.code === "SENDER_UNAVAILABLE";
       result.outcomes.push({
         vendorId: target.vendorId,
         vendorName: target.name,

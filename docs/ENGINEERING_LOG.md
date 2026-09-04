@@ -9768,3 +9768,27 @@ Use this file for chronological implementation notes that future agents should s
   or was cancelled keeps its unsettled tasks, and those are the oldest due rows,
   so limiting first could fill the whole result with requests the pass then
   discarded and leave a live failing request unled.
+
+## 2026-09-04: A paused thread mailbox is not an empty sender pool
+
+- A reservation pinned to one mailbox (a reply or follow up has to leave from
+  the mailbox that owns the supplier's thread) applied the shared sender pool
+  filter, so a mailbox paused by sender protection produced no candidate row and
+  the failure read "No connected email account is enabled in the sender pool".
+  Production showed that message while the pool held four connected mailboxes,
+  which points an operator at connecting mailboxes instead of resuming the
+  paused one.
+- `reserveEmailSender` now answers `SENDER_UNAVAILABLE` for a pinned mailbox and
+  names the actual condition: paused (with the pause reason), sending turned
+  off, disabled, disconnected, or gone. `POOL_EMPTY` again means only that the
+  shared pool has no connected sender.
+- Every caller treats `SENDER_UNAVAILABLE` like a capacity shortage rather than
+  a refusal, since a paused mailbox can be resumed: supplier nudges and bulk RFQ
+  count it as exhausted capacity and retry the supplier, and campaign send and
+  follow ups defer the recipient instead of settling it as rejected.
+- The read-only inbox diagnostic now reports how many connected mailboxes sender
+  protection holds out of the pool, with each pause reason and time, plus the
+  pause reason on each of the request's own blocked mailboxes.
+- Coverage: a database regression reserving against a paused pinned mailbox
+  asserts the code and the reason text, pure assertions cover every reason
+  branch, and source contracts assert each caller defers rather than refuses.

@@ -688,7 +688,12 @@ export async function runProcurementSupplierNudges(args: {
       accountId: target.accountId,
     });
     if (!("ok" in reservation)) {
-      const exhausted = reservation.code === "POOL_EXHAUSTED" || reservation.code === "POOL_EMPTY";
+      // A follow up leaves from the mailbox that owns the supplier's thread, so
+      // that mailbox being paused by sender protection defers the follow up
+      // until it is resumed rather than blocking the supplier for good.
+      const exhausted = reservation.code === "POOL_EXHAUSTED"
+        || reservation.code === "POOL_EMPTY"
+        || reservation.code === "SENDER_UNAVAILABLE";
       result.failed += 1;
       result.outcomes.push({
         vendorId: target.vendorId,

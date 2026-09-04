@@ -1,9 +1,10 @@
 import "server-only";
 
 import { EmailSenderReservationStatus, Prisma } from "@prisma/client";
-import { SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
+import { SHARED_MAILBOX_POOL_FILTER, SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
 import { prisma } from "@/lib/prisma";
 import {
+  pinnedSenderUnavailableReason,
   rankEmailSenderPoolCandidates,
   selectEmailSenderPoolCandidate,
   utcDayBounds,
@@ -16,6 +17,14 @@ type SenderPoolDatabase = Pick<Prisma.TransactionClient, "emailMessage" | "email
  * a per-office lock would let two offices hand out the same mailbox capacity.
  */
 const SHARED_SENDER_POOL_LOCK = "email-sender-pool:shared";
+
+/**
+ * How many times a send pinned to one mailbox rechecks that mailbox before it
+ * reports the mailbox unavailable. Rechecking absorbs a pause or resume landing
+ * mid reservation, and the bound keeps a mailbox flipping state from holding
+ * the shared pool lock.
+ */
+const PINNED_SENDER_STATE_READS = 3;
 
 type SenderPoolAccount = {
   id: string;
@@ -111,7 +120,16 @@ type ReservedSender = {
 
 type SenderPoolFailure = {
   error: string;
-  code: "INVALID_REQUEST" | "IDEMPOTENCY_CONFLICT" | "POOL_EMPTY" | "POOL_EXHAUSTED" | "DELIVERY_UNCERTAIN";
+  code:
+    | "INVALID_REQUEST"
+    | "IDEMPOTENCY_CONFLICT"
+    | "POOL_EMPTY"
+    // A connected mailbox is held out of sending (paused by sender protection,
+    // sending turned off, disabled), which is resumable and so a different
+    // problem from a pool with nothing connected.
+    | "SENDER_UNAVAILABLE"
+    | "POOL_EXHAUSTED"
+    | "DELIVERY_UNCERTAIN";
 };
 
 async function reserveEmailSenderAttempt(args: {
@@ -230,7 +248,7 @@ async function reserveEmailSenderAttempt(args: {
       };
     }
 
-    const accounts = await tx.emailAccount.findMany({
+    const senderPoolCandidates = () => tx.emailAccount.findMany({
       where: {
         ...SHARED_SENDER_POOL_FILTER,
         ...(args.accountId ? { id: args.accountId } : {}),
@@ -243,7 +261,44 @@ async function reserveEmailSenderAttempt(args: {
         dailySendLimit: true,
       },
     });
+    const pinnedSenderState = (accountId: string) => tx.emailAccount.findUnique({
+      where: { id: accountId },
+      select: { isActive: true, sendEnabled: true, sendPausedAt: true, sendPausedReason: true },
+    });
+    let accounts = await senderPoolCandidates();
+    if (accounts.length === 0 && args.accountId) {
+      let pinned = await pinnedSenderState(args.accountId);
+      // Sender protection can pause or resume the mailbox between these reads,
+      // so a mailbox that reads as sendable is looked up again and sends rather
+      // than being deferred on a stale reason. The attempts are bounded so a
+      // mailbox flipping state cannot hold this transaction open.
+      for (let attempt = 0; attempt < PINNED_SENDER_STATE_READS; attempt += 1) {
+        if (!pinned || !pinned.isActive || !pinned.sendEnabled || pinned.sendPausedAt) break;
+        accounts = await senderPoolCandidates();
+        if (accounts.length > 0) break;
+        pinned = await pinnedSenderState(args.accountId);
+      }
+      if (accounts.length === 0) {
+        return { error: pinnedSenderUnavailableReason(pinned), code: "SENDER_UNAVAILABLE" };
+      }
+    }
     if (accounts.length === 0) {
+      // A connected mailbox held out of the pool by sender protection is
+      // resumable, so it must not read as a pool with nothing connected.
+      const paused = await tx.emailAccount.count({
+        where: {
+          ...SHARED_MAILBOX_POOL_FILTER,
+          AND: [{ OR: [{ sendPausedAt: { not: null } }, { sendEnabled: false }] }],
+        },
+      });
+      if (paused > 0) {
+        return {
+          error: paused === 1
+            ? "The only connected mailbox in the sender pool is paused or has sending turned off. Resume it or connect another mailbox."
+            : `All ${paused} connected mailboxes in the sender pool are paused or have sending turned off. Resume one or connect another mailbox.`,
+          code: "SENDER_UNAVAILABLE",
+        };
+      }
       return { error: "No connected email account is enabled in the sender pool.", code: "POOL_EMPTY" };
     }
 

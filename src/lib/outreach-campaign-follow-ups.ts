@@ -191,7 +191,13 @@ export async function settleOutreachReservationFailure(
   db: FollowUpDb,
   input: { officeId: string; idempotencyKey: string; code: string },
 ): Promise<OutreachReservationFailureSettlement> {
-  if (input.code === "POOL_EXHAUSTED" || input.code === "POOL_EMPTY") return { kind: "RELEASE_CLAIM" };
+  if (
+    input.code === "POOL_EXHAUSTED"
+    || input.code === "POOL_EMPTY"
+    // A paused or disconnected pinned mailbox is a wait for that mailbox, not a
+    // terminal refusal of this recipient.
+    || input.code === "SENDER_UNAVAILABLE"
+  ) return { kind: "RELEASE_CLAIM" };
   if (input.code === "DELIVERY_UNCERTAIN") {
     const open = await db.emailSenderReservation.findFirst({
       where: { officeId: input.officeId, idempotencyKey: input.idempotencyKey, status: "RESERVED" },

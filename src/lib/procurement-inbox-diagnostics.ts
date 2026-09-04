@@ -1,6 +1,6 @@
 import "server-only";
 
-import { SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
+import { SHARED_MAILBOX_POOL_FILTER, SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { prisma } from "@/lib/prisma";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
@@ -48,6 +48,12 @@ export type SenderReach = {
   available: number;
   exhausted: number;
   capacityRemaining: number;
+  // Connected mailboxes held out of the sender pool by sender protection. A
+  // bounce spike can pause the whole fleet at once, which reads as a pool of
+  // almost nothing and leaves every reply unanswerable until an operator
+  // resumes them, so it is reported rather than left to be inferred.
+  paused: number;
+  pausedMailboxes: Array<{ email: string; reason: string | null; pausedAt: string }>;
   // Mailboxes this request mailed from that a reply cannot be answered from,
   // so their threads depend on the pool having a mailbox left.
   blocked: Array<{
@@ -55,6 +61,9 @@ export type SenderReach = {
     active: boolean;
     sendEnabled: boolean;
     sendPaused: boolean;
+    // Why sender protection paused it, so an operator sees the bounce or
+    // complaint spike behind the pause instead of a bare flag.
+    sendPausedReason: string | null;
     connected: boolean;
     outbound: number;
     suppliersContacted: number;
@@ -244,8 +253,28 @@ async function senderReach(tallies: Map<string, MailboxTally>): Promise<SenderRe
   );
   const rows = await prisma.emailAccount.findMany({
     where: { email: { in: emails, mode: "insensitive" } },
-    select: { email: true, isActive: true, sendEnabled: true, sendPausedAt: true, provider: true, refreshToken: true, credentialSecret: true },
+    select: {
+      email: true,
+      isActive: true,
+      sendEnabled: true,
+      sendPausedAt: true,
+      sendPausedReason: true,
+      provider: true,
+      refreshToken: true,
+      credentialSecret: true,
+    },
   });
+  const pausedMailboxes = (await prisma.emailAccount.findMany({
+    where: { ...SHARED_MAILBOX_POOL_FILTER, sendEnabled: true, sendPausedAt: { not: null } },
+    select: { email: true, sendPausedAt: true, sendPausedReason: true },
+    orderBy: { sendPausedAt: "desc" },
+  })).flatMap((account) => (account.sendPausedAt
+    ? [{
+      email: account.email.trim().toLowerCase(),
+      reason: account.sendPausedReason,
+      pausedAt: account.sendPausedAt.toISOString(),
+    }]
+    : []));
   const byEmail = new Map(rows.map((row) => [row.email.trim().toLowerCase(), row]));
   const blocked = emails
     .filter((email) => !sendable.has(email))
@@ -257,6 +286,7 @@ async function senderReach(tallies: Map<string, MailboxTally>): Promise<SenderRe
         active: row?.isActive ?? false,
         sendEnabled: row?.sendEnabled ?? false,
         sendPaused: Boolean(row?.sendPausedAt),
+        sendPausedReason: row?.sendPausedReason ?? null,
         connected: Boolean(row && (row.refreshToken !== null || row.credentialSecret !== null)),
         outbound: tally?.outbound ?? 0,
         suppliersContacted: tally?.suppliers.size ?? 0,
@@ -268,6 +298,8 @@ async function senderReach(tallies: Map<string, MailboxTally>): Promise<SenderRe
     available: available.length,
     exhausted: pool.length - available.length,
     capacityRemaining,
+    paused: pausedMailboxes.length,
+    pausedMailboxes,
     blocked,
   };
 }

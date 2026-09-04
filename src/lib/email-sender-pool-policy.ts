@@ -16,6 +16,27 @@ export function utcDayBounds(now = new Date()) {
   return { start, end };
 }
 
+// A send pinned to one mailbox (a follow up has to leave from the mailbox that
+// owns the supplier's thread) must not report the whole pool as empty when that
+// single mailbox is the thing that cannot send, since resuming that mailbox and
+// connecting a new one are different actions.
+export function pinnedSenderUnavailableReason(account: {
+  isActive: boolean;
+  sendEnabled: boolean;
+  sendPausedAt: Date | null;
+  sendPausedReason: string | null;
+} | null): string {
+  if (!account) return "The mailbox this thread was sent from no longer exists.";
+  if (account.sendPausedAt) {
+    return account.sendPausedReason?.trim()
+      ? `The mailbox this thread was sent from is paused by sender protection: ${account.sendPausedReason.trim()}`
+      : "The mailbox this thread was sent from is paused by sender protection.";
+  }
+  if (!account.sendEnabled) return "Sending is turned off for the mailbox this thread was sent from.";
+  if (!account.isActive) return "The mailbox this thread was sent from is disabled.";
+  return "The mailbox this thread was sent from is no longer connected.";
+}
+
 export function validEmailDailySendLimit(value: unknown): value is number {
   return Number.isInteger(value)
     && Number(value) >= 1

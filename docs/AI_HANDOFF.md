@@ -1,5 +1,23 @@
 # AI Handoff
 
+## 2026-09-04: Sender failures name the mailbox, not the pool
+
+- Migrations `20260904000100_order_supplier_last_email_message` and
+  `20260904000200_procurement_conversation_task` are deployed to production
+  (migration workflow run 33917956272), so conversation tasks now persist.
+- The first production pass after that deploy failed with "No connected email
+  account is enabled in the sender pool" while the diagnostic showed four
+  connected mailboxes, all out of daily capacity and several paused by sender
+  protection. The cause was that a send pinned to a thread's mailbox reused the
+  shared pool filter, so a paused mailbox looked like an empty pool.
+- `reserveEmailSender` now returns `SENDER_UNAVAILABLE` with the mailbox's real
+  condition, and every caller defers the recipient (retryable) instead of
+  refusing it, since sender protection pauses are temporary.
+- Operator next step, not a code change: sender-pool capacity. The diagnostic
+  at `/api/admin/procurement-inbox-diagnostics?orderId=` now lists the paused
+  mailboxes and their reasons, so resuming or adding mailboxes is the lever that
+  lets the owed conversations drain.
+
 ## 2026-09-04: Paid verification (Bouncer) and named-contact enrichment (Hunter) in leadgen
 
 - `src/lib/leadgen/verify.ts` now takes an injectable `MailboxVerifier`. The
@@ -62,7 +80,6 @@
 - The CosmicBrain supplier sequence can start immediately.
 - Every supplier thread must surface deferred payment, consignment, and
   financing terms explicitly.
-
 
 ## 2026-09-06: Durable supplier conversation tasks
 

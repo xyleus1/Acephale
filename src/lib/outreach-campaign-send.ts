@@ -222,7 +222,9 @@ export function outreachCampaignPausedSenderAction(input: {
 }
 
 export function outreachCampaignReservationOutcome(code: string) {
-  if (code === "POOL_EXHAUSTED" || code === "POOL_EMPTY") {
+  // A mailbox paused by sender protection can send again once it is resumed, so
+  // it defers this recipient like a capacity shortage instead of rejecting it.
+  if (code === "POOL_EXHAUSTED" || code === "POOL_EMPTY" || code === "SENDER_UNAVAILABLE") {
     return { state: "POOL_EXHAUSTED" as const, poolExhausted: true };
   }
   return { state: "REJECTED" as const, poolExhausted: false };

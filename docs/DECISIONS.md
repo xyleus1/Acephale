@@ -5127,6 +5127,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
   two concurrent failed transitions against the same task and asserts the
   attempt count reflects both.
 
+## 2026-09-04: A pinned sender that cannot send is reported separately from an empty pool
+
+- Status: accepted
+- Owner: engineering
+- Decision: `reserveEmailSender` distinguishes the shared pool having no
+  connected sender (`POOL_EMPTY`) from the single mailbox a send is pinned to
+  being unable to send (`SENDER_UNAVAILABLE`), and the pinned case names the
+  condition: paused by sender protection with its reason, sending turned off,
+  disabled, disconnected, or missing.
+- Safety boundary: the pinned lookup reads only that mailbox's send state and
+  never widens the pool a send may leave from, so an approved thread still sends
+  from the mailbox that owns it.
+- A shared pool whose connected mailboxes are all paused or have sending turned
+  off also reports `SENDER_UNAVAILABLE`, since the fix is to resume a mailbox,
+  not to connect one. `POOL_EMPTY` now means nothing is connected at all.
+- Sender protection can pause or resume a mailbox mid reservation, so the state
+  read and the filtered candidate lookup run as a bounded loop
+  (`PINNED_SENDER_STATE_READS`): a mailbox that reads as sendable is looked up
+  again, and the reason returned comes from the read that ended the loop. The
+  bound keeps a mailbox flipping state from holding the shared pool lock.
+- Scope boundary: callers treat `SENDER_UNAVAILABLE` as deferred capacity, not
+  as a refusal, because sender protection pauses are reversible. A recipient
+  therefore stays owed and retryable instead of being settled as rejected.
+- Verification: `scripts/email-sender-pool-database.test.ts` reserves against a
+  paused pinned mailbox and asserts the code and the pause reason;
+  `scripts/email-sender-pool.test.ts` covers every reason branch and asserts
+  each caller defers rather than refuses.
+
 ## 2026-09-04: Paid leadgen providers are advisory layers over deterministic checks
 
 - Status: accepted

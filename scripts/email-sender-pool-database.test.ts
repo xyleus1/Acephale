@@ -302,6 +302,119 @@ async function main() {
   });
   assert.equal("code" in exactUsedAccount ? exactUsedAccount.code : null, "POOL_EXHAUSTED");
 
+  // A follow up has to leave from the mailbox that owns the supplier's thread.
+  // When sender protection pauses that mailbox, the failure has to name it and
+  // its reason, since reporting an empty pool would send an operator to connect
+  // mailboxes while the pool still has capacity.
+  const pausedAccount = await prisma.emailAccount.create({
+    data: {
+      officeId,
+      email: `paused-${suffix}@example.test`,
+      displayName: "Paused sender",
+      provider: "GMAIL_APP_PASSWORD",
+      credentialSecret: "encrypted-test-secret",
+      isActive: true,
+      sendEnabled: true,
+      dailySendLimit: 2,
+      sendPausedAt: new Date(),
+      sendPausedReason: "Permanent bounces spiked",
+    },
+  });
+  const pinnedToPaused = await reserveEmailSender({
+    officeId,
+    accountId: pausedAccount.id,
+    idempotencyKey: `paused-sender-${suffix}`,
+    requestHash: requestHash("paused sender"),
+  });
+  assert.equal(
+    "code" in pinnedToPaused ? pinnedToPaused.code : null,
+    "SENDER_UNAVAILABLE",
+    "a paused thread mailbox must read as that mailbox being unavailable, not as an empty pool",
+  );
+  assert.match(
+    "error" in pinnedToPaused ? pinnedToPaused.error : "",
+    /paused by sender protection: Permanent bounces spiked/,
+    "the failure must carry the reason sender protection paused the mailbox",
+  );
+
+  // Resuming that mailbox has to make it send again on the next attempt, and a
+  // resume that lands between the two reads must not leave a stale reason.
+  await prisma.emailAccount.update({
+    where: { id: pausedAccount.id },
+    data: { sendPausedAt: null, sendPausedReason: null },
+  });
+  const pinnedAfterResume = await reserveEmailSender({
+    officeId,
+    accountId: pausedAccount.id,
+    idempotencyKey: `resumed-sender-${suffix}`,
+    requestHash: requestHash("resumed sender"),
+  });
+  assert.ok(
+    "ok" in pinnedAfterResume,
+    "a resumed mailbox must reserve instead of staying unavailable",
+  );
+
+  // A resume landing while the reservation runs must either send or report the
+  // pause that is still in force, never that the mailbox is disconnected.
+  await prisma.emailAccount.update({
+    where: { id: pausedAccount.id },
+    data: { sendPausedAt: new Date(), sendPausedReason: "Permanent bounces spiked" },
+  });
+  const [racedReservation] = await Promise.all([
+    reserveEmailSender({
+      officeId,
+      accountId: pausedAccount.id,
+      idempotencyKey: `resume-race-${suffix}`,
+      requestHash: requestHash("resume race"),
+    }),
+    prisma.emailAccount.update({
+      where: { id: pausedAccount.id },
+      data: { sendPausedAt: null, sendPausedReason: null },
+    }),
+  ]);
+  if (!("ok" in racedReservation)) {
+    assert.equal(racedReservation.code, "SENDER_UNAVAILABLE");
+    assert.match(
+      racedReservation.error,
+      /paused by sender protection/,
+      "a mailbox resumed mid reservation must not be reported as disconnected",
+    );
+  }
+
+  // A pool whose connected mailboxes are all paused is not an empty pool, so an
+  // unpinned send has to tell the operator to resume one rather than to connect
+  // a mailbox that is already connected.
+  const sendable = await prisma.emailAccount.findMany({
+    where: { isActive: true, sendEnabled: true, sendPausedAt: null },
+    select: { id: true },
+  });
+  await prisma.emailAccount.updateMany({
+    where: { id: { in: sendable.map((account) => account.id) } },
+    data: { sendPausedAt: new Date(), sendPausedReason: "Complaint rate spiked" },
+  });
+  try {
+    const pausedPool = await reserveEmailSender({
+      officeId,
+      idempotencyKey: `paused-pool-${suffix}`,
+      requestHash: requestHash("paused pool"),
+    });
+    assert.equal(
+      "code" in pausedPool ? pausedPool.code : null,
+      "SENDER_UNAVAILABLE",
+      "a pool of paused mailboxes must not read as a pool with nothing connected",
+    );
+    assert.match(
+      "error" in pausedPool ? pausedPool.error : "",
+      /paused or have sending turned off|paused or has sending turned off/,
+      "the failure must tell an operator to resume a mailbox",
+    );
+  } finally {
+    await prisma.emailAccount.updateMany({
+      where: { id: { in: sendable.map((account) => account.id) } },
+      data: { sendPausedAt: null, sendPausedReason: null },
+    });
+  }
+
   console.log("Email sender pool database behavior passed.");
 }
 
