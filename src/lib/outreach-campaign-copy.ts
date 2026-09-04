@@ -1,8 +1,35 @@
 import { createHash } from "node:crypto";
+import { DELIVERY_FEEDBACK_CLASSIFICATION } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
 
 export const CAMPAIGN_STATUSES = ["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
+
+// A human reply is an inbound message the deterministic delivery-feedback
+// parser did not claim. Delivery feedback keeps `deliveryKind` null until its
+// persistence finishes, so the classification marker is what excludes bounces
+// and auto-replies, not the kind. The exclusion is null-safe because Prisma
+// compiles a plain inequality to `NOT col = value`, which is NULL for
+// unclassified rows and would drop genuine replies.
+export function humanReplyMessageFilter(officeId: string, threadIds: readonly string[]) {
+  return {
+    officeId,
+    direction: "INBOUND" as const,
+    deliveryKind: null,
+    OR: [
+      { classification: null },
+      { classification: { not: DELIVERY_FEEDBACK_CLASSIFICATION } },
+    ],
+    threadId: { in: [...threadIds] },
+  };
+}
+
+export function isHumanReplyMessage(message: {
+  deliveryKind: string | null;
+  classification: string | null;
+}) {
+  return message.deliveryKind === null && message.classification !== DELIVERY_FEEDBACK_CLASSIFICATION;
+}
 
 export function normalizeResearchListQuery(value: string): string {
   return value.trim().replace(/\s+/g, " ").replace(/\s+\(\d+\)$/, "").trim();

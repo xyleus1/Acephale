@@ -7,8 +7,10 @@ import { runOutreachCampaignBatch } from "../src/lib/outreach-campaign-send";
 import {
   activateCampaign,
   campaignRecipientFeedback,
+  campaignReplyDigest,
   cancelCampaign,
   completeCampaignIfDone,
+  listCampaignSummaries,
   planOutreachCampaign,
   saveDraftCampaign,
   setCampaignFollowUps,
@@ -179,7 +181,7 @@ async function main() {
         officeId: office.id,
         listId: feedbackList.id,
         name: `Feedback Wens campaign ${suffix}`,
-        status: "COMPLETED",
+        status: "ACTIVE",
         subject: "Feedback",
         bodyTemplate: "Reply STOP to opt out.",
         emailField: "primary_email",
@@ -219,6 +221,147 @@ async function main() {
       },
       select: { id: true },
     });
+    const answeredReplyThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: "Re: Feedback",
+        participants: JSON.stringify([`feedback-clean-${suffix}@example.test`, sender.email]),
+      },
+    });
+    const awaitingReplyThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: "Re: Feedback awaiting",
+        participants: JSON.stringify([`feedback-awaiting-${suffix}@example.test`, sender.email]),
+      },
+    });
+    const autoReplyThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: "Out of office",
+        participants: JSON.stringify([`feedback-auto-${suffix}@example.test`, sender.email]),
+      },
+    });
+    const bounceThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: "Delivery failure",
+        participants: JSON.stringify([`feedback-bounced-${suffix}@example.test`, sender.email]),
+      },
+    });
+    const unfinishedFeedbackThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: "Delivery feedback pending",
+        participants: JSON.stringify([`feedback-pending-${suffix}@example.test`, sender.email]),
+      },
+    });
+    const unclassifiedReplyThread = await prisma.emailThread.create({
+      data: {
+        officeId: office.id,
+        subject: "Unclassified reply",
+        participants: JSON.stringify([`feedback-unclassified-${suffix}@example.test`, sender.email]),
+      },
+    });
+    await prisma.emailMessage.createMany({
+      data: [
+        {
+          officeId: office.id,
+          threadId: answeredReplyThread.id,
+          direction: "INBOUND",
+          fromEmail: `feedback-clean-${suffix}@example.test`,
+          fromName: "Clean Bakery",
+          toEmails: JSON.stringify([sender.email]),
+          subject: "Re: Feedback",
+          bodyText: "  We can supply   this product.\nPlease send the next steps. ",
+          sentAt: new Date("2026-01-02T10:00:00.000Z"),
+          deliveryKind: null,
+          classification: "CUSTOMER_REPLY",
+        },
+        {
+          officeId: office.id,
+          threadId: answeredReplyThread.id,
+          direction: "OUTBOUND",
+          fromEmail: sender.email,
+          toEmails: JSON.stringify([`feedback-clean-${suffix}@example.test`]),
+          subject: "Re: Feedback",
+          bodyText: "Thanks.",
+          sentAt: new Date("2026-01-02T11:00:00.000Z"),
+        },
+        {
+          officeId: office.id,
+          threadId: awaitingReplyThread.id,
+          direction: "OUTBOUND",
+          fromEmail: sender.email,
+          toEmails: JSON.stringify([`feedback-awaiting-${suffix}@example.test`]),
+          subject: "Feedback awaiting",
+          bodyText: "Please let us know.",
+          sentAt: new Date("2026-01-03T09:00:00.000Z"),
+        },
+        {
+          officeId: office.id,
+          threadId: awaitingReplyThread.id,
+          direction: "INBOUND",
+          fromEmail: `feedback-awaiting-${suffix}@example.test`,
+          fromName: "Awaiting Bakery",
+          toEmails: JSON.stringify([sender.email]),
+          subject: "Re: Feedback awaiting",
+          bodyText: "We need more details.",
+          sentAt: new Date("2026-01-03T10:00:00.000Z"),
+          deliveryKind: null,
+          classification: "CUSTOMER_REPLY",
+        },
+        {
+          officeId: office.id,
+          threadId: autoReplyThread.id,
+          direction: "INBOUND",
+          fromEmail: `feedback-auto-${suffix}@example.test`,
+          toEmails: JSON.stringify([sender.email]),
+          subject: "Out of office",
+          bodyText: "I am away.",
+          sentAt: new Date("2026-01-04T10:00:00.000Z"),
+          deliveryKind: "AUTO_REPLY",
+          classification: "DELIVERY_FEEDBACK",
+        },
+        {
+          officeId: office.id,
+          threadId: bounceThread.id,
+          direction: "INBOUND",
+          fromEmail: "mailer-daemon@example.test",
+          toEmails: JSON.stringify([sender.email]),
+          subject: "Delivery failure",
+          bodyText: "Delivery failed.",
+          sentAt: new Date("2026-01-05T10:00:00.000Z"),
+          deliveryKind: "BOUNCE",
+          classification: "DELIVERY_FEEDBACK",
+        },
+        {
+          officeId: office.id,
+          threadId: unfinishedFeedbackThread.id,
+          direction: "INBOUND",
+          fromEmail: "mailer-daemon@example.test",
+          toEmails: JSON.stringify([sender.email]),
+          subject: "Delivery feedback pending",
+          bodyText: "Delivery feedback is still being processed.",
+          sentAt: new Date("2026-01-06T10:00:00.000Z"),
+          deliveryKind: null,
+          classification: "DELIVERY_FEEDBACK",
+        },
+        {
+          officeId: office.id,
+          threadId: unclassifiedReplyThread.id,
+          direction: "INBOUND",
+          fromEmail: `feedback-unclassified-${suffix}@example.test`,
+          fromName: "Unclassified Bakery",
+          toEmails: JSON.stringify([sender.email]),
+          subject: "Unclassified reply",
+          bodyText: "This reply has no classification.",
+          sentAt: new Date("2026-01-07T10:00:00.000Z"),
+          deliveryKind: null,
+          classification: null,
+        },
+      ],
+    });
     await prisma.outreachCampaignSend.createMany({
       data: [
         {
@@ -227,6 +370,7 @@ async function main() {
           recordId: record.id,
           recipient: `feedback-bounced-${suffix}@example.test`,
           status: "SENT",
+          localThreadId: bounceThread.id,
         },
         {
           officeId: office.id,
@@ -234,6 +378,39 @@ async function main() {
           recordId: feedbackRecord.id,
           recipient: `feedback-clean-${suffix}@example.test`,
           status: "SENT",
+          localThreadId: answeredReplyThread.id,
+        },
+        {
+          officeId: office.id,
+          campaignId: feedbackCampaign.id,
+          recordId: `feedback-awaiting-${suffix}`,
+          recipient: `feedback-awaiting-${suffix}@example.test`,
+          status: "SENT",
+          localThreadId: awaitingReplyThread.id,
+        },
+        {
+          officeId: office.id,
+          campaignId: feedbackCampaign.id,
+          recordId: `feedback-auto-${suffix}`,
+          recipient: `feedback-auto-${suffix}@example.test`,
+          status: "SENT",
+          localThreadId: autoReplyThread.id,
+        },
+        {
+          officeId: office.id,
+          campaignId: feedbackCampaign.id,
+          recordId: `feedback-pending-${suffix}`,
+          recipient: `feedback-pending-${suffix}@example.test`,
+          status: "SENT",
+          localThreadId: unfinishedFeedbackThread.id,
+        },
+        {
+          officeId: office.id,
+          campaignId: feedbackCampaign.id,
+          recordId: `feedback-unclassified-${suffix}`,
+          recipient: `feedback-unclassified-${suffix}@example.test`,
+          status: "SENT",
+          localThreadId: unclassifiedReplyThread.id,
         },
       ],
     });
@@ -261,6 +438,43 @@ async function main() {
       optedOut: 0,
       blocked: 0,
     });
+    const digest = await campaignReplyDigest({
+      officeId: office.id,
+      campaignIds: [feedbackCampaign.id],
+      limit: 10,
+    });
+    assert.deepEqual(digest.counts.get(feedbackCampaign.id), {
+      replyThreads: 3,
+      answered: 1,
+      awaitingAnswer: 2,
+      autoReplies: 1,
+      bounces: 1,
+      optOuts: 0,
+      complaints: 0,
+    });
+    assert.equal(digest.replies.length, 3);
+    assert.equal(digest.replies[0]?.threadId, unclassifiedReplyThread.id);
+    assert.deepEqual(digest.replies.find((reply) => reply.threadId === awaitingReplyThread.id), {
+      campaignId: feedbackCampaign.id,
+      threadId: awaitingReplyThread.id,
+      recipient: `feedback-awaiting-${suffix}@example.test`,
+      fromEmail: `feedback-awaiting-${suffix}@example.test`,
+      fromName: "Awaiting Bakery",
+      subject: "Re: Feedback awaiting",
+      variantKey: null,
+      receivedAt: new Date("2026-01-03T10:00:00.000Z"),
+      answered: false,
+      answeredAt: null,
+      snippet: "We need more details.",
+    });
+    const answeredReply = digest.replies.find((reply) => reply.threadId === answeredReplyThread.id);
+    assert.equal(answeredReply?.answered, true);
+    assert.equal(answeredReply?.answeredAt?.toISOString(), "2026-01-02T11:00:00.000Z");
+    assert.equal(answeredReply?.snippet, "We can supply this product. Please send the next steps.");
+    assert.equal(digest.replies.some((reply) => reply.threadId === unfinishedFeedbackThread.id), false);
+    assert.equal(digest.replies.some((reply) => reply.threadId === unclassifiedReplyThread.id), true);
+    const summaries = await listCampaignSummaries(office.id, ["ACTIVE"]);
+    assert.equal(summaries.find((summary) => summary.id === feedbackCampaign.id)?.replies, 3);
 
     const rotationPlan = await planOutreachCampaign({
       ...baseInput,

@@ -14,6 +14,7 @@ import {
   activateCampaign,
   CAMPAIGN_STATUSES_ALL,
   campaignRecipientFeedback,
+  campaignReplyDigest,
   listCampaignSummaries,
   planOutreachCampaign,
   saveDraftCampaign,
@@ -161,8 +162,8 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   const action = boundedText(body?.action, 30);
-  if (!action || !["mailboxes", "status", "plan", "approve", "followups", "run"].includes(action)) {
-    return NextResponse.json({ error: "action must be mailboxes, status, plan, approve, followups, or run." }, { status: 400 });
+  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run"].includes(action)) {
+    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, or run." }, { status: 400 });
   }
 
   try {
@@ -194,6 +195,43 @@ export async function POST(request: NextRequest) {
           ...summary,
           feedback: feedback.get(summary.id) ?? { bounced: 0, complained: 0, optedOut: 0, blocked: 0 },
         })),
+      });
+    }
+    if (action === "replies") {
+      const campaignId = boundedText(body?.campaignId, 120);
+      const summaries = await listCampaignSummaries(office.id, CAMPAIGN_STATUSES_ALL);
+      const scoped = campaignId ? summaries.filter((summary) => summary.id === campaignId) : summaries;
+      const requestedLimit = body?.limit;
+      if (
+        requestedLimit !== undefined
+        && (typeof requestedLimit !== "number"
+          || !Number.isInteger(requestedLimit)
+          || requestedLimit < 1
+          || requestedLimit > 500)
+      ) {
+        return NextResponse.json({ error: "limit must be an integer between 1 and 500." }, { status: 400 });
+      }
+      const digest = await campaignReplyDigest({
+        officeId: office.id,
+        campaignIds: scoped.map((summary) => summary.id),
+        limit: requestedLimit,
+      });
+      const emptyCounts = {
+        replyThreads: 0,
+        answered: 0,
+        awaitingAnswer: 0,
+        autoReplies: 0,
+        bounces: 0,
+        optOuts: 0,
+        complaints: 0,
+      };
+      return NextResponse.json({
+        office: { id: office.id, name: office.name },
+        campaigns: scoped.map((summary) => ({
+          campaignId: summary.id,
+          counts: digest.counts.get(summary.id) ?? emptyCounts,
+        })),
+        replies: digest.replies,
       });
     }
     if (action === "plan") {

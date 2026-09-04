@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   campaignFollowUpSubject,
+  humanReplyMessageFilter,
   normalizeCampaignFollowUps,
   planCampaignFollowUps,
   renderCampaignEmail,
@@ -21,7 +22,6 @@ import {
 import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import { listSuppressedEmails } from "@/lib/email-delivery-events";
-import { DELIVERY_FEEDBACK_CLASSIFICATION } from "@/lib/email-delivery-feedback";
 import {
   SENDER_PAUSED_ERROR,
   type SupplierEmailProvider,
@@ -35,6 +35,8 @@ export const OUTREACH_FOLLOW_UP_RECLAIM_MINUTES = 30;
 export const OUTREACH_UNKNOWN_DELIVERY_TIMEOUT_HOURS = 24;
 
 type CapacityCampaign = { id: string; officeId: string; dailyCap: number };
+
+export { humanReplyMessageFilter };
 
 // Serializes first-touch and follow-up claims for one campaign inside the
 // claiming transaction.
@@ -222,20 +224,6 @@ export function renderFollowUpEmail(input: {
   return {
     subject: campaignFollowUpSubject({ ...input.step, subject: rendered.subject || null }, initial.subject),
     body: rendered.body,
-  };
-}
-
-// A human reply is an inbound message the deterministic delivery-feedback
-// parser did not claim. Delivery feedback keeps `deliveryKind` null until its
-// persistence finishes, so the classification marker is what excludes bounces
-// and auto-replies, not the kind.
-export function humanReplyMessageFilter(officeId: string, threadIds: readonly string[]) {
-  return {
-    officeId,
-    direction: "INBOUND" as const,
-    deliveryKind: null,
-    NOT: { classification: DELIVERY_FEEDBACK_CLASSIFICATION },
-    threadId: { in: [...threadIds] },
   };
 }
 

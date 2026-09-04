@@ -125,6 +125,19 @@
   plus an empty campaign. The status action is read-only and does not add an
   approval or send path.
 
+## 2026-09-04: Add a campaign reply digest and exclude delivery feedback
+
+- Campaign summary reply grouping now applies the shared human-reply predicate,
+  excluding deterministic bounces, complaints, opt-outs, and auto-replies that
+  share the campaign thread, including unfinished feedback marked
+  `DELIVERY_FEEDBACK` before `deliveryKind` persistence finishes.
+- The shared human-reply predicate is null-safe, so unclassified inbound
+  replies count as replies and suppress follow-ups.
+- The read-only outreach ops `replies` action returns campaign counts for
+  genuine replies and delivery feedback, plus a bounded newest-first digest of
+  genuine reply threads. Answered state requires an outbound message strictly
+  newer than the latest genuine inbound reply.
+
 ## 2026-09-04: A sweep blamed the thread mailbox for an unavailable sender
 
 - The production sweep after the reply scope work answered every waiting reply

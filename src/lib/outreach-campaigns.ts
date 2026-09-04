@@ -28,6 +28,8 @@ import {
   campaignSnapshotOutstandingRecordIds,
   dedupeRecipients,
   campaignReplyCounts,
+  humanReplyMessageFilter,
+  isHumanReplyMessage,
   outreachCampaignContactedWhere,
   normalizeResearchListQuery,
   normalizeCampaignExcludeEmails,
@@ -990,7 +992,9 @@ export async function listCampaignSummaries(
     const replies = threadToCampaign.size
       ? await prisma.emailMessage.groupBy({
         by: ["threadId"],
-        where: { officeId, direction: "INBOUND", threadId: { in: [...threadToCampaign.keys()] } },
+        // Delivery feedback is excluded because bounces and auto-replies arrive
+        // as inbound messages on the same thread.
+        where: humanReplyMessageFilter(officeId, [...threadToCampaign.keys()]),
         _count: { _all: true },
       })
       : [];
@@ -1082,6 +1086,135 @@ export async function campaignRecipientFeedback(input: {
     else bucket.blocked += 1;
   }
   return buckets;
+}
+
+export async function campaignReplyDigest(input: {
+  officeId: string;
+  campaignIds: readonly string[];
+  limit?: number;
+}) {
+  const counts = new Map<string, {
+    replyThreads: number;
+    answered: number;
+    awaitingAnswer: number;
+    autoReplies: number;
+    bounces: number;
+    optOuts: number;
+    complaints: number;
+  }>();
+  for (const campaignId of input.campaignIds) {
+    counts.set(campaignId, {
+      replyThreads: 0,
+      answered: 0,
+      awaitingAnswer: 0,
+      autoReplies: 0,
+      bounces: 0,
+      optOuts: 0,
+      complaints: 0,
+    });
+  }
+  if (!input.campaignIds.length) return { counts, replies: [] };
+  const sends = await prisma.outreachCampaignSend.findMany({
+    where: {
+      officeId: input.officeId,
+      campaignId: { in: [...input.campaignIds] },
+      status: "SENT",
+      localThreadId: { not: null },
+    },
+    select: { campaignId: true, recipient: true, variantKey: true, localThreadId: true },
+  });
+  const threadToCampaign = new Map(
+    sends.map((send) => [
+      send.localThreadId as string,
+      { campaignId: send.campaignId, recipient: send.recipient, variantKey: send.variantKey },
+    ]),
+  );
+  if (!threadToCampaign.size) return { counts, replies: [] };
+  const threadIds = [...threadToCampaign.keys()];
+  const [inbound, outbound] = await Promise.all([
+    prisma.emailMessage.findMany({
+      where: {
+        officeId: input.officeId,
+        threadId: { in: threadIds },
+        direction: "INBOUND",
+      },
+      select: {
+        threadId: true,
+        fromEmail: true,
+        fromName: true,
+        subject: true,
+        bodyText: true,
+        sentAt: true,
+        deliveryKind: true,
+        classification: true,
+      },
+      orderBy: { sentAt: "asc" },
+    }),
+    prisma.emailMessage.findMany({
+      where: {
+        officeId: input.officeId,
+        threadId: { in: threadIds },
+        direction: "OUTBOUND",
+      },
+      select: { threadId: true, sentAt: true },
+    }),
+  ]);
+  const inboundByThread = new Map<string, typeof inbound>();
+  for (const message of inbound) {
+    const threadMessages = inboundByThread.get(message.threadId) ?? [];
+    threadMessages.push(message);
+    inboundByThread.set(message.threadId, threadMessages);
+  }
+  const latestOutbound = new Map<string, Date>();
+  for (const message of outbound) {
+    const previous = latestOutbound.get(message.threadId);
+    if (!previous || message.sentAt > previous) latestOutbound.set(message.threadId, message.sentAt);
+  }
+  const feedbackThreads = new Set<string>();
+  for (const message of inbound) {
+    const campaign = threadToCampaign.get(message.threadId);
+    if (!campaign || !message.deliveryKind) continue;
+    const key = `${message.threadId}:${message.deliveryKind}`;
+    if (feedbackThreads.has(key)) continue;
+    feedbackThreads.add(key);
+    const campaignCounts = counts.get(campaign.campaignId);
+    if (!campaignCounts) continue;
+    if (message.deliveryKind === "AUTO_REPLY") campaignCounts.autoReplies += 1;
+    else if (message.deliveryKind === "BOUNCE") campaignCounts.bounces += 1;
+    else if (message.deliveryKind === "OPT_OUT") campaignCounts.optOuts += 1;
+    else if (message.deliveryKind === "COMPLAINT") campaignCounts.complaints += 1;
+  }
+  const replies = [];
+  for (const [threadId, campaign] of threadToCampaign) {
+    const latestInbound = [...(inboundByThread.get(threadId) ?? [])]
+      .filter(isHumanReplyMessage)
+      .at(-1);
+    if (!latestInbound) continue;
+    const campaignCounts = counts.get(campaign.campaignId);
+    if (!campaignCounts) continue;
+    campaignCounts.replyThreads += 1;
+    const answeredAt = latestOutbound.get(threadId);
+    const replyAnsweredAt = answeredAt && answeredAt > latestInbound.sentAt ? answeredAt : null;
+    const answered = replyAnsweredAt !== null;
+    if (answered) campaignCounts.answered += 1;
+    else campaignCounts.awaitingAnswer += 1;
+    replies.push({
+      campaignId: campaign.campaignId,
+      threadId,
+      recipient: campaign.recipient,
+      fromEmail: latestInbound.fromEmail,
+      fromName: latestInbound.fromName,
+      subject: latestInbound.subject,
+      variantKey: campaign.variantKey,
+      receivedAt: latestInbound.sentAt,
+      answered,
+      answeredAt: replyAnsweredAt,
+      snippet: (latestInbound.bodyText ?? "").replace(/\s+/g, " ").trim().slice(0, 600),
+    });
+  }
+  replies.sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime());
+  const limit = input.limit ?? 100;
+  return { counts, replies: replies.slice(0, limit) };
 }
 
 export async function completeCampaignIfDone(input: { officeId: string; campaignId: string }) {

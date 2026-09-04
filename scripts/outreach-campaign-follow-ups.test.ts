@@ -12,6 +12,7 @@ import {
 } from "../src/lib/outreach-campaign-follow-ups";
 import { SENDER_PAUSED_ERROR } from "../src/lib/supply-os/supplier-email-provider";
 import { outreachCampaignStatusAllowsSend } from "../src/lib/outreach-campaign-send";
+import { isHumanReplyMessage } from "../src/lib/outreach-campaign-copy";
 import { SHARED_MAILBOX_POOL_FILTER } from "../src/lib/email-account-pool";
 
 type FollowUpRow = {
@@ -151,14 +152,24 @@ function fakeDatabase(input: {
     outreachCampaignFollowUp: followUpModel,
     emailMessage: {
       groupBy: async (args: {
-        where: { officeId: string; direction: string; deliveryKind: null; NOT: { classification: string }; threadId: { in: string[] } };
+        where: {
+          officeId: string;
+          direction: string;
+          deliveryKind: null;
+          OR: Array<{ classification: null } | { classification: { not: string } }>;
+          threadId: { in: string[] };
+        };
       }) => {
         assert.equal(args.where.officeId, "office-1");
         assert.equal(args.where.direction, "INBOUND");
+        assert.deepEqual(args.where.OR, [
+          { classification: null },
+          { classification: { not: "DELIVERY_FEEDBACK" } },
+        ]);
         const replied = new Set(inboundMessages()
           .filter((message) => args.where.threadId.in.includes(message.threadId))
           .filter((message) => message.deliveryKind === args.where.deliveryKind)
-          .filter((message) => message.classification !== args.where.NOT.classification)
+          .filter((message) => message.classification === null || message.classification !== "DELIVERY_FEEDBACK")
           .map((message) => message.threadId));
         return [...replied].map((threadId) => ({ threadId, _count: { _all: 1 } }));
       },
@@ -244,6 +255,8 @@ const reservation = {
 };
 
 async function main() {
+  assert.equal(isHumanReplyMessage({ deliveryKind: null, classification: null }), true);
+  assert.equal(isHumanReplyMessage({ deliveryKind: null, classification: "DELIVERY_FEEDBACK" }), false);
   const rendered = renderFollowUpEmail({
     step: { waitDays: 3, subject: null, bodyTemplate: "Still interested, {{company}}? Reply STOP to opt out." },
     campaignSubject: "Hello {{company}}",
@@ -340,7 +353,7 @@ async function main() {
   // A reply in the local thread skips the sequence and records the reason.
   const repliedDb = fakeDatabase({
     sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
-    repliedThreadIds: ["thread-1"],
+    inboundMessages: [{ threadId: "thread-1", classification: null, deliveryKind: null }],
     now,
   });
   const repliedRun = await runOutreachCampaignFollowUps({ ...baseInput, db: repliedDb as never });

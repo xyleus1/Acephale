@@ -133,6 +133,19 @@
   read time, so they reflect current suppressions even when a suppression
   predates the campaign. The action performs no writes, sends, or approvals.
 
+## 2026-09-04: Campaign reply metrics exclude delivery feedback
+
+- Campaign summaries now count only inbound messages whose `deliveryKind` is
+  null, so bounces, complaints, opt-outs, and auto-replies on campaign threads
+  do not inflate reply totals. Unfinished delivery feedback is also excluded
+  by its `DELIVERY_FEEDBACK` classification while kind persistence is pending.
+  The shared human-reply predicate is null-safe, so unclassified inbound
+  replies count and suppress follow-ups.
+- The authenticated outreach ops route also exposes a read-only `replies`
+  action. It returns per-campaign reply and delivery-feedback counts plus a
+  capped digest of genuine reply threads with sender, subject, variant,
+  received time, answer state, and a short text snippet.
+
 ## 2026-09-04: Telling a blocked thread mailbox from an empty sender pool
 
 - A reply is answered from the mailbox that owns its thread, or from the shared
