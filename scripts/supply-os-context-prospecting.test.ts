@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { buildQueryPlan, QUERY_PLAN_VERSION } from "../src/lib/leadgen/query-plan";
 import {
+  DEFAULT_MAX_ENRICHMENTS,
   profileFromProspectingDraft,
   runProspectingBatch,
   searchProspectingQuery,
@@ -23,6 +24,7 @@ import {
   listCompanyContextProspectingActions,
   normalizeProspectingDraft,
   PROSPECTING_MIN_FIT_SCORE,
+  PROSPECTING_PAID_BUDGET,
   runProspectingBackgroundTick,
   runCompanyContextProspectingAction,
   shouldContinueProspectingInBackground,
@@ -67,7 +69,14 @@ const backgroundAction: StoredProspectingAction = {
   threadId: null,
   runningStartedAt: null,
   hiddenAt: null,
-  stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
+  stats: {
+    queriesUsed: 0,
+    pagesFetched: 0,
+    candidatesFound: 0,
+    rowsCreated: 0,
+    rowsUpdated: 0,
+    paidUsage: { enrichmentCalls: 0, enrichmentBillable: 0, verificationCalls: 0 },
+  },
   planVersion: 0,
   nextQueryOffset: 0,
   exhausted: false,
@@ -542,6 +551,78 @@ async function main() {
       },
     });
     assert.equal(currentQueryOffset, 30);
+
+    // Paid-provider budget: each batch may only spend what the run has left,
+    // usage accumulates across batches, and a spent budget hands the next
+    // batch zero paid calls (heuristics only) without stopping the run.
+    const budgetAction = await createBackgroundAction(`paid-budget-${suffix}`);
+    const seededUsage = {
+      enrichmentCalls: PROSPECTING_PAID_BUDGET.enrichmentCalls - 5,
+      enrichmentBillable: 40,
+      verificationCalls: PROSPECTING_PAID_BUDGET.verificationCalls - 3,
+    };
+    await setActionPayload(budgetAction.id, {
+      status: "COMPLETED",
+      planVersion: QUERY_PLAN_VERSION,
+      nextQueryOffset: 1,
+      exhausted: false,
+      autoContinue: false,
+      stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0, paidUsage: seededUsage },
+    }, "COMPLETED");
+    const budgetArgs: Array<{ maxEnrichments?: number; maxVerifications?: number }> = [];
+    const budgetBatch = async ({ maxEnrichments, maxVerifications }: { maxEnrichments?: number; maxVerifications?: number }) => {
+      budgetArgs.push({ maxEnrichments, maxVerifications });
+      return {
+        candidates: [],
+        stats: {
+          queriesUsed: 1,
+          pagesFetched: 0,
+          candidatesFound: 0,
+          usage: {
+            enrichment: { provider: "hunter", calls: 5, billable: 2, contacts: 3, failures: 0, exhausted: false, companiesEnriched: 5, companiesWithContacts: 2, skippedByCap: 7 },
+            verification: { provider: "bouncer", calls: 3, cached: 1, failures: 0, exhausted: false, skippedByCap: 4 },
+          },
+        },
+        nextQueryOffset: 2,
+        exhausted: false,
+      };
+    };
+    const budgetFirst = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: budgetAction.id,
+      runBatch: budgetBatch,
+    });
+    assert.deepEqual(budgetArgs, [{ maxEnrichments: Math.min(DEFAULT_MAX_ENRICHMENTS, 5), maxVerifications: 3 }], "a batch only gets the run's remaining paid budget");
+    assert.deepEqual(budgetFirst.stats.paidUsage, {
+      enrichmentCalls: PROSPECTING_PAID_BUDGET.enrichmentCalls,
+      enrichmentBillable: 42,
+      verificationCalls: PROSPECTING_PAID_BUDGET.verificationCalls,
+    }, "paid usage accumulates across batches");
+    assert.equal(budgetFirst.status, "COMPLETED");
+    const budgetSecond = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: budgetAction.id,
+      runBatch: budgetBatch,
+    });
+    assert.deepEqual(budgetArgs[1], { maxEnrichments: 0, maxVerifications: 0 }, "a spent budget leaves no paid calls for the next batch");
+    assert.equal(budgetSecond.status, "COMPLETED", "the run keeps going on heuristics once the budget is spent");
+    await setActionPayload(budgetAction.id, { autoContinue: false }, "COMPLETED");
+    const freshUsageAction = await createBackgroundAction(`paid-budget-fresh-${suffix}`);
+    const freshArgs: Array<{ maxEnrichments?: number; maxVerifications?: number }> = [];
+    await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: freshUsageAction.id,
+      runBatch: async ({ maxEnrichments, maxVerifications }) => {
+        freshArgs.push({ maxEnrichments, maxVerifications });
+        return { candidates: [], stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0 }, nextQueryOffset: 1, exhausted: true };
+      },
+    });
+    assert.deepEqual(freshArgs, [{ maxEnrichments: DEFAULT_MAX_ENRICHMENTS, maxVerifications: PROSPECTING_PAID_BUDGET.verificationCalls }], "a fresh run starts with the per-batch cap and the full verification budget");
+    const legacyStatsAction = (await listCompanyContextProspectingActions(context, workspace.id)).find((item) => item.id === legacyResumeAction.id);
+    assert.deepEqual(legacyStatsAction?.stats.paidUsage, { enrichmentCalls: 0, enrichmentBillable: 0, verificationCalls: 0 }, "actions stored before the budget decode with zero paid usage");
     const list = await prisma.researchList.findFirst({
       where: { officeId: office.id, slug: lifecycleDraft.listSlug },
       include: { records: true },
@@ -1113,6 +1194,36 @@ async function main() {
       where: { officeId: office.id, runId: prePersistenceRun.id },
     }), 0);
     await setActionPayload(prePersistenceAction.id, {
+      autoContinue: false,
+    }, "FAILED");
+
+    // A failing run ledger must not stop the action itself from settling as
+    // FAILED with its usage; the original batch error is what surfaces.
+    const ledgerFailureAction = await createBackgroundAction(`background-ledger-failure-${suffix}`);
+    await assert.rejects(
+      () => runCompanyContextProspectingAction({
+        context,
+        workspaceId: workspace.id,
+        actionId: ledgerFailureAction.id,
+        runBatch: async () => {
+          throw new Error("fixture batch failure");
+        },
+        bookkeeping: {
+          recordLeadDiscoveries: async () => undefined,
+          finishLeadGenRun: async () => {
+            throw new Error("fixture ledger failure");
+          },
+        },
+      }),
+      /fixture batch failure/,
+    );
+    const ledgerFailurePayload = await prisma.companyContext.findUniqueOrThrow({
+      where: { id: ledgerFailureAction.id },
+      select: { payload: true, processingState: true },
+    });
+    assert.equal(ledgerFailurePayload.processingState, "FAILED");
+    assert.equal((ledgerFailurePayload.payload as Record<string, unknown>).status, "FAILED");
+    await setActionPayload(ledgerFailureAction.id, {
       autoContinue: false,
     }, "FAILED");
 

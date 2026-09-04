@@ -17,6 +17,7 @@ import {
   type ContactEnricherUsage,
 } from "./enrich";
 import {
+  DEFAULT_VERIFIER_LIMIT,
   mailboxVerifierFromEnv,
   verifyEmails,
   type EmailVerification,
@@ -33,7 +34,7 @@ const DEFAULT_MAX_QUERIES = 60;
 const DEFAULT_MAX_PAGES = 300;
 const DEFAULT_BUDGET_MS = 240_000;
 /** Enrichment credits one batch may spend; only fit-qualified companies are enriched. */
-const DEFAULT_MAX_ENRICHMENTS = 40;
+export const DEFAULT_MAX_ENRICHMENTS = 40;
 const ENRICH_MIN_FIT_SCORE = 50;
 
 export type ProspectingDraft = {
@@ -82,7 +83,8 @@ export type ProspectingBatchStats = {
 
 export type ProspectingProviderUsage = {
   enrichment?: ContactEnricherUsage & { companiesEnriched: number; companiesWithContacts: number; skippedByCap: number };
-  verification?: MailboxVerifierUsage;
+  /** `skippedByCap`: addresses left to the heuristic verdict because `maxVerifications` was reached. */
+  verification?: MailboxVerifierUsage & { skippedByCap: number };
 };
 
 export type ProspectingBatchResult = {
@@ -257,6 +259,8 @@ export async function runProspectingBatch(args: {
   /** `undefined` uses `BOUNCER_API_KEY` when set; `null` disables paid verification. */
   verifier?: MailboxVerifier | null;
   maxEnrichments?: number;
+  /** Paid verifier calls this batch may make; further addresses keep the heuristic verdict. */
+  maxVerifications?: number;
 }): Promise<ProspectingBatchResult> {
   const maxQueries = Math.min(DEFAULT_MAX_QUERIES, Math.max(1, Math.floor(args.maxQueries ?? DEFAULT_MAX_QUERIES)));
   const maxPages = Math.min(DEFAULT_MAX_PAGES, Math.max(1, Math.floor(args.maxPages ?? DEFAULT_MAX_PAGES)));
@@ -267,8 +271,22 @@ export async function runProspectingBatch(args: {
   const enricher = args.enricher === undefined ? contactEnricherFromEnv() : args.enricher;
   const verifier = args.verifier === undefined ? mailboxVerifierFromEnv() : args.verifier;
   const maxEnrichments = Math.max(0, Math.floor(args.maxEnrichments ?? DEFAULT_MAX_ENRICHMENTS));
-  const verifyOptions = { resolveMx: args.resolveMx, verifier };
+  const maxVerifications = args.maxVerifications === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0, Math.floor(args.maxVerifications));
   const enrichment = { companiesEnriched: 0, companiesWithContacts: 0, skippedByCap: 0 };
+  const verification = { skippedByCap: 0 };
+
+  /** Free checks for every address; the paid verifier only while the batch budget lasts. */
+  async function verifyCandidateEmails(emails: readonly string[], companyDomain: string | undefined) {
+    if (!verifier) return verifyEmails(emails, { resolveMx: args.resolveMx, companyDomain, verifier });
+    const unique = new Set(emails.map((email) => email.trim().toLowerCase())).size;
+    const wanted = Math.min(DEFAULT_VERIFIER_LIMIT, unique);
+    const remaining = Math.max(0, maxVerifications - verifier.usage().calls);
+    const verifierLimit = Math.min(wanted, remaining);
+    verification.skippedByCap += wanted - verifierLimit;
+    return verifyEmails(emails, { resolveMx: args.resolveMx, companyDomain, verifier, verifierLimit });
+  }
   // Enrichment outcome per domain within this batch: a repeated domain (directory
   // rows are not domain-deduped) reuses it instead of spending another cap slot.
   const enrichedByDomain = new Map<string, LeadCandidate["contacts"]>();
@@ -379,10 +397,10 @@ export async function runProspectingBatch(args: {
           const directoryCandidate = candidateFromDirectoryRow(args.profile, row, query, hit);
           if (directoryCandidate.candidate.fit.tier === "reject") continue;
           await enrichCandidate(directoryCandidate.candidate);
-          directoryCandidate.verifications = await verifyEmails(directoryCandidate.candidate.emails, {
-            companyDomain: row.domain ?? undefined,
-            ...verifyOptions,
-          });
+          directoryCandidate.verifications = await verifyCandidateEmails(
+            directoryCandidate.candidate.emails,
+            row.domain ?? undefined,
+          );
           candidates.push(directoryCandidate);
           stats.candidatesFound += 1;
           const providerStats = providerStatsFor(providerNameForHit(hit));
@@ -394,10 +412,7 @@ export async function runProspectingBatch(args: {
       }
       if (harvested.fit.tier === "reject") continue;
       await enrichCandidate(harvested);
-      const verifications = await verifyEmails(harvested.emails, {
-        companyDomain: harvested.domain,
-        ...verifyOptions,
-      });
+      const verifications = await verifyCandidateEmails(harvested.emails, harvested.domain);
       candidates.push({ candidate: harvested, verifications, region: query.region });
       stats.candidatesFound += 1;
       const providerStats = providerStatsFor(providerNameForHit(hit));
@@ -411,7 +426,7 @@ export async function runProspectingBatch(args: {
   if (enricher || verifier) {
     stats.usage = {
       ...(enricher ? { enrichment: { ...enricher.usage(), ...enrichment } } : {}),
-      ...(verifier ? { verification: verifier.usage() } : {}),
+      ...(verifier ? { verification: { ...verifier.usage(), ...verification } } : {}),
     };
   }
 

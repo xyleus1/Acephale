@@ -1,5 +1,26 @@
 # Engineering Log
 
+## 2026-09-04: Paid provider spend is capped per prospecting run, not per batch
+
+- `runProspectingBatch` accepts `maxVerifications`; `verifyCandidateEmails`
+  computes the paid slots per company as `min(DEFAULT_VERIFIER_LIMIT, unique
+  addresses)`, clamps them to the verifier calls still allowed in the batch,
+  and counts the difference as `usage.verification.skippedByCap`. Every
+  address still gets the deterministic checks. `DEFAULT_MAX_ENRICHMENTS` is
+  exported for callers that combine it with a run budget.
+- `context-prospecting.ts`: `stats.paidUsage` is added to the stored action
+  (decoded as zeros for old payloads), `addPaidUsage` folds each batch's
+  `usage.enrichment.calls` / `billable` and `usage.verification.calls` into
+  it (also on the FAILED path when the batch itself returned), and
+  `remainingPaidBudget` sets the per-batch caps before each
+  `runProspectingBatch` call. The `runBatch` injection of
+  `runCompanyContextProspectingAction` forwards both caps.
+- Sales Agent card (`supply-os-context.tsx`): a "Paid lookups" row with usage
+  against the budget, hidden while nothing paid was spent.
+- Verification: `npx tsx scripts/leadgen.test.ts`,
+  `npm run test:supply-os-context-prospecting`, `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`.
+
 ## 2026-09-04: Legacy re-keying must not move a row that is already keyed by its domain
 
 - Post-merge review of #390: `persistCandidates` runs one `rekeyResearchRecords`

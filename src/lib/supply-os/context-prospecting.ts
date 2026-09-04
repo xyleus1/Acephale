@@ -23,6 +23,7 @@ import {
 import { normalizeDedupeValue } from "@/lib/research-dedupe";
 import { ensureResearchProject } from "@/lib/research-projects";
 import {
+  DEFAULT_MAX_ENRICHMENTS,
   defaultProspectingSearch,
   profileFromProspectingDraft,
   runProspectingBatch,
@@ -39,8 +40,15 @@ import type { VerifyOptions } from "@/lib/leadgen/verify";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
 import { lockCompanyContextAction, type CompanyContextCitation } from "@/lib/company-context";
 import { QUERY_PLAN_VERSION } from "@/lib/leadgen/query-plan";
-import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
+import {
+  EMPTY_PAID_USAGE,
+  PROSPECTING_PAID_BUDGET,
+  remainingPaidBudget,
+  STALE_RUN_MS,
+  type ProspectingPaidUsage,
+} from "@/lib/supply-os/context-prospecting-constants";
 export { STALE_RUN_MS };
+export { PROSPECTING_PAID_BUDGET };
 
 const MAX_ACTIONS = 50;
 const MAX_ACTION_SCAN_ROWS = 500;
@@ -81,6 +89,8 @@ type ProspectingStats = {
   candidatesFound: number;
   rowsCreated: number;
   rowsUpdated: number;
+  /** Paid enrichment and verification calls made so far, across all batches of the run. */
+  paidUsage: ProspectingPaidUsage;
 };
 
 export type StoredProspectingAction = {
@@ -169,6 +179,9 @@ function decodeAction(payload: unknown) {
     ? value.stats as Record<string, unknown>
     : {};
   const number = (item: unknown) => typeof item === "number" && Number.isFinite(item) ? Math.max(0, Math.floor(item)) : 0;
+  const paidUsageValue = statsValue.paidUsage && typeof statsValue.paidUsage === "object" && !Array.isArray(statsValue.paidUsage)
+    ? statsValue.paidUsage as Record<string, unknown>
+    : {};
   const citations = Array.isArray(value.citations) ? value.citations.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
     const citation = entry as Record<string, unknown>;
@@ -201,6 +214,11 @@ function decodeAction(payload: unknown) {
       candidatesFound: number(statsValue.candidatesFound),
       rowsCreated: number(statsValue.rowsCreated),
       rowsUpdated: number(statsValue.rowsUpdated),
+      paidUsage: {
+        enrichmentCalls: number(paidUsageValue.enrichmentCalls),
+        enrichmentBillable: number(paidUsageValue.enrichmentBillable),
+        verificationCalls: number(paidUsageValue.verificationCalls),
+      },
     },
     planVersion: number(value.planVersion),
     nextQueryOffset: number(value.nextQueryOffset),
@@ -281,7 +299,7 @@ export async function createCompanyContextProspectingActions(args: {
     threadId: args.threadId ?? null,
     runningStartedAt: null,
     hiddenAt: null,
-    stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
+    stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0, paidUsage: { ...EMPTY_PAID_USAGE } },
     planVersion: QUERY_PLAN_VERSION,
     nextQueryOffset: 0,
     exhausted: false,
@@ -352,6 +370,18 @@ async function ensureResearchList(officeId: string, companyId: string, draft: Pr
     }
     throw error;
   }
+}
+
+/** Run-level paid usage after adding one batch's provider counters. */
+export function addPaidUsage(
+  usage: ProspectingPaidUsage,
+  batch: Pick<ProspectingBatchStats, "usage"> | null | undefined,
+): ProspectingPaidUsage {
+  return {
+    enrichmentCalls: usage.enrichmentCalls + (batch?.usage?.enrichment?.calls ?? 0),
+    enrichmentBillable: usage.enrichmentBillable + (batch?.usage?.enrichment?.billable ?? 0),
+    verificationCalls: usage.verificationCalls + (batch?.usage?.verification?.calls ?? 0),
+  };
 }
 
 /** Search-provider counters plus paid enrichment/verification usage, stored on the run. */
@@ -650,6 +680,9 @@ async function executeProspectingAction(args: {
       workspaceId: args.workspaceId,
     });
     leadGenRunId = leadGenRun.id;
+    // The run budget is split across auto-continued batches: each batch may
+    // only spend what the run has left, so a 500-row run cannot outspend it.
+    const remainingBudget = remainingPaidBudget(args.action.stats.paidUsage);
     const result = await (args.runBatch ?? runProspectingBatch)({
       profile,
       queryOffset: args.action.planVersion === QUERY_PLAN_VERSION ? args.action.nextQueryOffset : 0,
@@ -657,6 +690,8 @@ async function executeProspectingAction(args: {
       fetchPage: args.fetchPage ?? defaultFetcher,
       resolveMx: args.resolveMx,
       budgetMs: args.batchBudgetMs,
+      maxEnrichments: Math.min(DEFAULT_MAX_ENRICHMENTS, remainingBudget.enrichmentCalls),
+      maxVerifications: remainingBudget.verificationCalls,
     });
     batchStats = result.stats;
     const persisted = await persistCandidates(args.context.officeId, draft.listSlug, result.candidates);
@@ -671,6 +706,7 @@ async function executeProspectingAction(args: {
         candidatesFound: args.action.stats.candidatesFound + result.stats.candidatesFound,
         rowsCreated: args.action.stats.rowsCreated + persisted.created,
         rowsUpdated: args.action.stats.rowsUpdated + persisted.updated,
+        paidUsage: addPaidUsage(args.action.stats.paidUsage, result.stats),
       },
       planVersion: QUERY_PLAN_VERSION,
       nextQueryOffset: result.nextQueryOffset,
@@ -745,10 +781,14 @@ async function executeProspectingAction(args: {
     return { id: args.action.id, createdAt: args.action.createdAt, ...completed };
   } catch (error) {
     if (progressCommitted && completedAction) return completedAction;
+    // Lead-run cleanup is best-effort: the action's FAILED state and the paid
+    // credits it already spent must be persisted even when the run ledger
+    // cannot be updated, otherwise a retry would start from stale usage.
     if (leadGenRunId) {
+      const runId = leadGenRunId;
       await finishRun(prisma, {
         officeId: args.context.officeId,
-        runId: leadGenRunId,
+        runId,
         status: "FAILED",
         counters: {
           queriesUsed: batchStats?.queriesUsed ?? 0,
@@ -761,13 +801,15 @@ async function executeProspectingAction(args: {
           providerStats: runProviderStats(batchStats),
         },
         error: boundedErrorMessage(error),
-      });
-      await discardLeadGenRunDiscoveries(args.context.officeId, leadGenRunId);
+      }).catch(() => undefined);
+      await discardLeadGenRunDiscoveries(args.context.officeId, runId).catch(() => undefined);
     }
     const failed: StoredProspectingAction = {
       ...args.action,
       status: "FAILED",
       runningStartedAt: null,
+      // Credits spent before the failure still count against the run budget.
+      stats: { ...args.action.stats, paidUsage: addPaidUsage(args.action.stats.paidUsage, batchStats) },
     };
     const updated = await prisma.companyContext.updateMany({
       where: {
@@ -1103,6 +1145,8 @@ export async function runCompanyContextProspectingAction(args: {
     search: ProspectingSearch;
     fetchPage: typeof defaultFetcher;
     resolveMx?: VerifyOptions["resolveMx"];
+    maxEnrichments?: number;
+    maxVerifications?: number;
   }) => Promise<ProspectingBatchResult>;
   bookkeeping?: ProspectingBookkeeping;
 }) {
@@ -1127,6 +1171,8 @@ export async function runCompanyContextProspectingAction(args: {
           search: input.search,
           fetchPage: input.fetchPage,
           resolveMx: input.resolveMx,
+          maxEnrichments: input.maxEnrichments,
+          maxVerifications: input.maxVerifications,
         })
       : undefined,
   });

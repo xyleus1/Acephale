@@ -32,7 +32,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
+import {
+  PROSPECTING_PAID_BUDGET,
+  STALE_RUN_MS,
+  type ProspectingPaidUsage,
+} from "@/lib/supply-os/context-prospecting-constants";
 import styles from "./supply-os-context.module.css";
 
 type ContextQuestion = {
@@ -118,6 +122,7 @@ type ContextProspectingAction = {
     candidatesFound: number;
     rowsCreated: number;
     rowsUpdated: number;
+    paidUsage?: ProspectingPaidUsage;
   };
   nextQueryOffset: number;
   exhausted: boolean;
@@ -197,6 +202,27 @@ function inlineMarkdown(text: string) {
       ? <strong key={`${part}:${index}`}>{part.slice(2, -2)}</strong>
       : <Fragment key={`${part}:${index}`}>{part}</Fragment>
   ));
+}
+
+/** Hunter/Bouncer credits used against the run budget; null until a paid call was made. */
+function paidUsageSummary(usage: ProspectingPaidUsage | undefined) {
+  const enrichment = usage?.enrichmentCalls ?? 0;
+  const verification = usage?.verificationCalls ?? 0;
+  if (!enrichment && !verification) return null;
+  const parts = [
+    `${enrichment} of ${PROSPECTING_PAID_BUDGET.enrichmentCalls} contact searches`,
+    `${verification} of ${PROSPECTING_PAID_BUDGET.verificationCalls} email checks`,
+  ];
+  const enrichmentCapped = enrichment >= PROSPECTING_PAID_BUDGET.enrichmentCalls;
+  const verificationCapped = verification >= PROSPECTING_PAID_BUDGET.verificationCalls;
+  const note = enrichmentCapped && verificationCapped
+    ? "Budget reached, free checks only."
+    : enrichmentCapped
+      ? "Contact search budget reached, free contact discovery only."
+      : verificationCapped
+        ? "Email check budget reached, free email checks only."
+        : null;
+  return note ? `${parts.join(", ")}. ${note}` : parts.join(", ");
 }
 
 function prospectingRunIsStale(action: ContextProspectingAction, now: number) {
@@ -1141,6 +1167,9 @@ export function SupplyOsContext({
                 <div><dt>Pages read</dt><dd>{action.stats.pagesFetched} {action.stats.pagesFetched === 1 ? "page" : "pages"}</dd></div>
                 <div><dt>Companies found</dt><dd>{action.stats.candidatesFound} {action.stats.candidatesFound === 1 ? "company" : "companies"}</dd></div>
                 <div><dt>Rows saved</dt><dd>{action.stats.rowsCreated} of {action.draft.rowTarget} rows saved</dd></div>
+                {paidUsageSummary(action.stats.paidUsage) ? (
+                  <div><dt>Paid lookups</dt><dd>{paidUsageSummary(action.stats.paidUsage)}</dd></div>
+                ) : null}
               </dl>
               {documentCitations(action.citations).length ? (
                 <div className={styles.citations} aria-label="Prospecting sources">

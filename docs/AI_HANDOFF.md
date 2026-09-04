@@ -1,5 +1,31 @@
 # AI Handoff
 
+## 2026-09-04: Leadgen: run-level paid budget for Hunter and Bouncer, usage on the Sales Agent card
+
+- A Sales Agent prospecting action auto-continues toward its row target, and
+  Hunter/Bouncer limits used to be per batch (`DEFAULT_MAX_ENRICHMENTS = 40`,
+  `DEFAULT_VERIFIER_LIMIT = 6` per company), so a long run could spend far
+  more than intended. `PROSPECTING_PAID_BUDGET` in
+  `src/lib/supply-os/context-prospecting-constants.ts` (200 enrichment calls,
+  600 verification calls) now caps one action across all of its batches.
+- `StoredProspectingAction.stats.paidUsage` (`enrichmentCalls`,
+  `enrichmentBillable`, `verificationCalls`) accumulates the batch `usage`
+  after every batch, including a batch whose persistence failed; actions stored
+  before this decode with zeros. `executeProspectingAction` hands each batch
+  `maxEnrichments = min(40, remaining)` and the new
+  `maxVerifications = remaining`; `runProspectingBatch` stops the paid
+  verifier at that count and reports the rest as
+  `usage.verification.skippedByCap`. Past the budget the run continues on the
+  free heuristics only; it never stops early because of cost.
+- The Sales Agent card shows "Paid lookups: N of 200 contact searches, M of 600
+  email checks" once a paid call was made, with "Budget reached, free checks
+  only." at the cap. Old actions without `paidUsage` render nothing extra.
+- Tests: `scripts/leadgen.test.ts` (`maxVerifications` stops the verifier,
+  heuristic verdicts remain, zero budget makes no call) and the real-DB
+  `scripts/supply-os-context-prospecting.test.ts` (batch receives only the
+  remaining budget, usage accumulates, spent budget yields zero paid calls on
+  the next batch while the run completes, legacy decode). No migration.
+
 ## 2026-09-04: Leadgen follow-up: a domain-keyed row is never re-keyed by its name
 
 - Post-merge review of #390: when one batch carried a company both with its

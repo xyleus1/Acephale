@@ -5212,3 +5212,21 @@ Use this log for durable product and engineering decisions. Do not put every imp
   `scripts/supply-os-context-prospecting.test.ts` cover every provider state
   with mocked transports and delete both keys from `process.env` so a
   credentialed machine or CI never spends credits.
+
+## 2026-09-04: Paid prospecting spend is budgeted per run and never stops the run
+
+- Status: accepted
+- Owner: engineering
+- Decision: One prospecting action (all auto-continued batches of one Sales
+  Agent request) may make at most `PROSPECTING_PAID_BUDGET.enrichmentCalls`
+  Hunter searches and `PROSPECTING_PAID_BUDGET.verificationCalls` Bouncer
+  checks, tracked in `stats.paidUsage` on the stored action. Per-batch caps
+  are derived from what the run has left. Reaching the budget switches the run
+  to the deterministic checks only; it does not pause, fail or shorten the run,
+  because discovery itself is free and the operator asked for rows, not for a
+  spend ceiling that halts work.
+- Usage is shown on the request card as calls against the budget so the
+  operator sees credit burn before topping up a provider. Billable Hunter calls
+  are recorded separately because a search with no contacts is free.
+- Verification: `scripts/leadgen.test.ts` and
+  `scripts/supply-os-context-prospecting.test.ts`.

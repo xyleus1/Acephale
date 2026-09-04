@@ -1002,6 +1002,65 @@ const cappedBatch = await runProspectingBatch({
 assert.equal(cappedBatch.stats.usage?.enrichment?.skippedByCap, 1, "the per-batch enrichment cap must be honoured");
 assert.equal(cappedBatch.stats.usage?.verification, undefined);
 
+// A batch-level verification budget: the paid verifier stops after
+// `maxVerifications` calls, later addresses keep the heuristic verdict and are
+// counted as skipped, and the batch still completes.
+let budgetedCalls = 0;
+const budgetedVerifier: MailboxVerifier = {
+  name: "counting",
+  usage: () => ({ provider: "counting", calls: budgetedCalls, cached: 0, failures: 0, exhausted: false }),
+  verify: async (email) => {
+    budgetedCalls += 1;
+    return countingVerifier.verify(email);
+  },
+};
+const wantedPaidChecks = enrichedBatch.candidates.reduce(
+  (sum, item) => sum + Math.min(6, new Set(item.candidate.emails.map((email) => email.toLowerCase())).size),
+  0,
+);
+assert.ok(wantedPaidChecks >= 2, "fixture must offer more addresses than the budget allows");
+const verificationBudgetBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  budgetMs: 10_000,
+  search: async () => [
+    { url: "https://www.ornekcelik.com.tr", domain: "ornekcelik.com.tr", engine: "brave", rank: 1 },
+    { url: "https://table-homepage.example", domain: "table-homepage.example", engine: "brave", rank: 2 },
+  ],
+  fetchPage: async (url) => pages[url.replace("https://ornekcelik", "https://www.ornekcelik")] ?? (url.includes("table-homepage.example")
+    ? { url, status: 200, contentType: "text/html", body: "<title>Table Steel</title><p>celik konstruksiyon imalat fabrika sac profil uretim</p><p>info@table-homepage.example</p>", isPdf: false }
+    : null),
+  resolveMx: companyMx,
+  enricher: batchEnricher,
+  verifier: budgetedVerifier,
+  maxVerifications: 1,
+});
+assert.equal(budgetedCalls, 1, "the paid verifier stops at the batch verification budget");
+assert.equal(verificationBudgetBatch.stats.usage?.verification?.calls, 1);
+assert.equal(verificationBudgetBatch.stats.usage?.verification?.skippedByCap, wantedPaidChecks - 1);
+assert.equal(verificationBudgetBatch.candidates.length, 2, "companies past the budget are still harvested");
+assert.equal(
+  verificationBudgetBatch.candidates.flatMap((item) => item.verifications).filter((item) => item.provider).length,
+  1,
+  "only the budgeted address carries a provider verdict",
+);
+const zeroBudgetBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  budgetMs: 10_000,
+  search: async () => [{ url: "https://www.ornekcelik.com.tr", domain: "ornekcelik.com.tr", engine: "brave", rank: 1 }],
+  fetchPage: async (url) => pages[url.replace("https://ornekcelik", "https://www.ornekcelik")] ?? null,
+  resolveMx: companyMx,
+  enricher: null,
+  verifier: budgetedVerifier,
+  maxVerifications: 0,
+});
+assert.equal(budgetedCalls, 1, "a zero budget makes no paid call");
+assert.ok((zeroBudgetBatch.stats.usage?.verification?.skippedByCap ?? 0) >= 1);
+assert.ok(zeroBudgetBatch.candidates[0]!.verifications.every((item) => item.provider === null && item.verdict !== "unknown"), "heuristic verdicts still apply");
+
 // Directory rows with a domain are enriched like harvested sites; rows without
 // a domain stay on the deterministic path and spend nothing.
 const directoryEnriched: string[] = [];
