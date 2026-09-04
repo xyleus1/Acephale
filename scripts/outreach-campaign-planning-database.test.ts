@@ -6,6 +6,7 @@ import { prisma } from "../src/lib/prisma";
 import { runOutreachCampaignBatch } from "../src/lib/outreach-campaign-send";
 import {
   activateCampaign,
+  campaignRecipientFeedback,
   cancelCampaign,
   completeCampaignIfDone,
   planOutreachCampaign,
@@ -153,6 +154,112 @@ async function main() {
     await prisma.researchRecord.update({
       where: { officeId: office.id, id: record.id },
       data: { status: "new" },
+    });
+    const feedbackList = await prisma.researchList.create({
+      data: {
+        officeId: office.id,
+        slug: `feedback-${suffix}`,
+        name: `Feedback ${suffix}`,
+        fields: [{ key: "primary_email", label: "Email", type: "email" }],
+      },
+    });
+    const feedbackRecord = await prisma.researchRecord.create({
+      data: {
+        officeId: office.id,
+        listId: feedbackList.id,
+        data: {
+          company_name: "Feedback Test Bakery",
+          country_name: "GB",
+          primary_email: `feedback-clean-${suffix}@example.test`,
+        },
+      },
+    });
+    const feedbackCampaign = await prisma.outreachCampaign.create({
+      data: {
+        officeId: office.id,
+        listId: feedbackList.id,
+        name: `Feedback Wens campaign ${suffix}`,
+        status: "COMPLETED",
+        subject: "Feedback",
+        bodyTemplate: "Reply STOP to opt out.",
+        emailField: "primary_email",
+        rowStatuses: ["new"],
+        filters: Prisma.DbNull,
+        senderAccountId: sender.id,
+        senderDisplayName: null,
+        variants: Prisma.DbNull,
+        audienceTotal: 2,
+        audienceRecordIds: [record.id, feedbackRecord.id],
+        audiencePersonalization: {
+          [record.id]: { email: `feedback-bounced-${suffix}@example.test` },
+          [feedbackRecord.id]: { email: `feedback-clean-${suffix}@example.test` },
+        },
+        revisionHash: "feedback",
+      },
+      select: { id: true },
+    });
+    const feedbackEmptyCampaign = await prisma.outreachCampaign.create({
+      data: {
+        officeId: office.id,
+        listId: feedbackList.id,
+        name: `Feedback empty campaign ${suffix}`,
+        status: "DRAFT",
+        subject: "Feedback empty",
+        bodyTemplate: "Reply STOP to opt out.",
+        emailField: "primary_email",
+        rowStatuses: ["new"],
+        filters: Prisma.DbNull,
+        senderAccountId: sender.id,
+        senderDisplayName: null,
+        variants: Prisma.DbNull,
+        audienceTotal: 0,
+        audienceRecordIds: [],
+        audiencePersonalization: Prisma.DbNull,
+        revisionHash: "feedback-empty",
+      },
+      select: { id: true },
+    });
+    await prisma.outreachCampaignSend.createMany({
+      data: [
+        {
+          officeId: office.id,
+          campaignId: feedbackCampaign.id,
+          recordId: record.id,
+          recipient: `feedback-bounced-${suffix}@example.test`,
+          status: "SENT",
+        },
+        {
+          officeId: office.id,
+          campaignId: feedbackCampaign.id,
+          recordId: feedbackRecord.id,
+          recipient: `feedback-clean-${suffix}@example.test`,
+          status: "SENT",
+        },
+      ],
+    });
+    await prisma.emailSuppression.create({
+      data: {
+        officeId: office.id,
+        email: `feedback-bounced-${suffix}@example.test`,
+        reason: "BOUNCED",
+        source: "GMAIL",
+      },
+    });
+    const feedback = await campaignRecipientFeedback({
+      officeId: office.id,
+      campaignIds: [feedbackCampaign.id, feedbackEmptyCampaign.id],
+    });
+    assert.deepEqual(feedback.get(feedbackCampaign.id), {
+      bounced: 1,
+      complained: 0,
+      optedOut: 0,
+      blocked: 0,
+    });
+    assert.deepEqual(feedback.get(feedbackEmptyCampaign.id), {
+      bounced: 0,
+      complained: 0,
+      optedOut: 0,
+      blocked: 0,
     });
 
     const rotationPlan = await planOutreachCampaign({

@@ -40,6 +40,7 @@ import {
   type CampaignStatus,
 } from "@/lib/outreach-campaign-copy";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
+import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import {
   outstandingCampaignFollowUps,
@@ -1048,6 +1049,39 @@ export async function listCampaignSummaries(
     }
     throw error;
   }
+}
+
+export const CAMPAIGN_STATUSES_ALL = ["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"] as const;
+
+export async function campaignRecipientFeedback(input: {
+  officeId: string;
+  campaignIds: readonly string[];
+}) {
+  const buckets = new Map<string, { bounced: number; complained: number; optedOut: number; blocked: number }>();
+  for (const campaignId of input.campaignIds) {
+    buckets.set(campaignId, { bounced: 0, complained: 0, optedOut: 0, blocked: 0 });
+  }
+  if (!input.campaignIds.length) return buckets;
+  const sends = await prisma.outreachCampaignSend.findMany({
+    where: { officeId: input.officeId, campaignId: { in: [...input.campaignIds] }, status: "SENT" },
+    select: { campaignId: true, recipient: true },
+  });
+  const suppressions = await listSuppressedEmails(input.officeId, sends.map((send) => send.recipient));
+  const counted = new Set<string>();
+  for (const send of sends) {
+    const email = send.recipient.trim().toLowerCase();
+    const key = `${send.campaignId}:${email}`;
+    if (counted.has(key)) continue;
+    counted.add(key);
+    const reason = suppressions.get(email);
+    const bucket = buckets.get(send.campaignId);
+    if (!reason || !bucket) continue;
+    if (reason === "BOUNCED") bucket.bounced += 1;
+    else if (reason === "COMPLAINED") bucket.complained += 1;
+    else if (reason === "OPTED_OUT") bucket.optedOut += 1;
+    else bucket.blocked += 1;
+  }
+  return buckets;
 }
 
 export async function completeCampaignIfDone(input: { officeId: string; campaignId: string }) {

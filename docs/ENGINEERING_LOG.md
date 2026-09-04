@@ -19,6 +19,19 @@
   price) and a molder (MOQ 100, 12 days, no price) short of a purchase order
   for a week.
 
+## 2026-09-04: Add read-only outreach status ops action
+
+- The authenticated campaign ops route now accepts `action: "status"` after
+  resolving the office. It uses all campaign statuses by default and supports
+  an optional `campaignId` filter without changing campaign state.
+- `campaignRecipientFeedback` matches each office-scoped campaign's SENT
+  recipients against current office suppressions and reports bounced,
+  complained, opted-out, and other blocked recipients. Suppression counts can
+  include suppressions created before the campaign.
+- The database suite covers one campaign with a bounced and clean recipient,
+  plus an empty campaign. The status action is read-only and does not add an
+  approval or send path.
+
 ## 2026-09-04: A sweep blamed the thread mailbox for an unavailable sender
 
 - The production sweep after the reply scope work answered every waiting reply

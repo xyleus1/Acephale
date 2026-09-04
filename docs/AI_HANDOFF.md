@@ -26,6 +26,16 @@
   first contact nudges still wait for an operator confirmation, and the quiet
   period and chase cap still bound the ask.
 
+## 2026-09-04: Read-only outreach campaign status ops action
+
+- The authenticated outreach ops route now accepts a read-only `status` action
+  scoped to the resolved office. It returns all campaign statuses, or one
+  campaign when `campaignId` is supplied, with sent, rejected, unknown,
+  replies, follow-up, and current recipient feedback counts.
+- Feedback counts match sent recipients against the office suppression list at
+  read time, so they reflect current suppressions even when a suppression
+  predates the campaign. The action performs no writes, sends, or approvals.
+
 ## 2026-09-04: Telling a blocked thread mailbox from an empty sender pool
 
 - A reply is answered from the mailbox that owns its thread, or from the shared

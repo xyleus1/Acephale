@@ -12,6 +12,9 @@ import {
 } from "@/lib/outreach-campaign-copy";
 import {
   activateCampaign,
+  CAMPAIGN_STATUSES_ALL,
+  campaignRecipientFeedback,
+  listCampaignSummaries,
   planOutreachCampaign,
   saveDraftCampaign,
   setCampaignFollowUps,
@@ -158,8 +161,8 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   const action = boundedText(body?.action, 30);
-  if (!action || !["mailboxes", "plan", "approve", "followups", "run"].includes(action)) {
-    return NextResponse.json({ error: "action must be mailboxes, plan, approve, followups, or run." }, { status: 400 });
+  if (!action || !["mailboxes", "status", "plan", "approve", "followups", "run"].includes(action)) {
+    return NextResponse.json({ error: "action must be mailboxes, status, plan, approve, followups, or run." }, { status: 400 });
   }
 
   try {
@@ -177,6 +180,22 @@ export async function POST(request: NextRequest) {
     }
 
     const office = await resolveOffice(body?.officeId ?? body?.officeSlug);
+    if (action === "status") {
+      const campaignId = boundedText(body?.campaignId, 120);
+      const summaries = await listCampaignSummaries(office.id, CAMPAIGN_STATUSES_ALL);
+      const scoped = campaignId ? summaries.filter((summary) => summary.id === campaignId) : summaries;
+      const feedback = await campaignRecipientFeedback({
+        officeId: office.id,
+        campaignIds: scoped.map((summary) => summary.id),
+      });
+      return NextResponse.json({
+        office: { id: office.id, name: office.name },
+        campaigns: scoped.map((summary) => ({
+          ...summary,
+          feedback: feedback.get(summary.id) ?? { bounced: 0, complained: 0, optedOut: 0, blocked: 0 },
+        })),
+      });
+    }
     if (action === "plan") {
       const senderMailbox = boundedText(body?.senderMailbox, 320);
       const senderRotation = body?.senderRotation === true;
