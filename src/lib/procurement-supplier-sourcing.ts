@@ -11,6 +11,7 @@ import { defaultFetcher, scoreEmailUsefulness, type PageFetcher } from "@/lib/le
 import { verifyEmail, type EmailVerification } from "@/lib/leadgen/verify";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { loadBulkRfqOrder, type BulkRfqOrder } from "@/lib/procurement-bulk-rfq";
+import { advanceProcurementOrderStatus } from "@/lib/procurement-order-status";
 import { procurementWorkflowDatabase } from "@/lib/procurement-workflow";
 import {
   selectSupplierDomainProposers,
@@ -381,7 +382,9 @@ export async function runProcurementSupplierSourcingWave(input: {
   loadOrder?: typeof loadBulkRfqOrder;
   loadExistingKeys?: typeof existingVendorKeys;
   insertVendor?: typeof insertSourcedVendor;
+  advanceStatus?: typeof advanceProcurementOrderStatus;
 }): Promise<SourcingWaveResult> {
+  const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
   const order = await (input.loadOrder ?? loadBulkRfqOrder)(input.orderId);
   if (!order) throw new SupplierSourcingError("The sourcing request was not found.", "not_found");
   const category = classifySupplierSourcingCategory({
@@ -406,6 +409,15 @@ export async function runProcurementSupplierSourcingWave(input: {
   const existing = await (input.loadExistingKeys ?? existingVendorKeys)(order.orderId);
   const seenDomains = new Set(existing.domains);
   const usedEmails = new Set(existing.emails);
+  let statusAdvanceRequested = false;
+  if (existing.domains.size > 0 || existing.emails.size > 0) {
+    statusAdvanceRequested = true;
+    await advanceStatus({
+      customerId: order.customerId,
+      orderId: order.orderId,
+      event: "supplier_discovered",
+    });
+  }
   const result: SourcingWaveResult = {
     orderId: order.orderId,
     material: order.material,
@@ -603,6 +615,16 @@ export async function runProcurementSupplierSourcingWave(input: {
       }
       usedEmails.add(accepted.email);
       result.added += 1;
+      // The first supplier saved is the moment the request is visibly being
+      // researched; the status write is idempotent, so a later wave is a no-op.
+      if (result.added === 1 && !statusAdvanceRequested) {
+        statusAdvanceRequested = true;
+        await advanceStatus({
+          customerId: order.customerId,
+          orderId: order.orderId,
+          event: "supplier_discovered",
+        });
+      }
       result.additions.push({
         vendorId,
         name: cleanName(site.companyName),

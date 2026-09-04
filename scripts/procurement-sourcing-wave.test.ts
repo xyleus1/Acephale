@@ -272,6 +272,7 @@ async function main() {
 
   // Suppliers already on the request are never proposed, crawled, or mailed twice.
   inserted.length = 0;
+  const repeatStatusCalls: Array<{ customerId: string; orderId: string; event: string }> = [];
   const repeat = await runProcurementSupplierSourcingWave({
     orderId: order.orderId,
     target: 10,
@@ -284,10 +285,19 @@ async function main() {
       emails: new Set(["rfq@polymerlabs.example"]),
     })) as never,
     insertVendor: insertVendor as never,
+    advanceStatus: (async (args) => {
+      repeatStatusCalls.push(args);
+      return "researching";
+    }) as never,
   });
   assert.equal(repeat.added, 0);
   assert.equal(inserted.length, 0, "a repeated wave loads nobody twice");
   assert.equal(repeat.examined, 0, "already known domains are not even fetched");
+  assert.deepEqual(repeatStatusCalls, [{
+    customerId: order.customerId,
+    orderId: order.orderId,
+    event: "supplier_discovered",
+  }]);
 
   // A continuation slice has to search phrases the earlier slices never used,
   // and one search that returns nothing new must not end the wave while curated

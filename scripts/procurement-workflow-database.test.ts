@@ -65,6 +65,7 @@ async function main() {
     [officeId]: customerA,
     [officeBId]: customerB,
   });
+  const priorPreviewWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
 
   try {
     await app.office.create({ data: { id: officeId, name: `Procurement DB ${suffix}` } });
@@ -165,8 +166,10 @@ async function main() {
     );
     const priorRetryWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
     const priorRetryWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+    const priorRetryWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
     process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
     process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+    process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
     let retryWebhookCount = 0;
     try {
       const wake = (async () => {
@@ -207,12 +210,16 @@ async function main() {
       else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorRetryWebhookUrl;
       if (priorRetryWebhookSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
       else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorRetryWebhookSecret;
+      if (priorRetryWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+      else process.env.PROCUREMENT_WORKFLOW_OWNER = priorRetryWorkflowOwner;
     }
 
     const priorConcurrentWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
     const priorConcurrentWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+    const priorConcurrentWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
     process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
     process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+    process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
     let concurrentWebhookCount = 0;
     try {
       const concurrentInput = {
@@ -250,6 +257,8 @@ async function main() {
       else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorConcurrentWebhookUrl;
       if (priorConcurrentWebhookSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
       else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorConcurrentWebhookSecret;
+      if (priorConcurrentWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+      else process.env.PROCUREMENT_WORKFLOW_OWNER = priorConcurrentWorkflowOwner;
     }
 
     await assert.rejects(
@@ -731,6 +740,106 @@ async function main() {
       quoteVendorId,
     );
     assert.equal(storedQuote[0]?.amount, "12.4", "The first recorded quote stays as it was written.");
+    const advanceOrderStatus = async (customerId: string, status: string) => {
+      const rows = await dashboard.$queryRawUnsafe<Array<{ status: string | null }>>(
+        "SELECT advance_order_status($1::uuid, $2::uuid, $3::text) AS status",
+        customerId,
+        created.orderId,
+        status,
+      );
+      return rows[0]?.status ?? null;
+    };
+    assert.equal(
+      (await owner.$queryRawUnsafe<Array<{ allowed: boolean }>>(
+        "SELECT has_column_privilege('dashboard_api', 'orders', 'status', 'UPDATE') AS allowed",
+      ))[0]?.allowed,
+      false,
+    );
+    assert.equal(await advanceOrderStatus(customerA, "researching"), "researching");
+    assert.equal(await advanceOrderStatus(customerA, "researching"), null);
+    assert.equal(await advanceOrderStatus(customerA, "sourcing"), "sourcing");
+    assert.equal(await advanceOrderStatus(customerA, "researching"), null);
+
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'new' WHERE id = $1::uuid",
+      created.orderId,
+    );
+    let releaseResearching!: () => void;
+    const researchingRelease = new Promise<void>((resolve) => {
+      releaseResearching = resolve;
+    });
+    let researchingReady!: () => void;
+    const researchingStarted = new Promise<void>((resolve) => {
+      researchingReady = resolve;
+    });
+    const researchingTransaction = dashboard.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRawUnsafe<Array<{ status: string | null }>>(
+        "SELECT advance_order_status($1::uuid, $2::uuid, $3::text) AS status",
+        customerA,
+        created.orderId,
+        "researching",
+      );
+      assert.equal(rows[0]?.status, "researching");
+      researchingReady();
+      await researchingRelease;
+      return rows[0]?.status ?? null;
+    });
+    await researchingStarted;
+
+    let sourcingPid!: number;
+    let sourcingReady!: () => void;
+    const sourcingStarted = new Promise<void>((resolve) => {
+      sourcingReady = resolve;
+    });
+    const sourcingTransaction = concurrentDashboard.$transaction(async (transaction) => {
+      const pidRows = await transaction.$queryRawUnsafe<Array<{ pid: number }>>(
+        "SELECT pg_backend_pid() AS pid",
+      );
+      sourcingPid = Number(pidRows[0]?.pid);
+      sourcingReady();
+      const rows = await transaction.$queryRawUnsafe<Array<{ status: string | null }>>(
+        "SELECT advance_order_status($1::uuid, $2::uuid, $3::text) AS status",
+        customerA,
+        created.orderId,
+        "sourcing",
+      );
+      return rows[0]?.status ?? null;
+    });
+    await sourcingStarted;
+    let sourcingBlocked = false;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const activity = await owner.$queryRawUnsafe<Array<{
+        waitEventType: string | null;
+      }>>(
+        "SELECT wait_event_type AS \"waitEventType\" FROM pg_stat_activity WHERE pid = $1::int",
+        sourcingPid,
+      );
+      if (activity[0]?.waitEventType === "Lock") {
+        sourcingBlocked = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(sourcingBlocked, true, "The second status advance waits for the first row lock.");
+    releaseResearching();
+    assert.equal(await researchingTransaction, "researching");
+    assert.equal(await sourcingTransaction, "sourcing");
+    const racedStatus = await owner.$queryRawUnsafe<Array<{ status: string }>>(
+      "SELECT status FROM \"ProcurementOrder\" WHERE id = $1::uuid",
+      created.orderId,
+    );
+    assert.equal(racedStatus[0]?.status, "sourcing");
+
+    assert.equal(await advanceOrderStatus(customerB, "awaiting_order_approval"), null);
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'cancelled' WHERE id = $1::uuid",
+      created.orderId,
+    );
+    assert.equal(await advanceOrderStatus(customerA, "sourcing"), null);
+    await assert.rejects(
+      () => advanceOrderStatus(customerA, "ordered"),
+      /may not be set by the application/,
+    );
     await permissionDenied(() => dashboard.$executeRawUnsafe(
       "UPDATE order_vendors SET quote = '{}'::jsonb, name = 'Renamed' WHERE order_id = $1::uuid",
       created.orderId,
@@ -793,6 +902,8 @@ async function main() {
 
     process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
     process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+    const priorFailureWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
+    process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
     const priorWarn = console.warn;
     console.warn = () => undefined;
     try {
@@ -813,9 +924,12 @@ async function main() {
       assert.equal(Number(persisted[0]?.count), 1);
     } finally {
       console.warn = priorWarn;
+      if (priorFailureWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+      else process.env.PROCUREMENT_WORKFLOW_OWNER = priorFailureWorkflowOwner;
     }
 
     let previewWebhookCount = 0;
+    process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
     const previewFetch = (async () => {
       previewWebhookCount += 1;
       return new Response(null, { status: 204 });
@@ -1070,6 +1184,8 @@ async function main() {
     assert(!clientSource.includes("PROCUREMENT_CUSTOMER_MAP_JSON"));
     console.log("Procurement workflow database contract passed.");
   } finally {
+    if (priorPreviewWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+    else process.env.PROCUREMENT_WORKFLOW_OWNER = priorPreviewWorkflowOwner;
     await app.office.deleteMany({ where: { id: { in: [officeId, officeBId] } } }).catch(() => undefined);
     await Promise.all([
       app.$disconnect(),

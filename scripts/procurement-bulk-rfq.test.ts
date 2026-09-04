@@ -108,19 +108,20 @@ async function main() {
   );
   const source = readFileSync("src/lib/procurement-bulk-rfq.ts", "utf8");
   const runBlock = source.slice(source.indexOf("export async function runProcurementBulkRfq"));
-  assert.match(runBlock, /listUncontactedBulkRfqTargets\(order, input\.vendorIds \?\? null, \{\s*excludeVendorIds: input\.excludeVendorIds \?\? null,\s*\}\)/, "the run reads every uncontacted supplier, minus reviewer exclusions, before applying the limit");
+  assert.match(runBlock, /listUncontactedBulkRfqTargets\)\(order, input\.vendorIds \?\? null, \{\s*excludeVendorIds: input\.excludeVendorIds \?\? null,\s*\}\)/, "the default run reads every uncontacted supplier, minus reviewer exclusions, before applying the limit");
   const hashCheck = runBlock.indexOf("throw new BulkRfqBatchChangedError(");
-  assert.ok(hashCheck > runBlock.indexOf("selectBulkRfqBatch(") && hashCheck < runBlock.indexOf("reserveEmailSender("), "a changed batch is refused after selection and before any sender is reserved");
+  const reserveCall = runBlock.indexOf("reserveEmailSender)");
+  assert.ok(hashCheck > runBlock.indexOf("selectBulkRfqBatch(") && hashCheck < reserveCall, "a changed batch is refused after selection and before any sender is reserved");
   const filesLoad = runBlock.indexOf("loadProcurementRfqAttachmentPackage)(");
   assert.ok(filesLoad >= 0 && filesLoad < hashCheck, "the run resolves the file package before the hash check so the hash covers what it will send");
   assert.match(runBlock, /bulkRfqBatchHash\(order, targets, files\)/, "the run hashes the recipients together with the RFQ copy and files");
   assert.match(previewBlockSource(source), /bulkRfqBatchHash\(order, batch\.sendable, options\.files\)/, "the preview computes the same hash from the same inputs");
-  assert.match(runBlock, /selectBulkRfqBatch\(\s*uncontacted,\s*await listSuppressedEmails\(order\.officeId/, "suppression is applied before the limit, office scoped");
-  assert.ok(runBlock.indexOf("selectBulkRfqBatch(") < runBlock.indexOf("reserveEmailSender("), "no sender is reserved before suppression and limit are settled");
+  assert.match(runBlock, /listSuppressedEmails\)\(order\.officeId, uncontacted\.map\(\(target\) => target\.contactEmail\)\)/, "suppression is applied before the limit, office scoped");
+  assert.ok(runBlock.indexOf("selectBulkRfqBatch(") < runBlock.indexOf("reserveEmailSender)"), "no sender is reserved before suppression and limit are settled");
   const sendLoop = runBlock.slice(runBlock.indexOf("for (const target of targets)"));
   const lateCheck = sendLoop.indexOf("listSuppressedEmails(order.officeId, [target.contactEmail])");
   const providerSend = sendLoop.indexOf("provider.send(");
-  assert.ok(lateCheck > sendLoop.indexOf("reserveEmailSender(") && lateCheck < providerSend, "each target is rechecked for a late suppression after its sender is reserved and before the provider call");
+  assert.ok(lateCheck > sendLoop.indexOf("reserveEmailSender)") && lateCheck < providerSend, "each target is rechecked for a late suppression after its sender is reserved and before the provider call");
   const lateBlock = sendLoop.slice(lateCheck, providerSend);
   assert.match(lateBlock, /releaseEmailSenderReservation\(\{ officeId: order\.officeId, reservationId: reservation\.reservationId \}\)/, "a late suppression releases the reservation it just took");
   assert.match(lateBlock, /error: suppressionSkipMessage\(lateSuppression\)/, "a late suppression is a BLOCKED outcome with the deterministic reason");
@@ -142,7 +143,11 @@ async function main() {
   assert.match(previewRoute, /expectedBatchHash,\s*\}\)\);/, "the send forwards the reviewed batch hash to the run");
   assert.match(previewRoute, /error instanceof BulkRfqBatchChangedError/, "a changed batch is a 409, not a partial send");
 
-  const { bulkRfqBatchHash, BulkRfqBatchChangedError } = await import("../src/lib/procurement-bulk-rfq");
+  const {
+    bulkRfqBatchHash,
+    BulkRfqBatchChangedError,
+    runProcurementBulkRfq,
+  } = await import("../src/lib/procurement-bulk-rfq");
   const { EMPTY_RFQ_ATTACHMENT_PACKAGE } = await import("../src/lib/procurement-rfq-attachments");
   const batchA = [target, { ...target, vendorId: "vendor-second", name: "Second Works", contactEmail: "rfq@second.example" }];
   const noFiles = bulkRfqBatchHash(order, batchA, EMPTY_RFQ_ATTACHMENT_PACKAGE);
@@ -182,6 +187,47 @@ async function main() {
   const changed = new BulkRfqBatchChangedError("a".repeat(64), "b".repeat(64));
   assert.equal(changed.code, "BATCH_CHANGED");
   assert.match(changed.message, /Preview it again/);
+
+  const alreadySentStatusCalls: Array<{ customerId: string; orderId: string; event: string }> = [];
+  const alreadySentTargets = [
+    { ...target, vendorId: "already-sent-1" },
+    { ...target, vendorId: "already-sent-2", contactEmail: "second@protoexpress.com" },
+  ];
+  const alreadySentRun = await runProcurementBulkRfq({
+    orderId: order.orderId,
+    limit: alreadySentTargets.length,
+    attachRequestFiles: false,
+    loadOrder: (async () => ({
+      ...order,
+      customerId: "customer-1",
+    })) as never,
+    loadTargets: (async () => alreadySentTargets) as never,
+    listSuppressed: (async () => new Map()) as never,
+    reserveSender: (async () => ({
+      ok: true,
+      reservationId: "reservation-1",
+      accountId: "account-1",
+      senderEmail: "buyer@example.com",
+      dailySendLimit: 100,
+      sentToday: 0,
+      reservedToday: 0,
+      completed: true,
+      providerMessageId: "provider-message-1",
+      providerThreadId: "provider-thread-1",
+      localThreadId: null,
+      sentAt: null,
+    })) as never,
+    advanceStatus: (async (args) => {
+      alreadySentStatusCalls.push(args);
+      return "sourcing";
+    }) as never,
+  });
+  assert.equal(alreadySentRun.alreadySent, alreadySentTargets.length);
+  assert.deepEqual(alreadySentStatusCalls, [{
+    customerId: "customer-1",
+    orderId: order.orderId,
+    event: "rfq_sent",
+  }]);
 
   console.log("procurement-bulk-rfq: all assertions passed");
 }

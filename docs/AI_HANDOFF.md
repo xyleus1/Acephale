@@ -1,5 +1,26 @@
 # AI Handoff
 
+## 2026-09-05: Derya owns procurement order status
+
+- The default workflow owner is Derya. Set
+  `PROCUREMENT_WORKFLOW_OWNER=bourne` to opt back into Bourne wake, retry, and
+  reconciliation. Unset and unknown values keep wake disabled.
+- Research mode now follows that owner when `PROCUREMENT_RESEARCH_MODE` is
+  unset: Derya research is enabled by default, while
+  `PROCUREMENT_WORKFLOW_OWNER=bourne` restores the old Bourne default for both
+  wake and research. An explicit research mode still wins.
+- The dashboard role uses the tenant-scoped, forward-only
+  `advance_order_status` security-definer boundary for
+  `researching`, `sourcing`, and `awaiting_order_approval`. It cannot update
+  order status directly. Its update is rank-based against the row's current
+  status, so concurrent progress events cannot lose a forward transition.
+  `ordered`, `cancelled`, and `needs_attention` remain operator-owned.
+- Hooks fire on the first supplier discovered, first RFQ sent, and first quote
+  recorded. Sends and approvals are unchanged.
+- Out of scope: campaign banner, request-derived ICP discovery, multiple
+  contacts per company, and auto-reply loops.
+
+
 ## 2026-09-06: The funnel covers the whole request, not the threads a pass read
 
 - `conversationFunnel` was built from the reply scoped plan, and a pass reads a

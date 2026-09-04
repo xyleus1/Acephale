@@ -1,3 +1,5 @@
+import { procurementWorkflowOwner } from "@/lib/procurement-workflow-owner";
+
 export type ProcurementResearchMode = "bourne" | "derya";
 
 export function parseProcurementResearchMode(value: unknown): ProcurementResearchMode {
@@ -5,5 +7,7 @@ export function parseProcurementResearchMode(value: unknown): ProcurementResearc
 }
 
 export function procurementResearchMode(): ProcurementResearchMode {
-  return parseProcurementResearchMode(process.env.PROCUREMENT_RESEARCH_MODE);
+  const configured = process.env.PROCUREMENT_RESEARCH_MODE;
+  if (configured === "derya" || configured === "bourne") return configured;
+  return procurementWorkflowOwner() === "bourne" ? "bourne" : "derya";
 }

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { ProcurementRequestInput } from "@/lib/procurement-contract";
 import { procurementResearchMode } from "@/lib/procurement-research-mode";
+import { bourneWorkflowWakeEnabled } from "@/lib/procurement-workflow-owner";
 import {
   MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY,
   type ProcurementLedgerConversationMessage,
@@ -1072,6 +1073,9 @@ export async function requestBourneWorkflowWake(
   payload: { orderId: string; customerId: string },
   fetchImplementation: typeof fetch = fetch,
 ) {
+  // Derya owns the request end to end unless the deployment says otherwise, so
+  // a submission no longer reaches the external worker at all.
+  if (!bourneWorkflowWakeEnabled()) return false;
   const webhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL?.trim();
   const webhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET?.trim();
   if (!webhookUrl || !webhookSecret) return false;
@@ -1195,6 +1199,7 @@ export async function retryProcurementWorkflowWake(
   orderId: string,
   dependencies?: { database?: RawDatabase; fetchImplementation?: typeof fetch },
 ) {
+  if (!bourneWorkflowWakeEnabled()) return { claimed: false, workflowWakeRequested: false };
   const database = dependencies?.database ?? externalDatabase();
   const claimed = await claimProcurementWakeRetryFromDatabase(database, customerId, orderId);
   const workflowWakeRequested = claimed
@@ -1211,6 +1216,11 @@ export async function reconcileProcurementWorkflowWakes(dependencies: {
   concurrency?: number;
 } = {}): Promise<ProcurementWakeReconciliationResult> {
   const database = dependencies.database ?? externalDatabase();
+  // Nothing to reconcile when no worker is woken: the queued requests are
+  // Derya's own, and its research queue drains them.
+  if (!bourneWorkflowWakeEnabled()) {
+    return { candidates: 0, claimed: 0, delivered: 0, failed: 0, skipped: 0 };
+  }
   const customerIds = procurementCustomerIdsFromServerMetadata(dependencies.rawCustomerMapping);
   const limit = Math.min(
     25,

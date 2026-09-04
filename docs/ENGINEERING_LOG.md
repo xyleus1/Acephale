@@ -1,5 +1,24 @@
 # Engineering Log
 
+## 2026-09-05: Derya owns procurement order status
+
+- Procurement workflow ownership defaults to Derya. `PROCUREMENT_WORKFLOW_OWNER=bourne`
+  is the only opt-in for Bourne wake, retry, and reconciliation.
+- Research mode follows the workflow owner when
+  `PROCUREMENT_RESEARCH_MODE` is unset, so Derya research is enabled by
+  default and explicit research mode values still override the fallback.
+- The dashboard role advances only `researching`, `sourcing`, and
+  `awaiting_order_approval` through the tenant-scoped, forward-only
+  `advance_order_status` security-definer function. Its update compares
+  ladder ranks against the current row, preserving concurrent forward
+  progress. Operator-owned statuses such as `ordered`, `cancelled`, and
+  `needs_attention` remain untouched.
+- Supplier discovery, the first RFQ send, and the first recorded quote advance
+  status through the shared helper. No send or approval behavior changed.
+- Campaign banner, request-derived ICP discovery, multiple contacts per
+  company, and auto-reply loops are out of scope.
+
+
 ## 2026-09-06: A funnel that only counted repliers reported nothing owed
 
 - The stage work reported the funnel from the reply scoped plan. A pass reads a

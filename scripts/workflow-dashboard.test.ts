@@ -11,9 +11,11 @@ import {
   procurementCustomerIdFromServerMetadata,
   ProcurementWorkflowError,
   requestBourneWorkflowWake,
+  retryProcurementWorkflowWake,
   submitProcurementRequest,
 } from "../src/lib/procurement-workflow";
 import { handleProcurementWake } from "../src/lib/procurement-route-handlers";
+import { procurementResearchMode } from "../src/lib/procurement-research-mode";
 
 const customerA = "11111111-1111-4111-8111-111111111111";
 const customerB = "22222222-2222-4222-8222-222222222222";
@@ -370,8 +372,10 @@ assert(!database.state.idempotency.has(`${customerA}:foreign-bom-attempt`), "A f
 
 const priorWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
 const priorWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+const priorWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
 process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
 process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
 const webhookDatabase = new FakeProcurementDatabase();
 const successFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
   webhookDatabase.events.push("webhook");
@@ -495,6 +499,63 @@ try {
   else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorWebhookUrl;
   if (priorWebhookSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
   else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorWebhookSecret;
+  if (priorWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+  else process.env.PROCUREMENT_WORKFLOW_OWNER = priorWorkflowOwner;
+}
+
+const defaultOwnerUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+const defaultOwnerSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+const defaultOwnerWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
+const defaultOwnerResearchMode = process.env.PROCUREMENT_RESEARCH_MODE;
+delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+delete process.env.PROCUREMENT_RESEARCH_MODE;
+process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
+process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+try {
+  let defaultOwnerFetchCalls = 0;
+  const defaultOwnerDatabase = new FakeProcurementDatabase();
+  const defaultOwnerResult = await submitProcurementRequest(customerA, {
+    ...validInput,
+    idempotencyKey: "derya-default-owner",
+  }, {
+    database: defaultOwnerDatabase,
+    fetchImplementation: (async () => {
+      defaultOwnerFetchCalls += 1;
+      return new Response(null, { status: 204 });
+    }) as typeof fetch,
+  });
+  assert.equal(defaultOwnerResult.workflowWakeRequested, false);
+  assert.equal(defaultOwnerResult.deryaResearchEnqueueRequested, true);
+  assert.equal(defaultOwnerFetchCalls, 0);
+  assert.equal(defaultOwnerDatabase.state.orders.size, 1);
+
+  const throwingDatabase = {
+    async $queryRawUnsafe() {
+      throw new Error("default-owner retry must not query");
+    },
+    async $executeRawUnsafe() {
+      throw new Error("default-owner retry must not execute");
+    },
+  };
+  const defaultRetry = await retryProcurementWorkflowWake(
+    customerA,
+    defaultOwnerResult.orderId,
+    { database: throwingDatabase },
+  );
+  assert.deepEqual(defaultRetry, { claimed: false, workflowWakeRequested: false });
+  process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
+  assert.equal(procurementResearchMode(), "bourne");
+  process.env.PROCUREMENT_RESEARCH_MODE = "derya";
+  assert.equal(procurementResearchMode(), "derya");
+} finally {
+  if (defaultOwnerUrl === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+  else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = defaultOwnerUrl;
+  if (defaultOwnerSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+  else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = defaultOwnerSecret;
+  if (defaultOwnerWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+  else process.env.PROCUREMENT_WORKFLOW_OWNER = defaultOwnerWorkflowOwner;
+  if (defaultOwnerResearchMode === undefined) delete process.env.PROCUREMENT_RESEARCH_MODE;
+  else process.env.PROCUREMENT_RESEARCH_MODE = defaultOwnerResearchMode;
 }
 
 const routeSource = await readFile("src/app/api/procurement/requests/route.ts", "utf8");
@@ -529,6 +590,9 @@ assert(!clientSource.includes("lease_owner"));
 assert(!clientSource.includes("gmail"));
 assert(!clientSource.includes("customer_id"));
 assert(provisioningSql.includes("CREATE ROLE dashboard_api LOGIN NOINHERIT"));
+assert(provisioningSql.includes("advance_order_status(uuid, uuid, text)"));
+assert(provisioningSql.includes("GRANT EXECUTE ON FUNCTION advance_order_status(uuid, uuid, text) TO dashboard_api"));
+assert(provisioningSql.includes("has_column_privilege('dashboard_api', 'orders', 'status', 'UPDATE')"));
 assert(provisioningSql.includes("ALTER ROLE dashboard_api NOINHERIT"));
 assert(!provisioningSql.includes("NOSUPERUSER"), "Managed Neon owners cannot alter the SUPERUSER flag.");
 assert(!provisioningSql.includes("NOREPLICATION"), "Managed Neon owners cannot alter the REPLICATION flag.");

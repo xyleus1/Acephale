@@ -159,6 +159,80 @@ $$;
 REVOKE ALL ON FUNCTION record_order_vendor_quote(uuid, uuid, uuid, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION record_order_vendor_quote(uuid, uuid, uuid, jsonb) TO dashboard_api;
 
+-- The lifecycle status was the last field the external worker owned, which left
+-- every request the application itself sources sitting on its submitted status
+-- while suppliers were being found and contacted. The dashboard role still gets
+-- no update privilege on the table: it may only call this function, which is the
+-- database boundary that proves the order belongs to the calling customer, moves
+-- the status forward along the fixed ladder and never backwards, refuses any
+-- status the application is not allowed to set, and leaves a request that a
+-- human or the worker has already settled or flagged untouched. Returns the new
+-- status, or null when nothing moved.
+CREATE OR REPLACE FUNCTION advance_order_status(
+  p_customer_id uuid,
+  p_order_id uuid,
+  p_status text
+) RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  ladder jsonb := '{
+    "new": 0,
+    "researching": 1,
+    "awaiting_shortlist_approval": 1,
+    "sourcing": 2,
+    "awaiting_order_approval": 3,
+    "ordered": 4
+  }'::jsonb;
+  current_status text;
+  written integer;
+BEGIN
+  IF p_customer_id IS NULL OR p_order_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  -- Placing an order, cancelling one and flagging one for attention stay with
+  -- the operator, so the automation can only reach the three sourcing statuses.
+  IF p_status IS NULL OR p_status NOT IN ('researching', 'sourcing', 'awaiting_order_approval') THEN
+    RAISE EXCEPTION 'order status % may not be set by the application', coalesce(p_status, 'null');
+  END IF;
+
+  SELECT procurement_order.status INTO current_status
+  FROM "ProcurementOrder" AS procurement_order
+  WHERE procurement_order.id = p_order_id
+    AND procurement_order.customer_id = p_customer_id;
+
+  IF current_status IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  -- A status outside the ladder, such as cancelled or needs_attention, is a
+  -- decision the automation must not overwrite with sourcing progress.
+  IF NOT ladder ? current_status THEN
+    RETURN NULL;
+  END IF;
+
+  IF (ladder->>p_status)::int <= (ladder->>current_status)::int THEN
+    RETURN NULL;
+  END IF;
+
+  UPDATE "ProcurementOrder"
+  SET status = p_status, updated_at = now()
+  WHERE "ProcurementOrder".id = p_order_id
+    AND "ProcurementOrder".customer_id = p_customer_id
+    AND ladder ? "ProcurementOrder".status
+    AND (ladder->>"ProcurementOrder".status)::int < (ladder->>p_status)::int;
+
+  GET DIAGNOSTICS written = ROW_COUNT;
+  RETURN CASE WHEN written = 1 THEN p_status ELSE NULL END;
+END
+$$;
+
+REVOKE ALL ON FUNCTION advance_order_status(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION advance_order_status(uuid, uuid, text) TO dashboard_api;
+
 REVOKE DELETE, TRUNCATE, REFERENCES, TRIGGER
 ON procurement_api_idempotency
 FROM dashboard_api;
@@ -185,6 +259,12 @@ BEGIN
       'record_order_vendor_quote(uuid, uuid, uuid, jsonb)',
       'EXECUTE'
     )
+    OR NOT has_function_privilege(
+      'dashboard_api',
+      'advance_order_status(uuid, uuid, text)',
+      'EXECUTE'
+    )
+    OR has_column_privilege('dashboard_api', 'orders', 'status', 'UPDATE')
     OR has_table_privilege('dashboard_api', 'order_vendors', 'DELETE')
     OR has_table_privilege('dashboard_api', 'order_vendors', 'TRUNCATE')
     OR has_table_privilege('dashboard_api', 'procurement_api_idempotency', 'DELETE')

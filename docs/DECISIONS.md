@@ -1,5 +1,30 @@
 # Decisions
 
+## Derya owns procurement order status; Bourne wake is opt-in
+
+Date: 2026-09-05
+
+- Status: accepted
+- Owner: product and engineering
+- Procurement workflow ownership defaults to Derya. Only
+  `PROCUREMENT_WORKFLOW_OWNER=bourne` re-enables Bourne wake, retry, and
+  reconciliation.
+- When `PROCUREMENT_RESEARCH_MODE` is unset, research follows the workflow
+  owner, so Derya research is on by default and
+  `PROCUREMENT_WORKFLOW_OWNER=bourne` restores the old Bourne default for both.
+  An explicit research mode overrides that fallback.
+- Derya advances status through the tenant-scoped `SECURITY DEFINER`
+  `advance_order_status` boundary. It accepts only `researching`, `sourcing`,
+  and `awaiting_order_approval`, moves forward only, and uses the current row
+  rank in its atomic update so concurrent progress events cannot lose a
+  transition. It never overwrites `ordered`, `cancelled`, or
+  `needs_attention`, which remain operator-owned.
+- Hooks advance status on the first supplier discovery, first RFQ send, and
+  first recorded quote. Supplier sends and approvals are unchanged.
+- Out of scope: campaign banner, request-derived ICP discovery, multiple
+  contacts per company, and auto-reply loops.
+
+
 ## A supplier conversation is finished only when a quote is recorded
 
 Date: 2026-09-05

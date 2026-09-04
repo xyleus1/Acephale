@@ -10,6 +10,7 @@ import { listSuppressedEmails, type EmailSuppressionReason } from "@/lib/email-d
 import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
+import { advanceProcurementOrderStatus } from "@/lib/procurement-order-status";
 import {
   EMPTY_RFQ_ATTACHMENT_PACKAGE,
   loadProcurementRfqAttachmentPackage,
@@ -555,6 +556,13 @@ export async function reconcileProcurementBulkRfq(input: {
         providerThreadId: receipt.providerThreadId,
       });
       outcomes.push({ vendorId, state: "SENT", error: null });
+      if (outcomes.filter((outcome) => outcome.state === "SENT").length === 1) {
+        await advanceProcurementOrderStatus({
+          customerId: order.customerId,
+          orderId: order.orderId,
+          event: "rfq_sent",
+        });
+      }
       continue;
     }
     if (receipt.state === "NOT_FOUND") {
@@ -586,17 +594,23 @@ export async function runProcurementBulkRfq(input: {
   // The batch hash from the preview the operator approved. When present, the
   // run refuses to send anything unless it would send exactly that batch.
   expectedBatchHash?: string | null;
+  advanceStatus?: typeof advanceProcurementOrderStatus;
+  loadOrder?: typeof loadBulkRfqOrder;
+  loadTargets?: typeof listUncontactedBulkRfqTargets;
+  listSuppressed?: typeof listSuppressedEmails;
+  reserveSender?: typeof reserveEmailSender;
 } & BulkRfqBatchOptions): Promise<BulkRfqRunResult> {
-  const order = await loadBulkRfqOrder(input.orderId);
+  const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
+  const order = await (input.loadOrder ?? loadBulkRfqOrder)(input.orderId);
   if (!order) throw new Error("The sourcing request was not found.");
   const provider = input.provider ?? gmailSupplierEmailProvider;
   const pauseMs = input.pauseMs ?? 400;
-  const uncontacted = await listUncontactedBulkRfqTargets(order, input.vendorIds ?? null, {
+  const uncontacted = await (input.loadTargets ?? listUncontactedBulkRfqTargets)(order, input.vendorIds ?? null, {
     excludeVendorIds: input.excludeVendorIds ?? null,
   });
   const { blocked, sendable: targets } = selectBulkRfqBatch(
     uncontacted,
-    await listSuppressedEmails(order.officeId, uncontacted.map((target) => target.contactEmail)),
+    await (input.listSuppressed ?? listSuppressedEmails)(order.officeId, uncontacted.map((target) => target.contactEmail)),
     input.limit,
   );
   // A loader failure throws here, before the hash check, so it can never be
@@ -631,7 +645,7 @@ export async function runProcurementBulkRfq(input: {
   for (const target of targets) {
     const body = buildBulkRfqBody(order, target, files);
     const hash = requestHash({ orderId: order.orderId, vendorId: target.vendorId, recipient: target.contactEmail, subject, body });
-    const reservation = await reserveEmailSender({
+    const reservation = await (input.reserveSender ?? reserveEmailSender)({
       officeId: order.officeId,
       idempotencyKey: `procurement-bulk-rfq:${order.orderId}:${target.vendorId}`,
       requestHash: hash,
@@ -655,6 +669,13 @@ export async function runProcurementBulkRfq(input: {
     }
     if (reservation.completed) {
       result.alreadySent += 1;
+      if (result.sent + result.alreadySent === 1) {
+        await advanceStatus({
+          customerId: order.customerId,
+          orderId: order.orderId,
+          event: "rfq_sent",
+        });
+      }
       result.outcomes.push({
         vendorId: target.vendorId,
         vendorName: target.name,
@@ -713,6 +734,15 @@ export async function runProcurementBulkRfq(input: {
         providerThreadId: receipt.providerThreadId,
       });
       result.sent += 1;
+      // The first RFQ out is when the request is visibly collecting supplier
+      // responses; the status write is idempotent, so later sends are no-ops.
+      if (result.sent + result.alreadySent === 1) {
+        await advanceStatus({
+          customerId: order.customerId,
+          orderId: order.orderId,
+          event: "rfq_sent",
+        });
+      }
       result.outcomes.push({
         vendorId: target.vendorId,
         vendorName: target.name,

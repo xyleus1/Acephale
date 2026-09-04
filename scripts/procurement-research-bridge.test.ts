@@ -314,11 +314,17 @@ assert.equal(sharedSecretMatches("wrong", "secret"), false);
 assert.equal(sharedSecretMatches("secret-long", "secret"), false);
 process.env.PROCUREMENT_RESEARCH_SHARED_SECRET = "test-secret";
 process.env.CRON_SECRET = "cron-secret";
+const priorResearchMode = process.env.PROCUREMENT_RESEARCH_MODE;
 process.env.PROCUREMENT_RESEARCH_MODE = "bourne";
-const cronResponse = await procurementResearchCron(new Request("http://localhost/api/cron/procurement-research", {
-  headers: { Authorization: "Bearer cron-secret" },
-}));
-assert.equal(cronResponse.status, 200);
+try {
+  const cronResponse = await procurementResearchCron(new Request("http://localhost/api/cron/procurement-research", {
+    headers: { Authorization: "Bearer cron-secret" },
+  }));
+  assert.equal(cronResponse.status, 200);
+} finally {
+  if (priorResearchMode === undefined) delete process.env.PROCUREMENT_RESEARCH_MODE;
+  else process.env.PROCUREMENT_RESEARCH_MODE = priorResearchMode;
+}
 const disabledResponse = await procurementResearchShortlistResponse(
   new Request("http://localhost/api/procurement/research-shortlist/order"),
   "00000000-0000-4000-8000-000000000001",

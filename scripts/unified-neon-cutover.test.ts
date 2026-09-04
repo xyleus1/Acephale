@@ -49,8 +49,10 @@ async function main() {
   process.env.PROCUREMENT_CUSTOMER_MAP_JSON = JSON.stringify({
     [user.officeId]: customerId,
   });
+  const priorWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
   process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
   process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
 
   const workflowPrisma = new PrismaClient({ datasourceUrl: workflowDatabaseUrl });
   let webhookCount = 0;
@@ -97,6 +99,8 @@ async function main() {
     assert.equal((await duplicate.json() as { orderId: string }).orderId, createdPayload.orderId);
     assert.equal(webhookCount, 1);
   } finally {
+    if (priorWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+    else process.env.PROCUREMENT_WORKFLOW_OWNER = priorWorkflowOwner;
     await workflowPrisma.$disconnect();
   }
 

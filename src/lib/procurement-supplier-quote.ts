@@ -2,6 +2,7 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
+import { advanceProcurementOrderStatus } from "@/lib/procurement-order-status";
 import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import {
   quoteCapturePage,
@@ -340,7 +341,9 @@ export async function runSupplierQuoteCapture(input: {
   reads?: number;
   after?: string | null;
   outOfTime?: () => boolean;
+  advanceStatus?: typeof advanceProcurementOrderStatus;
 }): Promise<SupplierQuoteCaptureResult | null> {
+  const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
   const plan = await listSupplierQuoteCandidates({
     orderId: input.orderId,
     reads: input.reads,
@@ -404,6 +407,18 @@ export async function runSupplierQuoteCapture(input: {
       });
     }
   }
+  const recorded = outcomes.filter((outcome) => outcome.state === "RECORDED").length;
+  const alreadyRecorded = plan.candidates.some((candidate) => candidate.state === "ALREADY_RECORDED")
+    || outcomes.some((outcome) => outcome.state === "ALREADY_RECORDED");
+  // A priced answer on file is what the operator is waiting on, so the request
+  // moves to their decision the first time one is recorded.
+  if (recorded > 0 || alreadyRecorded) {
+    await advanceStatus({
+      customerId: plan.customerId,
+      orderId: plan.orderId,
+      event: "quote_recorded",
+    });
+  }
   return {
     orderId: plan.orderId,
     material: plan.material,
@@ -417,7 +432,7 @@ export async function runSupplierQuoteCapture(input: {
         }]
         : []
     )),
-    recorded: outcomes.filter((outcome) => outcome.state === "RECORDED").length,
+    recorded,
     failed: outcomes.filter((outcome) => outcome.state === "FAILED").length,
     outcomes,
     // A reply whose write failed is not left behind the cursor, so a database

@@ -85,8 +85,10 @@ async function main() {
   const database = new ReconciliationDatabase();
   const priorUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
   const priorSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+  const priorWorkflowOwner = process.env.PROCUREMENT_WORKFLOW_OWNER;
   process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
   process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "reconciliation-secret";
+  process.env.PROCUREMENT_WORKFLOW_OWNER = "bourne";
   const webhookOrders: string[] = [];
   let activeFetches = 0;
   let maxActiveFetches = 0;
@@ -132,7 +134,25 @@ async function main() {
     else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorUrl;
     if (priorSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
     else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorSecret;
+    if (priorWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+    else process.env.PROCUREMENT_WORKFLOW_OWNER = priorWorkflowOwner;
   }
+
+  const defaultOwnerDatabase = {
+    async $queryRawUnsafe() {
+      throw new Error("default-owner reconciliation must not query");
+    },
+    async $executeRawUnsafe() {
+      throw new Error("default-owner reconciliation must not execute");
+    },
+  };
+  delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+  assert.deepEqual(
+    await reconcileProcurementWorkflowWakes({ database: defaultOwnerDatabase }),
+    { candidates: 0, claimed: 0, delivered: 0, failed: 0, skipped: 0 },
+  );
+  if (priorWorkflowOwner === undefined) delete process.env.PROCUREMENT_WORKFLOW_OWNER;
+  else process.env.PROCUREMENT_WORKFLOW_OWNER = priorWorkflowOwner;
 
   const priorCronSecret = process.env.CRON_SECRET;
   delete process.env.CRON_SECRET;
