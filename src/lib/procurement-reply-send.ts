@@ -10,6 +10,7 @@ import {
   procurementSupplierSenderVouched,
   type ProcurementConversation,
 } from "@/lib/procurement-conversation-model";
+import { supplierInboundKind } from "@/lib/procurement-inbound-triage";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import { chasesSentAfterLastReply, supplierChaseDecision } from "@/lib/procurement-supplier-chase";
 import {
@@ -183,7 +184,11 @@ function requireQuietThread(args: {
   const decision = supplierChaseDecision({
     lastDirection: "OUTBOUND",
     lastMessageAt: latest.sentAt,
-    chasesSent: chasesSentAfterLastReply(messages),
+    chasesSent: chasesSentAfterLastReply(messages, {
+      // An automatic notice is never answered, so on such a thread every
+      // outbound message after it is a follow up and counts against the cap.
+      answeredReply: supplierInboundKind(inbound.subject ?? "", inbound.body) !== "AUTO_REPLY",
+    }),
     hasQuote: false,
     now: args.now,
   });

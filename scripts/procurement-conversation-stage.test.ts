@@ -5,8 +5,10 @@ import {
   conversationFunnel,
   conversationOwesAction,
   supplierConversationStage,
+  unreadConversationInput,
   type SupplierConversationInput,
 } from "../src/lib/procurement-conversation-stage";
+import { chasesSentAfterLastReply, MAX_SUPPLIER_CHASES, supplierChaseDecision } from "../src/lib/procurement-supplier-chase";
 import { planAutopilotVendorAction } from "../src/lib/procurement-autopilot-plan";
 import {
   supplierQuoteMissingFacts,
@@ -198,8 +200,19 @@ assert.ok(
   "What each thread is short of comes from this pass own quote sweep.",
 );
 assert.ok(
-  /funnel: conversationFunnel\(/.test(autopilotSource),
-  "Every pass reports where the threads it read stand.",
+  /funnel: conversationFunnel\(\[/.test(autopilotSource)
+    && /order\.vendors\s*\.filter\(\(vendor\) => !plan\.some/.test(autopilotSource)
+    && /unreadConversationInput\(vendor\)/.test(autopilotSource),
+  "The funnel covers the whole request, not only the threads this pass read.",
+);
+assert.ok(
+  /procurementVendorOutreachClosed\(vendor\.status\)/.test(autopilotSource)
+    && /\.filter\(\(entry\) => !procurementVendorOutreachClosed\(/.test(autopilotSource),
+  "A supplier the request stopped pursuing is not counted as owing an action, replied or not.",
+);
+assert.ok(
+  /answeredReply: newestReply/.test(autopilotSource),
+  "An automatic notice is not treated as a reply we answered when counting follow ups.",
 );
 const cronSource = readFileSync(
   resolve(__dirname, "../src/app/api/cron/procurement-autopilot/route.ts"),
@@ -208,6 +221,92 @@ const cronSource = readFileSync(
 assert.ok(
   /conversations: \{\s*stages: run\.funnel\.stages,\s*owed: run\.funnel\.owed/.test(cronSource),
   "The scheduled response shows the funnel, so a stalled request does not need a manual sweep.",
+);
+
+// A pass reads a thread only for the suppliers that answered, so the rest of
+// the request is staged from what the request already records. Without this a
+// request with hundreds of silent suppliers reported nothing owed.
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v1",
+    name: "Witmold",
+    contacted: false,
+    responseCount: 0,
+    quote: null,
+  })),
+  "NOT_CONTACTED",
+);
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v2",
+    name: "Witmold",
+    contacted: true,
+    responseCount: 0,
+    quote: null,
+  })),
+  "AWAITING_FIRST_REPLY",
+);
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v3",
+    name: "Witmold",
+    contacted: true,
+    responseCount: 2,
+    quote: null,
+  })),
+  "REPLY_UNANSWERED",
+  "A supplier who answered and whose thread was not read is assumed to be waiting on us,"
+    + " since calling it AWAITING_QUOTE would hide exactly the reply this funnel exists to catch.",
+);
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v4",
+    name: "Prototype PCB",
+    contacted: true,
+    responseCount: 1,
+    quote: { unitPrice: 20.8, leadTimeDays: 10 },
+  })),
+  "QUOTED",
+);
+const wholeRequest = conversationFunnel([
+  { input: input({ vendorId: "read", hasQuote: true }) },
+  ...["s1", "s2", "s3"].map((id) => ({
+    input: unreadConversationInput({ id, name: "Silent shop", contacted: true, responseCount: 0, quote: null }),
+  })),
+]);
+assert.equal(wholeRequest.suppliers, 4);
+assert.equal(wholeRequest.stages.AWAITING_FIRST_REPLY, 3);
+assert.equal(
+  wholeRequest.owed,
+  3,
+  "A request whose only read thread is quoted still owes every silent supplier an action.",
+);
+
+// An out of office thread is chased, and because we never answered the notice,
+// every message after it counts against the cap: it used to be mailed one more
+// time than a request allows.
+const afterAutoReply = [
+  { direction: "OUTBOUND" as const },
+  { direction: "INBOUND" as const },
+  { direction: "OUTBOUND" as const },
+  { direction: "OUTBOUND" as const },
+];
+assert.equal(chasesSentAfterLastReply(afterAutoReply, { answeredReply: false }), 2);
+assert.equal(
+  chasesSentAfterLastReply(afterAutoReply),
+  1,
+  "On a thread we did answer, the first message after the reply is that answer.",
+);
+assert.equal(
+  supplierChaseDecision({
+    lastDirection: "OUTBOUND",
+    lastMessageAt: quiet,
+    chasesSent: chasesSentAfterLastReply(afterAutoReply, { answeredReply: false }),
+    hasQuote: false,
+    now,
+  }).chase,
+  false,
+  `An out of office thread stops at ${MAX_SUPPLIER_CHASES} follow ups like any other.`,
 );
 
 console.log("procurement conversation stage checks passed");

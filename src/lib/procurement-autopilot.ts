@@ -14,6 +14,7 @@ import {
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import {
   conversationFunnel,
+  unreadConversationInput,
   type ConversationFunnel,
 } from "@/lib/procurement-conversation-stage";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
@@ -26,13 +27,14 @@ import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import { chasesSentAfterLastReply } from "@/lib/procurement-supplier-chase";
 import {
   listSupplierNudgeTargets,
+  procurementVendorOutreachClosed,
   runProcurementSupplierNudges,
 } from "@/lib/procurement-supplier-nudge";
 import { sweepSupplierQuoteCapture } from "@/lib/procurement-supplier-quote";
 import type { SupplierQuoteMissingFact } from "@/lib/procurement-supplier-quote-reading";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
-import { procurementReplyFacts, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
+import { procurementReplyFacts, supplierInboundKind, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
 import {
   getProcurementRequest,
   procurementWorkflowDatabase,
@@ -220,7 +222,14 @@ async function vendorStates(args: {
       hasDraft: Boolean(draft),
       hasQuote: Boolean(vendor.quote),
       lastMessageAt: latest?.sentAt ?? null,
-      chasesSent: chasesSentAfterLastReply(conversation.messages),
+      chasesSent: chasesSentAfterLastReply(conversation.messages, {
+        // A thread whose newest inbound message is an automatic notice was
+        // never answered, so nothing after it is an answer and every one of
+        // those messages counts against the follow up cap.
+        answeredReply: newestReply
+          ? supplierInboundKind(newestReply.subject ?? "", newestReply.body) !== "AUTO_REPLY"
+          : true,
+      }),
       missingQuoteFacts: args.missingQuoteFacts?.get(vendor.id) ?? null,
     });
   }
@@ -466,7 +475,25 @@ export async function runProcurementAutopilot(args: {
     sendFollowUps,
     stoppedAtDeadline: scanStopped || chaseRun.stopped || outOfTime(),
     escalations: autopilotEscalations(plan),
-    funnel: conversationFunnel(plan.map((entry) => ({ input: entry.state, action: entry.action }))),
+    // The funnel covers the whole request, not only the threads this pass
+    // read: a reply scan walks the suppliers that answered, so counting only
+    // those would report nothing owed while hundreds of silent suppliers wait.
+    // Suppliers whose outreach is closed, rejected or ordered elsewhere are
+    // left out, since the request is not pursuing them.
+    funnel: conversationFunnel([
+      ...plan
+        // A supplier that replied and was then rejected or ordered elsewhere is
+        // excluded on the same rule as one this pass never read, so the two
+        // halves of the funnel agree about who the request is still pursuing.
+        .filter((entry) => !procurementVendorOutreachClosed(
+          order.vendors.find((vendor) => vendor.id === entry.vendorId)?.status,
+        ))
+        .map((entry) => ({ input: entry.state, action: entry.action })),
+      ...order.vendors
+        .filter((vendor) => !plan.some((entry) => entry.vendorId === vendor.id)
+          && !procurementVendorOutreachClosed(vendor.status))
+        .map((vendor) => ({ input: unreadConversationInput(vendor) })),
+    ]),
     plan,
   };
 }

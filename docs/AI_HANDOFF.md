@@ -1,5 +1,33 @@
 # AI Handoff
 
+## 2026-09-06: The funnel covers the whole request, not the threads a pass read
+
+- `conversationFunnel` was built from the reply scoped plan, and a pass reads a
+  thread only for the suppliers that answered, so a request with 359 contacted
+  suppliers and 22 replies could report nothing owed while hundreds waited.
+  The autopilot now stages the rest of the request from what it already
+  records with `unreadConversationInput`: never mailed is `NOT_CONTACTED`,
+  mailed with no response is `AWAITING_FIRST_REPLY`, a supplier who answered at
+  some point is `REPLY_UNANSWERED`, and a recorded quote is `QUOTED`.
+  Suppliers whose outreach is closed (rejected, disqualified, ordered,
+  cancelled) are excluded through `procurementVendorOutreachClosed`, on both
+  halves of the funnel, using the same list the nudge path refuses to mail. No
+  extra thread read is done, so the pass deadline is unchanged.
+- What the vendor row cannot say is who spoke last, so an unread supplier who
+  has ever answered is reported as `REPLY_UNANSWERED`. That is deliberate: a
+  thread wrongly called that is read and corrected by a later pass, while one
+  wrongly called `AWAITING_QUOTE` hides a reply nobody answered, which is the
+  failure the funnel exists to catch.
+- `chasesSentAfterLastReply` takes `answeredReply`. It subtracted one outbound
+  message because the first message after a reply is normally our answer, but
+  an out of office notice is never answered, so those threads got three follow
+  ups under a two chase cap. The autopilot and the reply send path classify the
+  newest inbound message and pass `answeredReply: false` for an `AUTO_REPLY`.
+- A missing fact follow up no longer carries the generic checklist. Asking for
+  a lead time and then restating "unit price at 100 units, tooling, lead time"
+  asked the supplier again for what they had already sent. Ordinary replies and
+  generic chases still get the full checklist, and attachments are unchanged.
+
 ## 2026-09-05: A supplier thread has a stage, and a partial quote is asked about
 
 - `procurement-conversation-stage.ts` names where a supplier thread stands:

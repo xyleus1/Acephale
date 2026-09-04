@@ -240,12 +240,19 @@ export function buildFileDeliveryReplyBody(args: {
     [
       "The figures above are read from the files themselves, so please treat the files as the controlling source and tell us where they disagree with your process.",
       "",
-      "Please reply with:",
-      "1. Whether this build is inside your capability as drawn.",
-      `2. Unit price at ${quantityText(order)}, and at 250 and 500 units.`,
-      "3. Tooling, setup, or NRE cost if any.",
-      "4. Lead time for tooling and for production.",
-      "5. Anything still missing from this package.",
+      // A supplier who already answered the checklist is asked for what is
+      // absent and nothing else: repeating the whole list would ask them again
+      // for the facts they have already given us.
+      ...(missingFacts.length
+        ? [`Please reply with ${missingFacts.map((fact) => SUPPLIER_QUOTE_MISSING_FACT_ASK[fact]).join(" and ")}, and we can place the order from there.`]
+        : [
+          "Please reply with:",
+          "1. Whether this build is inside your capability as drawn.",
+          `2. Unit price at ${quantityText(order)}, and at 250 and 500 units.`,
+          "3. Tooling, setup, or NRE cost if any.",
+          "4. Lead time for tooling and for production.",
+          "5. Anything still missing from this package.",
+        ]),
     ].join("\n"),
     ["Thank you,", "Sourcing desk", `Derya Supply OS, for ${args.companyName}`].join("\n"),
   ];

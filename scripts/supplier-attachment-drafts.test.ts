@@ -363,6 +363,33 @@ function replyBody() {
     "A supplier who did answer is not told we heard nothing.",
   );
   assert.equal(ask.includes("\u2014"), false, "A missing fact request must not contain an em dash.");
+  // The generic checklist asks for capability, prices, tooling and lead times,
+  // so leaving it in would ask this supplier again for what they already sent.
+  assert.equal(
+    ask.includes("Whether this build is inside your capability as drawn"),
+    false,
+    "A missing fact request drops the checklist the supplier already answered.",
+  );
+  assert.equal(
+    ask.includes("Lead time for tooling and for production"),
+    false,
+    "It does not restate the checklist lead time line beside the precise ask.",
+  );
+  const genericChase = buildFileDeliveryReplyBody({
+    order,
+    vendor,
+    companyName: "HypnoDreamz",
+    documents,
+    attachments: [
+      { documentId: "doc-spec", name: "hypnodreamz-order-1-doc-1.png", mimeType: "image/png", size: 240_000 },
+    ],
+    variant: "CHASE",
+  });
+  assert.equal(
+    genericChase.includes("Whether this build is inside your capability as drawn"),
+    true,
+    "A supplier who has said nothing commercial still gets the full checklist.",
+  );
 
   assert.equal(
     fileDeliveryReplySubject({ conversationSubject: "Re: [RFQ 24cb31bd] PCBA", order }),

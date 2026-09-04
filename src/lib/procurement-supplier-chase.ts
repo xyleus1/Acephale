@@ -51,11 +51,18 @@ export function supplierChaseDecision(args: {
 // with no supplier reply at all is not a chase candidate, so it counts as none.
 export function chasesSentAfterLastReply(
   messages: readonly { direction: "INBOUND" | "OUTBOUND" }[],
+  // Whether that newest inbound message was something we answered. It normally
+  // is, so the first outbound after it is the answer rather than a chase. An
+  // automatic out of office notice asks nothing and is never answered, so on
+  // those threads every outbound after it is a chase and counts against the
+  // cap, otherwise such a thread would be mailed one more time than allowed.
+  options?: { answeredReply?: boolean },
 ): number {
   let lastInbound = -1;
   messages.forEach((message, index) => {
     if (message.direction === "INBOUND") lastInbound = index;
   });
   if (lastInbound < 0) return 0;
-  return Math.max(0, messages.slice(lastInbound + 1).filter((message) => message.direction === "OUTBOUND").length - 1);
+  const outbound = messages.slice(lastInbound + 1).filter((message) => message.direction === "OUTBOUND").length;
+  return options?.answeredReply === false ? outbound : Math.max(0, outbound - 1);
 }

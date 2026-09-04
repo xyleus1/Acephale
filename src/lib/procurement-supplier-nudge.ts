@@ -95,6 +95,12 @@ const NUDGE_CLOSED_VENDOR_STATUSES = [
   "cancelled",
 ];
 
+// Whether outreach to a supplier is over, so the loop neither mails them nor
+// counts them as a conversation that still owes an action.
+export function procurementVendorOutreachClosed(status: string | null | undefined): boolean {
+  return NUDGE_CLOSED_VENDOR_STATUSES.includes((status ?? "").trim().toLowerCase());
+}
+
 // A request that is ordered or cancelled is finished, and the autopilot reader
 // already treats those two the same way.
 const NUDGE_CLOSED_ORDER_STATUSES = ["ordered", "cancelled"];

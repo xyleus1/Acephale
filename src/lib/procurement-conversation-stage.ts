@@ -34,6 +34,11 @@ export type SupplierConversationInput = AutopilotVendorState & {
   // said everything a purchase order needs, absent means nothing commercial was
   // read from the thread at all.
   missingQuoteFacts?: readonly SupplierQuoteMissingFact[] | null;
+  // Whether this supplier has ever answered. A pass reads a thread only for
+  // suppliers that replied, so for everybody else this is all the request
+  // knows, and a contacted supplier who never answered is waiting on a first
+  // reply rather than on a quote.
+  repliedEver?: boolean;
 };
 
 // Reached the end of the funnel: a recorded quote is what the request buys on,
@@ -56,9 +61,43 @@ export function supplierConversationStage(
   if (input.lastDirection === "INBOUND" && input.inboundKind !== "AUTO_REPLY") return "REPLY_UNANSWERED";
   if (input.missingQuoteFacts?.length) return "QUOTE_INCOMPLETE";
   if (input.lastDirection === null) return "NOT_CONTACTED";
+  if (input.repliedEver === false) return "AWAITING_FIRST_REPLY";
   return input.lastDirection === "OUTBOUND" || input.inboundKind === "AUTO_REPLY"
     ? "AWAITING_QUOTE"
     : "AWAITING_FIRST_REPLY";
+}
+
+// The funnel has to cover the whole request, not only the threads a pass read:
+// a reply scan walks the suppliers that answered, so a request with hundreds of
+// silent suppliers would otherwise report nothing owed and look finished. A
+// supplier whose thread was not read still has a stage, because the request
+// records whether we mailed them, whether they ever answered, and whether a
+// quote is recorded.
+//
+// What the request cannot say without reading the thread is who spoke last, so
+// a supplier who has answered at some point is reported as waiting on us. That
+// errs toward attention: a thread wrongly called REPLY_UNANSWERED is read by a
+// later pass and corrected, while one wrongly called AWAITING_QUOTE hides a
+// reply nobody answered, which is the failure this funnel exists to catch.
+export function unreadConversationInput(vendor: {
+  id: string;
+  name: string;
+  contacted: boolean;
+  responseCount: number;
+  quote: Record<string, unknown> | null;
+}): SupplierConversationInput {
+  return {
+    vendorId: vendor.id,
+    vendorName: vendor.name,
+    lastDirection: vendor.contacted
+      ? (vendor.responseCount > 0 ? "INBOUND" : "OUTBOUND")
+      : null,
+    inboundKind: null,
+    triageDecision: null,
+    hasDraft: false,
+    hasQuote: Boolean(vendor.quote),
+    repliedEver: vendor.responseCount > 0,
+  };
 }
 
 // A stage owes an action while the conversation has not settled. The loop can

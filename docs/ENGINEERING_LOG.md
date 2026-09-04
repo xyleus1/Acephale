@@ -1,5 +1,20 @@
 # Engineering Log
 
+## 2026-09-06: A funnel that only counted repliers reported nothing owed
+
+- The stage work reported the funnel from the reply scoped plan. A pass reads a
+  conversation only for suppliers that answered, so on the PCBA request (359
+  contacted, 22 replies) the funnel described 22 threads and a request whose
+  every replier was quoted would have reported zero owed with 337 suppliers
+  never followed up. The pass now stages the remaining vendors from the request
+  projection it already loaded, minus the ones outreach is closed on, so the
+  funnel counts the whole request without one extra thread read.
+- Two smaller leaks from the same work: an out of office thread was allowed a
+  third follow up, because the chase counter assumed the first message after an
+  inbound reply was our answer, and a follow up that asked for a missing lead
+  time then restated the whole commercial checklist, asking the supplier again
+  for the price they had already given.
+
 ## 2026-09-05: Every fix moved one step, nothing owned the conversation
 
 - After the discovery, attachment, ingestion, attribution, drafting, sending
