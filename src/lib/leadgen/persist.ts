@@ -273,7 +273,8 @@ export async function persistLeads(
     else result.companiesCreated += 1;
 
     for (const verification of usableEmails.slice(0, 5)) {
-      const fullName = contactNameForEmail(verification.email, name);
+      const enriched = candidate.contacts?.find((contact) => contact.email === verification.email) ?? null;
+      const fullName = enriched?.fullName ?? contactNameForEmail(verification.email, name);
       const existingContact = await client.contact.findFirst({
         where: { companyId: company.id, email: verification.email },
         select: { id: true },
@@ -282,8 +283,8 @@ export async function persistLeads(
       const contactData = {
         fullName,
         email: verification.email,
-        phone: candidate.phones[0] ?? null,
-        title: isRoleEmail(verification.email) ? "Company inbox" : null,
+        phone: enriched?.phone ?? candidate.phones[0] ?? null,
+        title: enriched?.position ?? (isRoleEmail(verification.email) ? "Company inbox" : null),
         relationshipType: "buyer",
         importance: candidate.fit.tier === "A" ? "high" : "medium",
         status: "not_contacted",
@@ -300,6 +301,26 @@ export async function persistLeads(
           emailConfidence: verification.confidence,
           mxHost: verification.mxHost,
           verifiedAt: now.toISOString(),
+          ...(verification.provider
+            ? {
+              mailboxProvider: verification.provider.provider,
+              mailboxStatus: verification.provider.status,
+              mailboxReason: verification.provider.reason,
+              mailboxScore: verification.provider.score,
+              mailboxCheckedAt: verification.provider.checkedAt,
+            }
+            : {}),
+          ...(enriched
+            ? {
+              enrichmentProvider: enriched.provider,
+              enrichmentConfidence: enriched.confidence,
+              enrichmentSeniority: enriched.seniority,
+              enrichmentDepartment: enriched.department,
+              enrichmentDecisionMaker: enriched.decisionMaker,
+              enrichmentSourceUrls: enriched.sourceUrls,
+              enrichedAt: enriched.enrichedAt,
+            }
+            : {}),
         } as Prisma.InputJsonValue,
       };
 

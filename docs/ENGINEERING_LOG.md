@@ -1,5 +1,51 @@
 # Engineering Log
 
+## 2026-09-04: Leadgen gets a paid verifier and a named-contact enricher, both optional
+
+- Prospecting found companies and role inboxes, but a campaign at 1,500
+  sends/day needs deliverable, named decision makers. `verify.ts` now accepts a
+  `MailboxVerifier` and `run.ts` a `ContactEnricher`; Bouncer and Hunter
+  adapters live in `bouncer.ts` and `hunter.ts` behind `fetchImpl`, timeout and
+  clock injection so every test runs against mocked transports.
+- The heuristic verdict is computed first and is what survives whenever the
+  provider cannot answer: no key, non-OK status, malformed JSON or payload,
+  network error, abort on timeout, `unknown` status, or exhausted credits
+  (Bouncer 402, Hunter 429). Exhaustion short-circuits later calls in the same
+  run without counting them as failures; a failed Hunter lookup is dropped from
+  the memo so a retry stays possible.
+- Hunter runs only after discovery, only on candidates at or above the fit
+  threshold, and at most `maxEnrichments` (40) times per batch. Generic
+  addresses and records without a name are dropped, duplicates are ranked
+  before dedupe so the stronger record survives, and enriched emails are merged
+  with harvested ones and verified through the same path, so the paid verifier
+  cap (6 per company) applies to both.
+- `selectPrimaryContact` picks the row's email: best ranked named contact whose
+  verification is not `undeliverable`, else the harvested public address, and
+  no email at all when every address is known to bounce (the verdict still says
+  `undeliverable`, so campaign audiences never inherit a bouncing address). The
+  research row's `evidence_urls` include only the chosen contact's sources.
+  `persist.ts` prefers the enriched name, title and phone and keeps both
+  providers' metadata in `sourceRefs`.
+- Review follow-ups: company research rows now dedupe on `domain` (falling back
+  to `company_name`) instead of the shown email, because enrichment or a new
+  verdict can change which address a company row shows and must update the
+  same row rather than insert a second one. Directory rows with a domain go
+  through the same `enrichCandidate` path as harvested sites (same fit
+  threshold, cap and verification), while rows without a domain stay
+  deterministic. `mailboxVerifierFromEnv()` and `contactEnricherFromEnv()`
+  build a fresh adapter per call, so exhaustion, usage counters and memos are
+  scoped to one `runProspectingBatch` instead of living in the process until
+  the next deploy.
+- Usage counters (`usage.verification`, `usage.enrichment` with companies
+  enriched, with contacts, skipped by cap) are stored alongside `providerStats`
+  on the run; `report.ts` ignores that key so provider summaries stay clean.
+- Test isolation: both suites delete `BOUNCER_API_KEY` and `HUNTER_API_KEY`
+  from `process.env` before importing, after a local run with real keys turned
+  a heuristic MX assertion into a live undeliverable verdict.
+- Verification: `npm run test:leadgen`,
+  `npm run test:supply-os-context-prospecting`, `npx tsc --noEmit` pass.
+  `npm run lint` reports only pre-existing findings outside this change.
+
 ## 2026-09-04: Olympian Motors and CosmicBrain AI offices
 
 - Provisioned Olympian Motors via `POST /api/ops/offices`, office id

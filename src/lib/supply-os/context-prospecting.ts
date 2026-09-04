@@ -30,6 +30,7 @@ import {
   type ProspectingDraft,
   type ProspectingSearch,
 } from "@/lib/leadgen/run";
+import { selectPrimaryContact } from "@/lib/leadgen/enrich";
 import { defaultFetcher } from "@/lib/leadgen/harvest";
 import { createLeadGenRun, finishLeadGenRun, recordLeadDiscoveries } from "@/lib/leadgen/persist";
 import type { VerifyOptions } from "@/lib/leadgen/verify";
@@ -346,13 +347,26 @@ async function ensureResearchList(officeId: string, companyId: string, draft: Pr
   }
 }
 
-function candidateRows(records: readonly ProspectingBatchCandidate[]) {
+/** Search-provider counters plus paid enrichment/verification usage, stored on the run. */
+function runProviderStats(stats: Pick<ProspectingBatchStats, "providerStats" | "usage"> | null | undefined) {
+  return {
+    ...(stats?.providerStats ?? {}),
+    ...(stats?.usage ? { usage: stats.usage } : {}),
+  };
+}
+
+export function candidateRows(records: readonly ProspectingBatchCandidate[]) {
   return records.flatMap(({ candidate, verifications, region, directoryRow }, index) => {
     if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
     if (directoryRow) return [];
-    const verification = verifications[0] ?? null;
-    const email = candidate.emails[0] ?? null;
-    const evidenceUrls = candidate.evidence.map((item) => item.url).slice(0, 8).join("\n");
+    const primary = selectPrimaryContact({ contacts: candidate.contacts, emails: candidate.emails, verifications });
+    const verification = primary.verification;
+    const email = primary.email;
+    const primarySources = candidate.contacts?.find((contact) => contact.email === email)?.sourceUrls ?? [];
+    const evidenceUrls = [
+      ...candidate.evidence.map((item) => item.url),
+      ...primarySources,
+    ].slice(0, 8).join("\n");
     const row: ResearchInputRow = {
       company_name: candidate.companyName,
       website: candidate.website,
@@ -361,8 +375,8 @@ function candidateRows(records: readonly ProspectingBatchCandidate[]) {
       city: candidate.city,
       segment: candidate.fit.matchedSegments.join(", ") || candidate.segmentKey,
       buys: candidate.fit.matchedSignals.join(", "),
-      contact_name: null,
-      contact_title: null,
+      contact_name: primary.name,
+      contact_title: primary.title,
       email,
       phone: candidate.phones[0] ?? null,
       fit_score: candidate.fit.score,
@@ -370,7 +384,9 @@ function candidateRows(records: readonly ProspectingBatchCandidate[]) {
       evidence_urls: evidenceUrls,
       source_query: candidate.discoveredVia,
     };
-    return { row: { row, sourceRow: index + 1 }, dedupeField: email ? "email" : "domain" };
+    // Company rows dedupe on the domain: the shown email moves as enrichment or
+    // verification changes the best contact, and must update the same row.
+    return { row: { row, sourceRow: index + 1 }, dedupeField: candidate.domain ? "domain" : "company_name" };
   });
 }
 
@@ -383,7 +399,8 @@ function directoryInputRows(records: readonly ProspectingBatchCandidate[]): Pros
   return records.flatMap(({ candidate, directoryRow, verifications, region }, index) => {
     if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
     if (!directoryRow) return [];
-    const email = directoryRow.emails[0] ?? null;
+    const primary = selectPrimaryContact({ contacts: candidate.contacts, emails: candidate.emails, verifications });
+    const email = primary.email;
     const domain = directoryRow.domain;
     const rawLine = directoryRow.rawLine.slice(0, 300);
     const row: ResearchInputRow = {
@@ -394,18 +411,21 @@ function directoryInputRows(records: readonly ProspectingBatchCandidate[]): Pros
       city: directoryRow.city,
       segment: candidate.segmentKey,
       buys: `Directory row ${directoryRow.rowIndex}; needsResolution=${directoryRow.needsResolution}; ${rawLine}`,
-      contact_name: null,
-      contact_title: null,
+      contact_name: primary.name,
+      contact_title: primary.title,
       email,
       phone: directoryRow.phones[0] ?? null,
       fit_score: candidate.fit.score,
-      email_verdict: verifications[0]?.verdict ?? "unknown",
-      evidence_urls: directoryRow.sourceUrl,
+      email_verdict: primary.verification?.verdict ?? "unknown",
+      evidence_urls: [
+        directoryRow.sourceUrl,
+        ...(candidate.contacts?.find((contact) => contact.email === email)?.sourceUrls ?? []),
+      ].slice(0, 8).join("\n"),
       source_query: candidate.discoveredVia,
     };
     return [{
       row: { row, sourceRow: index + 1 },
-      dedupeField: email ? "email" : domain ? "domain" : "company_name",
+      dedupeField: domain ? "domain" : "company_name",
     }];
   });
 }
@@ -663,7 +683,7 @@ async function executeProspectingAction(args: {
           companiesUpdated: persisted.updated,
           contactsCreated: persisted.contactsCreated,
           skipped: persisted.skipped,
-          providerStats: result.stats.providerStats ?? {},
+          providerStats: runProviderStats(result.stats),
         },
       });
     } catch (bookkeepingError) {
@@ -679,7 +699,7 @@ async function executeProspectingAction(args: {
           companiesUpdated: persisted.updated,
           contactsCreated: persisted.contactsCreated,
           skipped: persisted.skipped,
-          providerStats: result.stats.providerStats ?? {},
+          providerStats: runProviderStats(result.stats),
         },
         error: boundedErrorMessage(bookkeepingError),
       }).catch(() => undefined);
@@ -700,7 +720,7 @@ async function executeProspectingAction(args: {
           companiesUpdated: 0,
           contactsCreated: 0,
           skipped: 0,
-          providerStats: batchStats?.providerStats ?? {},
+          providerStats: runProviderStats(batchStats),
         },
         error: boundedErrorMessage(error),
       });

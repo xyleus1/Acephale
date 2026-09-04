@@ -15,6 +15,7 @@ import { createResearchList } from "../src/lib/research-lists";
 import { ensureResearchProject } from "../src/lib/research-projects";
 import { clampAgentRowTarget } from "../src/lib/supply-os/context-agent";
 import {
+  candidateRows,
   createCompanyContextProspectingActions,
   dismissCompanyContextProspectingAction,
   groupProspectingResearchRows,
@@ -30,6 +31,10 @@ import {
 } from "../src/lib/supply-os/context-prospecting";
 import { createSupplyWorkspace, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import type { ProspectingBatchCandidate } from "../src/lib/leadgen/run";
+
+// Paid providers must never be reached from the suite, even on a machine with keys.
+delete process.env.BOUNCER_API_KEY;
+delete process.env.HUNTER_API_KEY;
 
 const draft = {
   objective: "Find steel fabricators",
@@ -384,6 +389,80 @@ async function main() {
         },
       },
     } satisfies ProspectingBatchCandidate;
+    const namedPerson = {
+      email: "maria.perez@fixture-steel.test",
+      fullName: "Maria Perez",
+      firstName: "Maria",
+      lastName: "Perez",
+      position: "Head of Procurement",
+      seniority: "senior" as const,
+      department: "procurement",
+      decisionMaker: true,
+      confidence: 92,
+      verificationStatus: "valid" as const,
+      linkedin: null,
+      phone: "+58 1 555 0199",
+      sourceUrls: ["https://fixture-steel.test/team"],
+      provider: "hunter",
+      enrichedAt: new Date().toISOString(),
+    };
+    const verificationFor = (email: string, verdict: "deliverable_likely" | "undeliverable") => ({
+      email,
+      verdict,
+      confidence: verdict === "undeliverable" ? 5 : 90,
+      reasons: [],
+      hasMx: true,
+      mxHost: "mx.fixture-steel.test",
+      isRole: false,
+      isFreeProvider: false,
+      domainMatchesCompany: true,
+      provider: null,
+    });
+    const enrichedRows = candidateRows([
+      {
+        ...candidate,
+        candidate: {
+          ...candidate.candidate,
+          emails: [namedPerson.email, ...candidate.candidate.emails],
+          contacts: [namedPerson],
+        },
+        verifications: [
+          verificationFor(namedPerson.email, "deliverable_likely"),
+          verificationFor("buyer@fixture-steel.test", "deliverable_likely"),
+        ],
+      },
+      {
+        ...candidate,
+        candidate: {
+          ...candidate.candidate,
+          emails: [namedPerson.email, ...candidate.candidate.emails],
+          contacts: [namedPerson],
+        },
+        verifications: [
+          verificationFor(namedPerson.email, "undeliverable"),
+          verificationFor("buyer@fixture-steel.test", "deliverable_likely"),
+        ],
+      },
+      candidate,
+      lowFitCandidate,
+    ]);
+    assert.equal(enrichedRows.length, 3, "low-fit companies never become research rows");
+    const [namedRow, bouncedNamedRow, publicRow] = enrichedRows.map((entry) => entry.row.row);
+    assert.equal(namedRow?.contact_name, "Maria Perez");
+    assert.equal(namedRow?.contact_title, "Head of Procurement");
+    assert.equal(namedRow?.email, namedPerson.email);
+    assert.equal(namedRow?.email_verdict, "deliverable_likely");
+    assert.ok(String(namedRow?.evidence_urls).includes("https://fixture-steel.test/team"), "enrichment sources join the evidence trail");
+    assert.equal(bouncedNamedRow?.contact_name, null, "an undeliverable named contact yields to the public inbox");
+    assert.equal(bouncedNamedRow?.email, "buyer@fixture-steel.test");
+    assert.ok(!String(bouncedNamedRow?.evidence_urls).includes("/team"), "sources of an unused contact stay out of the row evidence");
+    assert.equal(publicRow?.contact_name, null);
+    assert.equal(publicRow?.email, "buyer@fixture-steel.test");
+    assert.equal(publicRow?.email_verdict, "unknown");
+    assert.ok(
+      enrichedRows.every((entry) => entry.dedupeField === "domain"),
+      "company rows dedupe on the stable domain, not on the contact email that enrichment may change",
+    );
     let runnerCalls = 0;
     const resolveMx = async () => [{ exchange: "mx.fixture-steel.test", priority: 10 }];
     const runBatch = async ({

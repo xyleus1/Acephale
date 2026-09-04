@@ -16,6 +16,7 @@ import {
 } from "./extract";
 import { checkPublicUrl, guardedRequest } from "./fetch-guard";
 import { parseDirectoryDocument, type DirectoryRow } from "./directory";
+import type { EnrichedContact } from "./enrich";
 import type { LeadGenProfile } from "./profile";
 import { scoreLead, type LeadFitResult } from "./score";
 
@@ -52,6 +53,8 @@ export type LeadCandidate = {
   discoveryRank?: number;
   discoverySourceUrl?: string;
   harvestedAt: string;
+  /** Named people from a contact enricher, best first. Absent when none ran. */
+  contacts?: EnrichedContact[];
 };
 
 const USER_AGENT =

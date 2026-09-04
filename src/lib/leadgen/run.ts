@@ -10,7 +10,20 @@ import { buildQueryPlan, type LeadGenQuery } from "./query-plan";
 import { defaultFetcher, harvestSite, type LeadCandidate, type PageFetcher } from "./harvest";
 import type { DirectoryRow } from "./directory";
 import { scoreLead } from "./score";
-import { verifyEmails, type EmailVerification, type VerifyOptions } from "./verify";
+import {
+  contactEnricherFromEnv,
+  rankEnrichedContacts,
+  type ContactEnricher,
+  type ContactEnricherUsage,
+} from "./enrich";
+import {
+  mailboxVerifierFromEnv,
+  verifyEmails,
+  type EmailVerification,
+  type MailboxVerifier,
+  type MailboxVerifierUsage,
+  type VerifyOptions,
+} from "./verify";
 import {
   signalsFromProductFocus,
   type LeadGenProfile,
@@ -19,6 +32,9 @@ import {
 const DEFAULT_MAX_QUERIES = 60;
 const DEFAULT_MAX_PAGES = 300;
 const DEFAULT_BUDGET_MS = 240_000;
+/** Enrichment credits one batch may spend; only fit-qualified companies are enriched. */
+const DEFAULT_MAX_ENRICHMENTS = 40;
+const ENRICH_MIN_FIT_SCORE = 50;
 
 export type ProspectingDraft = {
   objective: string;
@@ -60,6 +76,13 @@ export type ProspectingBatchStats = {
     withContact: number;
     deliverableLikely: number;
   }>;
+  /** Paid-provider usage for this batch; absent keys mean the provider was off. */
+  usage?: ProspectingProviderUsage;
+};
+
+export type ProspectingProviderUsage = {
+  enrichment?: ContactEnricherUsage & { companiesEnriched: number; companiesWithContacts: number; skippedByCap: number };
+  verification?: MailboxVerifierUsage;
 };
 
 export type ProspectingBatchResult = {
@@ -229,11 +252,47 @@ export async function runProspectingBatch(args: {
   search: ProspectingSearch;
   fetchPage: PageFetcher;
   resolveMx?: VerifyOptions["resolveMx"];
+  /** `undefined` uses `HUNTER_API_KEY` when set; `null` disables enrichment. */
+  enricher?: ContactEnricher | null;
+  /** `undefined` uses `BOUNCER_API_KEY` when set; `null` disables paid verification. */
+  verifier?: MailboxVerifier | null;
+  maxEnrichments?: number;
 }): Promise<ProspectingBatchResult> {
   const maxQueries = Math.min(DEFAULT_MAX_QUERIES, Math.max(1, Math.floor(args.maxQueries ?? DEFAULT_MAX_QUERIES)));
   const maxPages = Math.min(DEFAULT_MAX_PAGES, Math.max(1, Math.floor(args.maxPages ?? DEFAULT_MAX_PAGES)));
   const maxDirectoryRowsPerDocument = Math.max(0, Math.floor(args.maxDirectoryRowsPerDocument ?? 500));
   const budgetMs = Math.max(1_000, Math.min(DEFAULT_BUDGET_MS, Math.floor(args.budgetMs ?? DEFAULT_BUDGET_MS)));
+  // Provider adapters are created per batch so exhaustion, usage counters and
+  // memos end with the batch instead of outliving it in the process.
+  const enricher = args.enricher === undefined ? contactEnricherFromEnv() : args.enricher;
+  const verifier = args.verifier === undefined ? mailboxVerifierFromEnv() : args.verifier;
+  const maxEnrichments = Math.max(0, Math.floor(args.maxEnrichments ?? DEFAULT_MAX_ENRICHMENTS));
+  const verifyOptions = { resolveMx: args.resolveMx, verifier };
+  const enrichment = { companiesEnriched: 0, companiesWithContacts: 0, skippedByCap: 0 };
+
+  /** Adds ranked named contacts to a fit-qualified candidate with a domain; never throws. */
+  async function enrichCandidate(candidate: LeadCandidate) {
+    if (!enricher || !candidate.domain || candidate.fit.score < ENRICH_MIN_FIT_SCORE) return;
+    if (enrichment.companiesEnriched >= maxEnrichments) {
+      enrichment.skippedByCap += 1;
+      return;
+    }
+    enrichment.companiesEnriched += 1;
+    let contacts: LeadCandidate["contacts"];
+    try {
+      contacts = rankEnrichedContacts(await enricher.enrichDomain(candidate.domain));
+    } catch {
+      contacts = undefined;
+    }
+    if (!contacts?.length) return;
+    enrichment.companiesWithContacts += 1;
+    candidate.contacts = contacts;
+    const known = new Set(candidate.emails.map((email) => email.toLowerCase()));
+    candidate.emails = [
+      ...contacts.map((contact) => contact.email).filter((email) => !known.has(email)),
+      ...candidate.emails,
+    ];
+  }
   const plan = buildQueryPlan(args.profile);
   const start = Math.max(0, Math.min(plan.length, Math.floor(args.queryOffset ?? 0)));
   const deadline = Date.now() + budgetMs;
@@ -306,9 +365,10 @@ export async function runProspectingBatch(args: {
           if (Date.now() >= deadline) break;
           const directoryCandidate = candidateFromDirectoryRow(args.profile, row, query, hit);
           if (directoryCandidate.candidate.fit.tier === "reject") continue;
-          directoryCandidate.verifications = await verifyEmails(row.emails, {
+          await enrichCandidate(directoryCandidate.candidate);
+          directoryCandidate.verifications = await verifyEmails(directoryCandidate.candidate.emails, {
             companyDomain: row.domain ?? undefined,
-            resolveMx: args.resolveMx,
+            ...verifyOptions,
           });
           candidates.push(directoryCandidate);
           stats.candidatesFound += 1;
@@ -320,9 +380,10 @@ export async function runProspectingBatch(args: {
         continue;
       }
       if (harvested.fit.tier === "reject") continue;
+      await enrichCandidate(harvested);
       const verifications = await verifyEmails(harvested.emails, {
         companyDomain: harvested.domain,
-        resolveMx: args.resolveMx,
+        ...verifyOptions,
       });
       candidates.push({ candidate: harvested, verifications, region: query.region });
       stats.candidatesFound += 1;
@@ -332,6 +393,13 @@ export async function runProspectingBatch(args: {
       if (verifications.some((item) => item.verdict === "deliverable_likely")) providerStats.deliverableLikely += 1;
     }
     if (Date.now() >= deadline || stats.pagesFetched >= maxPages) break;
+  }
+
+  if (enricher || verifier) {
+    stats.usage = {
+      ...(enricher ? { enrichment: { ...enricher.usage(), ...enrichment } } : {}),
+      ...(verifier ? { verification: verifier.usage() } : {}),
+    };
   }
 
   const nextQueryOffset = Math.min(plan.length, start + stats.queriesUsed);

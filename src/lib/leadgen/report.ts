@@ -64,6 +64,7 @@ function providerStats(value: unknown): Record<string, ProviderStats> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value).flatMap(([provider, raw]) => {
+      if (provider === "usage") return [];
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
       const item = raw as Record<string, unknown>;
       const integer = (candidate: unknown) => typeof candidate === "number" && Number.isFinite(candidate)

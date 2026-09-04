@@ -1,5 +1,53 @@
 # AI Handoff
 
+## 2026-09-04: Paid verification (Bouncer) and named-contact enrichment (Hunter) in leadgen
+
+- `src/lib/leadgen/verify.ts` now takes an injectable `MailboxVerifier`. The
+  deterministic heuristic (syntax, disposable, free provider, company domain,
+  MX, role address) always runs first; a provider verdict then overrides the
+  heuristic verdict for `deliverable`, `risky` and `undeliverable`, while
+  `unknown`, a missing key, an error, a timeout or exhausted credits keep the
+  heuristic verdict and add a reason. `verifyEmails` sends at most
+  `DEFAULT_VERIFIER_LIMIT` (6) addresses per company to the paid verifier.
+- `src/lib/leadgen/bouncer.ts` is the Bouncer adapter (`x-api-key` header,
+  bounded timeout, memoized per normalized address, HTTP 402 marks credits
+  exhausted and stops further calls for the run). `BOUNCER_API_KEY` selects it
+  through `mailboxVerifierFromEnv()`; passing `verifier: null` disables it.
+- `src/lib/leadgen/hunter.ts` is the Hunter Domain Search adapter
+  (`X-API-KEY` header, `type=personal`, `limit=10`, memoized per domain,
+  HTTP 429 marks it exhausted). It runs only on fit-qualified candidates after
+  discovery, capped by `maxEnrichments` (default 40 per batch), and never sends
+  anything. `HUNTER_API_KEY` selects it through `contactEnricherFromEnv()`;
+  `enricher: null` disables it.
+- `src/lib/leadgen/enrich.ts` holds the shared `EnrichedContact` shape,
+  deterministic ranking (decision maker, seniority, department, confidence,
+  then email) with case-insensitive dedupe, and `selectPrimaryContact`, which
+  prefers the best named contact that is not `undeliverable`, otherwise falls
+  back to the harvested public address, and returns no email when every
+  address is known to bounce.
+- Company research rows dedupe on `domain` (then `company_name`), never on the
+  shown email, so a changed best contact updates the existing row. Directory
+  rows with a domain are enriched like harvested sites. Env-selected adapters
+  are created per batch (`mailboxVerifierFromEnv()`,
+  `contactEnricherFromEnv()` return a fresh instance), so exhaustion and usage
+  counters never leak across batches.
+- Named contacts ride on `LeadCandidate.contacts`; enriched emails join the
+  harvested set and go through the same verification and approval path.
+  Research rows now carry `contact_name` and `contact_title`, evidence URLs
+  include the chosen contact's sources, and persisted contacts keep Bouncer
+  (status, reason, score, checkedAt) and Hunter (confidence, seniority,
+  department, decisionMaker, sourceUrls, enrichedAt) metadata in `sourceRefs`.
+- Provider usage (calls, cached, failures, exhausted, contacts) is attached to
+  batch stats under `usage` and stored with the run's `providerStats`;
+  `report.ts` skips that key when summarizing search providers.
+- Tests are mocked only (`scripts/leadgen.test.ts`,
+  `scripts/supply-os-context-prospecting.test.ts`) and delete both keys from
+  `process.env` at startup so a machine with credentials never spends credits.
+- Ops: `BOUNCER_API_KEY` and `HUNTER_API_KEY` are set in Vercel. At the
+  planned 50 mailboxes x 30 sends/day, expect roughly 35-45k verifications and
+  domain searches per month; watch `usage.exhausted` in run stats before the
+  free tiers run dry. No migration was needed.
+
 ## 2026-09-04: Olympian Motors and CosmicBrain AI offices
 
 - Provisioned Olympian Motors via `POST /api/ops/offices`, office id

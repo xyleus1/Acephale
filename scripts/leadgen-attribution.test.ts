@@ -12,6 +12,10 @@ import { calculateLeadDiscoveryReport, percentage } from "../src/lib/leadgen/rep
 import { recordLeadDiscoveries } from "../src/lib/leadgen/persist";
 import { prisma } from "../src/lib/prisma";
 
+// Paid providers must never be reached from the suite, even on a machine with keys.
+delete process.env.BOUNCER_API_KEY;
+delete process.env.HUNTER_API_KEY;
+
 const freePage = (domain: string) => `<a href="https://${domain}/contact">${domain}</a>`;
 
 async function main() {

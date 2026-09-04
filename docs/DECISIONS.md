@@ -5126,3 +5126,32 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Verification: `scripts/procurement-conversation-task-database.test.ts` starts
   two concurrent failed transitions against the same task and asserts the
   attempt count reflects both.
+
+## 2026-09-04: Paid leadgen providers are advisory layers over deterministic checks
+
+- Status: accepted
+- Owner: engineering
+- Decision: Email verification and named-contact enrichment are injected
+  interfaces (`MailboxVerifier`, `ContactEnricher`) with the deterministic
+  path as the default. The heuristic verdict (syntax, disposable, free
+  provider, company domain, MX, role) is always computed first; a provider may
+  sharpen it to `deliverable`, `risky` or `undeliverable`, but a missing key,
+  an error, a timeout, a malformed payload, an `unknown` status or exhausted
+  credits leave the heuristic verdict in place with a reason appended. A
+  provider outage or a spent free tier therefore degrades quality, never
+  availability, of prospecting.
+- Provider selection is by environment key only (`BOUNCER_API_KEY`,
+  `HUNTER_API_KEY`) and callers may pass `null` to opt out. Provider calls are
+  bounded per run (verifier cap per company, `maxEnrichments` per batch,
+  request timeouts, memoization) and their usage is recorded on the run so
+  spend is visible before it bites.
+- Safety boundary: Enrichment runs after discovery on fit-qualified domains
+  only and never sends anything. Enriched addresses enter the same
+  verification, suppression, `officeId` scoping and batch approval path as
+  harvested ones. Provider credentials and raw payloads are never logged;
+  contact evidence (source URLs, confidence, provider, timestamp) is kept in
+  `sourceRefs` for provenance.
+- Verification: `scripts/leadgen.test.ts` and
+  `scripts/supply-os-context-prospecting.test.ts` cover every provider state
+  with mocked transports and delete both keys from `process.env` so a
+  credentialed machine or CI never spends credits.

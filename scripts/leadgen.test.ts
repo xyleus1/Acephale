@@ -37,11 +37,19 @@ import {
   registrableDomain,
 } from "../src/lib/leadgen/extract";
 import { scoreLead } from "../src/lib/leadgen/score";
-import { verifyEmail } from "../src/lib/leadgen/verify";
+import { mailboxVerifierFromEnv, verifyEmail, verifyEmails, type MailboxVerifier } from "../src/lib/leadgen/verify";
+import { createBouncerVerifier, parseBouncerResponse } from "../src/lib/leadgen/bouncer";
+import { createHunterEnricher, parseHunterDomainSearch } from "../src/lib/leadgen/hunter";
+import { contactEnricherFromEnv, rankEnrichedContacts, selectPrimaryContact, type EnrichedContact } from "../src/lib/leadgen/enrich";
 import { extractDirectoryTargets, harvestSite, scoreEmailUsefulness, type FetchedPage } from "../src/lib/leadgen/harvest";
 import { profileFromProspectingDraft, runProspectingBatch } from "../src/lib/leadgen/run";
+import { persistLeads } from "../src/lib/leadgen/persist";
 import { checkPublicUrl, guardedRequest, isPrivateAddress } from "../src/lib/leadgen/fetch-guard";
 import { createServer } from "node:http";
+
+// Paid providers must never be reached from the suite, even on a machine with keys.
+delete process.env.BOUNCER_API_KEY;
+delete process.env.HUNTER_API_KEY;
 
 // Query plan
 
@@ -677,6 +685,237 @@ assert.equal(freeMailbox.verdict, "risky", "free provider mailboxes need a secon
 assert.equal((await verifyEmail("not-an-email", { resolveMx: async () => [] })).verdict, "undeliverable");
 assert.equal((await verifyEmail("email@ornek.com", { resolveMx: async () => [] })).verdict, "undeliverable");
 
+// Bouncer-backed mailbox verification (mocked transport)
+
+const companyMx = async () => [{ exchange: "mail.ornekcelik.com.tr", priority: 10 }];
+const bouncerPayload = (status: string, extra: Record<string, unknown> = {}) => ({
+  email: "x",
+  status,
+  reason: status === "deliverable" ? "accepted_email" : status === "undeliverable" ? "rejected_email" : "low_deliverability",
+  domain: { name: "ornekcelik.com.tr", acceptAll: "no", disposable: "no", free: "no" },
+  account: { role: "yes", disabled: "no", fullMailbox: "no" },
+  dns: { type: "MX", record: "mail.ornekcelik.com.tr." },
+  provider: "ornekcelik.com.tr",
+  score: status === "deliverable" ? 100 : 10,
+  ...extra,
+});
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+const bouncerRequests: Array<{ url: string; headers: Record<string, string> }> = [];
+const bouncerByEmail: Record<string, Response | (() => Response)> = {
+  "satis@ornekcelik.com.tr": jsonResponse(bouncerPayload("deliverable")),
+  "gone@ornekcelik.com.tr": jsonResponse(bouncerPayload("undeliverable")),
+  "maybe@ornekcelik.com.tr": jsonResponse(bouncerPayload("risky", { domain: { name: "ornekcelik.com.tr", acceptAll: "yes", disposable: "no", free: "no" } })),
+  "shrug@ornekcelik.com.tr": jsonResponse(bouncerPayload("unknown", { reason: "timeout", score: null })),
+  "weird@ornekcelik.com.tr": jsonResponse({ nonsense: true }),
+  "broke@ornekcelik.com.tr": jsonResponse({ error: "Payment required" }, 402),
+};
+const bouncer = createBouncerVerifier({
+  apiKey: "test-key",
+  now: () => new Date("2026-08-31T00:00:00.000Z"),
+  fetchImpl: async (url, init) => {
+    const headers = Object.fromEntries(Object.entries((init?.headers ?? {}) as Record<string, string>));
+    bouncerRequests.push({ url, headers });
+    const email = new URL(url).searchParams.get("email") ?? "";
+    const stub = bouncerByEmail[email];
+    if (!stub) throw new TypeError("fetch failed");
+    return typeof stub === "function" ? stub() : stub.clone();
+  },
+});
+
+const bouncerDeliverable = await verifyEmail("satis@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerDeliverable.verdict, "deliverable_likely");
+assert.equal(bouncerDeliverable.provider?.provider, "bouncer");
+assert.equal(bouncerDeliverable.provider?.status, "deliverable");
+assert.equal(bouncerDeliverable.provider?.score, 100);
+assert.equal(bouncerDeliverable.provider?.checkedAt, "2026-08-31T00:00:00.000Z");
+assert.ok(bouncerDeliverable.confidence >= 90, "a provider-confirmed mailbox must carry high confidence");
+assert.equal(bouncerDeliverable.mxHost, "mail.ornekcelik.com.tr", "heuristic MX evidence must survive the provider verdict");
+assert.equal(bouncerRequests[0]!.headers["x-api-key"], "test-key");
+assert.ok(!bouncerRequests[0]!.url.includes("test-key"), "the API key must travel in a header, not the URL");
+
+const bouncerUndeliverable = await verifyEmail("gone@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerUndeliverable.verdict, "undeliverable", "a provider rejection must override a heuristic pass");
+assert.ok(bouncerUndeliverable.confidence <= 10);
+
+const bouncerRisky = await verifyEmail("maybe@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerRisky.verdict, "risky");
+assert.equal(bouncerRisky.provider?.acceptAll, true);
+
+const bouncerUnknown = await verifyEmail("shrug@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerUnknown.verdict, "deliverable_likely", "an unknown provider answer keeps the heuristic verdict");
+assert.equal(bouncerUnknown.provider?.status, "unknown");
+assert.ok(bouncerUnknown.reasons.some((reason) => reason.includes("unknown")));
+
+const bouncerMalformed = await verifyEmail("weird@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerMalformed.verdict, "deliverable_likely", "a malformed payload falls back to the heuristic verdict");
+assert.equal(bouncerMalformed.provider ?? null, null);
+assert.ok(bouncerMalformed.reasons.some((reason) => reason.includes("unavailable")));
+
+const bouncerNetwork = await verifyEmail("offline@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerNetwork.verdict, "deliverable_likely", "a transport failure falls back to the heuristic verdict");
+
+const bouncerBroke = await verifyEmail("broke@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerBroke.verdict, "deliverable_likely");
+assert.equal(bouncer.usage().exhausted, true, "HTTP 402 must flag exhausted credits");
+const callsBeforeExhaustedRetry = bouncer.usage().calls;
+await verifyEmail("another@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncer.usage().calls, callsBeforeExhaustedRetry, "no further provider calls once credits are exhausted");
+
+assert.equal(bouncerRequests.filter((request) => request.url.includes("satis%40")).length, 1);
+await verifyEmail("SATIS@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
+assert.equal(bouncerRequests.filter((request) => request.url.includes("satis%40")).length, 1, "repeat lookups must be served from the memo");
+assert.ok(bouncer.usage().cached >= 1);
+assert.ok(bouncer.usage().failures >= 3);
+
+assert.throws(() => parseBouncerResponse({ status: "maybe" }, new Date()), /payload/);
+assert.equal(parseBouncerResponse({ status: "deliverable" }, new Date()).reason, "unknown");
+
+const withoutProvider = await verifyEmail("satis@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: null });
+assert.equal(withoutProvider.provider ?? null, null, "verifier: null must skip the provider entirely");
+
+let paidCalls = 0;
+const countingVerifier: MailboxVerifier = {
+  name: "counting",
+  usage: () => ({ provider: "counting", calls: paidCalls, cached: 0, failures: 0, exhausted: false }),
+  verify: async () => {
+    paidCalls += 1;
+    return { provider: "counting", status: "deliverable", reason: "accepted_email", score: 100, acceptAll: false, disposable: false, free: false, role: false, disabled: false, fullMailbox: false, checkedAt: "2026-08-31T00:00:00.000Z" };
+  },
+};
+const manyEmails = Array.from({ length: 9 }, (_, index) => `person${index}@ornekcelik.com.tr`);
+const capped = await verifyEmails(manyEmails, { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: countingVerifier, verifierLimit: 4 });
+assert.equal(capped.length, 9);
+assert.equal(paidCalls, 4, "paid verification must stop at the per-company limit");
+assert.equal(capped.filter((item) => item.provider).length, 4);
+
+// Hunter-backed decision-maker enrichment (mocked transport)
+
+const hunterPerson = (value: string, extra: Record<string, unknown> = {}) => ({
+  value,
+  type: "personal",
+  confidence: 90,
+  sources: [{ domain: "ornekcelik.com.tr", uri: "http://ornekcelik.com.tr/ekibimiz", extracted_on: "2026-01-01", last_seen_on: "2026-08-01", still_on_page: true }],
+  first_name: "Ayse",
+  last_name: "Yilmaz",
+  position: "Purchasing Manager",
+  seniority: "senior",
+  department: "management",
+  decision_maker: true,
+  linkedin: "https://www.linkedin.com/in/ayse-yilmaz",
+  twitter: null,
+  phone_number: null,
+  verification: { date: "2026-08-01", status: "valid" },
+  ...extra,
+});
+const hunterRequests: string[] = [];
+const hunterByDomain: Record<string, () => Response> = {
+  "ornekcelik.com.tr": () => jsonResponse({
+    data: {
+      domain: "ornekcelik.com.tr",
+      emails: [
+        hunterPerson("stajyer@ornekcelik.com.tr", { first_name: "Can", last_name: "Demir", position: "Intern", seniority: "junior", department: "support", decision_maker: false, confidence: 60 }),
+        hunterPerson("ayse.yilmaz@ornekcelik.com.tr"),
+        hunterPerson("AYSE.YILMAZ@ornekcelik.com.tr", { confidence: 40 }),
+        hunterPerson("info@ornekcelik.com.tr", { type: "generic", first_name: null, last_name: null }),
+        hunterPerson("mehmet.kaya@ornekcelik.com.tr", { first_name: "Mehmet", last_name: "Kaya", position: "CEO", seniority: "executive", department: "executive", confidence: 95 }),
+      ],
+    },
+    meta: { results: 5, limit: 10, offset: 0, params: { domain: "ornekcelik.com.tr" } },
+  }),
+  "empty.example": () => jsonResponse({ data: { domain: "empty.example", emails: [] }, meta: { results: 0 } }),
+  "broken.example": () => jsonResponse({ data: { surprise: 1 } }),
+  "limited.example": () => jsonResponse({ errors: [{ id: "too_many_requests", code: 429, details: "Too many requests" }] }, 429),
+};
+const hunter = createHunterEnricher({
+  apiKey: "hunter-test-key",
+  now: () => new Date("2026-08-31T00:00:00.000Z"),
+  fetchImpl: async (url, init) => {
+    hunterRequests.push(url);
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    assert.equal(headers["X-API-KEY"], "hunter-test-key");
+    assert.ok(!url.includes("hunter-test-key"), "the Hunter key must travel in a header, not the URL");
+    const domain = new URL(url).searchParams.get("domain") ?? "";
+    const stub = hunterByDomain[domain];
+    if (!stub) throw new TypeError("fetch failed");
+    return stub();
+  },
+});
+
+const enriched = await hunter.enrichDomain("ornekcelik.com.tr");
+assert.equal(enriched.length, 4, "generic inboxes are dropped and case-duplicate emails are kept for ranking");
+const ranked = rankEnrichedContacts(enriched);
+assert.deepEqual(ranked.map((contact) => contact.email), [
+  "mehmet.kaya@ornekcelik.com.tr",
+  "ayse.yilmaz@ornekcelik.com.tr",
+  "stajyer@ornekcelik.com.tr",
+], "ranking must dedupe by email, prefer executives and decision makers, and cap the list");
+assert.equal(ranked[1]!.fullName, "Ayse Yilmaz");
+assert.equal(ranked[1]!.position, "Purchasing Manager");
+assert.equal(ranked[1]!.confidence, 90, "duplicates must keep the higher-confidence record");
+assert.deepEqual(ranked[1]!.sourceUrls, ["http://ornekcelik.com.tr/ekibimiz"]);
+assert.equal(ranked[1]!.enrichedAt, "2026-08-31T00:00:00.000Z");
+assert.equal(hunter.usage().billable, 1);
+
+assert.deepEqual(await hunter.enrichDomain("empty.example"), [], "no results is a normal empty answer");
+await assert.rejects(hunter.enrichDomain("broken.example"), /payload/);
+await assert.rejects(hunter.enrichDomain("offline.example"), /network/);
+await assert.rejects(hunter.enrichDomain("limited.example"), /quota/);
+assert.equal(hunter.usage().exhausted, true, "HTTP 429 must flag the plan as exhausted");
+const hunterCallsAtExhaustion = hunter.usage().calls;
+await assert.rejects(hunter.enrichDomain("ornekcelik.example"), /quota/);
+assert.equal(hunter.usage().calls, hunterCallsAtExhaustion, "no further Hunter calls once exhausted");
+assert.equal(hunterRequests.filter((url) => url.includes("domain=ornekcelik.com.tr")).length, 1);
+await hunter.enrichDomain("ornekcelik.com.tr");
+assert.equal(hunterRequests.filter((url) => url.includes("domain=ornekcelik.com.tr")).length, 1, "repeat domains must be served from the memo");
+assert.equal(hunter.usage().failures, 3, "payload, network and 429 count; the post-exhaustion short-circuit does not");
+assert.throws(() => parseHunterDomainSearch({ data: {} }, new Date()), /payload/);
+
+const namedContact: EnrichedContact = ranked[1]!;
+const primaryWithNamed = selectPrimaryContact({
+  contacts: ranked,
+  emails: ["mehmet.kaya@ornekcelik.com.tr", "ayse.yilmaz@ornekcelik.com.tr", "info@ornekcelik.com.tr"],
+  verifications: [
+    { ...bouncerUndeliverable, email: "mehmet.kaya@ornekcelik.com.tr" },
+    { ...bouncerDeliverable, email: "ayse.yilmaz@ornekcelik.com.tr" },
+    { ...withoutProvider, email: "info@ornekcelik.com.tr" },
+  ],
+});
+assert.equal(primaryWithNamed.email, namedContact.email, "an undeliverable top contact must yield to the next named person");
+assert.equal(primaryWithNamed.name, "Ayse Yilmaz");
+assert.equal(primaryWithNamed.title, "Purchasing Manager");
+assert.equal(primaryWithNamed.verification?.verdict, "deliverable_likely");
+const primaryFallback = selectPrimaryContact({
+  contacts: [],
+  emails: ["info@ornekcelik.com.tr"],
+  verifications: [{ ...withoutProvider, email: "info@ornekcelik.com.tr" }],
+});
+assert.equal(primaryFallback.email, "info@ornekcelik.com.tr", "without enrichment the public inbox stays the contact");
+assert.equal(primaryFallback.name, null);
+const primaryAllRejected = selectPrimaryContact({
+  contacts: [{ ...namedContact, email: "gone@ornekcelik.com.tr" }],
+  emails: ["gone@ornekcelik.com.tr", "dead@ornekcelik.com.tr"],
+  verifications: [
+    { ...bouncerUndeliverable, email: "gone@ornekcelik.com.tr" },
+    { ...bouncerUndeliverable, email: "dead@ornekcelik.com.tr" },
+  ],
+});
+assert.equal(primaryAllRejected.email, null, "a row must never advertise an address known to bounce");
+assert.equal(primaryAllRejected.name, null);
+assert.equal(primaryAllRejected.verification?.verdict, "undeliverable", "the row still says why it has no email");
+
+// Env-selected providers are built per call, so exhaustion in one batch never
+// silences the next one.
+process.env.BOUNCER_API_KEY = "test-only";
+process.env.HUNTER_API_KEY = "test-only";
+assert.notStrictEqual(mailboxVerifierFromEnv(), mailboxVerifierFromEnv(), "each batch gets its own verifier state");
+assert.notStrictEqual(contactEnricherFromEnv(), contactEnricherFromEnv(), "each batch gets its own enricher state");
+delete process.env.BOUNCER_API_KEY;
+delete process.env.HUNTER_API_KEY;
+assert.equal(mailboxVerifierFromEnv(), null);
+assert.equal(contactEnricherFromEnv(), null);
+
 // Harvest with a stubbed fetcher
 
 const pages: Record<string, FetchedPage> = {
@@ -705,6 +944,195 @@ assert.equal(harvested?.city, "Bursa");
 assert.ok(harvested?.emails.includes("ihracat@ornekcelik.com.tr"), "contact pages must be crawled");
 assert.equal(harvested?.evidence.length, 2, "every fetched page must stay in the evidence trail");
 assert.equal(harvested?.fit.tier, "A");
+
+// Enrichment inside a prospecting batch: named people join the candidate, a
+// provider failure leaves the public harvest intact, usage lands in stats.
+const enrichedDomains: string[] = [];
+const batchEnricher = {
+  name: "hunter",
+  usage: () => ({ provider: "hunter", calls: enrichedDomains.length, billable: 1, contacts: 1, failures: 0, exhausted: false }),
+  enrichDomain: async (domain: string) => {
+    enrichedDomains.push(domain);
+    if (domain !== "ornekcelik.com.tr") throw new Error("boom");
+    return [namedContact];
+  },
+};
+const enrichedBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  budgetMs: 10_000,
+  search: async () => [
+    { url: "https://www.ornekcelik.com.tr", domain: "ornekcelik.com.tr", engine: "brave", rank: 1 },
+    { url: "https://table-homepage.example", domain: "table-homepage.example", engine: "brave", rank: 2 },
+  ],
+  fetchPage: async (url) => pages[url.replace("https://ornekcelik", "https://www.ornekcelik")] ?? (url.includes("table-homepage.example")
+    ? { url, status: 200, contentType: "text/html", body: "<title>Table Steel</title><p>celik konstruksiyon imalat fabrika sac profil uretim</p><p>info@table-homepage.example</p>", isPdf: false }
+    : null),
+  resolveMx: companyMx,
+  enricher: batchEnricher,
+  verifier: countingVerifier,
+});
+assert.deepEqual(enrichedDomains, ["ornekcelik.com.tr", "table-homepage.example"], "every fit-qualified company is enriched once");
+const enrichedCandidate = enrichedBatch.candidates.find((item) => item.candidate.domain === "ornekcelik.com.tr")!;
+assert.equal(enrichedCandidate.candidate.emails[0], namedContact.email, "the named contact leads the candidate's emails");
+assert.ok(enrichedCandidate.candidate.emails.includes("ihracat@ornekcelik.com.tr"), "public emails are kept behind the named contact");
+assert.deepEqual(enrichedCandidate.candidate.contacts?.map((contact) => contact.email), [namedContact.email]);
+assert.ok(enrichedCandidate.verifications.some((item) => item.email === namedContact.email && item.provider?.provider === "counting"));
+const unenrichedCandidate = enrichedBatch.candidates.find((item) => item.candidate.domain === "table-homepage.example")!;
+assert.equal(unenrichedCandidate.candidate.contacts, undefined, "a provider failure must not drop the company");
+assert.deepEqual(unenrichedCandidate.candidate.emails, ["info@table-homepage.example"]);
+assert.equal(enrichedBatch.stats.usage?.enrichment?.companiesEnriched, 2);
+assert.equal(enrichedBatch.stats.usage?.enrichment?.companiesWithContacts, 1);
+assert.equal(enrichedBatch.stats.usage?.enrichment?.skippedByCap, 0);
+assert.equal(enrichedBatch.stats.usage?.verification?.provider, "counting");
+
+const cappedBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  budgetMs: 10_000,
+  search: async () => [{ url: "https://www.ornekcelik.com.tr", domain: "ornekcelik.com.tr", engine: "brave", rank: 1 }],
+  fetchPage: async (url) => pages[url.replace("https://ornekcelik", "https://www.ornekcelik")] ?? null,
+  resolveMx: companyMx,
+  enricher: batchEnricher,
+  verifier: null,
+  maxEnrichments: 0,
+});
+assert.equal(cappedBatch.stats.usage?.enrichment?.skippedByCap, 1, "the per-batch enrichment cap must be honoured");
+assert.equal(cappedBatch.stats.usage?.verification, undefined);
+
+// Directory rows with a domain are enriched like harvested sites; rows without
+// a domain stay on the deterministic path and spend nothing.
+const directoryEnriched: string[] = [];
+const directoryBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  budgetMs: 10_000,
+  search: async () => [{ url: "https://chamber.example/members.pdf", domain: "chamber.example", engine: "brave", rank: 1 }],
+  fetchPage: async (url) => (url === "https://chamber.example/members.pdf"
+    ? {
+      ...directoryPdf,
+      body: [
+        "Chamber Member Directory",
+        "ALPHA STEEL GmbH celik konstruksiyon sac profil imalat | info@alpha-steel.de | https://alpha-steel.de | Berlin",
+        "NAMELESS METAL celik konstruksiyon sac profil imalat | sales@nameless-metal.example | Berlin",
+      ].join("\n"),
+    }
+    : null),
+  resolveMx: companyMx,
+  enricher: {
+    name: "hunter",
+    usage: () => ({ provider: "hunter", calls: directoryEnriched.length, billable: 1, contacts: 1, failures: 0, exhausted: false }),
+    enrichDomain: async (domain: string) => {
+      directoryEnriched.push(domain);
+      return [{ ...namedContact, email: "ayse.yilmaz@alpha-steel.de" }];
+    },
+  },
+  verifier: null,
+});
+const alphaRow = directoryBatch.candidates.find((item) => item.candidate.domain === "alpha-steel.de");
+assert.ok(alphaRow?.directoryRow, "the directory document must expand into a directory candidate");
+assert.ok(directoryEnriched.includes("alpha-steel.de"), "a fit-qualified directory company with a domain is enriched");
+assert.equal(alphaRow?.candidate.emails[0], "ayse.yilmaz@alpha-steel.de", "the named contact leads the directory candidate's emails");
+assert.ok(alphaRow?.candidate.emails.includes("info@alpha-steel.de"), "the directory inbox is kept behind the named contact");
+assert.ok(alphaRow?.verifications.some((item) => item.email === "ayse.yilmaz@alpha-steel.de"), "enriched directory emails go through verification");
+assert.deepEqual(alphaRow?.directoryRow?.emails, ["info@alpha-steel.de"], "the parsed directory row itself stays untouched");
+assert.ok(!directoryEnriched.some((domain) => !domain), "rows without a domain must not spend an enrichment call");
+const offBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  budgetMs: 10_000,
+  search: async () => [{ url: "https://www.ornekcelik.com.tr", domain: "ornekcelik.com.tr", engine: "brave", rank: 1 }],
+  fetchPage: async (url) => pages[url.replace("https://ornekcelik", "https://www.ornekcelik")] ?? null,
+  resolveMx: companyMx,
+});
+assert.equal(offBatch.stats.usage, undefined, "without keys or injected providers no usage block is reported");
+
+// Persistence keeps the enriched identity and both providers' evidence on the contact.
+const createdContacts: Array<Record<string, unknown>> = [];
+const fakeClient = {
+  company: {
+    findUnique: async () => null,
+    create: async () => ({ id: "company-persist" }),
+    update: async () => ({ id: "company-persist" }),
+  },
+  contact: {
+    findFirst: async () => null,
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      createdContacts.push(data);
+      return { id: `contact-${createdContacts.length}` };
+    },
+    update: async () => ({ id: "unused" }),
+  },
+  leadDiscovery: { create: async ({ data }: { data: Record<string, unknown> }) => data },
+} as unknown as Parameters<typeof persistLeads>[1]["client"];
+const persistedAt = new Date("2026-09-04T12:00:00Z");
+const persistResult = await persistLeads([{
+  candidate: enrichedCandidate.candidate,
+  verifications: [
+    {
+      email: namedContact.email,
+      verdict: "deliverable_likely",
+      confidence: 95,
+      isRole: false,
+      hasMx: true,
+      mxHost: "mx.ornekcelik.com.tr",
+      isFreeProvider: false,
+      domainMatchesCompany: true,
+      reasons: ["bouncer: deliverable"],
+      provider: {
+        provider: "bouncer",
+        status: "deliverable",
+        reason: "accepted_email",
+        score: 100,
+        acceptAll: false,
+        disposable: false,
+        free: false,
+        role: false,
+        disabled: false,
+        fullMailbox: false,
+        checkedAt: "2026-09-04T11:59:00.000Z",
+      },
+    },
+    {
+      email: "ihracat@ornekcelik.com.tr",
+      verdict: "deliverable_likely",
+      confidence: 60,
+      isRole: true,
+      hasMx: true,
+      mxHost: "mx.ornekcelik.com.tr",
+      isFreeProvider: false,
+      domainMatchesCompany: true,
+      reasons: [],
+    },
+  ],
+}], { client: fakeClient, officeId: "office-persist", campaignTag: "persist-test", now: persistedAt });
+assert.equal(persistResult.companiesCreated, 1);
+assert.equal(persistResult.contactsCreated, 2);
+const namedRow = createdContacts.find((row) => row.email === namedContact.email)!;
+assert.equal(namedRow.fullName, namedContact.fullName, "the enriched person name is persisted");
+assert.equal(namedRow.title, namedContact.position, "the enriched title is persisted");
+assert.equal(namedRow.phone, namedContact.phone ?? enrichedCandidate.candidate.phones[0] ?? null);
+const namedRefs = namedRow.sourceRefs as Record<string, unknown>;
+assert.equal(namedRefs.mailboxProvider, "bouncer");
+assert.equal(namedRefs.mailboxStatus, "deliverable");
+assert.equal(namedRefs.mailboxReason, "accepted_email");
+assert.equal(namedRefs.mailboxScore, 100);
+assert.equal(namedRefs.mailboxCheckedAt, "2026-09-04T11:59:00.000Z");
+assert.equal(namedRefs.enrichmentProvider, namedContact.provider);
+assert.equal(namedRefs.enrichmentConfidence, namedContact.confidence);
+assert.equal(namedRefs.enrichmentDecisionMaker, namedContact.decisionMaker);
+assert.deepEqual(namedRefs.enrichmentSourceUrls, namedContact.sourceUrls);
+assert.equal(namedRefs.enrichedAt, namedContact.enrichedAt);
+assert.equal(namedRefs.verifiedAt, persistedAt.toISOString());
+const publicRow = createdContacts.find((row) => row.email === "ihracat@ornekcelik.com.tr")!;
+assert.equal(publicRow.title, "Company inbox", "a harvested role inbox keeps the generic title");
+const publicRefs = publicRow.sourceRefs as Record<string, unknown>;
+assert.equal(publicRefs.mailboxProvider, undefined, "no provider evidence is invented for a heuristic-only address");
+assert.equal(publicRefs.enrichmentProvider, undefined);
 
 const tableHomepage = await harvestSite(MANEKS_PROFILE, "https://table-homepage.example", {
   directoryMode: true,
