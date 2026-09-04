@@ -568,7 +568,7 @@ function capturePersistence() {
   // inbound history rather than the capped presentation summary, so a price in
   // an older reply is still read.
   assert.ok(
-    /procurementRepliedVendors\(\{\s*officeId: summary\.officeId,\s*orderId: summary\.orderId,\s*vendors: order\.vendors,/
+    /procurementRepliedVendors\(\{\s*officeId: summary\.officeId,\s*orderId: summary\.orderId,\s*vendors: [^;]*order\.vendors/
       .test(source)
       && !/localRfqOutreach\(/.test(source),
     "Candidates are the request's actual repliers, read office and order scoped across its whole history.",
@@ -659,7 +659,7 @@ function onePassWalksPastTheFirstPage() {
 
   const autopilot = readFileSync(resolve(root, "src/lib/procurement-autopilot.ts"), "utf8");
   assert.ok(
-    autopilot.includes("sweepSupplierQuoteCapture({ orderId: args.orderId, outOfTime: outOfScanTime })")
+    /sweepSupplierQuoteCapture\(\{\s*orderId: args\.orderId,\s*outOfTime: outOfScanTime,/.test(autopilot)
       && !autopilot.includes("runSupplierQuoteCapture("),
     "The autopilot sweeps, so respondents beyond the first page are never starved of capture.",
   );

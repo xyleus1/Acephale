@@ -186,6 +186,7 @@ model Office {
   outreachCampaignFollowUps OutreachCampaignFollowUp[]
   emailDeliveryEvents  EmailDeliveryEvent[]
   emailSuppressions    EmailSuppression[]
+  procurementConversationTasks ProcurementConversationTask[]
 
   @@unique([name])
 }
@@ -1166,6 +1167,11 @@ model OrderSupplier {
   research       Json     @default("{}")
   quote          Json?
   gmailMessageId String?  @map("gmail_message_id")
+  // What the RFQ send stamps on the row: the RFC message id of the mail we sent
+  // and the provider thread it opened, which is how a later pass replies on the
+  // same thread and how the request knows this supplier was contacted.
+  lastEmailMessageId String? @map("last_email_message_id")
+  emailThreadId      String? @map("email_thread_id")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1174,6 +1180,41 @@ model OrderSupplier {
 
   @@index([orderId, status])
   @@index([supplierId])
+}
+
+// Durable ownership of one supplier conversation of one sourcing request. The
+// loop used to recompute every thread's state on each pass and keep nothing, so
+// a failed draft, a failed send or a quote that could not be written was
+// reported once and then forgotten. A task records what the thread owes, how
+// often it has been tried and when it may be tried again, which is what lets a
+// scheduled pass carry the conversation to a quote without a manual sweep.
+model ProcurementConversationTask {
+  id       String @id @default(cuid())
+  officeId String
+  // The workflow request and supplier row this conversation belongs to. They
+  // live in the procurement workflow database, so they are held as ids rather
+  // than relations.
+  orderId    String
+  vendorId   String
+  vendorName String
+  stage      String
+  action     String
+  attempts   Int      @default(0)
+  nextAttemptAt DateTime
+  lastAttemptAt DateTime
+  lastError     String?
+  lastSuccessAt DateTime?
+  // Set when the conversation reached a recorded quote or is unreachable, which
+  // is when the loop stops owing it an action.
+  settledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@unique([officeId, orderId, vendorId])
+  @@index([officeId, settledAt, nextAttemptAt])
+  @@index([orderId, settledAt])
 }
 
 model ProcurementRequestKey {

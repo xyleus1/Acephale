@@ -200,7 +200,8 @@ assert.ok(
   "What each thread is short of comes from this pass own quote sweep.",
 );
 assert.ok(
-  /funnel: conversationFunnel\(\[/.test(autopilotSource)
+  /const funnelEntries = \[/.test(autopilotSource)
+    && /funnel: conversationFunnel\(funnelEntries\)/.test(autopilotSource)
     && /order\.vendors\s*\.filter\(\(vendor\) => !plan\.some/.test(autopilotSource)
     && /unreadConversationInput\(vendor\)/.test(autopilotSource),
   "The funnel covers the whole request, not only the threads this pass read.",
@@ -268,6 +269,90 @@ assert.equal(
   })),
   "QUOTED",
 );
+// Sourcing keeps a shop it found without a published address. No pass can mail
+// it, so counting it as owed made a request look permanently behind while the
+// threads that were genuinely stalled were buried in the same number.
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v5",
+    name: "No address foam shop",
+    contacted: false,
+    responseCount: 0,
+    quote: null,
+    contact: null,
+  })),
+  "NO_CONTACT_METHOD",
+);
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v6",
+    name: "Phone only shop",
+    contacted: false,
+    responseCount: 0,
+    quote: null,
+    contact: { email: null },
+  })),
+  "NO_CONTACT_METHOD",
+);
+assert.equal(
+  supplierConversationStage(unreadConversationInput({
+    id: "v7",
+    name: "Mailable shop",
+    contacted: false,
+    responseCount: 0,
+    quote: null,
+    contact: { email: "sales@mailable.test" },
+  })),
+  "NOT_CONTACTED",
+  "A supplier we hold an address for owes a first contact, so it stays owed work.",
+);
+const unreachable = conversationFunnel([
+  {
+    input: unreadConversationInput({
+      id: "u1",
+      name: "No address foam shop",
+      contacted: false,
+      responseCount: 0,
+      quote: null,
+      contact: null,
+    }),
+  },
+  {
+    input: unreadConversationInput({
+      id: "u2",
+      name: "Mailable shop",
+      contacted: false,
+      responseCount: 0,
+      quote: null,
+      contact: { email: "sales@mailable.test" },
+    }),
+  },
+]);
+assert.equal(unreachable.suppliers, 2);
+assert.equal(unreachable.stages.NO_CONTACT_METHOD, 1);
+assert.equal(
+  unreachable.owed,
+  1,
+  "An unreachable supplier stays visible in the funnel without inflating the work owed.",
+);
+assert.ok(
+  conversationOwesAction("NOT_CONTACTED") && !conversationOwesAction("NO_CONTACT_METHOD"),
+);
+
+// The first RFQ stamps last_email_message_id, so a projection that only read
+// the legacy gmail_message_id reported every mailed supplier as uncontacted.
+const workflowSource = readFileSync(resolve(__dirname, "../src/lib/procurement-workflow.ts"), "utf8");
+assert.ok(
+  /VENDOR_SENT_MESSAGE_ID_SQL = `COALESCE\(\s*NULLIF\(to_jsonb\(order_vendors\)->>'last_email_message_id', ''\),\s*NULLIF\(to_jsonb\(order_vendors\)->>'gmail_message_id', ''\)/
+    .test(workflowSource),
+  "A supplier is contacted when either the current or the legacy sent message id is stamped.",
+);
+assert.equal(
+  workflowSource.split("NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')").length - 1,
+  1,
+  "Nothing reads the legacy sent message id on its own, which is what made contacted counts wrong.",
+);
+
 const wholeRequest = conversationFunnel([
   { input: input({ vendorId: "read", hasQuote: true }) },
   ...["s1", "s2", "s3"].map((id) => ({

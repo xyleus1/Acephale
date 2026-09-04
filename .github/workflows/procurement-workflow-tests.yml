@@ -220,7 +220,8 @@ jobs:
                 if [[ "$migration" == *"20260821000100_minimal_customer_procurement_schema"* \
                   || "$migration" == *"20260822000300_customer_portal_context_access"* \
                   || "$migration" == *"20260822000200_order_supplier_contact_compatibility"* \
-                  || "$migration" == *"20260822000500_procurement_workspace_context_relink"* ]]; then
+                  || "$migration" == *"20260822000500_procurement_workspace_context_relink"* \
+                  || "$migration" == *"20260904000100_order_supplier_last_email_message"* ]]; then
                   continue
                 fi
                 psql "$LEGACY_MIGRATION_DATABASE_URL" --set=ON_ERROR_STOP=1 --file="$migration"
@@ -274,6 +275,11 @@ jobs:
             psql "$LEGACY_MIGRATION_DATABASE_URL" \
               --set=ON_ERROR_STOP=1 \
               --file=prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql
+          done
+          for pass in 1 2; do
+            psql "$LEGACY_MIGRATION_DATABASE_URL" \
+              --set=ON_ERROR_STOP=1 \
+              --file=prisma/migrations/20260904000100_order_supplier_last_email_message/migration.sql
           done
           psql "$LEGACY_MIGRATION_DATABASE_URL" \
             --file=scripts/sql/procurement-workspace-relink-fixture.sql
@@ -478,6 +484,7 @@ jobs:
           npm run test:procurement-autopilot-plan
           npm run test:procurement-supplier-nudge
           npm run test:procurement-conversation-stage
+          npm run test:procurement-conversation-task
           npm run test:procurement-supplier-quote-reading
           npm run test:procurement-request-document-merge
           npm run test:workflow-guild2
@@ -499,3 +506,5 @@ jobs:
           DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
             DOCUMENT_STORAGE_LOCAL_ROOT=.local-uploads/ci-supplier-reply-documents \
             npm run test:procurement-file-draft-db
+          DATABASE_URL="$SUPPLY_REPLY_DATABASE_URL" DATABASE_URL_UNPOOLED="$SUPPLY_REPLY_DATABASE_URL" \
+            npm run test:procurement-conversation-task-db

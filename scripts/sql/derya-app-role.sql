@@ -62,7 +62,8 @@ DECLARE
     'SupplyPlanningResult', 'SupplyMediaAsset', 'SupplyEvidence',
     'SupplyCapabilityRun', 'SupplyDecision', 'SupplyScenario',
     'SupplyScenarioComparison', 'SupplyDecisionEvidence', 'SupplyScenarioEvidence',
-    'SupplyApproval', 'SupplyExecutionTask', 'SupplyExecutionEvent'
+    'SupplyApproval', 'SupplyExecutionTask', 'SupplyExecutionEvent',
+    'ProcurementConversationTask'
   ];
 BEGIN
   FOREACH app_table IN ARRAY app_tables LOOP

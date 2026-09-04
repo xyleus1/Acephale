@@ -174,6 +174,11 @@ export async function listSupplierQuoteCandidates(input: {
   // deadline, so a long history cannot spend the invocation before a quote or an
   // answer is written. The next pass reads it again from the newest mail.
   outOfTime?: () => boolean;
+  // Conversations waiting out their own backoff after a failed write. A quote
+  // write is a retry like any other, so a thread whose write keeps failing is
+  // left alone until its next attempt is due instead of consuming the batch on
+  // every pass.
+  skipVendorIds?: ReadonlySet<string>;
 }): Promise<{
   orderId: string;
   customerId: string;
@@ -202,7 +207,9 @@ export async function listSupplierQuoteCandidates(input: {
   const replied = (await procurementRepliedVendors({
     officeId: summary.officeId,
     orderId: summary.orderId,
-    vendors: order.vendors,
+    vendors: input.skipVendorIds?.size
+      ? order.vendors.filter((vendor) => !input.skipVendorIds?.has(vendor.id))
+      : order.vendors,
     outOfTime: input.outOfTime,
   })).vendors;
   const byId = new Map(replied.map((vendor) => [vendor.id, vendor]));
@@ -291,6 +298,7 @@ export async function sweepSupplierQuoteCapture(input: {
   orderId: string;
   limit?: number;
   reads?: number;
+  skipVendorIds?: ReadonlySet<string>;
   pages?: number;
   // A page is the bounded unit of work here, so a caller with a function limit
   // to return inside stops the sweep between pages. The cursor of the next pass
@@ -313,6 +321,7 @@ export async function sweepSupplierQuoteCapture(input: {
       reads: input.reads,
       outOfTime: input.outOfTime,
       after: cursor,
+      skipVendorIds: input.skipVendorIds,
     });
     if (!run) return swept;
     swept = swept
@@ -341,6 +350,7 @@ export async function runSupplierQuoteCapture(input: {
   reads?: number;
   after?: string | null;
   outOfTime?: () => boolean;
+  skipVendorIds?: ReadonlySet<string>;
   advanceStatus?: typeof advanceProcurementOrderStatus;
 }): Promise<SupplierQuoteCaptureResult | null> {
   const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
@@ -349,6 +359,7 @@ export async function runSupplierQuoteCapture(input: {
     reads: input.reads,
     after: input.after,
     outOfTime: input.outOfTime,
+    skipVendorIds: input.skipVendorIds,
   });
   if (!plan) return null;
   const limit = Math.min(

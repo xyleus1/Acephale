@@ -3,9 +3,11 @@ import { runDueBackgroundJobs } from "@/lib/background-jobs";
 import {
   AUTOPILOT_MAX_ORDERS_PER_RUN,
   listAutopilotOrderIds,
+  prioritizeAutopilotQueue,
   rotateAutopilotOrderIds,
   runProcurementAutopilot,
 } from "@/lib/procurement-autopilot";
+import { listDueConversationTaskOrderIds } from "@/lib/procurement-conversation-task-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +57,33 @@ export async function GET(request: Request) {
     // Rotation covers the whole eligible queue, not the requests one pass can
     // work: taking the first requests of an oldest first list every time is how
     // a later request would never be worked at all.
-    const queue = rotateAutopilotOrderIds(await listAutopilotOrderIds(), startedAt);
+    const rotated = rotateAutopilotOrderIds(await listAutopilotOrderIds(), startedAt);
+    // A request whose supplier conversations owe an action now leads the pass,
+    // so a failed send or an unanswered reply is retried on the next scheduled
+    // pass rather than waiting for the rotation to come back around to it.
+    // A task store that cannot be read falls back to the rotation, since a pass
+    // that answers requests in the wrong order is better than one that answers
+    // none, but it says so: a silent fallback here would look exactly like a
+    // queue with nothing owed.
+    let dueOrderIds: string[] = [];
+    let backlogReadFailed = false;
+    try {
+      // The due read is intersected with the eligible queue in the database, so
+      // the limit is spent on requests this pass can actually work. A request
+      // that reached an order or was cancelled keeps its unsettled tasks, and
+      // those are the oldest due rows, so limiting first let them fill the
+      // whole result and leave a live failing request unled.
+      dueOrderIds = rotated.length
+        ? await listDueConversationTaskOrderIds({
+          limit: AUTOPILOT_MAX_ORDERS_PER_RUN,
+          orderIds: rotated,
+        })
+        : [];
+    } catch (error) {
+      backlogReadFailed = true;
+      console.error("procurement autopilot due conversation tasks failed", error);
+    }
+    const queue = prioritizeAutopilotQueue(rotated, dueOrderIds);
     const orderIds = queue.slice(0, AUTOPILOT_MAX_ORDERS_PER_RUN);
     const runs = [];
     let failed = 0;
@@ -114,6 +142,19 @@ export async function GET(request: Request) {
               needsOperator: run.funnel.needsOperator.length,
               quoteIncomplete: run.funnel.quoteIncomplete.length,
             },
+            // The stored work that outlives this pass: what is retried next,
+            // what is waiting out a backoff after a failure, and the threads
+            // that keep failing and need a person.
+            backlog: {
+              owed: run.backlog.owed,
+              due: run.backlog.due,
+              backingOff: run.backlog.backingOff,
+              stuck: run.backlog.stuck.length,
+              // An unwritable or unreadable store reports zero owed, which is
+              // indistinguishable from a request with nothing to do unless the
+              // pass says which one it is.
+              stored: run.backlogStored,
+            },
           });
         }
       } catch (error) {
@@ -127,6 +168,7 @@ export async function GET(request: Request) {
       requests: runs.length,
       deferred,
       failed,
+      backlogReadFailed,
       runs,
     }, { headers: responseHeaders });
   } catch (error) {

@@ -1,5 +1,34 @@
 # Decisions
 
+## A supplier conversation is durable work with its own retry state
+
+Date: 2026-09-06
+
+- Status: accepted
+- Owner: engineering
+- Decision: The owed action for one supplier conversation of one request is
+  stored in `ProcurementConversationTask`, keyed uniquely by
+  `officeId, orderId, vendorId`. Passes update that row; they never recompute
+  ownership from scratch and never enqueue a second row for the same thread.
+- Retry rule: `src/lib/procurement-conversation-task.ts` is pure. Attempts count
+  failures only, progress resets them, and the backoff is 5m, 15m, 1h, 4h then
+  daily, repeating so no thread is abandoned. Whether a thread is due is a
+  function of the stored row and the clock, not of what a pass happens to read.
+- Terminal rule: a recorded quote is the only settled state. A supplier with no
+  contact method is unreachable, counted in the funnel but never retried.
+  `NEEDS_OPERATOR` stays owed, because nothing clears it without a person.
+- Tenant boundary: writes and backlog reads are office scoped. The scheduled
+  pass runs for every office, so it reads due request ids without an office and
+  intersects them with the queue it was already allowed to work, so a task can
+  never pull in a request outside that queue.
+- Safety boundary: the task carries no message body. What goes to a supplier
+  still comes from the saved draft and its idempotency record, so a retry can
+  change only the mailbox, never the text, and confirmation gates for
+  unsolicited follow ups are unchanged.
+- Failure boundary: a store that cannot be written or read never silently reads
+  as nothing owed. The pass reports it and the next pass rewrites the same
+  threads from the same projection.
+
 ## Derya owns procurement order status; Bourne wake is opt-in
 
 Date: 2026-09-05
@@ -5076,3 +5105,24 @@ Use this log for durable product and engineering decisions. Do not put every imp
   documents, and elapsed time are covered as negative controls in
   `scripts/state-recheck.test.ts`, which fails CI if a stale send escapes or an
   unrelated change is blocked.
+
+## 2026-09-04: A supplier conversation task transitions under a row lock
+
+- Status: accepted
+- Owner: engineering
+- Decision: Every write to `ProcurementConversationTask` reads its current
+  retry state and writes the next one inside one transaction that holds
+  `SELECT ... FOR UPDATE` on that thread's row. Two passes that overlap on the
+  same supplier therefore serialize, and both failures count. A pass that finds
+  no row creates it, and a create that loses the unique key race is retried
+  once so the loser locks the row the winner created.
+- Safety boundary: The lock is per conversation, not per request, so one slow
+  thread never blocks another supplier's retry, and every statement stays
+  scoped by `officeId`.
+- Scope boundary: Retry state lives in the task row only. Supplier facing
+  payloads stay authoritative in saved drafts and idempotency records, so a
+  retry can change the mailbox it sends from but never the text a supplier
+  receives.
+- Verification: `scripts/procurement-conversation-task-database.test.ts` starts
+  two concurrent failed transitions against the same task and asserts the
+  attempt count reflects both.

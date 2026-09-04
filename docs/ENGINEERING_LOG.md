@@ -1,5 +1,64 @@
 # Engineering Log
 
+## 2026-09-06: A supplier conversation is now stored work, not a recomputed view
+
+- Every earlier fix improved one step of the loop, but the state of a thread was
+  recomputed each pass and nothing survived it, so a failed draft, a failed send
+  or a quote that could not be written was reported once and forgotten, and that
+  supplier stalled until somebody swept the request by hand.
+- `ProcurementConversationTask` stores one row per office, request and supplier:
+  the stage, the action owed, failed attempts, when it may be tried again, the
+  last error and the last time it moved. `officeId, orderId, vendorId` is unique,
+  so a pass updates a thread instead of adding to a queue, and a retry can never
+  duplicate a supplier message on its own.
+- `nextConversationTaskState` is pure and tested without a database. Attempts
+  count failures only, so a thread waiting on its supplier stays due for the next
+  pass at zero attempts, progress clears the count, and a failing thread backs
+  off 5m, 15m, 1h, 4h then daily forever rather than being abandoned.
+- Settled means a recorded quote. `NO_CONTACT_METHOD` is unreachable rather than
+  settled, so a supplier with no address stays visible in the funnel without
+  inflating the work the loop owes. `NEEDS_OPERATOR` stays owed, since nothing
+  clears it on its own.
+- Every thread the funnel covers is written back, not only the ones that failed,
+  so a silent supplier stays owned. A failure overrides progress for the same
+  supplier in the same pass, so a failed send is not masked by another phase
+  touching that thread.
+- The scheduled pass leads with the requests whose conversations are due, and
+  keeps the rotation as the fallback, so a request that is behind is not starved
+  and a request with nothing owed is not skipped forever. A due-task read is
+  intersected with the queue the pass was already allowed to work.
+- A store that refuses the write or the read no longer throws away a pass that
+  already answered suppliers: it reports `backlog.stored: false` and
+  `backlogReadFailed`, because an empty backlog and an unreadable store look
+  identical otherwise.
+- Contacted state now reads `last_email_message_id` or the legacy
+  `gmail_message_id`, so suppliers reached by the bulk RFQ path are no longer
+  projected as never contacted.
+- Owning a request was not the same as owning a thread, so five leaks were
+  closed on top of the first cut. A pass now honours each conversation's own
+  backoff instead of retrying every thread of a request one of them made due. A
+  thread the pass never worked, because a deadline or a batch limit stopped it,
+  keeps its attempts, its error and its backoff instead of reading as a
+  successful wait, which used to erase the retry history of exactly the threads
+  that were behind. A supplier the request stopped pursuing is settled, so it
+  cannot keep its request in the due queue forever. Due requests are grouped in
+  the database and only then limited, so one request with a long tail of old
+  threads cannot crowd out every other request. Scheduled eligibility reads the
+  same current or legacy contacted stamp as the rest of the loop.
+- The task table is on the `derya_app` allowlist in
+  `scripts/sql/derya-app-role.sql`; the deployment boundary test in `prebuild`
+  fails the build otherwise, which is how the missing grant surfaced.
+- Verified with `npm run test:procurement-conversation-task`,
+  `npm run test:procurement-conversation-stage`,
+  `npm run test:procurement-conversation-task-db`,
+  `npm run test:procurement-reply-send-db`,
+  `npm run test:procurement-local-outreach-db`, the procurement autopilot, nudge,
+  draft, quote, reply and attachment suites, `npx prisma validate`,
+  `npm run db:generate`, `npm run lint` (no new errors in touched files;
+  `src/lib/thread-actions.ts` and `src/lib/whatsapp.ts` keep their preexisting
+  `no-explicit-any` errors) and `npx tsc --noEmit` (only the preexisting stale
+  `.next/types/validator.ts` reference to a deleted campaigns page).
+
 ## 2026-09-05: Derya owns procurement order status
 
 - Procurement workflow ownership defaults to Derya. `PROCUREMENT_WORKFLOW_OWNER=bourne`
@@ -9614,3 +9673,23 @@ Use this file for chronological implementation notes that future agents should s
 - Query plan ordering is versioned, so legacy prospecting actions restart from
   offset zero while actions created with the current plan version resume safely.
 - Directory prospecting now drops hard-rejected rows before email verification or candidate accounting.
+
+## 2026-09-04: Conversation task transitions are atomic and backoff covers every retry
+
+- A conversation task transition now reads and writes its row inside one
+  transaction holding a row lock, so two overlapping passes that both fail on
+  the same supplier both increment the attempt count instead of one silently
+  overwriting the other. A create that loses the unique key race retries once.
+- Per conversation backoff is read before the quote sweep and the draft batch,
+  not only before the funnel scan, and the backing off supplier ids are passed
+  into both. A quote write or draft that keeps failing is left alone until its
+  own next attempt is due, while a request stays in the queue for its other
+  suppliers.
+- Coverage: a database concurrency regression for the two overlapping failures,
+  and wiring assertions that the lock, the create race retry, and the backoff
+  handoff into the quote and draft paths are all in place.
+- The scheduled pass now intersects the due conversation read with the queue it
+  may work, in the database, before the limit. A request that reached an order
+  or was cancelled keeps its unsettled tasks, and those are the oldest due rows,
+  so limiting first could fill the whole result with requests the pass then
+  discarded and leave a live failing request unled.

@@ -278,8 +278,17 @@ function vendorContactEmailSql(ledgerAvailable: boolean) {
   )`;
 }
 
+// The first RFQ stamps the message it sent on `last_email_message_id`, and only
+// the oldest supplier rows still carry the legacy `gmail_message_id`, so both
+// count as the message this request sent. Reading them out of `to_jsonb` keeps
+// the query working against a schema that has only one of the two columns.
+export const VENDOR_SENT_MESSAGE_ID_SQL = `COALESCE(
+    NULLIF(to_jsonb(order_vendors)->>'last_email_message_id', ''),
+    NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')
+  )`;
+
 function vendorMessageIdSql(ledgerAvailable: boolean) {
-  if (!ledgerAvailable) return "NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')";
+  if (!ledgerAvailable) return VENDOR_SENT_MESSAGE_ID_SQL;
   const ledgerFallback = `,
     (
       SELECT communication.provider_message_id
@@ -292,7 +301,7 @@ function vendorMessageIdSql(ledgerAvailable: boolean) {
       LIMIT 1
     )`;
   return `COALESCE(
-    NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')
+    ${VENDOR_SENT_MESSAGE_ID_SQL}
     ${ledgerFallback}
   )`;
 }
@@ -306,7 +315,7 @@ function vendorContactedSql(ledgerAvailable: boolean) {
       AND communication.vendor_id = order_vendors.id
       AND communication.direction = 'OUTBOUND'
   )` : "";
-  return `(NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL${ledgerFallback})`;
+  return `(${VENDOR_SENT_MESSAGE_ID_SQL} IS NOT NULL${ledgerFallback})`;
 }
 
 function supplierMetricsSql(ledgerAvailable: boolean) {
@@ -321,7 +330,7 @@ function supplierMetricsSql(ledgerAvailable: boolean) {
     SELECT
       COUNT(DISTINCT order_vendors.id)::int AS "supplierCount",
       COUNT(DISTINCT order_vendors.id) FILTER (
-        WHERE NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL${outbound}
+        WHERE ${VENDOR_SENT_MESSAGE_ID_SQL} IS NOT NULL${outbound}
       )::int AS "contactedCount",
       COUNT(DISTINCT order_vendors.id) FILTER (
         WHERE (

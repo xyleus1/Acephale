@@ -126,6 +126,10 @@ async function draftTargets(
   bestEffort: boolean,
   outOfTime?: () => boolean,
   rotateFrom?: number,
+  // Conversations waiting out their own backoff after a failed draft. Drafting
+  // is a retry too, so a thread that keeps refusing to draft is left alone
+  // until its next attempt is due instead of holding the batch every pass.
+  skipVendorIds?: ReadonlySet<string>,
 ) {
   const targets: Array<FileDraftTarget & { answers: string[] }> = [];
   const access = await procurementOperatorAccess(context.summary.officeId);
@@ -140,7 +144,9 @@ async function draftTargets(
   const replied = await procurementRepliedVendors({
     officeId: context.summary.officeId,
     orderId: context.summary.orderId,
-    vendors: context.order.vendors,
+    vendors: skipVendorIds?.size
+      ? context.order.vendors.filter((vendor) => !skipVendorIds.has(vendor.id))
+      : context.order.vendors,
     outOfTime,
   });
   // The read itself rotates, not only the targets it produced: a scan the
@@ -190,10 +196,18 @@ export async function runProcurementFileDraftBatch(args: {
   // or a batch that never fits, cannot hold the same first replies forever while
   // later ones are never drafted at all.
   rotateFrom?: number;
+  // Conversations held back by their own conversation task backoff.
+  skipVendorIds?: ReadonlySet<string>;
 }): Promise<FileDraftRunResult | null> {
   const context = await loadContext(args.orderId);
   if (!context) return null;
-  const targets = await draftTargets(context, args.bestEffort === true, args.outOfTime, args.rotateFrom);
+  const targets = await draftTargets(
+    context,
+    args.bestEffort === true,
+    args.outOfTime,
+    args.rotateFrom,
+    args.skipVendorIds,
+  );
   const access = await procurementOperatorAccess(context.summary.officeId);
   const limit = Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? FILE_DRAFT_MAX_PER_RUN)));
   // Rotation is applied once, on the reads inside `draftTargets`, and the

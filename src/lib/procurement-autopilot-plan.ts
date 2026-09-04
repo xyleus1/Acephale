@@ -181,6 +181,23 @@ export function autopilotFailures(args: {
   ];
 }
 
+// A pass can only work a few requests, so the requests whose conversations owe
+// an action right now lead the queue, in the order their work came due. The
+// rotated queue follows, so a request with no stored task is still reached and
+// nothing is starved by a request that keeps failing.
+export function prioritizeAutopilotQueue(
+  queue: readonly string[],
+  dueOrderIds: readonly string[],
+): string[] {
+  const eligible = new Set(queue);
+  const ordered: string[] = [];
+  for (const orderId of [...dueOrderIds, ...queue]) {
+    if (!eligible.has(orderId) || ordered.includes(orderId)) continue;
+    ordered.push(orderId);
+  }
+  return ordered;
+}
+
 // A scheduled pass cannot always reach every request inside one invocation, so
 // the queue is rotated by the window the pass belongs to: a request left behind
 // by one pass is worked first by a later one instead of never being reached.

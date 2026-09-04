@@ -13,6 +13,9 @@ import type { SupplierQuoteMissingFact } from "@/lib/procurement-supplier-quote-
 export type SupplierConversationStage =
   // Never mailed, so the thread owes a first contact rather than a reply.
   | "NOT_CONTACTED"
+  // Sourcing found the supplier but no address to mail, so there is no
+  // conversation to carry and no action the loop can take.
+  | "NO_CONTACT_METHOD"
   // Mailed and the supplier has not answered at all.
   | "AWAITING_FIRST_REPLY"
   // The supplier is waiting on us.
@@ -39,6 +42,10 @@ export type SupplierConversationInput = AutopilotVendorState & {
   // knows, and a contacted supplier who never answered is waiting on a first
   // reply rather than on a quote.
   repliedEver?: boolean;
+  // Whether the request holds an address for this supplier. Absent means the
+  // caller did not look, which is the case for every thread a pass read, since
+  // a thread only exists because we mailed somebody.
+  contactable?: boolean;
 };
 
 // Reached the end of the funnel: a recorded quote is what the request buys on,
@@ -47,6 +54,14 @@ export type SupplierConversationInput = AutopilotVendorState & {
 // an action, just not one the loop may take, so neither settles.
 export const CONVERSATION_SETTLED_STAGES: readonly SupplierConversationStage[] = [
   "QUOTED",
+];
+
+// A supplier row with no address was never a conversation: sourcing found the
+// shop but no way to reach it, so no pass can move it and counting it as owed
+// would bury the threads that are genuinely stalled. It keeps its own stage so
+// the gap stays visible instead of disappearing into the contacted count.
+export const CONVERSATION_UNREACHABLE_STAGES: readonly SupplierConversationStage[] = [
+  "NO_CONTACT_METHOD",
 ];
 
 export function supplierConversationStage(
@@ -60,7 +75,9 @@ export function supplierConversationStage(
   // is still waiting on the supplier rather than on us.
   if (input.lastDirection === "INBOUND" && input.inboundKind !== "AUTO_REPLY") return "REPLY_UNANSWERED";
   if (input.missingQuoteFacts?.length) return "QUOTE_INCOMPLETE";
-  if (input.lastDirection === null) return "NOT_CONTACTED";
+  if (input.lastDirection === null) {
+    return input.contactable === false ? "NO_CONTACT_METHOD" : "NOT_CONTACTED";
+  }
   if (input.repliedEver === false) return "AWAITING_FIRST_REPLY";
   return input.lastDirection === "OUTBOUND" || input.inboundKind === "AUTO_REPLY"
     ? "AWAITING_QUOTE"
@@ -85,6 +102,7 @@ export function unreadConversationInput(vendor: {
   contacted: boolean;
   responseCount: number;
   quote: Record<string, unknown> | null;
+  contact?: { email: string | null } | null;
 }): SupplierConversationInput {
   return {
     vendorId: vendor.id,
@@ -97,6 +115,12 @@ export function unreadConversationInput(vendor: {
     hasDraft: false,
     hasQuote: Boolean(vendor.quote),
     repliedEver: vendor.responseCount > 0,
+    // A caller that did not project the contact at all leaves this unknown, and
+    // an unknown address is treated as mailable so the supplier stays owed work
+    // rather than being written off on missing data.
+    contactable: "contact" in vendor
+      ? Boolean(vendor.contact?.email?.includes("@"))
+      : undefined,
   };
 }
 
@@ -105,7 +129,8 @@ export function unreadConversationInput(vendor: {
 // only place a thread may legitimately wait on a person, and that is why it is
 // reported by name rather than counted.
 export function conversationOwesAction(stage: SupplierConversationStage): boolean {
-  return !CONVERSATION_SETTLED_STAGES.includes(stage);
+  return !CONVERSATION_SETTLED_STAGES.includes(stage)
+    && !CONVERSATION_UNREACHABLE_STAGES.includes(stage);
 }
 
 export type ConversationFunnel = {
@@ -128,6 +153,7 @@ export type ConversationFunnel = {
 
 const EMPTY_STAGES: Record<SupplierConversationStage, number> = {
   NOT_CONTACTED: 0,
+  NO_CONTACT_METHOD: 0,
   AWAITING_FIRST_REPLY: 0,
   REPLY_UNANSWERED: 0,
   ANSWER_READY: 0,

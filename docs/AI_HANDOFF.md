@@ -1,5 +1,53 @@
 # AI Handoff
 
+## 2026-09-06: Durable supplier conversation tasks
+
+- A supplier conversation is now stored work. `ProcurementConversationTask`
+  holds one row per office, request and supplier with the stage, the action
+  owed, failed attempts, the next attempt time, the last error and the last time
+  the thread moved.
+- Retry semantics live in `src/lib/procurement-conversation-task.ts` and are
+  pure: attempts count failures only, progress resets them, the backoff is 5m,
+  15m, 1h, 4h then daily, and a recorded quote is the only settled state.
+  `NO_CONTACT_METHOD` is unreachable (visible, never retried) and
+  `NEEDS_OPERATOR` stays owed.
+- Persistence and backlog reporting live in
+  `src/lib/procurement-conversation-task-store.ts`. Writes and backlog reads are
+  office scoped; the scheduled pass reads due request ids across offices and
+  intersects them with its own eligible queue.
+- The cron pass leads with due requests and reports `backlog` per request,
+  including `stored`, which is false when the task store could not be written or
+  read. `backlogReadFailed` at the top level says the pass fell back to plain
+  rotation.
+- Two migrations are committed and not yet deployed:
+  `20260904000100_order_supplier_last_email_message` and
+  `20260904000200_procurement_conversation_task`, each with a read-only
+  verification script under `scripts/sql/production-verification/`. Deploy them
+  through `.github/workflows/production-database-migration.yml` before the
+  scheduled pass runs against production, otherwise the task write fails and the
+  pass reports `stored: false` while still answering suppliers.
+- Each conversation retries on its own backoff. A request enters the scheduled
+  queue when any one of its threads is due, so the pass reads
+  `listBackingOffConversationVendorIds` for that request and leaves those
+  threads out of the reply scan, the chase targets and the send batch.
+- A pass covers the whole request but works only part of it, so a projected but
+  unworked thread is recorded with `attempted: false` and keeps its attempts,
+  its last error and its backoff. Only a genuinely settled stage settles it.
+- A supplier the request stopped pursuing is settled by
+  `settleAbsentConversationTasks`, so a closed, rejected or removed supplier
+  stops holding its request in the due queue. Reopening it writes the task again.
+- Due requests are grouped in the database (`GROUP BY "orderId"` ordered by the
+  earliest due task), so one request with a long tail of old threads cannot
+  crowd every other request out of the queue.
+- Scheduled eligibility reads the same current or legacy contacted stamp
+  (`VENDOR_SENT_MESSAGE_ID_SQL`) as the rest of the loop, so a request whose
+  suppliers carry only `gmail_message_id` is still worked.
+- `ProcurementConversationTask` is on the `derya_app` table allowlist in
+  `scripts/sql/derya-app-role.sql`, which the deployment boundary test enforces.
+- Not done yet: the task stores no message payload or inbound/outbound message
+  ids. The authoritative payload is still the saved draft and its idempotency
+  record, which is what keeps a retry from changing what a supplier reads.
+
 ## 2026-09-05: Derya owns procurement order status
 
 - The default workflow owner is Derya. Set

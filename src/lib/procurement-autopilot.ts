@@ -5,6 +5,7 @@ import {
   autopilotFailures,
   autopilotRequestStage,
   planAutopilotVendorAction,
+  prioritizeAutopilotQueue,
   rotateAutopilotOrderIds,
   rotateAutopilotQueue,
   type AutopilotAction,
@@ -18,6 +19,15 @@ import {
   type ConversationFunnel,
 } from "@/lib/procurement-conversation-stage";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
+import { conversationTaskEntries } from "@/lib/procurement-conversation-task";
+import {
+  conversationTaskBacklog,
+  EMPTY_CONVERSATION_TASK_BACKLOG,
+  listBackingOffConversationVendorIds,
+  recordConversationTasks,
+  settleAbsentConversationTasks,
+  type ConversationTaskBacklog,
+} from "@/lib/procurement-conversation-task-store";
 import {
   getProcurementFileDeliveryDraft,
   saveProcurementFileDeliveryDraft,
@@ -38,6 +48,7 @@ import { procurementReplyFacts, supplierInboundKind, triageSupplierInbound } fro
 import {
   getProcurementRequest,
   procurementWorkflowDatabase,
+  VENDOR_SENT_MESSAGE_ID_SQL,
   type ProcurementOrderDetail,
 } from "@/lib/procurement-workflow";
 
@@ -56,7 +67,10 @@ export const AUTOPILOT_MAX_ORDERS_PER_RUN = 10;
 export const AUTOPILOT_MAX_QUEUE = 200;
 
 // Only requests that already reached suppliers can have a supplier thread to
-// work, and a closed request is never touched again.
+// work, and a closed request is never touched again. A supplier is contacted by
+// the same current or legacy stamp the rest of the loop reads, so a request
+// whose suppliers were mailed before `last_email_message_id` existed is still
+// worked by the scheduled pass instead of being invisible to it.
 export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_QUEUE): Promise<string[]> {
   const bounded = Math.min(AUTOPILOT_MAX_QUEUE, Math.max(1, Math.trunc(limit)));
   const rows = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{ orderId: string }>>(`
@@ -64,7 +78,7 @@ export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_QUEUE): Promis
     FROM orders
     JOIN order_vendors
       ON order_vendors.order_id = orders.id
-      AND order_vendors.last_email_message_id IS NOT NULL
+      AND ${VENDOR_SENT_MESSAGE_ID_SQL} IS NOT NULL
     WHERE orders.status NOT IN ('ordered', 'cancelled')
     ORDER BY orders.created_at ASC, orders.id ASC
     LIMIT ${bounded}
@@ -72,7 +86,7 @@ export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_QUEUE): Promis
   return rows.map((row) => row.orderId);
 }
 
-export { rotateAutopilotOrderIds };
+export { prioritizeAutopilotQueue, rotateAutopilotOrderIds };
 
 // What the send batch needs at the end of a pass, so reading never consumes the
 // time answering requires.
@@ -125,6 +139,15 @@ export type AutopilotRunResult = {
   // an action. A pass reports one slice of a request, so this is what makes a
   // thread that stalled visible without somebody sweeping the request by hand.
   funnel: ConversationFunnel;
+  // The work the loop still owns for this request after the pass, which is what
+  // survives it: a failed send or an unanswered reply is a stored task the next
+  // scheduled pass retries, with a backoff, instead of being recomputed and
+  // possibly missed. `due` is what a pass can pick up now, `stuck` names the
+  // threads that keep failing and need a person.
+  backlog: ConversationTaskBacklog;
+  // Whether the backlog above is the stored truth. A store that refused the
+  // write or the read reports an empty backlog, and this says so.
+  backlogStored: boolean;
   plan: AutopilotVendorPlan[];
 };
 
@@ -155,6 +178,11 @@ async function vendorStates(args: {
   // sweep earlier in this pass, so a thread short of a price or a lead time is
   // asked for that fact instead of being chased with the brief again.
   missingQuoteFacts?: Map<string, SupplierQuoteMissingFact[]>;
+  // Conversations waiting out their own backoff after a failure. They are left
+  // out of the scan so the pass spends itself on the threads that are due,
+  // instead of retrying a thread whose sender pool or mailbox has not had time
+  // to recover.
+  skipVendorIds?: ReadonlySet<string>;
 }): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor>; stopped: boolean }> {
   const facts = procurementReplyFacts({
     material: args.order.material,
@@ -173,7 +201,9 @@ async function vendorStates(args: {
   const scanned = await procurementRepliedVendors({
     officeId: args.officeId,
     orderId: args.order.id,
-    vendors: args.order.vendors,
+    vendors: args.skipVendorIds?.size
+      ? args.order.vendors.filter((vendor) => !args.skipVendorIds?.has(vendor.id))
+      : args.order.vendors,
     outOfTime: args.outOfTime,
   });
   const replied = typeof args.rotateFrom === "number"
@@ -331,9 +361,28 @@ export async function runProcurementAutopilot(args: {
   // The sweep carries its own cursor across pages, so a request whose first
   // pages of respondents stay unquoted cannot hide the priced replies behind
   // them from every later pass.
+  // A request enters the scheduled queue when any one of its conversations is
+  // due, so the pass has to honour each conversation's own backoff itself:
+  // without this, one due thread pulled every failing thread of the request
+  // into the same pass. It is read before the first phase that can retry a
+  // thread, since the quote write and the draft are retries too, and reading it
+  // after them let those two failures repeat on every pass. A store that cannot
+  // be read blocks nothing, since holding the whole request back would be worse
+  // than retrying too early.
+  const backingOff = new Set(await listBackingOffConversationVendorIds({
+    officeId: summary.officeId,
+    orderId: args.orderId,
+  }).catch((error: unknown) => {
+    console.error("procurement conversation backoff not read", args.orderId, error);
+    return [] as string[];
+  }));
   const quoteRun = outOfScanTime()
     ? null
-    : await sweepSupplierQuoteCapture({ orderId: args.orderId, outOfTime: outOfScanTime });
+    : await sweepSupplierQuoteCapture({
+      orderId: args.orderId,
+      outOfTime: outOfScanTime,
+      skipVendorIds: backingOff,
+    });
   // Each phase is entered only while there is time to finish it, and stops
   // between its own units of work, so a pass that runs out reports what it did
   // instead of being killed with nothing said.
@@ -343,6 +392,7 @@ export async function runProcurementAutopilot(args: {
     bestEffort: args.bestEffort,
     outOfTime: outOfScanTime,
     rotateFrom: deadlineAt === null ? undefined : Date.now(),
+    skipVendorIds: backingOff,
   });
   if (!draftRun && !outOfScanTime()) return null;
   const order = await getProcurementRequest(summary.customerId, args.orderId);
@@ -361,6 +411,7 @@ export async function runProcurementAutopilot(args: {
     missingQuoteFacts: new Map(
       (quoteRun?.partials ?? []).map((partial) => [partial.vendorId, partial.missing]),
     ),
+    skipVendorIds: backingOff,
   });
   const plan = states.map((state) => ({
     vendorId: state.vendorId,
@@ -376,6 +427,7 @@ export async function runProcurementAutopilot(args: {
   // read them as a ready draft and send what was never confirmed. The plan
   // still names every quiet thread, so nothing is hidden from the operator.
   const chaseTargets = plan.flatMap((entry) => {
+    if (backingOff.has(entry.vendorId)) return [];
     if (entry.action.kind === "ASK_QUOTE_FACTS" && (sendFollowUps || askQuoteFacts)) {
       return [{ vendorId: entry.vendorId, missing: entry.action.missing }];
     }
@@ -398,7 +450,8 @@ export async function runProcurementAutopilot(args: {
     : { drafted: [] as string[], failures: [] as AutopilotRunResult["failures"], stopped: false };
   const deliverable = [
     ...plan
-      .filter((entry) => entry.action.kind === "SEND_DRAFT"
+      .filter((entry) => !backingOff.has(entry.vendorId)
+        && entry.action.kind === "SEND_DRAFT"
         // Without follow up sending, delivery is restricted to threads whose
         // newest message is the supplier's, which is exactly a reply awaiting
         // an answer. A chase draft saved by an earlier operator pass sits on a
@@ -438,6 +491,89 @@ export async function runProcurementAutopilot(args: {
   // Quotes recorded earlier in this pass are already on the vendor rows the
   // plan was built from, so counting the states counts them once.
   const quotes = states.filter((state) => state.hasQuote).length;
+  // The funnel covers the whole request, not only the threads this pass read: a
+  // reply scan walks the suppliers that answered, so counting only those would
+  // report nothing owed while hundreds of silent suppliers wait. Suppliers whose
+  // outreach is closed, rejected or ordered elsewhere are left out, since the
+  // request is not pursuing them.
+  const funnelEntries = [
+    ...plan
+      // A supplier that replied and was then rejected or ordered elsewhere is
+      // excluded on the same rule as one this pass never read, so the two halves
+      // of the funnel agree about who the request is still pursuing.
+      .filter((entry) => !procurementVendorOutreachClosed(
+        order.vendors.find((vendor) => vendor.id === entry.vendorId)?.status,
+      ))
+      .map((entry) => ({
+        input: entry.state,
+        action: entry.action,
+        attempted: !backingOff.has(entry.vendorId),
+      })),
+    ...order.vendors
+      .filter((vendor) => !plan.some((entry) => entry.vendorId === vendor.id)
+        && !procurementVendorOutreachClosed(vendor.status))
+      // A supplier the pass only projected keeps whatever the store already
+      // knows about it, so a deadline or a batch limit cannot erase the retry
+      // history of a thread this pass never reached.
+      .map((vendor) => ({ input: unreadConversationInput(vendor), attempted: false })),
+  ];
+  const failures = autopilotFailures({
+    chase: chaseRun.failures,
+    draft: draftRun?.outcomes,
+    nudge: nudgeRun?.outcomes,
+    send: sendRun?.outcomes,
+    quote: quoteRun?.outcomes,
+  });
+  // Every thread the pass covered is written back as a task, whether it moved,
+  // failed or simply waits, so the loop owns the whole request between passes
+  // and nothing depends on an operator sweeping it.
+  // A store that will not accept the write must not throw away a pass that
+  // already answered suppliers, so the failure is reported and the next pass
+  // writes the same threads again from the same projection.
+  const recorded = await recordConversationTasks({
+    officeId: summary.officeId,
+    orderId: args.orderId,
+    entries: conversationTaskEntries({
+      entries: funnelEntries,
+      failures: new Map(failures.map((failure) => [failure.vendorId, failure.error])),
+      progressed: new Set([
+        ...chaseRun.drafted,
+        ...(draftRun?.outcomes ?? [])
+          .filter((outcome) => outcome.state === "DRAFTED")
+          .map((outcome) => outcome.vendorId),
+        ...(sendRun?.outcomes ?? [])
+          .filter((outcome) => outcome.state === "SENT")
+          .map((outcome) => outcome.vendorId),
+        ...(nudgeRun?.outcomes ?? [])
+          .filter((outcome) => outcome.state === "SENT")
+          .map((outcome) => outcome.vendorId),
+        ...(quoteRun?.outcomes ?? [])
+          .filter((outcome) => outcome.state === "RECORDED")
+          .map((outcome) => outcome.vendorId),
+      ]),
+    }),
+  }).catch((error: unknown) => {
+    console.error("procurement conversation tasks not stored", args.orderId, error);
+    return null;
+  });
+  // A supplier the request stopped pursuing is no longer in the funnel, so its
+  // task is settled here. Left owed, it would keep its request in the due queue
+  // for work nobody wants done.
+  const reconciled = await settleAbsentConversationTasks({
+    officeId: summary.officeId,
+    orderId: args.orderId,
+    activeVendorIds: funnelEntries.map((entry) => entry.input.vendorId),
+  }).catch((error: unknown) => {
+    console.error("procurement conversation tasks not reconciled", args.orderId, error);
+    return null;
+  });
+  const backlog = await conversationTaskBacklog({
+    officeId: summary.officeId,
+    orderId: args.orderId,
+  }).catch((error: unknown) => {
+    console.error("procurement conversation backlog not read", args.orderId, error);
+    return null;
+  });
   return {
     orderId: summary.orderId,
     material: summary.material,
@@ -464,36 +600,16 @@ export async function runProcurementAutopilot(args: {
     // A delivery that fails needs an operator, so it is reported next to the
     // escalations instead of being reduced to a count. A quote that cannot be
     // written counts too, since it leaves a priced reply invisible.
-    failures: autopilotFailures({
-      chase: chaseRun.failures,
-      draft: draftRun?.outcomes,
-      nudge: nudgeRun?.outcomes,
-      send: sendRun?.outcomes,
-      quote: quoteRun?.outcomes,
-    }),
+    failures,
     autoSend,
     sendFollowUps,
     stoppedAtDeadline: scanStopped || chaseRun.stopped || outOfTime(),
     escalations: autopilotEscalations(plan),
-    // The funnel covers the whole request, not only the threads this pass
-    // read: a reply scan walks the suppliers that answered, so counting only
-    // those would report nothing owed while hundreds of silent suppliers wait.
-    // Suppliers whose outreach is closed, rejected or ordered elsewhere are
-    // left out, since the request is not pursuing them.
-    funnel: conversationFunnel([
-      ...plan
-        // A supplier that replied and was then rejected or ordered elsewhere is
-        // excluded on the same rule as one this pass never read, so the two
-        // halves of the funnel agree about who the request is still pursuing.
-        .filter((entry) => !procurementVendorOutreachClosed(
-          order.vendors.find((vendor) => vendor.id === entry.vendorId)?.status,
-        ))
-        .map((entry) => ({ input: entry.state, action: entry.action })),
-      ...order.vendors
-        .filter((vendor) => !plan.some((entry) => entry.vendorId === vendor.id)
-          && !procurementVendorOutreachClosed(vendor.status))
-        .map((vendor) => ({ input: unreadConversationInput(vendor) })),
-    ]),
+    funnel: conversationFunnel(funnelEntries),
+    backlog: backlog ?? EMPTY_CONVERSATION_TASK_BACKLOG,
+    // False when the durable record of this pass could not be written or read,
+    // which is itself owed work rather than an empty backlog.
+    backlogStored: recorded !== null && reconciled !== null && backlog !== null,
     plan,
   };
 }
