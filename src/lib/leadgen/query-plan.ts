@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { LeadGenProfile } from "./profile";
 
 // Bump when buildQueryPlan ordering changes so persisted offsets are not reused.
-export const QUERY_PLAN_VERSION = 3;
+export const QUERY_PLAN_VERSION = 4;
 
 export type QueryLocale =
   | "tr"
@@ -105,6 +105,11 @@ const COUNTRY_LOCALES: Readonly<Record<string, readonly QueryLocale[]>> = {
   germany: ["de", "en"], austria: ["de", "en"], italy: ["it", "en"], poland: ["pl", "en"],
   romania: ["ro", "en"], bulgaria: ["bg", "ru", "en"], georgia: ["ru", "en"], egypt: ["ar", "en"],
   "saudi arabia": ["ar", "en"], iran: ["fa", "en"], china: ["zh", "en"],
+  shenzhen: ["zh", "en"], shanghai: ["zh", "en"], beijing: ["zh", "en"],
+  hangzhou: ["zh", "en"], suzhou: ["zh", "en"], dongguan: ["zh", "en"],
+  japan: ["en"], tokyo: ["en"], osaka: ["en"],
+  "south korea": ["en"], seoul: ["en"],
+  munich: ["de", "en"], stuttgart: ["de", "en"],
   peru: ["es", "en"], chile: ["es", "en"], mexico: ["es", "en"], panama: ["es", "en"],
   ecuador: ["es", "en"], argentina: ["es", "en"], "dominican republic": ["es", "en"],
   portugal: ["pt", "en"], morocco: ["ar", "en"], algeria: ["ar", "en"], tunisia: ["ar", "en"],

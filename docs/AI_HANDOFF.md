@@ -1,5 +1,21 @@
 # AI Handoff
 
+## 2026-09-04: Olympian Motors and CosmicBrain AI offices
+
+- Provisioned Olympian Motors via `POST /api/ops/offices`, office id
+  `cmtnfivia0000la04k8b8mre1`.
+- Provisioned CosmicBrain AI via `POST /api/ops/offices`, office id
+  `cmtnfivu9000dla04osd127rx`.
+- Added three leadgen profiles: `olympian`, `cosmicbrain-suppliers`, and
+  `cosmicbrain-hospitality`.
+- Hold the CosmicBrain hospitality sequence until the customer confirms the
+  demo video link and sends a suppression list.
+- California is excluded from the CosmicBrain hospitality campaign.
+- The CosmicBrain supplier sequence can start immediately.
+- Every supplier thread must surface deferred payment, consignment, and
+  financing terms explicitly.
+
+
 ## 2026-09-06: Durable supplier conversation tasks
 
 - A supplier conversation is now stored work. `ProcurementConversationTask`

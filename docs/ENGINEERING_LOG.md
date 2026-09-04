@@ -1,5 +1,21 @@
 # Engineering Log
 
+## 2026-09-04: Olympian Motors and CosmicBrain AI offices
+
+- Provisioned Olympian Motors via `POST /api/ops/offices`, office id
+  `cmtnfivia0000la04k8b8mre1`.
+- Provisioned CosmicBrain AI via `POST /api/ops/offices`, office id
+  `cmtnfivu9000dla04osd127rx`.
+- Registered `olympian`, `cosmicbrain-suppliers`, and
+  `cosmicbrain-hospitality` leadgen profiles.
+- Hold CosmicBrain hospitality until the demo video link is confirmed and a
+  suppression list arrives from the customer.
+- California remains excluded from the hospitality profile.
+- Supplier prospecting can start immediately.
+- Supplier threads must explicitly ask about deferred payment, consignment,
+  and financing terms.
+
+
 ## 2026-09-06: A supplier conversation is now stored work, not a recomputed view
 
 - Every earlier fix improved one step of the loop, but the state of a thread was

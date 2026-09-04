@@ -12,6 +12,11 @@ import {
 } from "../src/lib/leadgen/profile";
 import { WENS_PROFILE } from "../src/lib/leadgen/profile-wens";
 import { FEAST_PROFILE } from "../src/lib/leadgen/profile-feast";
+import {
+  COSMICBRAIN_HOSPITALITY_PROFILE,
+  COSMICBRAIN_SUPPLIERS_PROFILE,
+} from "../src/lib/leadgen/profile-cosmicbrain";
+import { OLYMPIAN_PROFILE } from "../src/lib/leadgen/profile-olympian";
 import { resolveLeadGenProfile } from "../src/lib/leadgen/registry";
 import {
   createSerperSearchProvider,
@@ -84,6 +89,52 @@ assert.ok(new Set(feastPlan.map((entry) => entry.region)).size >= 10);
 assert.deepEqual(new Set(buildQueryPlan(FEAST_PROFILE).map((entry) => entry.region).filter((region): region is string => region !== null)), new Set(FEAST_PROFILE.regions));
 assert.equal(new Set(feastPlan.slice(0, 50).map((entry) => entry.segmentKey)).size, 5);
 
+const cosmicbrainSuppliersPlan = buildQueryPlan(COSMICBRAIN_SUPPLIERS_PROFILE);
+const cosmicbrainChineseRegions = new Set([
+  "China",
+  "Shenzhen",
+  "Shanghai",
+  "Beijing",
+  "Hangzhou",
+  "Suzhou",
+  "Dongguan",
+]);
+const cosmicbrainGermanRegions = new Set([
+  "Germany",
+  "Munich",
+  "Stuttgart",
+  "Switzerland",
+  "Luxembourg",
+]);
+assert.ok(
+  cosmicbrainSuppliersPlan.some((entry) => entry.region === "China" && /[\u4e00-\u9fff]/u.test(entry.query)),
+  "CosmicBrain supplier China queries must include a Chinese keyword",
+);
+assert.ok(
+  cosmicbrainSuppliersPlan.every((entry) =>
+    entry.region === null
+      || !/[\u4e00-\u9fff]/u.test(entry.query)
+      || cosmicbrainChineseRegions.has(entry.region),
+  ),
+  "CosmicBrain supplier Chinese queries must stay within Chinese regions",
+);
+assert.ok(
+  cosmicbrainSuppliersPlan.every((entry) =>
+    entry.region === null
+      || entry.locale !== "de"
+      || cosmicbrainGermanRegions.has(entry.region),
+  ),
+  "CosmicBrain supplier German queries must stay within German regions",
+);
+assert.ok(
+  cosmicbrainSuppliersPlan.some((entry) => entry.region === "China" && entry.locale === "zh"),
+  "CosmicBrain supplier China must have zh queries",
+);
+assert.ok(
+  cosmicbrainSuppliersPlan.some((entry) => entry.region === "Shenzhen" && entry.locale === "zh"),
+  "CosmicBrain supplier Shenzhen must have zh queries",
+);
+
 const excludedCosta = scoreLead(FEAST_PROFILE, {
   companyName: "Costa Coffee Brighton",
   domain: "costa.co.uk",
@@ -138,6 +189,19 @@ assert.notEqual(scoreLead(FEAST_PROFILE, {
   emailCount: 1,
   hasPhone: true,
 }).tier, "reject");
+
+for (const profile of [OLYMPIAN_PROFILE, COSMICBRAIN_HOSPITALITY_PROFILE]) {
+  const result = scoreLead(profile, {
+    companyName: "Hilton Garden Inn Phoenix",
+    domain: "hiltongardeninn.com",
+    pageText: "hotel rooms suites guests hospitality",
+    segmentKey: "independent_hotel",
+    emailCount: 1,
+    hasPhone: true,
+  });
+  assert.equal(result.tier, "reject");
+  assert.ok(result.rejectionReason?.startsWith("excluded brand"));
+}
 
 const scoped = buildQueryPlan(MANEKS_PROFILE, { segmentKeys: ["fabricator"], maxRegionsPerSegment: 2 });
 assert.ok(scoped.every((entry) => entry.segmentKey === "fabricator"), "segment filter must hold");
@@ -202,6 +266,9 @@ for (const locale of queryLocales) {
   assert.ok(LOCALIZED_URL_TOKENS[locale], `${locale} must have a URL token`);
 }
 assert.equal(resolveLeadGenProfile("wens").slug, "wens");
+assert.equal(resolveLeadGenProfile("olympian").slug, "olympian");
+assert.equal(resolveLeadGenProfile("cosmicbrain-suppliers").slug, "cosmicbrain-suppliers");
+assert.equal(resolveLeadGenProfile("cosmicbrain-hospitality").slug, "cosmicbrain-hospitality");
 assert.throws(() => resolveLeadGenProfile("unknown"), /Unknown leadgen profile "unknown".*Valid slugs:/);
 assert.deepEqual(
   wensPlan.map((entry) => entry.id),
