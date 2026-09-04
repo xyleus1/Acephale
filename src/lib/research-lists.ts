@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import { safeHttpUrl } from "@/lib/leads-directory";
 import { normalizeDedupeValue } from "@/lib/research-dedupe";
@@ -303,6 +303,76 @@ function chunks<T>(items: T[], size: number): T[][] {
     result.push(items.slice(index, index + size));
   }
   return result;
+}
+
+/**
+ * Moves records that were stored under a different (or no) dedupe key onto the
+ * key derived from `dedupeField`, so a later upsert on that field updates them
+ * instead of inserting a second row for the same company. Only the oldest
+ * matching record is re-keyed and only while the target key is still free;
+ * records are never deleted or merged here.
+ */
+export async function rekeyResearchRecords(
+  officeId: string,
+  slug: string,
+  dedupeField: string,
+  values: readonly unknown[],
+  options: { client?: PrismaClient } = {},
+): Promise<{ rekeyed: number }> {
+  const client = options.client ?? defaultPrisma;
+  const list = await loadList(officeId, slug, client);
+  if (!list.fields.some((field) => field.key === dedupeField)) {
+    throw new Error("Dedupe field is not in the list definition.");
+  }
+  const targets = new Set<string>();
+  for (const value of values) {
+    const key = normalizeDedupeValue(cleanText(value));
+    if (key) targets.add(key);
+  }
+  if (!targets.size) return { rekeyed: 0 };
+
+  const claimed = new Set(
+    (await client.researchRecord.findMany({
+      where: { officeId, listId: list.id, dedupeKey: { in: [...targets] } },
+      select: { dedupeKey: true },
+    })).flatMap((record) => (record.dedupeKey ? [record.dedupeKey] : [])),
+  );
+  const open = [...targets].filter((key) => !claimed.has(key));
+  let rekeyed = 0;
+  for (const batch of chunks(open, 50)) {
+    const wanted = new Set(batch);
+    // Case-insensitive substring match so "Alpha Steel GmbH", "ALPHA STEEL GMBH",
+    // and "https://www.Alpha-Steel.de/" are all candidates; the exact normalized
+    // key is confirmed in code below.
+    const stale = await client.researchRecord.findMany({
+      where: {
+        officeId,
+        listId: list.id,
+        OR: batch.map((key) => ({
+          data: { path: [dedupeField], string_contains: key, mode: "insensitive" as const },
+        })),
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, dedupeKey: true, data: true },
+    });
+    const taken = new Set<string>();
+    for (const record of stale) {
+      const key = normalizeDedupeValue(asData(record.data)[dedupeField]);
+      if (!key || key === record.dedupeKey || taken.has(key) || !wanted.has(key)) continue;
+      taken.add(key);
+      try {
+        const result = await client.researchRecord.updateMany({
+          where: { id: record.id, officeId, listId: list.id, dedupeKey: record.dedupeKey },
+          data: { dedupeKey: key },
+        });
+        rekeyed += result.count;
+      } catch (error) {
+        // A concurrent writer claimed the key first; the upsert will update that row.
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      }
+    }
+  }
+  return { rekeyed };
 }
 
 export async function upsertResearchRecords(

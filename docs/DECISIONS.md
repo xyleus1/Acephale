@@ -1,5 +1,23 @@
 # Decisions
 
+## Prospecting research rows are keyed by company, and legacy keys migrate in place
+
+Date: 2026-09-04
+
+- Status: accepted
+- Owner: engineering
+- Decision: A company row written by context prospecting dedupes on
+  `domain` (falling back to `company_name`), never on the email it currently
+  shows, because enrichment and verification can change that email without the
+  company changing. Rows that predate this rule (email-derived or null
+  `dedupeKey`) are moved onto the stable key by `rekeyResearchRecords` right
+  before each domain-keyed upsert, inside the same office and list, one oldest
+  row per key and only while the key is free. Nothing is deleted or merged and
+  `status` is preserved, so reviewed or rejected rows keep their decision and
+  campaign audiences do not gain a second row for the same company. A key
+  already claimed by a concurrent writer is not an error: the upsert then
+  updates that row.
+
 ## A supplier conversation is durable work with its own retry state
 
 Date: 2026-09-06

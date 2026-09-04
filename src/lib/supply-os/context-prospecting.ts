@@ -14,6 +14,7 @@ import {
   assignResearchListProject,
   listResearchLists,
   RESEARCH_MAX_ROWS,
+  rekeyResearchRecords,
   slugify,
   upsertResearchRecords,
   type ParsedResearchRow,
@@ -446,6 +447,19 @@ async function persistCandidates(officeId: string, listSlug: string, records: re
   let updated = 0;
   const persistedRecordIndexes = new Set<number>();
   for (const [field, rows] of groups) {
+    // Rows written before company-keyed dedupe carry an email-derived (or no)
+    // dedupeKey; move them onto the company key so the upsert updates them.
+    await rekeyResearchRecords(
+      officeId,
+      listSlug,
+      field,
+      rows.map((input) => {
+        const row: ResearchInputRow = "sourceRow" in input && "row" in input
+          ? (input as ParsedResearchRow).row
+          : (input as ResearchInputRow);
+        return row[field];
+      }),
+    );
     for (let index = 0; index < rows.length; index += RESEARCH_MAX_ROWS) {
       const result = await upsertResearchRecords(officeId, listSlug, rows.slice(index, index + RESEARCH_MAX_ROWS), {
         dedupeField: field,

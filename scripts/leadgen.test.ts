@@ -1040,6 +1040,61 @@ assert.ok(alphaRow?.candidate.emails.includes("info@alpha-steel.de"), "the direc
 assert.ok(alphaRow?.verifications.some((item) => item.email === "ayse.yilmaz@alpha-steel.de"), "enriched directory emails go through verification");
 assert.deepEqual(alphaRow?.directoryRow?.emails, ["info@alpha-steel.de"], "the parsed directory row itself stays untouched");
 assert.ok(!directoryEnriched.some((domain) => !domain), "rows without a domain must not spend an enrichment call");
+
+// A company listed by several directory documents spends one enrichment slot
+// and one provider call; the cap is measured in unique domains.
+const repeatedEnriched: string[] = [];
+const repeatedDirectories: Record<string, string[]> = {
+  "https://chamber-a.example/members.pdf": [
+    "ALPHA STEEL GmbH celik konstruksiyon sac profil imalat | info@alpha-steel.de | https://alpha-steel.de | Berlin",
+    "BETA STAHL GmbH celik konstruksiyon sac profil imalat | info@beta-stahl.de | https://beta-stahl.de | Berlin",
+  ],
+  "https://chamber-b.example/members.pdf": [
+    "ALPHA STEEL Werk 2 celik konstruksiyon sac profil imalat | werk2@alpha-steel.de | https://www.alpha-steel.de | Berlin",
+    "BETA STAHL Vertrieb celik konstruksiyon sac profil imalat | vertrieb@beta-stahl.de | https://www.beta-stahl.de | Berlin",
+  ],
+};
+const repeatedBatch = await runProspectingBatch({
+  profile: MANEKS_PROFILE,
+  maxQueries: 1,
+  maxPages: 4,
+  maxEnrichments: 1,
+  budgetMs: 10_000,
+  search: async () => Object.keys(repeatedDirectories).map((url, index) => ({
+    url,
+    domain: new URL(url).hostname,
+    engine: "brave",
+    rank: index + 1,
+  })),
+  fetchPage: async (url) => (repeatedDirectories[url]
+    ? { ...directoryPdf, url, body: ["Chamber Member Directory", ...repeatedDirectories[url]].join("\n") }
+    : null),
+  resolveMx: companyMx,
+  enricher: {
+    name: "hunter",
+    usage: () => ({ provider: "hunter", calls: repeatedEnriched.length, billable: repeatedEnriched.length, contacts: 1, failures: 0, exhausted: false }),
+    enrichDomain: async (domain: string) => {
+      repeatedEnriched.push(domain);
+      return [{ ...namedContact, email: `ayse.yilmaz@${domain}` }];
+    },
+  },
+  verifier: null,
+});
+const alphaRows = repeatedBatch.candidates.filter((item) => item.candidate.domain === "alpha-steel.de");
+assert.ok(alphaRows.length >= 2, "the repeated domain must expand into several directory candidates");
+assert.deepEqual(repeatedEnriched, ["alpha-steel.de"], "a repeated domain must be enriched once and never spend a second slot");
+assert.ok(
+  alphaRows.every((item) => item.candidate.emails[0] === "ayse.yilmaz@alpha-steel.de"),
+  "every candidate of the repeated domain receives the shared enrichment result",
+);
+assert.equal(repeatedBatch.stats.usage?.enrichment?.companiesEnriched, 1);
+assert.equal(repeatedBatch.stats.usage?.enrichment?.companiesWithContacts, 1);
+assert.equal(
+  repeatedBatch.candidates.filter((item) => item.candidate.domain === "beta-stahl.de").length,
+  2,
+  "the capped domain is also listed twice",
+);
+assert.equal(repeatedBatch.stats.usage?.enrichment?.skippedByCap, 1, "a unique domain that missed the cap counts as skipped once");
 const offBatch = await runProspectingBatch({
   profile: MANEKS_PROFILE,
   maxQueries: 1,

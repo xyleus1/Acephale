@@ -1,5 +1,33 @@
 # Engineering Log
 
+## 2026-09-04: Repeated domains share one enrichment slot; legacy research rows move to the domain key
+
+- Review of #389 found two gaps. First, directory documents are not
+  domain-deduped (two chamber PDFs can list the same member), and every repeat
+  spent a `maxEnrichments` slot before Hunter served its memo, so 40 repeats
+  could starve later unique companies. `enrichCandidate` now keys its outcome
+  by lowercased domain: repeats reuse the cached ranked contacts and the
+  counters (`companiesEnriched`, `skippedByCap`) count unique domains.
+- Second, rows written before company-keyed dedupe still carried an
+  email-derived or null `dedupeKey`, and `upsertResearchRecords` matches only
+  the stored key, so the next batch would have inserted a second row per
+  company that could re-enter campaigns. `rekeyResearchRecords` runs before
+  the domain-keyed upsert: it checks which stable keys are already taken in
+  the office and list, then for the still-free ones looks up candidate records
+  with a case-insensitive `string_contains` on `data[dedupeField]` (Postgres
+  JSON filter, so `Lambda Steel GmbH` matches a batch spelled
+  `LAMBDA STEEL GMBH`), confirms `normalizeDedupeValue(stored) === key` in
+  code so a mere substring hit is skipped, and moves the oldest legacy
+  row onto the stable key with a write conditioned on id, office, list and the
+  previously read key. Later legacy rows for the same domain and rows whose
+  stable key is already taken are left as they are (nothing is deleted or
+  merged), a P2002 from a concurrent claimer is swallowed because the upsert
+  will then update that row, and any other error propagates.
+- Verification: `npm run test:leadgen`, `npm run test:research-lists`,
+  `npm run test:supply-os-context-prospecting`, `npx tsc --noEmit` and
+  `npm run build` pass; `npm run lint` reports only pre-existing findings
+  outside this change.
+
 ## 2026-09-04: Leadgen gets a paid verifier and a named-contact enricher, both optional
 
 - Prospecting found companies and role inboxes, but a campaign at 1,500

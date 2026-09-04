@@ -1,5 +1,28 @@
 # AI Handoff
 
+## 2026-09-04: Leadgen follow-up: one enrichment slot per domain, legacy research rows re-keyed
+
+- `runProspectingBatch` tracks enrichment per lowercased domain within the
+  batch (`enrichedByDomain`, `skippedDomains`). Directory documents are not
+  domain-deduped, so the same company can appear several times; every repeat
+  now reuses the cached Hunter result (a copy per candidate) and
+  `companiesEnriched` / `skippedByCap` count unique domains only.
+- `rekeyResearchRecords(officeId, slug, dedupeField, values)` in
+  `src/lib/research-lists.ts` runs before each domain-keyed
+  `upsertResearchRecords` in `persistCandidates`. It finds records in the same
+  office and list whose `data[dedupeField]` normalizes (via
+  `normalizeDedupeValue`, case-insensitive candidate query) to an incoming key
+  but whose `dedupeKey` is different or null, and moves the oldest
+  one onto the stable key while that key is still free. Writes are pinned to
+  id, office, list and the key that was read; a P2002 from a concurrent claim
+  is tolerated, every other error surfaces. Nothing is deleted or merged and
+  `status` is untouched.
+- Tests: `scripts/leadgen.test.ts` (repeated domain across two directory
+  documents with `maxEnrichments: 1`), `scripts/research-lists.test.ts`
+  (fake Prisma client covering email-derived and null keys, taken stable key,
+  two legacy rows for one domain, other office, URL-shaped and mixed-case
+  input, substring-only near-match, race, real DB failure). No migration.
+
 ## 2026-09-04: Sender failures name the mailbox, not the pool
 
 - Migrations `20260904000100_order_supplier_last_email_message` and

@@ -269,24 +269,37 @@ export async function runProspectingBatch(args: {
   const maxEnrichments = Math.max(0, Math.floor(args.maxEnrichments ?? DEFAULT_MAX_ENRICHMENTS));
   const verifyOptions = { resolveMx: args.resolveMx, verifier };
   const enrichment = { companiesEnriched: 0, companiesWithContacts: 0, skippedByCap: 0 };
+  // Enrichment outcome per domain within this batch: a repeated domain (directory
+  // rows are not domain-deduped) reuses it instead of spending another cap slot.
+  const enrichedByDomain = new Map<string, LeadCandidate["contacts"]>();
+  const skippedDomains = new Set<string>();
 
   /** Adds ranked named contacts to a fit-qualified candidate with a domain; never throws. */
   async function enrichCandidate(candidate: LeadCandidate) {
     if (!enricher || !candidate.domain || candidate.fit.score < ENRICH_MIN_FIT_SCORE) return;
-    if (enrichment.companiesEnriched >= maxEnrichments) {
-      enrichment.skippedByCap += 1;
-      return;
-    }
-    enrichment.companiesEnriched += 1;
+    const domain = candidate.domain.toLowerCase();
     let contacts: LeadCandidate["contacts"];
-    try {
-      contacts = rankEnrichedContacts(await enricher.enrichDomain(candidate.domain));
-    } catch {
-      contacts = undefined;
+    if (enrichedByDomain.has(domain)) {
+      contacts = enrichedByDomain.get(domain);
+    } else {
+      if (enrichment.companiesEnriched >= maxEnrichments) {
+        if (!skippedDomains.has(domain)) {
+          skippedDomains.add(domain);
+          enrichment.skippedByCap += 1;
+        }
+        return;
+      }
+      enrichment.companiesEnriched += 1;
+      try {
+        contacts = rankEnrichedContacts(await enricher.enrichDomain(candidate.domain));
+      } catch {
+        contacts = undefined;
+      }
+      if (contacts?.length) enrichment.companiesWithContacts += 1;
+      enrichedByDomain.set(domain, contacts?.length ? contacts : undefined);
     }
     if (!contacts?.length) return;
-    enrichment.companiesWithContacts += 1;
-    candidate.contacts = contacts;
+    candidate.contacts = contacts.map((contact) => ({ ...contact }));
     const known = new Set(candidate.emails.map((email) => email.toLowerCase()));
     candidate.emails = [
       ...contacts.map((contact) => contact.email).filter((email) => !known.has(email)),
