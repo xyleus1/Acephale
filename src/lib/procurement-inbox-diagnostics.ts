@@ -1,5 +1,7 @@
 import "server-only";
 
+import { SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
+import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { prisma } from "@/lib/prisma";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { rfqSubjectReference } from "@/lib/procurement-local-outreach-model";
@@ -34,6 +36,31 @@ export type MailboxReach = {
   suppliersContacted: number;
 };
 
+// A reply is answered from the mailbox that owns its thread, or from the shared
+// sender pool when that mailbox cannot send. Both can be blocked at once, which
+// leaves a genuine reply unanswerable, so what a send would find is reported
+// beside what the inbox ingests.
+export type SenderReach = {
+  // Mailboxes that pass the shared sender pool filter, so a pool of 0 means
+  // every pooled mailbox is inactive, send disabled, paused, or disconnected,
+  // while a pool with 0 available is a mailbox out of daily send capacity.
+  pool: number;
+  available: number;
+  exhausted: number;
+  capacityRemaining: number;
+  // Mailboxes this request mailed from that a reply cannot be answered from,
+  // so their threads depend on the pool having a mailbox left.
+  blocked: Array<{
+    email: string;
+    active: boolean;
+    sendEnabled: boolean;
+    sendPaused: boolean;
+    connected: boolean;
+    outbound: number;
+    suppliersContacted: number;
+  }>;
+};
+
 export type ProcurementInboxDiagnostics = {
   orderId: string;
   officeId: string;
@@ -41,6 +68,7 @@ export type ProcurementInboxDiagnostics = {
   // Suppliers written to from a mailbox that cannot ingest a reply. Their
   // answers exist, they just never reach the app.
   unreachable: { suppliers: number; mailboxes: string[] };
+  senders: SenderReach;
   // Answers we did ingest on a thread this request started, whose subject no
   // longer carries the request reference, so the request never counts them.
   strandedInbound: number;
@@ -197,6 +225,53 @@ async function scanTaggedMessages(officeId: string, reference: string) {
   return { messages, truncated: Boolean(beyond) };
 }
 
+// The sender pool is shared across offices by design, so pool capacity is read
+// unscoped, while the mailboxes reported as blocked are only the ones this
+// office's request actually mailed from.
+async function senderReach(tallies: Map<string, MailboxTally>): Promise<SenderReach> {
+  const pool = await listEmailSenderPoolAccounts();
+  const available = pool.filter((account) => account.sentToday + account.reservedToday < account.dailySendLimit);
+  const capacityRemaining = available.reduce(
+    (total, account) => total + (account.dailySendLimit - account.sentToday - account.reservedToday),
+    0,
+  );
+  const emails = [...tallies.keys()].filter((email) => email !== UNKNOWN_MAILBOX);
+  const sendable = new Set(
+    (await prisma.emailAccount.findMany({
+      where: { email: { in: emails, mode: "insensitive" }, ...SHARED_SENDER_POOL_FILTER },
+      select: { email: true },
+    })).map((account) => account.email.trim().toLowerCase()),
+  );
+  const rows = await prisma.emailAccount.findMany({
+    where: { email: { in: emails, mode: "insensitive" } },
+    select: { email: true, isActive: true, sendEnabled: true, sendPausedAt: true, provider: true, refreshToken: true, credentialSecret: true },
+  });
+  const byEmail = new Map(rows.map((row) => [row.email.trim().toLowerCase(), row]));
+  const blocked = emails
+    .filter((email) => !sendable.has(email))
+    .map((email) => {
+      const row = byEmail.get(email);
+      const tally = tallies.get(email);
+      return {
+        email,
+        active: row?.isActive ?? false,
+        sendEnabled: row?.sendEnabled ?? false,
+        sendPaused: Boolean(row?.sendPausedAt),
+        connected: Boolean(row && (row.refreshToken !== null || row.credentialSecret !== null)),
+        outbound: tally?.outbound ?? 0,
+        suppliersContacted: tally?.suppliers.size ?? 0,
+      };
+    })
+    .sort((left, right) => right.outbound - left.outbound);
+  return {
+    pool: pool.length,
+    available: available.length,
+    exhausted: pool.length - available.length,
+    capacityRemaining,
+    blocked,
+  };
+}
+
 export async function procurementInboxDiagnostics(
   orderId: string,
 ): Promise<ProcurementInboxDiagnostics | null> {
@@ -262,6 +337,7 @@ export async function procurementInboxDiagnostics(
   }
 
   const stranded = await strandedInbound([...threadIds], reference);
+  const senders = await senderReach(tallies);
 
   const accounts = await prisma.emailAccount.findMany({
     where: { isActive: true },
@@ -285,6 +361,7 @@ export async function procurementInboxDiagnostics(
       suppliers: blindSuppliers.size,
       mailboxes: blind.map((tally) => tally.email),
     },
+    senders,
     strandedInbound: stranded.count,
     strandedSample: stranded.sample,
     truncated,

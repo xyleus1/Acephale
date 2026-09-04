@@ -1,5 +1,23 @@
 # AI Handoff
 
+## 2026-09-04: Telling a blocked thread mailbox from an empty sender pool
+
+- A reply is answered from the mailbox that owns its thread, or from the shared
+  sender pool when that mailbox cannot send. Both can be blocked at once, and
+  the failure used to name only the thread mailbox, so an operator was told to
+  reconnect a mailbox that was not the problem.
+  `ProcurementReplySenderUnavailableError` now carries a `block` of
+  `THREAD_MAILBOX` or `SENDER_POOL`: a caller that allowed the pooled fallback
+  and still found no sender is blocked by the pool, and the message points at
+  the pool rather than asserting one cause, since a pool can be empty because
+  its mailboxes are disconnected, disabled, paused, or out of daily capacity.
+- `procurementInboxDiagnostics` reports a `senders` section beside the inbox
+  one: pool size, how many mailboxes are still under their daily limit, the
+  remaining capacity, and the mailboxes this request mailed from that cannot
+  send (inactive, send disabled, paused, or no longer connected). Pool capacity
+  is read unscoped because the sender pool is shared across offices by design;
+  the blocked mailboxes are only those the office's own request mailed from.
+
 ## 2026-09-03: A reply pass follows the replies, not the supplier count
 
 - `procurementRepliedVendors` is the one scope every reply pass uses: the

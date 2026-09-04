@@ -627,7 +627,13 @@ export async function sendProcurementSupplierReply(args: {
       }
       throw new SupplyPersistenceError("Gmail delivery is still unresolved. Check Sent Mail before attempting another reply.", "conflict");
     }
-    throw new ProcurementReplySenderUnavailableError(anchor.accountEmail);
+    // A caller that allowed the pooled fallback and still has no sender is not
+    // blocked by the thread's mailbox but by the pool itself, and telling an
+    // operator to reconnect the thread mailbox would not fix that.
+    throw new ProcurementReplySenderUnavailableError(
+      anchor.accountEmail,
+      args.allowPooledSender ? "SENDER_POOL" : "THREAD_MAILBOX",
+    );
   }
   // A Gmail thread id belongs to the mailbox that holds it, so a pooled sender
   // starts a new provider thread and relies on the reply headers instead. The

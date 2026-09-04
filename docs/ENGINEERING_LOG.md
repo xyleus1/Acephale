@@ -1,5 +1,18 @@
 # Engineering Log
 
+## 2026-09-04: A sweep blamed the thread mailbox for an unavailable sender
+
+- The production sweep after the reply scope work answered every waiting reply
+  it could and reported five as "that Gmail inbox is disconnected or disabled
+  for sending", naming mailboxes the inbox diagnostic showed as active and
+  ingesting. The pass allows the pooled sender, so the message was wrong about
+  the cause: the pooled fallback had found no mailbox either, and the failure
+  reported only the thread mailbox.
+- The error now distinguishes the two blocks, and the read-only inbox diagnostic
+  reports sender reach (pool size, mailboxes under their daily limit, remaining
+  capacity, and the request's own mailboxes that cannot send), so an operator
+  can tell a mailbox to resume from a pool with nothing left today.
+
 ## 2026-09-03: Answering replies outlasted the invocation limit
 
 - A confirmed autopilot pass on a 424 supplier request returned 504
