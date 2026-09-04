@@ -12,6 +12,10 @@ import {
   type AutopilotVendorState,
 } from "@/lib/procurement-autopilot-plan";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
+import {
+  conversationFunnel,
+  type ConversationFunnel,
+} from "@/lib/procurement-conversation-stage";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
 import {
   getProcurementFileDeliveryDraft,
@@ -25,6 +29,7 @@ import {
   runProcurementSupplierNudges,
 } from "@/lib/procurement-supplier-nudge";
 import { sweepSupplierQuoteCapture } from "@/lib/procurement-supplier-quote";
+import type { SupplierQuoteMissingFact } from "@/lib/procurement-supplier-quote-reading";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
 import { procurementReplyFacts, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
@@ -86,6 +91,9 @@ export type AutopilotRunResult = {
   replied: number;
   drafted: number;
   chased: number;
+  // Follow ups that ask a supplier for the one commercial fact their reply is
+  // short of, counted apart from a chase that only repeats the package.
+  quoteFactAsks: number;
   // A supplier that never answered the first RFQ cannot be chased through the
   // reply path, so those follow ups are counted separately.
   nudgeCandidates: number;
@@ -111,6 +119,10 @@ export type AutopilotRunResult = {
   // the function limit reports nothing and answers nothing.
   stoppedAtDeadline: boolean;
   escalations: Array<{ vendorId: string; vendorName: string; reason: string }>;
+  // Where every supplier thread this pass read stands, and how many still owe
+  // an action. A pass reports one slice of a request, so this is what makes a
+  // thread that stalled visible without somebody sweeping the request by hand.
+  funnel: ConversationFunnel;
   plan: AutopilotVendorPlan[];
 };
 
@@ -137,6 +149,10 @@ async function vendorStates(args: {
   // request whose respondents cannot all be read in one pass still has every
   // one of them read by a later pass rather than the same prefix every time.
   rotateFrom?: number | null;
+  // What each supplier's own replies still leave unsaid, read by the quote
+  // sweep earlier in this pass, so a thread short of a price or a lead time is
+  // asked for that fact instead of being chased with the brief again.
+  missingQuoteFacts?: Map<string, SupplierQuoteMissingFact[]>;
 }): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor>; stopped: boolean }> {
   const facts = procurementReplyFacts({
     material: args.order.material,
@@ -205,6 +221,7 @@ async function vendorStates(args: {
       hasQuote: Boolean(vendor.quote),
       lastMessageAt: latest?.sentAt ?? null,
       chasesSent: chasesSentAfterLastReply(conversation.messages),
+      missingQuoteFacts: args.missingQuoteFacts?.get(vendor.id) ?? null,
     });
   }
   return { states, anchors, stopped };
@@ -217,16 +234,19 @@ async function draftChases(args: {
   officeId: string;
   customerId: string;
   order: ProcurementOrderDetail;
-  vendorIds: readonly string[];
+  // A thread short of a price or a lead time carries what is missing, so the
+  // follow up asks the one question that closes the quote.
+  targets: ReadonlyArray<{ vendorId: string; missing: SupplierQuoteMissingFact[] }>;
   anchors: Map<string, ChaseAnchor>;
   outOfTime?: () => boolean;
 }) {
   const drafted: string[] = [];
   const failures: AutopilotRunResult["failures"] = [];
-  if (!args.vendorIds.length) return { drafted, failures, stopped: false };
+  if (!args.targets.length) return { drafted, failures, stopped: false };
   const access = await procurementOperatorAccess(args.officeId);
-  for (const vendorId of args.vendorIds) {
+  for (const target of args.targets) {
     if (args.outOfTime?.()) return { drafted, failures, stopped: true };
+    const vendorId = target.vendorId;
     const vendor = args.order.vendors.find((candidate) => candidate.id === vendorId);
     const anchor = args.anchors.get(vendorId);
     if (!vendor || !anchor) continue;
@@ -240,6 +260,7 @@ async function draftChases(args: {
         recipient: anchor.recipient,
         conversationSubject: anchor.conversationSubject,
         variant: "CHASE",
+        missingFacts: target.missing,
       });
       drafted.push(vendorId);
     } catch (error) {
@@ -261,6 +282,13 @@ export async function runProcurementAutopilot(args: {
   // Chases and nudges are the ones an operator confirms, so they default to
   // the same instruction that turned sending on and are turned off separately.
   sendFollowUps?: boolean;
+  // A supplier who already answered with part of a quote is asked for the fact
+  // that is missing, on their own thread, even when unsolicited follow ups stay
+  // behind an operator confirmation. Without this a thread that priced but
+  // never dated (or dated but never priced) sits at a partial reading forever,
+  // which is the leak that kept requests short of a purchase order. It stays
+  // bounded by the same quiet period and follow up cap as any chase.
+  askQuoteFacts?: boolean;
   bestEffort?: boolean;
   limit?: number;
   // Absolute time after which no further work is started. A pass runs several
@@ -283,6 +311,7 @@ export async function runProcurementAutopilot(args: {
   const limit = Math.min(AUTOPILOT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? AUTOPILOT_MAX_PER_RUN)));
   const autoSend = args.autoSend === true;
   const sendFollowUps = autoSend && args.sendFollowUps !== false;
+  const askQuoteFacts = autoSend && args.askQuoteFacts !== false;
   // A priced answer is worth nothing until it is recorded against the supplier,
   // because the request reads its quotes, not its inbox. Recording mails nobody,
   // so it runs in draft only passes too and only writes supplier stated facts.
@@ -320,6 +349,9 @@ export async function runProcurementAutopilot(args: {
     // window exactly as the request queue does. Delivery stays idempotent, so
     // revisiting a thread cannot mail it twice.
     rotateFrom: deadlineAt === null ? null : Date.now(),
+    missingQuoteFacts: new Map(
+      (quoteRun?.partials ?? []).map((partial) => [partial.vendorId, partial.missing]),
+    ),
   });
   const plan = states.map((state) => ({
     vendorId: state.vendorId,
@@ -334,12 +366,23 @@ export async function runProcurementAutopilot(args: {
   // deliver chases does not write them either: a later pass would otherwise
   // read them as a ready draft and send what was never confirmed. The plan
   // still names every quiet thread, so nothing is hidden from the operator.
-  const chaseRun = sendFollowUps
+  const chaseTargets = plan.flatMap((entry) => {
+    if (entry.action.kind === "ASK_QUOTE_FACTS" && (sendFollowUps || askQuoteFacts)) {
+      return [{ vendorId: entry.vendorId, missing: entry.action.missing }];
+    }
+    return entry.action.kind === "CHASE" && sendFollowUps
+      ? [{ vendorId: entry.vendorId, missing: [] as SupplierQuoteMissingFact[] }]
+      : [];
+  });
+  const chaseRun = chaseTargets.length
     ? await draftChases({
       officeId: summary.officeId,
       customerId: summary.customerId,
       order,
-      vendorIds: plan.filter((entry) => entry.action.kind === "CHASE").map((entry) => entry.vendorId),
+      // A precise ask for the missing commercial fact is a chase on the same
+      // thread with the same files, so it is drafted by the same path and only
+      // differs in what it asks for.
+      targets: chaseTargets,
       anchors,
       outOfTime: outOfScanTime,
     })
@@ -351,7 +394,13 @@ export async function runProcurementAutopilot(args: {
         // newest message is the supplier's, which is exactly a reply awaiting
         // an answer. A chase draft saved by an earlier operator pass sits on a
         // thread we spoke last on, so it stays behind its confirmation.
-        && (sendFollowUps || entry.state.lastDirection === "INBOUND"))
+        && (sendFollowUps
+          || entry.state.lastDirection === "INBOUND"
+          // A saved ask for a missing commercial fact belongs to a thread that
+          // already engaged, so a pass that withholds unsolicited follow ups
+          // still delivers it. Leaving it undelivered would strand the one
+          // question standing between the reply and a purchase order.
+          || (askQuoteFacts && Boolean(entry.state.missingQuoteFacts?.length))))
       .map((entry) => entry.vendorId),
     ...chaseRun.drafted,
   ];
@@ -388,6 +437,7 @@ export async function runProcurementAutopilot(args: {
     replied: states.filter((state) => state.lastDirection === "INBOUND").length,
     drafted: draftRun?.drafted ?? 0,
     chased: chaseRun.drafted.length,
+    quoteFactAsks: chaseTargets.filter((target) => target.missing.length).length,
     nudgeCandidates: nudgeRun?.candidates ?? nudgePlan?.targets.length ?? 0,
     nudged: nudgeRun?.sent ?? 0,
     quotesRecorded: quoteRun?.recorded ?? 0,
@@ -416,6 +466,7 @@ export async function runProcurementAutopilot(args: {
     sendFollowUps,
     stoppedAtDeadline: scanStopped || chaseRun.stopped || outOfTime(),
     escalations: autopilotEscalations(plan),
+    funnel: conversationFunnel(plan.map((entry) => ({ input: entry.state, action: entry.action }))),
     plan,
   };
 }

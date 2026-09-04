@@ -11,8 +11,10 @@ import {
 import {
   mergeSupplierQuoteThread,
   readSupplierQuote,
+  supplierQuoteMissingFacts,
   type SupplierQuoteFactSources,
   type SupplierQuoteMessageEvidence,
+  type SupplierQuoteMissingFact,
   type SupplierQuoteReading,
 } from "@/lib/procurement-supplier-quote-reading";
 import {
@@ -58,6 +60,28 @@ export type SupplierQuoteCaptureOutcome = {
   error: string | null;
 };
 
+// A supplier who priced without dating, or dated without pricing, is one
+// question away from a purchase order, so the sweep names them and says what
+// is still missing instead of dropping a partial reading on the floor.
+export type SupplierQuotePartial = {
+  vendorId: string;
+  vendorName: string;
+  missing: SupplierQuoteMissingFact[];
+};
+
+// Later pages read later respondents, so a partial already named keeps the
+// reading it was named with rather than being listed twice.
+function mergeQuotePartials(
+  earlier: readonly SupplierQuotePartial[],
+  later: readonly SupplierQuotePartial[],
+): SupplierQuotePartial[] {
+  const byVendorId = new Map(earlier.map((partial) => [partial.vendorId, partial]));
+  for (const partial of later) {
+    if (!byVendorId.has(partial.vendorId)) byVendorId.set(partial.vendorId, partial);
+  }
+  return [...byVendorId.values()];
+}
+
 export type SupplierQuoteCaptureResult = {
   orderId: string;
   material: string;
@@ -65,6 +89,7 @@ export type SupplierQuoteCaptureResult = {
   recorded: number;
   failed: number;
   outcomes: SupplierQuoteCaptureOutcome[];
+  partials: SupplierQuotePartial[];
   // The last respondent this pass read, so the next pass starts after it.
   nextCursor: string | null;
 };
@@ -296,6 +321,7 @@ export async function sweepSupplierQuoteCapture(input: {
         recorded: swept.recorded + run.recorded,
         failed: swept.failed + run.failed,
         outcomes: [...swept.outcomes, ...run.outcomes],
+        partials: mergeQuotePartials(swept.partials, run.partials),
       }
       : run;
     // A write that failed leaves the cursor short of it, so the next page would
@@ -382,6 +408,15 @@ export async function runSupplierQuoteCapture(input: {
     orderId: plan.orderId,
     material: plan.material,
     candidates: recordable.length,
+    partials: plan.candidates.flatMap((candidate) => (
+      candidate.state === "PARTIAL" && candidate.reading
+        ? [{
+          vendorId: candidate.vendorId,
+          vendorName: candidate.vendorName,
+          missing: supplierQuoteMissingFacts(candidate.reading),
+        }]
+        : []
+    )),
     recorded: outcomes.filter((outcome) => outcome.state === "RECORDED").length,
     failed: outcomes.filter((outcome) => outcome.state === "FAILED").length,
     outcomes,

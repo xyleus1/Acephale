@@ -8,6 +8,10 @@ import {
   PROCUREMENT_FILE_DRAFT_UNVERIFIED_REASON,
   procurementFileDraftStateKey,
 } from "@/lib/procurement-file-draft-freshness";
+import {
+  SUPPLIER_QUOTE_MISSING_FACT_ASK,
+  type SupplierQuoteMissingFact,
+} from "@/lib/procurement-supplier-quote-reading";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "@/lib/procurement-workflow";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-os/persistence";
 import {
@@ -186,9 +190,14 @@ export function buildFileDeliveryReplyBody(args: {
   // Answers to the questions this supplier actually asked, so the reply speaks
   // to their message instead of only restating the package.
   answers?: readonly string[];
+  // Commercial facts this supplier's own replies still leave unsaid. A thread
+  // that priced without dating is one question away from a purchase order, so
+  // the follow up asks for exactly that instead of repeating the whole brief.
+  missingFacts?: readonly SupplierQuoteMissingFact[];
 }) {
   const { order, attachments } = args;
   const chase = args.variant === "CHASE";
+  const missingFacts = [...new Set(args.missingFacts ?? [])];
   const included = new Set<string>();
   const documentSections = renderedDocumentContext({ documents: args.documents, attachments })
     .map((document) => {
@@ -206,9 +215,11 @@ export function buildFileDeliveryReplyBody(args: {
     .slice(0, 14);
   const sections = [
     `Hello ${supplierGreetingName(args.vendor)},`,
-    chase
-      ? `Following up on ${order.material}. We sent the technical package you asked for and have not heard back, so it is attached again here in case it did not reach you.`
-      : `Thank you for coming back to us on ${order.material}. The technical package you asked for is attached to this reply.`,
+    chase && missingFacts.length
+      ? `Following up on ${order.material}. Thank you for what you have sent so far. To raise a purchase order we still need ${missingFacts.map((fact) => SUPPLIER_QUOTE_MISSING_FACT_ASK[fact]).join(" and ")}, and the technical package is attached again for reference.`
+      : chase
+        ? `Following up on ${order.material}. We sent the technical package you asked for and have not heard back, so it is attached again here in case it did not reach you.`
+        : `Thank you for coming back to us on ${order.material}. The technical package you asked for is attached to this reply.`,
     [
       "Attached files:",
       ...attachments.map((attachment) => `- ${attachment.name} (${attachment.mimeType}, ${sizeLabel(attachment.size)})`),
@@ -478,6 +489,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
   // opens differently and is delivered by the chase send path.
   variant?: ProcurementDraftVariant;
   answers?: readonly string[];
+  missingFacts?: readonly SupplierQuoteMissingFact[];
 }): Promise<ProcurementFileDeliveryDraft> {
   const documents = procurementRequestDocuments(args.order);
   if (!documents.length) {
@@ -503,6 +515,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
       attachments,
       variant: args.variant,
       answers: args.answers,
+      missingFacts: args.missingFacts,
     })),
   };
   const sourceMessageId = requiredText(args.sourceMessageId, "Displayed supplier message", 512);

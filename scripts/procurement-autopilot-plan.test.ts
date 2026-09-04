@@ -264,12 +264,12 @@ assert.ok(
   "Nudges are delivered only when follow up sending is on.",
 );
 assert.ok(
-  /const chaseRun = sendFollowUps/.test(autopilotSource),
+  /entry\.action\.kind === "CHASE" && sendFollowUps/.test(autopilotSource),
   "A chase draft is not even written when follow up sending is off, or a later pass would send it as a ready draft.",
 );
 assert.ok(
-  /sendFollowUps \|\| entry\.state\.lastDirection === "INBOUND"/.test(autopilotSource),
-  "Without follow up sending, delivery is restricted to threads whose newest message is the supplier's.",
+  /sendFollowUps\s*\|\| entry\.state\.lastDirection === "INBOUND"/.test(autopilotSource),
+  "Without follow up sending, delivery is restricted to threads whose newest message is the supplier's, or to a saved ask for a missing commercial fact.",
 );
 assert.ok(
   /const deadlineAt = startedAt \+ PASS_BUDGET_MS/.test(cronSource)

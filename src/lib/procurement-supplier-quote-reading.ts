@@ -628,3 +628,22 @@ export function mergeSupplierQuoteReadings(
     readings.map((reading, index) => ({ messageId: String(index), reading })),
   ).reading;
 }
+
+// A price plus a lead time is what a purchase order needs, so a reading short
+// of that names exactly what the supplier still has to say. The wording is
+// supplier facing, because it is what a follow up asks for.
+export type SupplierQuoteMissingFact = "PRICE" | "LEAD_TIME";
+
+export const SUPPLIER_QUOTE_MISSING_FACT_ASK: Record<SupplierQuoteMissingFact, string> = {
+  PRICE: "a unit price at our quantity, or a total for the order",
+  LEAD_TIME: "a production lead time from purchase order to shipment",
+};
+
+export function supplierQuoteMissingFacts(
+  reading: Pick<SupplierQuoteReading, "unitPrice" | "totalPrice" | "leadTimeDays">,
+): SupplierQuoteMissingFact[] {
+  const missing: SupplierQuoteMissingFact[] = [];
+  if (!(reading.unitPrice ?? reading.totalPrice)) missing.push("PRICE");
+  if (reading.leadTimeDays === null) missing.push("LEAD_TIME");
+  return missing;
+}

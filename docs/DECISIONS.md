@@ -1,5 +1,36 @@
 # Decisions
 
+## A supplier conversation is finished only when a quote is recorded
+
+Date: 2026-09-05
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Every supplier thread on a sourcing request has a stage
+  (`src/lib/procurement-conversation-stage.ts`), and the only stage that owes
+  nobody anything is `QUOTED`. A thread never mailed owes a first contact, a
+  thread holding a bounce, a wrong contact, or a question the request cannot
+  answer owes an action a person has to take, and everything else owes an action
+  the loop takes. A pass reports the stage counts, what is still owed, and the
+  threads waiting on a person by name, so a request that stalled is visible in
+  the pass result and in the scheduled response rather than in a manual sweep.
+- Stages are derived, never stored: they are computed from the thread the pass
+  just read, the drafts saved against it, the recorded quote, and the missing
+  facts of this pass own quote sweep. A stored stage would be a second source of
+  truth that drifts from the mailbox, and reconciling it is the failure mode this
+  replaces.
+- An automatic out of office notice is not an answer, so it does not settle a
+  thread. It leaves the thread waiting on the supplier and the chase decision
+  applies to it.
+- A reply that states some commercial facts and not others is a question, not a
+  dead end. The pass asks that supplier for the missing fact on their own thread
+  with the category files attached, and a scheduled pass delivers that ask even
+  though it withholds unsolicited chases and first contact nudges, because the
+  thread already engaged and the missing fact is the last thing between the reply
+  and a purchase order. The quiet period and the chase cap still bound it, and
+  price, payment terms, and legal questions are still escalated rather than
+  answered.
+
 ## A mailbox paused mid-send reroutes a first touch and defers a follow-up
 
 Date: 2026-09-03

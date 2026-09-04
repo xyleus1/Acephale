@@ -20,6 +20,7 @@ import {
   fileDeliveryReplySubject,
   procurementRequestDocuments,
 } from "../src/lib/procurement-file-delivery-draft";
+import { SUPPLIER_QUOTE_MISSING_FACT_ASK } from "../src/lib/procurement-supplier-quote-reading";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
 
 function binaryStl(triangles: number) {
@@ -331,6 +332,37 @@ function replyBody() {
     "A follow up does not thank a supplier for a reply that never came.",
   );
   assert.equal(chase.includes("\u2014"), false, "A follow up must not contain an em dash.");
+
+  // A supplier who priced but never dated is one question away from a purchase
+  // order, so the follow up asks that question instead of repeating the brief.
+  const ask = buildFileDeliveryReplyBody({
+    order,
+    vendor,
+    companyName: "HypnoDreamz",
+    documents,
+    attachments: [
+      { documentId: "doc-spec", name: "hypnodreamz-order-1-doc-1.png", mimeType: "image/png", size: 240_000 },
+      { documentId: "doc-bom", name: "hypnodreamz-order-1-doc-2.csv", mimeType: "text/csv", size: 4_096 },
+    ],
+    variant: "CHASE",
+    missingFacts: ["LEAD_TIME"],
+  });
+  assert.equal(
+    ask.includes(SUPPLIER_QUOTE_MISSING_FACT_ASK.LEAD_TIME),
+    true,
+    "The follow up asks for the fact the supplier reply was short of.",
+  );
+  assert.equal(
+    ask.includes(SUPPLIER_QUOTE_MISSING_FACT_ASK.PRICE),
+    false,
+    "It does not ask again for what the supplier already stated.",
+  );
+  assert.equal(
+    ask.includes("have not heard back"),
+    false,
+    "A supplier who did answer is not told we heard nothing.",
+  );
+  assert.equal(ask.includes("\u2014"), false, "A missing fact request must not contain an em dash.");
 
   assert.equal(
     fileDeliveryReplySubject({ conversationSubject: "Re: [RFQ 24cb31bd] PCBA", order }),

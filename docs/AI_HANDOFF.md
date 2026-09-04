@@ -1,5 +1,31 @@
 # AI Handoff
 
+## 2026-09-05: A supplier thread has a stage, and a partial quote is asked about
+
+- `procurement-conversation-stage.ts` names where a supplier thread stands:
+  `NOT_CONTACTED`, `AWAITING_FIRST_REPLY`, `REPLY_UNANSWERED`, `ANSWER_READY`,
+  `AWAITING_QUOTE`, `QUOTE_INCOMPLETE`, `QUOTED`, `NEEDS_OPERATOR`. Only
+  `QUOTED` settles: a supplier never mailed still owes a first contact, and a
+  bounce or a question the request cannot answer still owes an action, just not
+  one the loop may take. `conversationFunnel` counts the stages of the threads a
+  pass read, counts what is still owed, and names the threads waiting on a
+  person with their reason, so a stalled request says so in the pass result and
+  in the scheduled response instead of needing a manual sweep.
+- An automatic out of office notice no longer reads as a finished thread. It is
+  `AWAITING_QUOTE`, and the chase decision applies to it, so a supplier whose
+  only reply was a holiday notice is followed up rather than left alone.
+- The quote sweep now reports `partials`: what each thread's own replies left
+  unsaid (`PRICE`, `LEAD_TIME`), read from the same evidence the recorded quotes
+  come from. The plan turns a quiet thread holding a partial reading into
+  `ASK_QUOTE_FACTS`, and the follow up asks for exactly that fact with the
+  category files attached again, instead of repeating the brief.
+- A scheduled pass delivers that ask even though it withholds chases and
+  nudges: the thread already engaged, and the missing fact is the one question
+  between a reply and a purchase order. A saved ask is delivered by the same
+  rule, so it cannot be stranded by the follow up gate. Unsolicited chases and
+  first contact nudges still wait for an operator confirmation, and the quiet
+  period and chase cap still bound the ask.
+
 ## 2026-09-04: Telling a blocked thread mailbox from an empty sender pool
 
 - A reply is answered from the mailbox that owns its thread, or from the shared

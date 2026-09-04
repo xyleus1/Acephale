@@ -1,5 +1,24 @@
 # Engineering Log
 
+## 2026-09-05: Every fix moved one step, nothing owned the conversation
+
+- After the discovery, attachment, ingestion, attribution, drafting, sending
+  and quote reading fixes, requests still leaked: 66 real replies, one recorded
+  quote, two partial readings sitting untouched, and threads whose only reply
+  was an out of office notice never followed up. Each pass decided one action
+  per thread and reported what failed, so a thread that received nothing looked
+  the same as a finished one and only a manual sweep found it.
+- A supplier thread now has a stage and a funnel, so a pass reports where its
+  threads stand and how many still owe an action, and only a recorded quote
+  counts as finished. The scheduled response carries the same counts, which is
+  what removes the manual sweep from the loop.
+- A partial reading is now a question, not a dead end. The quote sweep reports
+  the missing fact, the plan asks the supplier for that fact on their own
+  thread with the category files attached, and the scheduled pass delivers it,
+  since waiting for an operator command is what left ubersmt (21 days, no
+  price) and a molder (MOQ 100, 12 days, no price) short of a purchase order
+  for a week.
+
 ## 2026-09-04: A sweep blamed the thread mailbox for an unavailable sender
 
 - The production sweep after the reply scope work answered every waiting reply

@@ -1,5 +1,9 @@
 import type { ProcurementInboundTriage, SupplierInboundKind } from "@/lib/procurement-inbound-triage";
 import { supplierChaseDecision } from "@/lib/procurement-supplier-chase";
+import {
+  SUPPLIER_QUOTE_MISSING_FACT_ASK,
+  type SupplierQuoteMissingFact,
+} from "@/lib/procurement-supplier-quote-reading";
 
 // The autopilot decides what a sourcing request needs next from the state of
 // each supplier thread. The decision is a pure function so the loop is
@@ -29,10 +33,15 @@ export type AutopilotVendorState = {
   // plan, in which case a quiet thread stays untouched.
   lastMessageAt?: string | null;
   chasesSent?: number;
+  // What the supplier's own replies still leave unsaid. A thread that priced
+  // without dating (or dated without pricing) is one question away from a
+  // purchase order, so the follow up asks for exactly that.
+  missingQuoteFacts?: readonly SupplierQuoteMissingFact[] | null;
 };
 
 export type AutopilotAction =
   | { kind: "SEND_DRAFT"; reason: string }
+  | { kind: "ASK_QUOTE_FACTS"; reason: string; missing: SupplierQuoteMissingFact[] }
   | { kind: "DRAFT_REPLY"; reason: string }
   | { kind: "CHASE"; reason: string }
   | { kind: "AWAIT_APPROVAL"; reason: string }
@@ -47,9 +56,7 @@ export function planAutopilotVendorAction(
   if (state.inboundKind === "BOUNCE") {
     return { kind: "ESCALATE", reason: "Delivery bounced, so this supplier needs a new address." };
   }
-  if (state.inboundKind === "AUTO_REPLY") {
-    return { kind: "NONE", reason: "The last message is an automatic out of office notice." };
-  }
+
   if (state.inboundKind === "WRONG_RECIPIENT") {
     return { kind: "ESCALATE", reason: "The supplier says this is the wrong contact." };
   }
@@ -61,19 +68,34 @@ export function planAutopilotVendorAction(
       ? { kind: "SEND_DRAFT", reason: "A saved reply carrying the request files is ready to deliver." }
       : { kind: "AWAIT_APPROVAL", reason: "A saved reply is waiting for an operator to confirm delivery." };
   }
-  if (state.lastDirection === "INBOUND") {
+  // An automatic out of office notice is not an answer, so a thread holding one
+  // is not waiting on us and is not finished either: it goes back to the quiet
+  // thread follow up rather than resting on a notice forever.
+  const answered = state.lastDirection === "INBOUND" && state.inboundKind !== "AUTO_REPLY";
+  if (answered) {
     return { kind: "DRAFT_REPLY", reason: "The supplier replied and the request files answer it." };
   }
-  if (state.lastDirection === "OUTBOUND") {
+  if (state.lastDirection !== null) {
     // A supplier that replied once and then went quiet is chased on the same
     // thread, carrying the same request files, up to the bounded limit.
     const chase = supplierChaseDecision({
-      lastDirection: state.lastDirection,
+      lastDirection: "OUTBOUND",
       lastMessageAt: state.lastMessageAt ?? null,
       chasesSent: state.chasesSent ?? 0,
       hasQuote: state.hasQuote,
       now: policy.now,
     });
+    const missing = [...(state.missingQuoteFacts ?? [])];
+    // A supplier who already stated part of a quote is worth one precise
+    // question, and that question is not the generic package chase, so it is
+    // planned as its own action and reported as its own reason.
+    if (chase.chase && missing.length) {
+      return {
+        kind: "ASK_QUOTE_FACTS",
+        reason: `${chase.reason} The reply is short of ${missing.map((fact) => SUPPLIER_QUOTE_MISSING_FACT_ASK[fact]).join(" and ")}.`,
+        missing,
+      };
+    }
     return chase.chase
       ? { kind: "CHASE", reason: chase.reason }
       : { kind: "NONE", reason: chase.reason };

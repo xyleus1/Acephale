@@ -24,6 +24,10 @@ const responseHeaders = {
 // Only replies that currently await an answer are delivered. A quiet thread
 // chase and a first contact nudge are unsolicited mail nobody asked us to
 // send, so this pass plans and reports them and an operator confirms them.
+// The exception is a supplier who already answered with part of a quote: the
+// one question standing between their reply and a purchase order is asked on
+// their own thread, because leaving that for an operator command is what left
+// partial readings sitting untouched between commands.
 const PASS_BUDGET_MS = 240_000;
 const REQUEST_SEND_LIMIT = 8;
 
@@ -95,9 +99,21 @@ export async function GET(request: Request) {
             // response rather than looking like a queue with nothing to chase.
             chaseCandidates: run.plan.filter((entry) => entry.action.kind === "CHASE").length,
             nudgeCandidates: run.nudgeCandidates,
+            quoteFactAsks: run.quoteFactAsks,
             failed: run.failed,
             stoppedAtDeadline: run.stoppedAtDeadline,
             escalations: run.escalations.length,
+            // Where the threads this pass read stand, so a request whose
+            // conversations stalled says so in the scheduled response instead
+            // of waiting for somebody to sweep it by hand. Threads still owed
+            // an action are led by a later pass; the ones only a person can
+            // move are counted separately, because no pass will clear them.
+            conversations: {
+              stages: run.funnel.stages,
+              owed: run.funnel.owed,
+              needsOperator: run.funnel.needsOperator.length,
+              quoteIncomplete: run.funnel.quoteIncomplete.length,
+            },
           });
         }
       } catch (error) {
