@@ -357,6 +357,10 @@
 - Project collision slugs now hash the full project and list identity, preserving
   deterministic separation for long list slugs.
 
+## 2026-09-03: Context prospecting fit gate
+
+- Context prospecting now persists only tier A/B candidates (fit >= 50), matching the leadgen persist gate.
+
 ## 2026-09-03: Outreach sender rotation and office recipient dedupe
 
 - Campaign plans can rotate across enabled shared-pool mailboxes and report

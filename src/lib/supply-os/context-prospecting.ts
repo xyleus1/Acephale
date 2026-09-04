@@ -45,6 +45,8 @@ const ACTION_TYPE = "PROSPECTING";
 const MAX_BACKGROUND_ATTEMPTS = 3;
 const BACKGROUND_SCAN_CAP = 500;
 const LOST_CLAIM_MESSAGE = "This prospecting run is already in progress. Retry shortly.";
+/** Matches the leadgen persist default: only tier A/B candidates reach the list. */
+export const PROSPECTING_MIN_FIT_SCORE = 50;
 const LIST_FIELDS = [
   { key: "company_name", label: "Company", type: "text" },
   { key: "website", label: "Website", type: "url" },
@@ -346,6 +348,7 @@ async function ensureResearchList(officeId: string, companyId: string, draft: Pr
 
 function candidateRows(records: readonly ProspectingBatchCandidate[]) {
   return records.flatMap(({ candidate, verifications, region, directoryRow }, index) => {
+    if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
     if (directoryRow) return [];
     const verification = verifications[0] ?? null;
     const email = candidate.emails[0] ?? null;
@@ -378,6 +381,7 @@ export type ProspectingResearchRow = {
 
 function directoryInputRows(records: readonly ProspectingBatchCandidate[]): ProspectingResearchRow[] {
   return records.flatMap(({ candidate, directoryRow, verifications, region }, index) => {
+    if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
     if (!directoryRow) return [];
     const email = directoryRow.emails[0] ?? null;
     const domain = directoryRow.domain;

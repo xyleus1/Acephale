@@ -21,6 +21,7 @@ import {
   hideCompanyContextProspectingAction,
   listCompanyContextProspectingActions,
   normalizeProspectingDraft,
+  PROSPECTING_MIN_FIT_SCORE,
   runProspectingBackgroundTick,
   runCompanyContextProspectingAction,
   shouldContinueProspectingInBackground,
@@ -42,6 +43,7 @@ const draft = {
 };
 const profile = profileFromProspectingDraft(draft);
 assert.equal(profile.globalQueries, false);
+assert.equal(PROSPECTING_MIN_FIT_SCORE, 50);
 assert.equal(clampAgentRowTarget(undefined), 500);
 assert.equal(clampAgentRowTarget(20), 500);
 assert.equal(clampAgentRowTarget(1200), 1200);
@@ -368,6 +370,20 @@ async function main() {
       verifications: [],
       region: "Venezuela",
     } satisfies ProspectingBatchCandidate;
+    const lowFitCandidate = {
+      ...candidate,
+      candidate: {
+        ...candidate.candidate,
+        domain: "fixture-low-fit.test",
+        website: "https://fixture-low-fit.test",
+        companyName: "Low Fit Steel",
+        fit: {
+          ...candidate.candidate.fit,
+          score: 30,
+          tier: "C",
+        },
+      },
+    } satisfies ProspectingBatchCandidate;
     let runnerCalls = 0;
     const resolveMx = async () => [{ exchange: "mx.fixture-steel.test", priority: 10 }];
     const runBatch = async ({
@@ -382,8 +398,8 @@ async function main() {
       runnerCalls += 1;
       assert.equal(queryOffset, expectedQueryOffset);
       return {
-        candidates: [candidate],
-        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
+        candidates: [candidate, lowFitCandidate],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 2 },
         nextQueryOffset: runnerCalls,
         exhausted: runnerCalls > 1,
       };
@@ -456,6 +472,7 @@ async function main() {
       where: { officeId: office.id, name: lifecycleDraft.projectName },
       select: { id: true },
     }))?.id);
+    assert.equal(list?.records[0]?.data && (list.records[0].data as Record<string, unknown>).company_name, "Fixture Steel");
     assert.equal(list?.records[0]?.data && (list.records[0].data as Record<string, unknown>).country, "Venezuela");
     const secondProjectDraft = {
       ...lifecycleDraft,
