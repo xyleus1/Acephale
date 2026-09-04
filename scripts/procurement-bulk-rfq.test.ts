@@ -188,46 +188,28 @@ async function main() {
   assert.equal(changed.code, "BATCH_CHANGED");
   assert.match(changed.message, /Preview it again/);
 
-  const alreadySentStatusCalls: Array<{ customerId: string; orderId: string; event: string }> = [];
-  const alreadySentTargets = [
-    { ...target, vendorId: "already-sent-1" },
-    { ...target, vendorId: "already-sent-2", contactEmail: "second@protoexpress.com" },
-  ];
-  const alreadySentRun = await runProcurementBulkRfq({
+  const reconciliationCalls: Array<{ customerId: string; orderId: string; officeId: string }> = [];
+  const alreadyContactedRun = await runProcurementBulkRfq({
     orderId: order.orderId,
-    limit: alreadySentTargets.length,
+    limit: 2,
     attachRequestFiles: false,
     loadOrder: (async () => ({
       ...order,
       customerId: "customer-1",
     })) as never,
-    loadTargets: (async () => alreadySentTargets) as never,
+    loadTargets: (async () => []) as never,
     listSuppressed: (async () => new Map()) as never,
-    reserveSender: (async () => ({
-      ok: true,
-      reservationId: "reservation-1",
-      accountId: "account-1",
-      senderEmail: "buyer@example.com",
-      dailySendLimit: 100,
-      sentToday: 0,
-      reservedToday: 0,
-      completed: true,
-      providerMessageId: "provider-message-1",
-      providerThreadId: "provider-thread-1",
-      localThreadId: null,
-      sentAt: null,
-    })) as never,
-    advanceStatus: (async (args) => {
-      alreadySentStatusCalls.push(args);
+    reconcileStatus: (async (args) => {
+      reconciliationCalls.push(args);
       return "sourcing";
     }) as never,
   });
-  assert.equal(alreadySentRun.alreadySent, alreadySentTargets.length);
-  assert.deepEqual(alreadySentStatusCalls, [{
+  assert.equal(alreadyContactedRun.candidates, 0);
+  assert.deepEqual(reconciliationCalls, [{
     customerId: "customer-1",
     orderId: order.orderId,
-    event: "rfq_sent",
-  }]);
+    officeId: order.officeId,
+  }], "an empty retry still reconciles persisted supplier facts");
 
   console.log("procurement-bulk-rfq: all assertions passed");
 }

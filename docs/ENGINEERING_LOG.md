@@ -197,6 +197,9 @@
   `needs_attention` remain untouched.
 - Supplier discovery, the first RFQ send, and the first recorded quote advance
   status through the shared helper. No send or approval behavior changed.
+- Each sourcing, RFQ, and quote pass reconciles status from persisted supplier
+  facts, so a failed status write can self-heal on a later pass with no new
+  outcome.
 - Campaign banner, request-derived ICP discovery, multiple contacts per
   company, and auto-reply loops are out of scope.
 

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { prisma } from "@/lib/prisma";
 import { procurementWorkflowDatabase } from "@/lib/procurement-workflow";
 
 // The lifecycle status of a sourcing request used to be written only by the
@@ -14,6 +15,12 @@ export type ProcurementOrderProgressEvent =
   | "supplier_discovered"
   | "rfq_sent"
   | "quote_recorded";
+
+export type ProcurementOrderProgressFacts = {
+  vendors: number;
+  contacted: number;
+  quoted: number;
+};
 
 export const PROCUREMENT_ORDER_STATUS_LADDER: Record<string, number> = {
   new: 0,
@@ -33,6 +40,15 @@ const EVENT_STATUS: Record<ProcurementOrderProgressEvent, string> = {
   // order: the supplier choice and the spend are still theirs.
   quote_recorded: "awaiting_order_approval",
 };
+
+export function procurementOrderProgressEventForFacts(
+  facts: ProcurementOrderProgressFacts,
+): ProcurementOrderProgressEvent | null {
+  if (facts.quoted > 0) return "quote_recorded";
+  if (facts.contacted > 0) return "rfq_sent";
+  if (facts.vendors > 0) return "supplier_discovered";
+  return null;
+}
 
 // The status the event would move the request to, or null when the request is
 // already at or past it, or sits outside the ladder because it was cancelled,
@@ -79,6 +95,67 @@ export async function advanceProcurementOrderStatus(
     console.warn("procurement order status advance failed", {
       orderId: args.orderId,
       event: args.event,
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+    return null;
+  }
+}
+
+export async function reconcileProcurementOrderStatus(
+  args: { customerId: string; orderId: string; officeId: string },
+  dependencies?: {
+    database?: {
+      $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+    };
+    advance?: typeof advanceProcurementOrderStatus;
+    countRecordedSends?: (officeId: string, orderId: string) => Promise<number>;
+  },
+): Promise<string | null> {
+  try {
+    const database = dependencies?.database ?? procurementWorkflowDatabase();
+    const rows = await database.$queryRawUnsafe<Array<ProcurementOrderProgressFacts>>(`
+      SELECT
+        count(*)::int AS "vendors",
+        count(*) FILTER (
+          WHERE coalesce(
+            NULLIF(to_jsonb(order_vendors)->>'last_email_message_id', ''),
+            NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')
+          ) IS NOT NULL
+        )::int AS "contacted",
+        count(*) FILTER (
+          WHERE jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+            AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
+        )::int AS "quoted"
+      FROM order_vendors
+      WHERE order_vendors.order_id = $1::uuid
+    `, args.orderId);
+    const facts = rows[0] ?? { vendors: 0, contacted: 0, quoted: 0 };
+    const countRecordedSends = dependencies?.countRecordedSends ?? (async (
+      officeId: string,
+      orderId: string,
+    ) => prisma.emailSenderReservation.count({
+      where: {
+        officeId,
+        status: "RECORDED",
+        idempotencyKey: { startsWith: `procurement-bulk-rfq:${orderId}:` },
+      },
+    }));
+    const recordedSends = await countRecordedSends(args.officeId, args.orderId);
+    const event = procurementOrderProgressEventForFacts({
+      ...facts,
+      contacted: Math.max(facts.contacted, recordedSends),
+    });
+    if (!event) return null;
+    const advance = dependencies?.advance ?? advanceProcurementOrderStatus;
+    return await advance({
+      customerId: args.customerId,
+      orderId: args.orderId,
+      event,
+    }, { database });
+  } catch (error) {
+    console.warn("procurement order status advance failed", {
+      orderId: args.orderId,
+      event: "reconcile",
       message: error instanceof Error ? error.message : "unknown error",
     });
     return null;

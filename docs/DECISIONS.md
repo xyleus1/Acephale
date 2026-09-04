@@ -74,6 +74,11 @@ Date: 2026-09-05
   `needs_attention`, which remain operator-owned.
 - Hooks advance status on the first supplier discovery, first RFQ send, and
   first recorded quote. Supplier sends and approvals are unchanged.
+- Every sourcing, RFQ, and quote pass derives status from persisted supplier
+  facts, so a failed status write self-heals on a later pass even when the pass
+  has no new send, reply, or quote outcome. The furthest fact wins, and the
+  database boundary remains forward-only. Contact evidence includes recorded
+  office-scoped recorded send reservations as well as supplier-row message ids.
 - Out of scope: campaign banner, request-derived ICP discovery, multiple
   contacts per company, and auto-reply loops.
 

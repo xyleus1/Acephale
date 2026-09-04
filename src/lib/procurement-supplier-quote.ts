@@ -2,7 +2,10 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { advanceProcurementOrderStatus } from "@/lib/procurement-order-status";
+import {
+  advanceProcurementOrderStatus,
+  reconcileProcurementOrderStatus,
+} from "@/lib/procurement-order-status";
 import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import {
   quoteCapturePage,
@@ -182,6 +185,7 @@ export async function listSupplierQuoteCandidates(input: {
 }): Promise<{
   orderId: string;
   customerId: string;
+  officeId: string;
   material: string;
   candidates: SupplierQuoteCandidate[];
   nextCursor: string | null;
@@ -282,6 +286,7 @@ export async function listSupplierQuoteCandidates(input: {
   return {
     orderId: summary.orderId,
     customerId: summary.customerId,
+    officeId: summary.officeId,
     material: summary.material,
     candidates: candidates.sort((left, right) => left.vendorId.localeCompare(right.vendorId)),
     nextCursor: page.nextCursor,
@@ -352,8 +357,10 @@ export async function runSupplierQuoteCapture(input: {
   outOfTime?: () => boolean;
   skipVendorIds?: ReadonlySet<string>;
   advanceStatus?: typeof advanceProcurementOrderStatus;
+  reconcileStatus?: typeof reconcileProcurementOrderStatus;
 }): Promise<SupplierQuoteCaptureResult | null> {
   const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
+  const reconcileStatus = input.reconcileStatus ?? reconcileProcurementOrderStatus;
   const plan = await listSupplierQuoteCandidates({
     orderId: input.orderId,
     reads: input.reads,
@@ -362,6 +369,11 @@ export async function runSupplierQuoteCapture(input: {
     skipVendorIds: input.skipVendorIds,
   });
   if (!plan) return null;
+  await reconcileStatus({
+    customerId: plan.customerId,
+    orderId: plan.orderId,
+    officeId: plan.officeId,
+  });
   const limit = Math.min(
     QUOTE_CAPTURE_MAX_PER_RUN,
     Math.max(1, Math.trunc(input.limit ?? QUOTE_CAPTURE_MAX_PER_RUN)),
@@ -419,11 +431,9 @@ export async function runSupplierQuoteCapture(input: {
     }
   }
   const recorded = outcomes.filter((outcome) => outcome.state === "RECORDED").length;
-  const alreadyRecorded = plan.candidates.some((candidate) => candidate.state === "ALREADY_RECORDED")
-    || outcomes.some((outcome) => outcome.state === "ALREADY_RECORDED");
   // A priced answer on file is what the operator is waiting on, so the request
   // moves to their decision the first time one is recorded.
-  if (recorded > 0 || alreadyRecorded) {
+  if (recorded > 0) {
     await advanceStatus({
       customerId: plan.customerId,
       orderId: plan.orderId,

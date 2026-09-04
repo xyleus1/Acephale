@@ -10,7 +10,10 @@ import { listSuppressedEmails, type EmailSuppressionReason } from "@/lib/email-d
 import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
-import { advanceProcurementOrderStatus } from "@/lib/procurement-order-status";
+import {
+  advanceProcurementOrderStatus,
+  reconcileProcurementOrderStatus,
+} from "@/lib/procurement-order-status";
 import {
   EMPTY_RFQ_ATTACHMENT_PACKAGE,
   loadProcurementRfqAttachmentPackage,
@@ -595,14 +598,21 @@ export async function runProcurementBulkRfq(input: {
   // run refuses to send anything unless it would send exactly that batch.
   expectedBatchHash?: string | null;
   advanceStatus?: typeof advanceProcurementOrderStatus;
+  reconcileStatus?: typeof reconcileProcurementOrderStatus;
   loadOrder?: typeof loadBulkRfqOrder;
   loadTargets?: typeof listUncontactedBulkRfqTargets;
   listSuppressed?: typeof listSuppressedEmails;
   reserveSender?: typeof reserveEmailSender;
 } & BulkRfqBatchOptions): Promise<BulkRfqRunResult> {
   const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
+  const reconcileStatus = input.reconcileStatus ?? reconcileProcurementOrderStatus;
   const order = await (input.loadOrder ?? loadBulkRfqOrder)(input.orderId);
   if (!order) throw new Error("The sourcing request was not found.");
+  await reconcileStatus({
+    customerId: order.customerId,
+    orderId: order.orderId,
+    officeId: order.officeId,
+  });
   const provider = input.provider ?? gmailSupplierEmailProvider;
   const pauseMs = input.pauseMs ?? 400;
   const uncontacted = await (input.loadTargets ?? listUncontactedBulkRfqTargets)(order, input.vendorIds ?? null, {
@@ -673,13 +683,6 @@ export async function runProcurementBulkRfq(input: {
     }
     if (reservation.completed) {
       result.alreadySent += 1;
-      if (result.sent + result.alreadySent === 1) {
-        await advanceStatus({
-          customerId: order.customerId,
-          orderId: order.orderId,
-          event: "rfq_sent",
-        });
-      }
       result.outcomes.push({
         vendorId: target.vendorId,
         vendorName: target.name,
@@ -740,7 +743,7 @@ export async function runProcurementBulkRfq(input: {
       result.sent += 1;
       // The first RFQ out is when the request is visibly collecting supplier
       // responses; the status write is idempotent, so later sends are no-ops.
-      if (result.sent + result.alreadySent === 1) {
+      if (result.sent === 1) {
         await advanceStatus({
           customerId: order.customerId,
           orderId: order.orderId,

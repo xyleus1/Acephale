@@ -11,7 +11,10 @@ import { defaultFetcher, scoreEmailUsefulness, type PageFetcher } from "@/lib/le
 import { verifyEmail, type EmailVerification } from "@/lib/leadgen/verify";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { loadBulkRfqOrder, type BulkRfqOrder } from "@/lib/procurement-bulk-rfq";
-import { advanceProcurementOrderStatus } from "@/lib/procurement-order-status";
+import {
+  advanceProcurementOrderStatus,
+  reconcileProcurementOrderStatus,
+} from "@/lib/procurement-order-status";
 import { procurementWorkflowDatabase } from "@/lib/procurement-workflow";
 import {
   selectSupplierDomainProposers,
@@ -383,10 +386,17 @@ export async function runProcurementSupplierSourcingWave(input: {
   loadExistingKeys?: typeof existingVendorKeys;
   insertVendor?: typeof insertSourcedVendor;
   advanceStatus?: typeof advanceProcurementOrderStatus;
+  reconcileStatus?: typeof reconcileProcurementOrderStatus;
 }): Promise<SourcingWaveResult> {
   const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
+  const reconcileStatus = input.reconcileStatus ?? reconcileProcurementOrderStatus;
   const order = await (input.loadOrder ?? loadBulkRfqOrder)(input.orderId);
   if (!order) throw new SupplierSourcingError("The sourcing request was not found.", "not_found");
+  const reconciledStatus = await reconcileStatus({
+    customerId: order.customerId,
+    orderId: order.orderId,
+    officeId: order.officeId,
+  });
   const category = classifySupplierSourcingCategory({
     material: order.material,
     specification: order.specification,
@@ -409,15 +419,9 @@ export async function runProcurementSupplierSourcingWave(input: {
   const existing = await (input.loadExistingKeys ?? existingVendorKeys)(order.orderId);
   const seenDomains = new Set(existing.domains);
   const usedEmails = new Set(existing.emails);
-  let statusAdvanceRequested = false;
-  if (existing.domains.size > 0 || existing.emails.size > 0) {
-    statusAdvanceRequested = true;
-    await advanceStatus({
-      customerId: order.customerId,
-      orderId: order.orderId,
-      event: "supplier_discovered",
-    });
-  }
+  let statusAdvanceRequested = reconciledStatus !== null
+    || existing.domains.size > 0
+    || existing.emails.size > 0;
   const result: SourcingWaveResult = {
     orderId: order.orderId,
     material: order.material,

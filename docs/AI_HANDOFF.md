@@ -193,6 +193,10 @@
   `ordered`, `cancelled`, and `needs_attention` remain operator-owned.
 - Hooks fire on the first supplier discovered, first RFQ sent, and first quote
   recorded. Sends and approvals are unchanged.
+- Every sourcing, RFQ, and quote pass also projects status from persisted supplier
+  facts. A failed status write therefore self-heals on a later pass, including
+  when there is no new send, reply, or quote outcome. Contact evidence includes
+  office-scoped recorded send reservations as well as supplier-row message ids.
 - Out of scope: campaign banner, request-derived ICP discovery, multiple
   contacts per company, and auto-reply loops.
 

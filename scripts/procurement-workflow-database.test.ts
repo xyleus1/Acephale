@@ -25,6 +25,10 @@ import {
   retryProcurementWorkflowWake,
   submitProcurementRequest,
 } from "../src/lib/procurement-workflow";
+import {
+  advanceProcurementOrderStatus,
+  reconcileProcurementOrderStatus,
+} from "../src/lib/procurement-order-status";
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
@@ -740,6 +744,98 @@ async function main() {
       quoteVendorId,
     );
     assert.equal(storedQuote[0]?.amount, "12.4", "The first recorded quote stays as it was written.");
+    const reconcileOrderStatus = () => reconcileProcurementOrderStatus({
+      customerId: customerA,
+      orderId: created.orderId,
+      officeId,
+    }, {
+      database: dashboard,
+      advance: (args) => advanceProcurementOrderStatus(args, { database: dashboard }),
+    });
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'new' WHERE id = $1::uuid",
+      created.orderId,
+    );
+    assert.equal(
+      await reconcileOrderStatus(),
+      "awaiting_order_approval",
+      "A persisted quote projects an order from new to awaiting order approval.",
+    );
+    const reservationAccountId = `reservation-account-${suffix}`;
+    await app.emailAccount.create({
+      data: {
+        id: reservationAccountId,
+        officeId,
+        email: `reservation-${suffix}@example.test`,
+        provider: "GMAIL",
+        sendEnabled: true,
+      },
+    });
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'new' WHERE id = $1::uuid",
+      created.orderId,
+    );
+    await owner.$executeRawUnsafe(
+      "UPDATE \"OrderSupplier\" SET quote = NULL, gmail_message_id = NULL WHERE order_id = $1::uuid",
+      created.orderId,
+    );
+    await app.emailSenderReservation.create({
+      data: {
+        id: `reservation-${suffix}`,
+        officeId,
+        accountId: reservationAccountId,
+        usageDate: new Date(),
+        idempotencyKey: `procurement-bulk-rfq:${created.orderId}:reservation-vendor`,
+        requestHash: "a".repeat(64),
+        status: "RECORDED",
+      },
+    });
+    assert.equal(
+      await reconcileOrderStatus(),
+      "sourcing",
+      "A recorded send reservation projects an order from new to sourcing without a supplier message id.",
+    );
+    await app.emailSenderReservation.deleteMany({
+      where: { officeId, idempotencyKey: { startsWith: `procurement-bulk-rfq:${created.orderId}:` } },
+    });
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'new' WHERE id = $1::uuid",
+      created.orderId,
+    );
+    await owner.$executeRawUnsafe(
+      "UPDATE \"OrderSupplier\" SET gmail_message_id = 'gmail-contacted' WHERE id = $1::uuid",
+      quoteVendorId,
+    );
+    assert.equal(
+      await reconcileOrderStatus(),
+      "sourcing",
+      "A persisted contact projects an order from new to sourcing.",
+    );
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'cancelled' WHERE id = $1::uuid",
+      created.orderId,
+    );
+    await owner.$executeRawUnsafe(
+      "UPDATE \"OrderSupplier\" SET quote = $2::jsonb WHERE id = $1::uuid",
+      quoteVendorId,
+      JSON.stringify({ unitPrice: { amount: 12.4, currency: "USD" } }),
+    );
+    assert.equal(
+      await reconcileOrderStatus(),
+      null,
+      "Persisted quotes never overwrite an operator-owned cancelled order.",
+    );
+    assert.equal(
+      (await owner.$queryRawUnsafe<Array<{ status: string }>>(
+        "SELECT status FROM \"ProcurementOrder\" WHERE id = $1::uuid",
+        created.orderId,
+      ))[0]?.status,
+      "cancelled",
+    );
+    await owner.$executeRawUnsafe(
+      "UPDATE \"ProcurementOrder\" SET status = 'new' WHERE id = $1::uuid",
+      created.orderId,
+    );
     const advanceOrderStatus = async (customerId: string, status: string) => {
       const rows = await dashboard.$queryRawUnsafe<Array<{ status: string | null }>>(
         "SELECT advance_order_status($1::uuid, $2::uuid, $3::text) AS status",
