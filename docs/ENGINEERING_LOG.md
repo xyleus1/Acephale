@@ -1,5 +1,38 @@
 # Engineering Log
 
+## 2026-09-04: Legacy re-keying must not move a row that is already keyed by its domain
+
+- Post-merge review of #390: `persistCandidates` runs one `rekeyResearchRecords`
+  and upsert pass per dedupe field, and when a batch held the same company
+  with a domain and as a domainless directory line, the `company_name` pass
+  matched the row the `domain` pass had just keyed (by its stored
+  `company_name`), moved it onto the name key, and the name upsert replaced
+  `data` with a row whose `domain` is null. The next domain-only run then found
+  no row under the domain key and inserted a duplicate company.
+- `rekeyResearchRecords` takes `keepKeyedBy`: a matched row whose current
+  `dedupeKey` equals `normalizeDedupeValue(data[field])` for one of those
+  fields is a current row, not a legacy one. Its target key goes into the new
+  `keyedElsewhere` result, it is not written, and no other legacy row is moved
+  onto that key either (the decision is made across the whole candidate set
+  before any write, so it does not depend on row age). With `keepKeyedBy` the
+  precedence check also covers targets whose key is already claimed, so a
+  name-keyed duplicate left behind by the old behavior stops receiving
+  name-only updates and the domain row stays the one that is fed; re-keying
+  itself is still limited to free targets. Calls without the option are
+  unchanged.
+- `PROSPECTING_DEDUPE_FIELDS` fixes the precedence `domain` then
+  `company_name`; `groupProspectingResearchRows` orders groups by it and
+  `persistCandidates` passes the preceding fields as `keepKeyedBy`, then drops
+  the inputs whose key came back in `keyedElsewhere` instead of upserting them
+  (a domainless sighting carries less than the domain row already holds). Those
+  candidates count as persisted because the company is in the list.
+- Verification: `npm run test:research-lists` (new kept-row assertions),
+  `npm run test:supply-os-context-prospecting` (real DB: mixed batch yields one
+  domain-keyed row, later domain-only run updates it with the new email and
+  keeps status; the same scenario failed before the fix with a spurious
+  update), `npm run test:leadgen`, `npx tsc --noEmit`, `npm run build`;
+  `npm run lint` reports only pre-existing findings outside this change.
+
 ## 2026-09-04: Repeated domains share one enrichment slot; legacy research rows move to the domain key
 
 - Review of #389 found two gaps. First, directory documents are not

@@ -1,5 +1,29 @@
 # AI Handoff
 
+## 2026-09-04: Leadgen follow-up: a domain-keyed row is never re-keyed by its name
+
+- Post-merge review of #390: when one batch carried a company both with its
+  domain and as a domainless directory line, the `company_name` pass of
+  `persistCandidates` found the freshly domain-keyed row by its stored name,
+  moved it onto the name key, and the name upsert then overwrote `domain`
+  with null, so the next domain-only run inserted a second row.
+- `PROSPECTING_DEDUPE_FIELDS = ["domain", "company_name"]` in
+  `src/lib/supply-os/context-prospecting.ts` is the precedence order.
+  `groupProspectingResearchRows` emits groups in that order and
+  `persistCandidates` passes the higher-precedence fields as
+  `keepKeyedBy` to `rekeyResearchRecords`. A candidate row whose current
+  `dedupeKey` equals the normalized value of one of those fields is treated as
+  current, not legacy: it is not moved, no other legacy row is moved onto that
+  name key, and the key is returned in `keyedElsewhere`. `persistCandidates`
+  drops the name-keyed inputs for those keys (the company already lives on its
+  domain row and a domainless sighting must not erase the domain) and still
+  counts them as persisted. Callers without `keepKeyedBy` behave as before.
+- Tests: `scripts/research-lists.test.ts` (kept domain row, untouched legacy
+  duplicate, unguarded call still re-keys) and a real-DB scenario in
+  `scripts/supply-os-context-prospecting.test.ts` (domain and name sighting in
+  one batch, later domain-only run with a changed email updates the same row,
+  status and office preserved). No migration.
+
 ## 2026-09-04: Leadgen follow-up: one enrichment slot per domain, legacy research rows re-keyed
 
 - `runProspectingBatch` tracks enrichment per lowercased domain within the

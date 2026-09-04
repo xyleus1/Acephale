@@ -745,6 +745,116 @@ async function main() {
     assert.equal(directoryData?.email_verdict, "unknown");
     assert.match(String(directoryData?.buys), /row 12/);
     assert.match(String(directoryData?.buys), /needsResolution=true/);
+
+    // One company seen both with its domain and as a domainless directory line
+    // in the same batch: the domain row is the company's row, the name sighting
+    // must not re-key it or erase the domain, and a later domain-only run
+    // updates that row instead of creating a second company.
+    const mixedSlug = `${lifecycleDraft.listSlug}-mixed`;
+    const mixedAction = (await createCompanyContextProspectingActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{ draft: { ...lifecycleDraft, listSlug: mixedSlug }, citations: [] }],
+      requestMessageId: "message:mixed",
+      requestBody: "Find mixed keyed prospects.",
+      requestCreatedAt: new Date(),
+    }))[0]!;
+    const mixedDomainCandidate = {
+      ...candidate,
+      candidate: {
+        ...candidate.candidate,
+        companyName: "Mixed Key Steel",
+        domain: "mixed-key.test",
+        website: "https://mixed-key.test",
+        emails: ["sales@mixed-key.test"],
+      },
+    } satisfies ProspectingBatchCandidate;
+    const mixedNameCandidate = {
+      ...directoryCandidate,
+      candidate: { ...directoryCandidate.candidate, companyName: "MIXED KEY STEEL" },
+      directoryRow: { ...directoryCandidate.directoryRow, companyName: "MIXED KEY STEEL", rowIndex: 3 },
+    } satisfies ProspectingBatchCandidate;
+    const mixedFirst = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: mixedAction.id,
+      runBatch: async () => ({
+        candidates: [mixedNameCandidate, mixedDomainCandidate],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 2 },
+        nextQueryOffset: 1,
+        exhausted: false,
+      }),
+      resolveMx,
+    });
+    assert.equal(mixedFirst.stats.rowsCreated, 1);
+    assert.equal(mixedFirst.stats.rowsUpdated, 0);
+    const mixedList = await prisma.researchList.findFirstOrThrow({
+      where: { officeId: office.id, slug: mixedSlug },
+      include: { records: true },
+    });
+    assert.equal(mixedList.records.length, 1, "domain and name sightings of one company share a row");
+    const mixedRecord = mixedList.records[0]!;
+    assert.equal(mixedRecord.dedupeKey, "mixed-key.test");
+    assert.equal(mixedRecord.officeId, office.id);
+    assert.equal((mixedRecord.data as Record<string, unknown>).domain, "mixed-key.test");
+    assert.equal((mixedRecord.data as Record<string, unknown>).email, "sales@mixed-key.test");
+    await prisma.researchRecord.update({ where: { id: mixedRecord.id }, data: { status: "contacted" } });
+    const mixedSecond = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: mixedAction.id,
+      runBatch: async () => ({
+        candidates: [{
+          ...mixedDomainCandidate,
+          candidate: { ...mixedDomainCandidate.candidate, emails: ["buyer@mixed-key.test"] },
+        }],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
+        nextQueryOffset: 2,
+        exhausted: false,
+      }),
+      resolveMx,
+    });
+    assert.equal(mixedSecond.stats.rowsCreated, 1, "later domain-only run reuses the company row");
+    assert.equal(mixedSecond.stats.rowsUpdated, 1);
+    const mixedAfter = await prisma.researchRecord.findMany({
+      where: { listId: mixedList.id },
+    });
+    assert.equal(mixedAfter.length, 1);
+    assert.equal(mixedAfter[0]!.id, mixedRecord.id);
+    assert.equal(mixedAfter[0]!.dedupeKey, "mixed-key.test");
+    assert.equal(mixedAfter[0]!.status, "contacted");
+    assert.equal((mixedAfter[0]!.data as Record<string, unknown>).domain, "mixed-key.test");
+    assert.equal((mixedAfter[0]!.data as Record<string, unknown>).email, "buyer@mixed-key.test");
+    // Pre-fix state: a name-keyed duplicate already sits next to the domain row.
+    // A name-only sighting must not keep feeding the duplicate.
+    const staleDuplicate = await prisma.researchRecord.create({
+      data: {
+        officeId: office.id,
+        listId: mixedList.id,
+        dedupeKey: "mixed key steel",
+        status: "new",
+        data: { company_name: "Mixed Key Steel", domain: null, email: "old@directory.test" },
+      },
+    });
+    const mixedThird = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: mixedAction.id,
+      runBatch: async () => ({
+        candidates: [mixedNameCandidate],
+        stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
+        nextQueryOffset: 3,
+        exhausted: true,
+      }),
+      resolveMx,
+    });
+    assert.equal(mixedThird.stats.rowsCreated, 1);
+    assert.equal(mixedThird.stats.rowsUpdated, 1, "the name sighting is routed to the domain row, not written");
+    const duplicateAfter = await prisma.researchRecord.findUniqueOrThrow({ where: { id: staleDuplicate.id } });
+    assert.equal(duplicateAfter.updatedAt.getTime(), staleDuplicate.updatedAt.getTime(), "the name-keyed duplicate is left untouched");
+    assert.equal((duplicateAfter.data as Record<string, unknown>).email, "old@directory.test");
+    assert.equal(await prisma.researchRecord.count({ where: { listId: mixedList.id } }), 2);
+
     await prisma.researchRecord.update({
       where: { id: list!.records[0]!.id },
       data: { status: "rejected" },

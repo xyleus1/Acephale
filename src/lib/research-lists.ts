@@ -311,25 +311,36 @@ function chunks<T>(items: T[], size: number): T[][] {
  * instead of inserting a second row for the same company. Only the oldest
  * matching record is re-keyed and only while the target key is still free;
  * records are never deleted or merged here.
+ *
+ * A record whose current key is derived from one of `options.keepKeyedBy`
+ * (fields that take precedence over `dedupeField`, e.g. `domain` over
+ * `company_name`) is not legacy and stays where it is; its target key is
+ * reported in `keyedElsewhere` so the caller can route the row to it.
  */
 export async function rekeyResearchRecords(
   officeId: string,
   slug: string,
   dedupeField: string,
   values: readonly unknown[],
-  options: { client?: PrismaClient } = {},
-): Promise<{ rekeyed: number }> {
+  options: { client?: PrismaClient; keepKeyedBy?: readonly string[] } = {},
+): Promise<{ rekeyed: number; keyedElsewhere: string[] }> {
   const client = options.client ?? defaultPrisma;
   const list = await loadList(officeId, slug, client);
-  if (!list.fields.some((field) => field.key === dedupeField)) {
+  const fieldKeys = new Set(list.fields.map((field) => field.key));
+  if (!fieldKeys.has(dedupeField)) {
     throw new Error("Dedupe field is not in the list definition.");
+  }
+  const keepKeyedBy = (options.keepKeyedBy ?? []).filter((field) => field !== dedupeField);
+  if (keepKeyedBy.some((field) => !fieldKeys.has(field))) {
+    throw new Error("Precedence field is not in the list definition.");
   }
   const targets = new Set<string>();
   for (const value of values) {
     const key = normalizeDedupeValue(cleanText(value));
     if (key) targets.add(key);
   }
-  if (!targets.size) return { rekeyed: 0 };
+  const keyedElsewhere = new Set<string>();
+  if (!targets.size) return { rekeyed: 0, keyedElsewhere: [] };
 
   const claimed = new Set(
     (await client.researchRecord.findMany({
@@ -337,9 +348,13 @@ export async function rekeyResearchRecords(
       select: { dedupeKey: true },
     })).flatMap((record) => (record.dedupeKey ? [record.dedupeKey] : [])),
   );
-  const open = [...targets].filter((key) => !claimed.has(key));
+  // Precedence is checked for every target, including ones already claimed
+  // (a name-keyed duplicate next to the company's domain row), so the caller
+  // routes the input to the domain row instead of feeding the duplicate.
+  // Re-keying itself stays limited to targets that are still free.
+  const scan = keepKeyedBy.length ? [...targets] : [...targets].filter((key) => !claimed.has(key));
   let rekeyed = 0;
-  for (const batch of chunks(open, 50)) {
+  for (const batch of chunks(scan, 50)) {
     const wanted = new Set(batch);
     // Case-insensitive substring match so "Alpha Steel GmbH", "ALPHA STEEL GMBH",
     // and "https://www.Alpha-Steel.de/" are all candidates; the exact normalized
@@ -355,10 +370,22 @@ export async function rekeyResearchRecords(
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true, dedupeKey: true, data: true },
     });
+    const candidates = stale.flatMap((record) => {
+      const data = asData(record.data);
+      const key = normalizeDedupeValue(data[dedupeField]);
+      return key && key !== record.dedupeKey && wanted.has(key) ? [{ record, data, key }] : [];
+    });
+    for (const { record, data, key } of candidates) {
+      if (
+        record.dedupeKey &&
+        keepKeyedBy.some((field) => normalizeDedupeValue(data[field]) === record.dedupeKey)
+      ) {
+        keyedElsewhere.add(key);
+      }
+    }
     const taken = new Set<string>();
-    for (const record of stale) {
-      const key = normalizeDedupeValue(asData(record.data)[dedupeField]);
-      if (!key || key === record.dedupeKey || taken.has(key) || !wanted.has(key)) continue;
+    for (const { record, key } of candidates) {
+      if (claimed.has(key) || taken.has(key) || keyedElsewhere.has(key)) continue;
       taken.add(key);
       try {
         const result = await client.researchRecord.updateMany({
@@ -372,7 +399,7 @@ export async function rekeyResearchRecords(
       }
     }
   }
-  return { rekeyed };
+  return { rekeyed, keyedElsewhere: [...keyedElsewhere] };
 }
 
 export async function upsertResearchRecords(

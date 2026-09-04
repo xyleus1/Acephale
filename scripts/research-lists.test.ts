@@ -308,6 +308,53 @@ assert.equal(byId.get("r13")?.status, "reviewed");
 assert.equal(byId.get("r14")?.dedupeKey, "mu metall ag", "an upper-case stored name with a null key is re-keyed");
 assert.equal(byId.get("r15")?.dedupeKey, "info@lambda-steel-service.example", "a name that merely contains the batch name is not re-keyed");
 
+// A row already keyed by a higher-precedence field is not legacy: a name-only
+// sighting of the same company must not move it off its domain key.
+const r16: FakeRecord = { id: "r16", officeId: "office-id", listId: "list-id", dedupeKey: "old@gamma.example", status: "new", data: { company_name: "Gamma", website: null }, createdAt: new Date("2026-01-16") };
+legacyRows.push(r16);
+const keptWrites = updateCalls.length;
+const mixed = await rekeyResearchRecords(
+  "office-id",
+  "test",
+  "company_name",
+  ["GAMMA", "Alpha", "Nu Stahl"],
+  { client: rekeyPrisma as unknown as PrismaClient, keepKeyedBy: ["website"] },
+);
+assert.equal(mixed.rekeyed, 0, "domain-keyed rows stay put and nothing else is moved onto their name key");
+assert.deepEqual(mixed.keyedElsewhere.sort(), ["alpha", "gamma"], "the caller learns which name keys already live on a domain row");
+assert.equal(byId.get("r3")?.dedupeKey, "gamma.example", "a row keyed by its domain is not re-keyed to its name");
+assert.equal(byId.get("r1")?.dedupeKey, "alpha.example");
+assert.equal(r16.dedupeKey, "old@gamma.example", "a legacy duplicate is not moved onto a name key the domain row already answers for");
+assert.equal(updateCalls.length, keptWrites, "no write is issued for kept rows");
+// A name-keyed duplicate already exists next to the domain row (the state the
+// earlier bug produced): the claimed name key must still be reported as living
+// on the domain row so the caller stops feeding the duplicate.
+const r17: FakeRecord = { id: "r17", officeId: "office-id", listId: "list-id", dedupeKey: "gamma", status: "new", data: { company_name: "Gamma", website: null }, createdAt: new Date("2026-01-17") };
+legacyRows.push(r17);
+const claimedName = await rekeyResearchRecords(
+  "office-id",
+  "test",
+  "company_name",
+  ["Gamma"],
+  { client: rekeyPrisma as unknown as PrismaClient, keepKeyedBy: ["website"] },
+);
+assert.equal(claimedName.rekeyed, 0);
+assert.deepEqual(claimedName.keyedElsewhere, ["gamma"], "a claimed name key is still routed to the domain row");
+assert.equal(byId.get("r3")?.dedupeKey, "gamma.example");
+assert.equal(r16.dedupeKey, "old@gamma.example");
+assert.equal(r17.dedupeKey, "gamma");
+assert.equal(updateCalls.length, keptWrites, "an already-claimed key is never written");
+const unguarded = await rekeyResearchRecords(
+  "office-id",
+  "test",
+  "company_name",
+  ["Alpha"],
+  { client: rekeyPrisma as unknown as PrismaClient },
+);
+assert.equal(unguarded.rekeyed, 1, "without keepKeyedBy the oldest matching row is still re-keyed");
+assert.deepEqual(unguarded.keyedElsewhere, []);
+assert.equal(byId.get("r1")?.dedupeKey, "alpha", "legacy callers keep the previous behavior");
+
 // A concurrent writer claiming the key between the read and the write is tolerated.
 legacyRows.push({ id: "r9", officeId: "office-id", listId: "list-id", dedupeKey: "old@theta.example", status: "new", data: { company_name: "Theta", website: "theta.example" }, createdAt: new Date("2026-01-09") });
 const racingPrisma = {

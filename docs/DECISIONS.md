@@ -17,6 +17,12 @@ Date: 2026-09-04
   campaign audiences do not gain a second row for the same company. A key
   already claimed by a concurrent writer is not an error: the upsert then
   updates that row.
+- Addendum (2026-09-04): identity fields have a fixed precedence,
+  `PROSPECTING_DEDUPE_FIELDS = ["domain", "company_name"]`. A row keyed by a
+  higher-precedence field is the company's row and is never re-keyed by a
+  lower one: legacy migration only moves email-derived or null keys, and a
+  domainless sighting of a company that already has a domain-keyed row is not
+  written at all, so the stored domain is never erased by a name-only input.
 
 ## A supplier conversation is durable work with its own retry state
 

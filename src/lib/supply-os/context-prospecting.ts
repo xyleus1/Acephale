@@ -20,6 +20,7 @@ import {
   type ParsedResearchRow,
   type ResearchInputRow,
 } from "@/lib/research-lists";
+import { normalizeDedupeValue } from "@/lib/research-dedupe";
 import { ensureResearchProject } from "@/lib/research-projects";
 import {
   defaultProspectingSearch,
@@ -49,6 +50,11 @@ const BACKGROUND_SCAN_CAP = 500;
 const LOST_CLAIM_MESSAGE = "This prospecting run is already in progress. Retry shortly.";
 /** Matches the leadgen persist default: only tier A/B candidates reach the list. */
 export const PROSPECTING_MIN_FIT_SCORE = 50;
+/**
+ * Company identity fields in precedence order: a row keyed by an earlier field
+ * is the company's row, and a later field never re-keys or duplicates it.
+ */
+export const PROSPECTING_DEDUPE_FIELDS = ["domain", "company_name"] as const;
 const LIST_FIELDS = [
   { key: "company_name", label: "Company", type: "text" },
   { key: "website", label: "Website", type: "url" },
@@ -431,9 +437,19 @@ function directoryInputRows(records: readonly ProspectingBatchCandidate[]): Pros
   });
 }
 
+function inputRow(input: ResearchInputRow | ParsedResearchRow): ResearchInputRow {
+  return "sourceRow" in input && "row" in input
+    ? (input as ParsedResearchRow).row
+    : (input as ResearchInputRow);
+}
+
 export function groupProspectingResearchRows(items: readonly ProspectingResearchRow[]) {
   const groups = new Map<string, Array<ResearchInputRow | ParsedResearchRow>>();
-  for (const item of items) {
+  const order = (field: string) => {
+    const index = PROSPECTING_DEDUPE_FIELDS.indexOf(field as (typeof PROSPECTING_DEDUPE_FIELDS)[number]);
+    return index === -1 ? PROSPECTING_DEDUPE_FIELDS.length : index;
+  };
+  for (const item of [...items].sort((a, b) => order(a.dedupeField) - order(b.dedupeField))) {
     const rows = groups.get(item.dedupeField) ?? [];
     rows.push(item.row);
     groups.set(item.dedupeField, rows);
@@ -446,20 +462,28 @@ async function persistCandidates(officeId: string, listSlug: string, records: re
   let created = 0;
   let updated = 0;
   const persistedRecordIndexes = new Set<number>();
-  for (const [field, rows] of groups) {
+  for (const [field, allRows] of groups) {
     // Rows written before company-keyed dedupe carry an email-derived (or no)
-    // dedupeKey; move them onto the company key so the upsert updates them.
-    await rekeyResearchRecords(
+    // dedupeKey; move them onto the company key so the upsert updates them. A
+    // row already keyed by a higher-precedence field (domain) is the company's
+    // row: it keeps its key and the lower-precedence input is not written, so
+    // a domainless sighting cannot erase the domain.
+    const precedence = PROSPECTING_DEDUPE_FIELDS.indexOf(field as (typeof PROSPECTING_DEDUPE_FIELDS)[number]);
+    const { keyedElsewhere } = await rekeyResearchRecords(
       officeId,
       listSlug,
       field,
-      rows.map((input) => {
-        const row: ResearchInputRow = "sourceRow" in input && "row" in input
-          ? (input as ParsedResearchRow).row
-          : (input as ResearchInputRow);
-        return row[field];
-      }),
+      allRows.map((input) => inputRow(input)[field]),
+      { keepKeyedBy: precedence > 0 ? PROSPECTING_DEDUPE_FIELDS.slice(0, precedence) : [] },
     );
+    const skipKeys = new Set(keyedElsewhere);
+    const rows = allRows.filter((input) => {
+      const key = normalizeDedupeValue(inputRow(input)[field]);
+      if (!key || !skipKeys.has(key)) return true;
+      const sourceRow = "sourceRow" in input && typeof input.sourceRow === "number" ? input.sourceRow : 0;
+      if (sourceRow > 0) persistedRecordIndexes.add(sourceRow - 1);
+      return false;
+    });
     for (let index = 0; index < rows.length; index += RESEARCH_MAX_ROWS) {
       const result = await upsertResearchRecords(officeId, listSlug, rows.slice(index, index + RESEARCH_MAX_ROWS), {
         dedupeField: field,
