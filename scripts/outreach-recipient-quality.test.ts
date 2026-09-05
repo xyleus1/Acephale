@@ -269,6 +269,17 @@ async function liveChecks() {
       return MX;
     },
   });
+  const exhaustedGate = new LiveRecipientGate({
+    verifier: {
+      name: "exhausted",
+      verify: async () => {
+        throw new Error("not called");
+      },
+      usage: () => ({ provider: "exhausted", calls: 1, cached: 0, failures: 1, exhausted: true }),
+    },
+    resolveMx: async () => MX,
+  });
+  assert.equal(exhaustedGate.verifierExhausted(), true);
 
   const placeholder = await gate.check("r1", "someone@example.com", undefined);
   assert.equal(placeholder.ok, false);

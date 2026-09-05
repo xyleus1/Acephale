@@ -7,7 +7,7 @@
 // lose a candidate to a provider outage.
 
 import { promises as dns } from "node:dns";
-import { createBouncerVerifier } from "./bouncer";
+import { createBouncerVerifier, fetchBouncerCredits } from "./bouncer";
 import { emailDomain, isRoleEmail, registrableDomain } from "./extract";
 
 export type EmailVerdict = "deliverable_likely" | "risky" | "undeliverable" | "unknown";
@@ -151,6 +151,11 @@ export type VerifyOptions = {
 export function mailboxVerifierFromEnv(): MailboxVerifier | null {
   const apiKey = process.env.BOUNCER_API_KEY?.trim();
   return apiKey ? createBouncerVerifier({ apiKey }) : null;
+}
+
+export async function mailboxVerifierCreditsFromEnv() {
+  const apiKey = process.env.BOUNCER_API_KEY?.trim();
+  return apiKey ? { provider: "bouncer", ...await fetchBouncerCredits({ apiKey }) } : null;
 }
 
 function applyMailboxVerdict(heuristic: EmailVerification, verdict: MailboxVerdict): EmailVerification {

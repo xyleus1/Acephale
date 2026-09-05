@@ -6,6 +6,7 @@ import { ResumeAccountButton } from "@/components/resume-account-button";
 import { requireEmailAccountAdminSession } from "@/lib/email-account-access";
 import { senderPoolMembership } from "@/lib/email-account-pool";
 import { GMAIL_APP_PASSWORD_PROVIDER } from "@/lib/gmail-app-password";
+import { mailboxVerifierCreditsFromEnv } from "@/lib/leadgen/verify";
 import { prisma } from "@/lib/prisma";
 import { isSecretEncryptionConfigured } from "@/lib/security/crypto";
 import { canReadMailLog } from "@/lib/email-account-policy";
@@ -57,6 +58,7 @@ export default async function ConnectedEmailsPage() {
   const sentTodayTotal = monitored.reduce((total, account) => total + (sentToday.get(account.id) ?? 0), 0);
   const dailyCapacity = enabledSenders.reduce((total, account) => total + account.dailySendLimit, 0);
   const oauthConfigured = Boolean(process.env.GOOGLE_CLIENT_ID);
+  const verifierCredits = await mailboxVerifierCreditsFromEnv();
 
   return (
     <main className={settingsStyles.page}>
@@ -73,6 +75,15 @@ export default async function ConnectedEmailsPage() {
           <div><span>Sent today</span><strong>{sentTodayTotal} / {dailyCapacity}</strong></div>
           {pausedBySenderProtection.length > 0 ? (
             <div><span>Paused by sender protection</span><strong>{pausedBySenderProtection.length}</strong></div>
+          ) : null}
+          {verifierCredits ? (
+            <div>
+              <span>Verifier credits</span>
+              <strong>{"error" in verifierCredits ? "unavailable" : Math.max(0, verifierCredits.credits)}</strong>
+              {"error" in verifierCredits || verifierCredits.credits > 0 ? null : (
+                <small>Bouncer is out of credits, campaign sends go out with MX-only checks.</small>
+              )}
+            </div>
           ) : null}
           <a className="btn" href="#add-email">Add account</a>
         </section>

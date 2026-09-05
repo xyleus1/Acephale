@@ -122,6 +122,7 @@ export type BulkRfqRunResult = {
   pruned: number;
   // Paid mailbox verifications spent by this run.
   verificationChecks: number;
+  verifierExhausted: boolean;
   poolExhausted: boolean;
   outcomes: BulkRfqOutcome[];
 };
@@ -681,6 +682,7 @@ export async function runProcurementBulkRfq(input: {
     unknown: 0,
     pruned: 0,
     verificationChecks: 0,
+    verifierExhausted: false,
     poolExhausted: false,
     outcomes: [...blocked],
   };
@@ -693,6 +695,7 @@ export async function runProcurementBulkRfq(input: {
     // was reviewed by hash, so a refused supplier is reported, never replaced.
     const quality = await gate.check(target, target.contactEmail, { website: target.website ?? "" });
     result.verificationChecks = gate.paidChecks;
+    result.verifierExhausted = gate.verifierExhausted();
     if (!quality.ok) {
       const refusal = recipientQualityRefusal(quality);
       if (refusal.permanent) {

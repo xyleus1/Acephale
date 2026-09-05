@@ -12736,6 +12736,11 @@ Verification caveat:
 - Manual resume is conditional on the pause timestamp shown to the admin, so
   newer delivery feedback cannot be cleared by an older page.
 
+## 2026-09-05: Mailbox verifier credit visibility
+
+- Bouncer credits are shown in connected-email settings and the outreach
+  mailbox ops response; zero credits explicitly marks sends as MX-only.
+
 ## Pooled supplier answers close their thread (this pass)
 
 - Fixed the loop where a supplier reply answered from a pooled mailbox stayed

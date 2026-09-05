@@ -400,6 +400,14 @@ export class LiveRecipientGate {
     this.resolveAddress = check.resolveAddress ?? defaultResolveAddress;
   }
 
+  verifierExhausted(): boolean {
+    return this.verifier?.usage().exhausted ?? false;
+  }
+
+  verifierFailures(): number {
+    return this.verifier?.usage().failures ?? 0;
+  }
+
   private mxFor(domain: string) {
     let pending = this.mx.get(domain);
     if (!pending) {

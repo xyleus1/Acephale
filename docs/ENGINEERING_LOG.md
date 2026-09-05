@@ -10123,6 +10123,11 @@ Use this file for chronological implementation notes that future agents should s
 - Manual resume now uses a compare-and-clear pause timestamp guard and reports
   stale feedback to the connected-email UI.
 
+## 2026-09-05: Mailbox verifier credit visibility
+
+- Added Bouncer credit checks to the settings and ops surfaces, plus
+  verifier-exhausted state on outbound batch results.
+
 ## Supplier answers delivered from a pooled mailbox now close the thread
 
 - A reply whose own thread mailbox cannot send leaves from a pooled mailbox, and

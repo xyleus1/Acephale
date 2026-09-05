@@ -38,7 +38,7 @@ import {
 } from "../src/lib/leadgen/extract";
 import { scoreLead } from "../src/lib/leadgen/score";
 import { mailboxVerifierFromEnv, verifyEmail, verifyEmails, type MailboxVerifier } from "../src/lib/leadgen/verify";
-import { createBouncerVerifier, parseBouncerResponse } from "../src/lib/leadgen/bouncer";
+import { createBouncerVerifier, fetchBouncerCredits, parseBouncerResponse } from "../src/lib/leadgen/bouncer";
 import { createHunterEnricher, parseHunterDomainSearch } from "../src/lib/leadgen/hunter";
 import { contactEnricherFromEnv, rankEnrichedContacts, selectPrimaryContact, type EnrichedContact } from "../src/lib/leadgen/enrich";
 import { extractDirectoryTargets, harvestSite, scoreEmailUsefulness, type FetchedPage } from "../src/lib/leadgen/harvest";
@@ -723,6 +723,30 @@ const bouncer = createBouncerVerifier({
     return typeof stub === "function" ? stub() : stub.clone();
   },
 });
+
+assert.deepEqual(
+  await fetchBouncerCredits({
+    apiKey: "credits-key",
+    fetchImpl: async () => jsonResponse({ credits: 4995 }),
+  }),
+  { credits: 4995 },
+);
+for (const status of [402, 500]) {
+  assert.deepEqual(
+    await fetchBouncerCredits({
+      apiKey: "credits-key",
+      fetchImpl: async () => new Response("error", { status }),
+    }),
+    { error: "http", status },
+  );
+}
+assert.deepEqual(
+  await fetchBouncerCredits({
+    apiKey: "credits-key",
+    fetchImpl: async () => new Response("not json", { status: 200 }),
+  }),
+  { error: "payload", status: 200 },
+);
 
 const bouncerDeliverable = await verifyEmail("satis@ornekcelik.com.tr", { companyDomain: "ornekcelik.com.tr", resolveMx: companyMx, verifier: bouncer });
 assert.equal(bouncerDeliverable.verdict, "deliverable_likely");

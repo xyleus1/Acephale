@@ -13,12 +13,64 @@ const STATUSES: ReadonlySet<MailboxStatus> = new Set(["deliverable", "risky", "u
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+export const BOUNCER_CREDITS_URL = "https://api.usebouncer.com/v1.1/credits";
 export type BouncerVerifierOptions = {
   apiKey: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
   now?: () => Date;
 };
+
+export async function fetchBouncerCredits(options: {
+  apiKey: string;
+  fetchImpl?: FetchLike;
+  timeoutMs?: number;
+}): Promise<
+  { credits: number }
+  | { error: "http" | "payload" | "timeout" | "network"; status: number | null }
+> {
+  const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+  const timeoutMs = options.timeoutMs ?? 8_000;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    let response: Response;
+    try {
+      response = await fetchImpl(BOUNCER_CREDITS_URL, {
+        method: "GET",
+        headers: { "x-api-key": options.apiKey, accept: "application/json" },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const aborted = timedOut || (error instanceof Error && error.name === "AbortError");
+      return { error: aborted ? "timeout" : "network", status: null };
+    }
+    if (!response.ok) return { error: "http", status: response.status };
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      const aborted = timedOut || (error instanceof Error && error.name === "AbortError");
+      return { error: aborted ? "timeout" : "payload", status: response.status };
+    }
+    if (
+      !payload
+      || typeof payload !== "object"
+      || Array.isArray(payload)
+      || typeof (payload as { credits?: unknown }).credits !== "number"
+      || !Number.isFinite((payload as { credits: number }).credits)
+    ) {
+      return { error: "payload", status: response.status };
+    }
+    return { credits: (payload as { credits: number }).credits };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export class MailboxVerifierError extends Error {
   readonly code: "http" | "payload" | "timeout" | "network" | "exhausted";

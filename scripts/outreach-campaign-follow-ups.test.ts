@@ -15,6 +15,7 @@ import { outreachCampaignStatusAllowsSend } from "../src/lib/outreach-campaign-s
 import { isHumanReplyMessage } from "../src/lib/outreach-campaign-copy";
 import type { LiveRecipientCheck } from "../src/lib/outreach-recipient-quality";
 import { SHARED_MAILBOX_POOL_FILTER } from "../src/lib/email-account-pool";
+import { MailboxVerifierError } from "../src/lib/leadgen/bouncer";
 
 type FollowUpRow = {
   officeId: string;
@@ -1398,6 +1399,24 @@ async function main() {
   assert.equal(rejectedFollowUp?.step, 1);
   assert.equal(gateDb.followUps.find((row) => row.recordId === "record-1")?.status, "SENT");
   assert.equal(gateRun.outstanding, 1, "only the live recipient still has a step ahead");
+  const exhaustedVerifierRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    db: fakeDatabase({
+      sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+      now,
+    }) as never,
+    recipientCheck: {
+      resolveMx: async () => [{ exchange: "mx.buyerco.com", priority: 10 }],
+      verifier: {
+        name: "bouncer",
+        async verify() {
+          throw new MailboxVerifierError("exhausted", "no credits left", 402);
+        },
+        usage: () => ({ provider: "bouncer", calls: 1, cached: 0, failures: 1, exhausted: true }),
+      },
+    },
+  });
+  assert.equal(exhaustedVerifierRun.verifierExhausted, true, "follow-up result exposes verifier exhaustion");
   const rerunAfterGate = await runOutreachCampaignFollowUps({
     ...baseInput,
     campaign: gateCampaign,

@@ -118,6 +118,7 @@ export type CampaignFollowUpBatchResult = {
   outstanding: number;
   // Paid mailbox verifications spent by the live recipient gate this run.
   verificationChecks: number;
+  verifierExhausted: boolean;
   poolExhausted: boolean;
   outcomes: CampaignFollowUpOutcome[];
 };
@@ -158,6 +159,7 @@ export function emptyFollowUpResult(steps = 0): CampaignFollowUpBatchResult {
     skipped: 0,
     outstanding: 0,
     verificationChecks: 0,
+    verifierExhausted: false,
     poolExhausted: false,
     outcomes: [],
   };
@@ -825,6 +827,7 @@ export async function runOutreachCampaignFollowUps(input: {
     // quality fields (stored verdict, company domain) come from the list.
     const quality = await gate.check(candidate, candidate.recipient, researchData.get(candidate.recordId));
     output.verificationChecks = gate.paidChecks;
+    output.verifierExhausted = gate.verifierExhausted();
     if (!quality.ok) {
       const refusal = recipientQualityRefusal(quality);
       if (refusal.permanent) {

@@ -80,6 +80,7 @@ export type CampaignBatchResult = {
   // `rejected`) and the paid verifier calls it spent.
   pruned: number;
   verificationChecks: number;
+  verifierExhausted: boolean;
   poolExhausted: boolean;
   blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER" | "NO_AUDIENCE";
   outcomes: CampaignBatchSend[];
@@ -473,6 +474,7 @@ function result(campaignId: string): CampaignBatchResult {
     rerouted: 0,
     pruned: 0,
     verificationChecks: 0,
+    verifierExhausted: false,
     poolExhausted: false,
     outcomes: [],
   };
@@ -648,6 +650,7 @@ async function rejectUnqualifiedCampaignRows(
     refused.push({ row, recipient, ...recipientQualityRefusal(outcome) });
   }
   output.verificationChecks = gate.paidChecks;
+  output.verifierExhausted = gate.verifierExhausted();
   if (!refused.length) return rows;
   const existing = await db.outreachCampaignSend.findMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: { in: refused.map((item) => item.row.id) } },
@@ -929,7 +932,9 @@ export async function runOutreachCampaignBatch(input: {
     const sentToday = await db.outreachCampaignSend.count({
       where: { officeId: input.officeId, campaignId: campaign.id, status: "SENT", sentAt: { gte: start, lt: end } },
     });
-    output.followUps = await runFollowUps(0);
+    const followUps = await runFollowUps(0);
+    output.followUps = followUps;
+    output.verifierExhausted = output.verifierExhausted || followUps.verifierExhausted;
     await (input.complete ?? completeCampaignIfDone)({
       officeId: input.officeId,
       campaignId: input.campaignId,
@@ -1239,7 +1244,11 @@ export async function runOutreachCampaignBatch(input: {
     }
     if ((input.pauseMs ?? 400) > 0) await new Promise((resolve) => setTimeout(resolve, input.pauseMs ?? 400));
   }
-  if (!output.poolExhausted) output.followUps = await runFollowUps(claimedRows.length);
+  if (!output.poolExhausted) {
+    const followUps = await runFollowUps(claimedRows.length);
+    output.followUps = followUps;
+    output.verifierExhausted = output.verifierExhausted || followUps.verifierExhausted;
+  }
   await (input.complete ?? completeCampaignIfDone)({
     officeId: input.officeId,
     campaignId: input.campaignId,

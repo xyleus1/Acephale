@@ -27,6 +27,7 @@ import {
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
 import { senderProtectionWindow } from "@/lib/email-delivery-events";
+import { mailboxVerifierCreditsFromEnv } from "@/lib/leadgen/verify";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -205,6 +206,7 @@ export async function POST(request: NextRequest) {
           sentToday: mailbox.sentToday,
         })),
         paused,
+        verifier: await mailboxVerifierCreditsFromEnv(),
       });
     }
 
