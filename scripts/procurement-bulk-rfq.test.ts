@@ -59,13 +59,13 @@ async function main() {
 
   // Suppressed supplier addresses are blocked before any sender reservation,
   // matched case-insensitively, and everyone else stays sendable in order.
-  const bounced = { ...target, vendorId: "vendor-bounced", name: "Bounced Co", contactEmail: "Sales@Bounced.example" };
-  const optedOut = { ...target, vendorId: "vendor-opted-out", name: "Quiet Co", contactEmail: "rfq@quiet.example" };
+  const bounced = { ...target, vendorId: "vendor-bounced", name: "Bounced Co", contactEmail: "Sales@Bounced.eu" };
+  const optedOut = { ...target, vendorId: "vendor-opted-out", name: "Quiet Co", contactEmail: "rfq@quiet.eu" };
   const partition = partitionSuppressedRfqTargets(
     [target, bounced, optedOut],
     new Map([
-      ["sales@bounced.example", "BOUNCED"],
-      ["rfq@quiet.example", "OPTED_OUT"],
+      ["sales@bounced.eu", "BOUNCED"],
+      ["rfq@quiet.eu", "OPTED_OUT"],
     ]),
   );
   assert.deepEqual(partition.sendable, [target], "only unsuppressed suppliers remain sendable");
@@ -83,17 +83,53 @@ async function main() {
     "an empty suppression list blocks nobody",
   );
 
+  // The product-wide recipient gate applies to supplier RFQs too: placeholder,
+  // disposable, and malformed vendor addresses are blocked without any
+  // suppression record, and do not consume the run limit.
+  const placeholderVendor = { ...target, vendorId: "vendor-placeholder", name: "Template Vendor", contactEmail: "someone@example.com" };
+  const disposableVendor = { ...target, vendorId: "vendor-disposable", name: "Throwaway Vendor", contactEmail: "rfq@mailinator.com" };
+  const malformedVendor = { ...target, vendorId: "vendor-malformed", name: "Typo Vendor", contactEmail: "rfq@vendor" };
+  const qualityPartition = partitionSuppressedRfqTargets([placeholderVendor, disposableVendor, malformedVendor, target], new Map());
+  assert.deepEqual(qualityPartition.sendable, [target]);
+  assert.deepEqual(
+    qualityPartition.blocked.map((outcome) => [outcome.vendorId, outcome.state, outcome.error]),
+    [
+      ["vendor-placeholder", "BLOCKED", "Recipient skipped: placeholder or template address (placeholder address)."],
+      ["vendor-disposable", "BLOCKED", "Recipient skipped: disposable mailbox provider (mailinator.com)."],
+      ["vendor-malformed", "BLOCKED", "Recipient skipped: invalid email syntax."],
+    ],
+  );
+  assert.deepEqual(
+    selectBulkRfqBatch([placeholderVendor, disposableVendor, target], new Map(), 1).sendable,
+    [target],
+    "quality-blocked suppliers do not consume the run limit",
+  );
+  const dotAtomVendors = [".rfq@vendor.eu", "rfq..team@vendor.eu", "rfq@-vendor.eu", "rfq@vendor..eu"].map((contactEmail, index) => ({
+    ...target,
+    vendorId: `vendor-syntax-${index}`,
+    name: `Syntax Vendor ${index}`,
+    contactEmail,
+  }));
+  const providerVendor = { ...target, vendorId: "vendor-provider", name: "Provider Vendor", contactEmail: "rfq@email.com" };
+  const syntaxPartition = partitionSuppressedRfqTargets([...dotAtomVendors, providerVendor, target], new Map());
+  assert.deepEqual(syntaxPartition.sendable, [providerVendor, target], "a real mailbox provider domain is not a placeholder");
+  assert.deepEqual(
+    syntaxPartition.blocked.map((outcome) => outcome.error),
+    dotAtomVendors.map(() => "Recipient skipped: invalid email syntax."),
+    "leading, trailing, or doubled dots and bad domain labels are blocked",
+  );
+
   // The run limit counts sendable suppliers. With `limit` suppressed rows ahead
   // of the only eligible one, the eligible supplier is still reached and the
   // blocked rows are still reported.
   const suppressedFirst = new Map([
-    ["sales@bounced.example", "BOUNCED" as const],
-    ["rfq@quiet.example", "OPTED_OUT" as const],
+    ["sales@bounced.eu", "BOUNCED" as const],
+    ["rfq@quiet.eu", "OPTED_OUT" as const],
   ]);
   const starved = selectBulkRfqBatch([bounced, optedOut, target], suppressedFirst, 2);
   assert.deepEqual(starved.sendable, [target], "suppressed rows do not consume the run limit");
   assert.deepEqual(starved.blocked.map((outcome) => outcome.vendorId), ["vendor-bounced", "vendor-opted-out"]);
-  const second = { ...target, vendorId: "vendor-second", contactEmail: "rfq@second.example" };
+  const second = { ...target, vendorId: "vendor-second", contactEmail: "rfq@second.eu" };
   const capped = selectBulkRfqBatch([bounced, target, second], suppressedFirst, 1);
   assert.deepEqual(capped.sendable, [target], "the limit still bounds sendable suppliers");
   assert.equal(capped.blocked.length, 1);
@@ -101,7 +137,7 @@ async function main() {
     selectBulkRfqBatch(Array.from({ length: BULK_RFQ_MAX_PER_RUN + 5 }, (_, index) => ({
       ...target,
       vendorId: `vendor-${index}`,
-      contactEmail: `rfq-${index}@many.example`,
+      contactEmail: `rfq-${index}@many.eu`,
     })), new Map(), 10_000).sendable.length,
     BULK_RFQ_MAX_PER_RUN,
     "the per-run cap applies to sendable suppliers",
@@ -149,13 +185,13 @@ async function main() {
     runProcurementBulkRfq,
   } = await import("../src/lib/procurement-bulk-rfq");
   const { EMPTY_RFQ_ATTACHMENT_PACKAGE } = await import("../src/lib/procurement-rfq-attachments");
-  const batchA = [target, { ...target, vendorId: "vendor-second", name: "Second Works", contactEmail: "rfq@second.example" }];
+  const batchA = [target, { ...target, vendorId: "vendor-second", name: "Second Works", contactEmail: "rfq@second.eu" }];
   const noFiles = bulkRfqBatchHash(order, batchA, EMPTY_RFQ_ATTACHMENT_PACKAGE);
   assert.equal(noFiles, bulkRfqBatchHash({ ...order }, [...batchA].reverse(), EMPTY_RFQ_ATTACHMENT_PACKAGE), "the batch hash is stable for the same inputs and ignores ordering");
   assert.notEqual(noFiles, bulkRfqBatchHash(order, [target], EMPTY_RFQ_ATTACHMENT_PACKAGE), "dropping a supplier changes the batch hash");
   assert.notEqual(
     noFiles,
-    bulkRfqBatchHash(order, [batchA[0], { ...batchA[1], contactEmail: "other@second.example" }], EMPTY_RFQ_ATTACHMENT_PACKAGE),
+    bulkRfqBatchHash(order, [batchA[0], { ...batchA[1], contactEmail: "other@second.eu" }], EMPTY_RFQ_ATTACHMENT_PACKAGE),
     "a changed supplier address changes the batch hash",
   );
   assert.notEqual(
@@ -210,6 +246,63 @@ async function main() {
     orderId: order.orderId,
     officeId: order.officeId,
   }], "an empty retry still reconciles persisted supplier facts");
+
+  // The live recipient gate runs per reviewed supplier before any mailbox
+  // reservation: a Null MX domain is a BLOCKED outcome that never takes a
+  // sender slot and is suppressed for the office, a placeholder address is
+  // already blocked by the static selection, and a supplier that passes still
+  // reaches the reservation.
+  const gateOrder = { ...order, customerId: "customer-1" };
+  const gateTargets = [
+    { vendorId: "vendor-nullmx", name: "Dead Mail Works", website: "https://nullmx.eu", contactEmail: "rfq@nullmx.eu" },
+    { vendorId: "vendor-placeholder", name: "Template Vendor", website: null, contactEmail: "someone@example.com" },
+    { vendorId: "vendor-live", name: "Live Works", website: "https://live.eu", contactEmail: "rfq@live.eu" },
+  ];
+  const reservations: string[] = [];
+  const suppressed: Array<{ officeId: string; email: string; reason: string; source: string }> = [];
+  const mxLookups: string[] = [];
+  const gated = await runProcurementBulkRfq({
+    orderId: gateOrder.orderId,
+    limit: 5,
+    attachRequestFiles: false,
+    loadOrder: (async () => gateOrder) as never,
+    loadTargets: (async () => gateTargets) as never,
+    listSuppressed: (async () => new Map()) as never,
+    reconcileStatus: (async () => "sourcing") as never,
+    recipientCheck: {
+      verifier: null,
+      resolveMx: async (domain) => {
+        mxLookups.push(domain);
+        return domain === "nullmx.eu" ? [{ exchange: ".", priority: 0 }] : [{ exchange: `mx.${domain}`, priority: 10 }];
+      },
+    },
+    suppress: (async (_db: unknown, row: { officeId: string; email: string; reason: string; source: string }) => {
+      suppressed.push({ officeId: row.officeId, email: row.email, reason: row.reason, source: row.source });
+    }) as never,
+    reserveSender: (async (args: { idempotencyKey: string }) => {
+      reservations.push(args.idempotencyKey);
+      return { code: "POOL_EXHAUSTED", error: "No mailbox has capacity left today." };
+    }) as never,
+  });
+  assert.equal(gated.candidates, 3);
+  assert.equal(gated.pruned, 1, "the live gate prunes the supplier whose domain takes no mail");
+  assert.equal(gated.poolExhausted, true, "the qualified supplier reached the sender reservation");
+  assert.deepEqual(reservations, [`procurement-bulk-rfq:${gateOrder.orderId}:vendor-live`], "refused suppliers never reserve a mailbox slot");
+  assert.deepEqual(mxLookups, ["nullmx.eu", "live.eu"], "static blocks never reach DNS; each domain is looked up once");
+  assert.deepEqual(
+    gated.outcomes.map((outcome) => [outcome.vendorId, outcome.state]),
+    [["vendor-placeholder", "BLOCKED"], ["vendor-nullmx", "BLOCKED"], ["vendor-live", "POOL_EXHAUSTED"]],
+    "static blocks are reported first, then the live gate's refusals in send order",
+  );
+  assert.match(gated.outcomes[0].error ?? "", /placeholder or template address/);
+  assert.match(gated.outcomes[1].error ?? "", /^Recipient skipped: domain accepts no mail \(nullmx\.eu publishes a Null MX record/);
+  assert.deepEqual(
+    suppressed,
+    [{ officeId: order.officeId, email: "rfq@nullmx.eu", reason: "UNDELIVERABLE", source: "RECIPIENT_QUALITY_GATE" }],
+    "a permanent live refusal is suppressed for the office so later RFQs and campaigns skip it",
+  );
+  const gateCheck = sendLoop.indexOf("gate.check(target, target.contactEmail");
+  assert.ok(gateCheck >= 0 && gateCheck < sendLoop.indexOf("reserveEmailSender)"), "the live gate runs before the sender reservation in the send loop");
 
   console.log("procurement-bulk-rfq: all assertions passed");
 }

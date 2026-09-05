@@ -50,6 +50,36 @@ const GMAIL_STYLE_BOUNCE = feedbackInput({
   ].join("\n"),
 });
 
+// Two Gmail failure shapes seen in production: a Null MX / unknown domain
+// notice with no SMTP code, and a downstream 554 5.7.1 NO-DOMAIN rejection.
+const GMAIL_NULL_MX_BOUNCE = feedbackInput({
+  fromEmail: "mailer-daemon@googlemail.com",
+  subject: "Delivery Status Notification (Failure)",
+  bodyText: [
+    "Address not found",
+    "",
+    "Your message wasn't delivered to someone@example.com because the domain example.com couldn't be found. Check for typos or unnecessary spaces and try again.",
+    "",
+    "The response was:",
+    "",
+    "DNS Error: DNS type 'mx' lookup of example.com responded with code NOERROR. The domain example.com has a Null MX record and does not accept email.",
+  ].join("\n"),
+});
+
+const GMAIL_NO_DOMAIN_BOUNCE = feedbackInput({
+  fromEmail: "mailer-daemon@googlemail.com",
+  subject: "Delivery Status Notification (Failure)",
+  bodyText: [
+    "Address not found",
+    "",
+    "Your message wasn't delivered to info@theworldofbaking.example because the address couldn't be found, or is unable to receive mail.",
+    "",
+    "The response from the remote server was:",
+    "",
+    "554 5.7.1 <info@theworldofbaking.example>: Recipient address rejected: NO-DOMAIN",
+  ].join("\n"),
+});
+
 const ARF_COMPLAINT = feedbackInput({
   fromEmail: "abuse@isp.example",
   subject: "Abuse report",
@@ -228,6 +258,7 @@ async function main() {
     listSuppressedEmails,
     applySenderProtection,
     recordDeliveryFeedback,
+    recoverLegacyDeliveryFeedback,
     recoverPausedSenderAccounts,
     SENDER_RECOVERY_ROTATION_MS,
     recoverUnfinishedDeliveryFeedback,
@@ -249,6 +280,14 @@ async function main() {
   assert.equal(gmailStyle?.kind, "BOUNCE");
   assert.equal(gmailStyle?.permanent, true);
   assert.deepEqual(gmailStyle?.recipients, ["purchasing@nowhere-corp.example"], "the failed address is read from the failure line");
+  const nullMx = classifyDeliveryFeedback(GMAIL_NULL_MX_BOUNCE);
+  assert.equal(nullMx?.kind, "BOUNCE");
+  assert.equal(nullMx?.permanent, true, "a Null MX / unknown domain notice is a permanent bounce without an SMTP code");
+  assert.deepEqual(nullMx?.recipients, ["someone@example.com"]);
+  const noDomain = classifyDeliveryFeedback(GMAIL_NO_DOMAIN_BOUNCE);
+  assert.equal(noDomain?.kind, "BOUNCE");
+  assert.equal(noDomain?.permanent, true, "554 5.7.1 NO-DOMAIN is a permanent bounce");
+  assert.deepEqual(noDomain?.recipients, ["info@theworldofbaking.example"]);
   const genericTransient = classifyDeliveryFeedback(GENERIC_FAILURE_TRANSIENT);
   assert.equal(genericTransient?.kind, "BOUNCE");
   assert.equal(genericTransient?.permanent, false, "a Failure subject does not outrank 4.x.x or mailbox-full diagnostics");
@@ -388,6 +427,16 @@ async function main() {
       classificationAt?: Date | null;
       thread: { officeId: string; autoLinkSkipReason: string | null };
     }>;
+    // Inbound rows stored with an AI classification and no deliveryKind.
+    legacyInbound?: Array<{
+      id: string;
+      threadId: string;
+      fromEmail: string;
+      subject: string;
+      bodyText: string;
+      classification: string | null;
+      thread: { officeId: string; autoLinkSkipReason: string | null };
+    }>;
   }) {
     const events = new Map<string, Record<string, unknown>>();
     const suppressions = new Map<string, Record<string, unknown>>();
@@ -398,6 +447,8 @@ async function main() {
       (input.pendingFeedback ?? []).map((row) => [row.id, row.classificationAt ?? null]),
     );
     const sweepBatches: string[][] = [];
+    const legacyRows = new Map((input.legacyInbound ?? []).map((row) => [row.id, { ...row, deliveryKind: null as string | null }]));
+    const legacyBatches: string[][] = [];
     const failures = new Set<FailurePoint>();
     const failOnce = (point: FailurePoint) => {
       if (!failures.has(point)) return;
@@ -411,6 +462,8 @@ async function main() {
       accountUpdates,
       attemptedAt,
       sweepBatches,
+      legacyRows,
+      legacyBatches,
       failNextAt: (point: FailurePoint) => failures.add(point),
       emailDeliveryEvent: {
         create: async (args: { data: Record<string, unknown> }) => {
@@ -429,11 +482,18 @@ async function main() {
           .length,
       },
       emailMessage: {
-        updateMany: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        updateMany: async (args: { where: { id: string; deliveryKind?: null }; data: Record<string, unknown> }) => {
           messageUpdates.push({ ...args.where, ...args.data });
           const pending = input.pendingFeedback?.find((row) => row.id === args.where.id);
           if (pending && args.data.deliveryKind) completedFeedbackIds.add(pending.id);
           if (pending && args.data.classificationAt instanceof Date) attemptedAt.set(pending.id, args.data.classificationAt);
+          const legacy = legacyRows.get(args.where.id);
+          if (legacy) {
+            if (args.where.deliveryKind === null && legacy.deliveryKind !== null) return { count: 0 };
+            if (typeof args.data.classification === "string") legacy.classification = args.data.classification;
+            if (typeof args.data.deliveryKind === "string") legacy.deliveryKind = args.data.deliveryKind;
+            if (args.data.classificationAt instanceof Date) attemptedAt.set(legacy.id, args.data.classificationAt);
+          }
           return { count: 1 };
         },
         count: async () => input.outboundSent,
@@ -446,7 +506,14 @@ async function main() {
           };
         },
         findMany: async (args: {
-          where: { accountId: string; direction?: string; classification?: string; deliveryKind?: null };
+          where: {
+            accountId: string;
+            direction?: string;
+            classification?: string;
+            deliveryKind?: null;
+            sentAt?: { gte: Date };
+            AND?: Array<{ OR: Array<Record<string, unknown>> }>;
+          };
           orderBy?: unknown;
           take?: number;
         }) => {
@@ -456,6 +523,38 @@ async function main() {
               ccEmails: row.ccEmails ? JSON.stringify(row.ccEmails) : null,
               thread: { officeId: row.officeId },
             }));
+          }
+          if (args.where.direction === "INBOUND") {
+            assert.equal(args.where.deliveryKind, null, "the legacy sweep only revisits rows without a delivery kind");
+            assert.ok(args.where.sentAt?.gte instanceof Date, "the legacy sweep is bounded by a lookback window");
+            assert.equal(args.take, DELIVERY_FEEDBACK_RECOVERY_BATCH, "the legacy sweep is bounded per sync");
+            const [classificationFilter, shapeFilter] = args.where.AND ?? [];
+            assert.deepEqual(
+              classificationFilter?.OR,
+              [{ classification: null }, { classification: { not: "DELIVERY_FEEDBACK" } }],
+              "rows already stored as feedback belong to the unfinished sweep",
+            );
+            const looksLikeReport = (row: { fromEmail: string; subject: string }) => (shapeFilter?.OR ?? []).some((clause) => {
+              const from = clause.fromEmail as { startsWith: string } | undefined;
+              const subject = clause.subject as { contains: string } | undefined;
+              if (from) return row.fromEmail.toLowerCase().startsWith(from.startsWith.toLowerCase());
+              if (subject) return row.subject.toLowerCase().includes(subject.contains.toLowerCase());
+              return false;
+            });
+            const batch = [...legacyRows.values()]
+              .filter((row) => row.deliveryKind === null && row.classification !== "DELIVERY_FEEDBACK" && looksLikeReport(row))
+              .map((row, index) => ({ row, index, attempted: attemptedAt.get(row.id) ?? null }))
+              .sort((left, right) => {
+                if (left.attempted === null || right.attempted === null) {
+                  if (left.attempted === right.attempted) return left.index - right.index;
+                  return left.attempted === null ? -1 : 1;
+                }
+                return left.attempted.getTime() - right.attempted.getTime() || left.index - right.index;
+              })
+              .slice(0, args.take)
+              .map(({ row }) => ({ ...row, sentAt: new Date("2026-08-30T08:00:00Z") }));
+            legacyBatches.push(batch.map((row) => row.id));
+            return batch;
           }
           assert.equal(args.where.classification, "DELIVERY_FEEDBACK", "recovery sweeps stored delivery feedback only");
           assert.equal(args.where.deliveryKind, null, "recovery sweeps rows whose persistence never finished");
@@ -790,6 +889,69 @@ async function main() {
   assert.equal(poisonDb.events.get("message-new")?.officeId, "office-1");
   assert.equal(poisonDb.suppressions.get("office-1:buyer@acme-machining.example")?.reason, "BOUNCED");
   assert.equal(poisonDb.events.size, 1, "poison rows never produce an event");
+
+  // Reports stored before the parser ran (AI classification, no deliveryKind)
+  // are re-parsed from the database: recognised ones become stored feedback
+  // and suppress their recipients, noise from daemon senders is stamped and
+  // left alone, and human mail is never revisited.
+  const legacyDb = fakeDeliveryDb({
+    outboundSent: 20,
+    legacyInbound: [
+      {
+        id: "legacy-null-mx",
+        threadId: "thread-legacy-1",
+        fromEmail: GMAIL_NULL_MX_BOUNCE.fromEmail,
+        subject: GMAIL_NULL_MX_BOUNCE.subject,
+        bodyText: GMAIL_NULL_MX_BOUNCE.bodyText,
+        classification: "OTHER",
+        thread: { officeId: "office-1", autoLinkSkipReason: null },
+      },
+      {
+        id: "legacy-no-domain",
+        threadId: "thread-legacy-2",
+        fromEmail: GMAIL_NO_DOMAIN_BOUNCE.fromEmail,
+        subject: GMAIL_NO_DOMAIN_BOUNCE.subject,
+        bodyText: GMAIL_NO_DOMAIN_BOUNCE.bodyText,
+        classification: null,
+        thread: { officeId: "office-1", autoLinkSkipReason: null },
+      },
+      {
+        id: "legacy-daemon-noise",
+        threadId: "thread-legacy-3",
+        fromEmail: "postmaster@relay.example",
+        subject: "Mailbox storage report",
+        bodyText: "Your mailbox is using 40% of its quota.",
+        classification: "OTHER",
+        thread: { officeId: "office-1", autoLinkSkipReason: null },
+      },
+      {
+        id: "legacy-human",
+        threadId: "thread-legacy-4",
+        fromEmail: "buyer@acme-machining.example",
+        subject: "Re: quote",
+        bodyText: "Please send the catalog.",
+        classification: "OTHER",
+        thread: { officeId: "office-1", autoLinkSkipReason: null },
+      },
+    ],
+  });
+  const legacyFirst = await recoverLegacyDeliveryFeedback(legacyDb as never, sweepInput);
+  assert.deepEqual(legacyFirst, { pending: 3, completed: 2 }, "only report-looking rows are revisited; two of them parse as bounces");
+  assert.deepEqual(legacyDb.legacyBatches[0], ["legacy-null-mx", "legacy-no-domain", "legacy-daemon-noise"], "human mail never enters the legacy sweep");
+  assert.equal(legacyDb.suppressions.get("office-1:someone@example.com")?.reason, "BOUNCED", "a Null MX failure suppresses the placeholder address");
+  assert.equal(legacyDb.suppressions.get("office-1:info@theworldofbaking.example")?.reason, "BOUNCED", "a NO-DOMAIN rejection suppresses the address");
+  assert.equal(legacyDb.suppressions.get("office-1:someone@example.com")?.evidenceMessageId, "legacy-null-mx");
+  assert.equal(legacyDb.events.get("legacy-null-mx")?.permanent, true);
+  assert.equal(legacyDb.events.get("legacy-no-domain")?.officeId, "office-1");
+  assert.equal(legacyDb.legacyRows.get("legacy-null-mx")?.classification, "DELIVERY_FEEDBACK", "a recognised row is re-labelled as stored feedback");
+  assert.equal(legacyDb.legacyRows.get("legacy-null-mx")?.deliveryKind, "BOUNCE", "a recognised row no longer counts as a human reply");
+  assert.equal(legacyDb.legacyRows.get("legacy-daemon-noise")?.classification, "OTHER", "unrecognised daemon mail keeps its classification");
+  assert.equal(legacyDb.attemptedAt.get("legacy-daemon-noise")?.getTime(), now.getTime(), "unrecognised daemon mail is stamped so it moves to the back");
+  assert.equal(legacyDb.events.has("legacy-daemon-noise"), false);
+  assert.equal(legacyDb.events.has("legacy-human"), false);
+  const legacySecond = await recoverLegacyDeliveryFeedback(legacyDb as never, sweepInput);
+  assert.deepEqual(legacySecond, { pending: 1, completed: 0 }, "finished rows leave the sweep; only the stamped noise row remains");
+  assert.equal(legacyDb.events.size, 2, "the legacy sweep never duplicates an event");
 
   // Unthreaded reports on a shared mailbox go to the office that mailed the
   // address, not the office that connected the mailbox.

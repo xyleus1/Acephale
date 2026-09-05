@@ -18,15 +18,13 @@ import {
   type CampaignFollowUpStep,
   campaignPersonalization,
   campaignActivationTransitionWhere,
-  excludeContactedRecipients,
   campaignPersonalizationMap,
   campaignRevisionHash,
   campaignRevisionMatches,
-  campaignRowEligible,
   campaignSampleRecipients,
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
-  dedupeRecipients,
+  selectCampaignAudience,
   campaignReplyCounts,
   humanReplyMessageFilter,
   isHumanReplyMessage,
@@ -43,6 +41,7 @@ import {
 } from "@/lib/outreach-campaign-copy";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { listSuppressedEmails } from "@/lib/email-delivery-events";
+import { tallyKeptRecipientCaveats, type RecipientQualityPruneCounts } from "@/lib/outreach-recipient-quality";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import {
   outstandingCampaignFollowUps,
@@ -67,13 +66,6 @@ export type CampaignSpotCheckItem = {
   pick: "head" | "spot";
   subject: string;
   body: string;
-};
-
-type CampaignRecord = {
-  id: string;
-  status: string;
-  data: ResearchRecordData;
-  createdAt: Date;
 };
 
 type ResearchListForCampaign = {
@@ -144,6 +136,12 @@ export type CampaignPlan = {
   // approves every eligible row, not only the rows shown.
   spotCheck: CampaignSpotCheckItem[];
   audienceQuality: RecipientQualitySummary;
+  // Rows the product-wide recipient quality gate removed before review, by
+  // reason, so the reviewer sees what was pruned and why.
+  pruned: RecipientQualityPruneCounts;
+  // Eligible rows left out because the office already suppressed the address
+  // (bounced, complained, opted out, failed an earlier quality check).
+  suppressed: number;
   // Campaign id the spot check variants were selected for. Variant assignment
   // is keyed by campaign id, so a plan made before the draft existed must be
   // re-rendered against the saved draft id when variants are in play.
@@ -218,10 +216,6 @@ function filtersFromJson(value: Prisma.JsonValue | null): CampaignFilters {
       ? { excludeEmails: normalizeCampaignExcludeEmails(object.excludeEmails) }
       : {}),
   };
-}
-
-function recordRow(record: CampaignRecord) {
-  return { status: record.status, data: record.data };
 }
 
 function renderRow(
@@ -333,19 +327,16 @@ async function eligibleRecords(campaign: CampaignWithList, useSnapshot = false) 
   });
   const selected = useSnapshot && audienceRecordIds.length
     ? records
-    : records.filter((record) => campaignRowEligible({
-    row: recordRow({
-      ...record,
-      data: record.data as ResearchRecordData,
-    }),
-    statuses,
-    countries: filters.countries,
-    segments: filters.segments,
-    emailField: campaign.emailField,
-    countryField: campaign.countryField ?? undefined,
-    segmentField: filters.segmentField,
-    excludeEmails: filters.excludeEmails,
-    }));
+    : selectCampaignAudience({
+      records: records.map((record) => ({ ...record, data: record.data as Record<string, unknown> })),
+      statuses,
+      countries: filters.countries,
+      segments: filters.segments,
+      emailField: campaign.emailField,
+      countryField: campaign.countryField ?? undefined,
+      segmentField: filters.segmentField,
+      excludeEmails: filters.excludeEmails,
+    }).eligible;
   return {
     filters,
     records: useSnapshot && audienceRecordIds.length
@@ -405,19 +396,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
   });
   const statuses = input.statuses?.length ? input.statuses : ["new", "reviewed"];
   const filters = campaignFilters(input);
-  const eligible = dedupeRecipients({
-    rows: records.filter((record) => campaignRowEligible({
-      row: recordRow({ ...record, data: record.data as ResearchRecordData }),
-      statuses,
-      countries: input.countries,
-      segments: input.segments,
-      emailField,
-      countryField: input.countryField,
-      segmentField: input.segmentField,
-      excludeEmails: filters.excludeEmails,
-    })),
-    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
-  });
+  const planRecipientOf = (record: { data: unknown }) =>
+    String((record.data as Record<string, unknown>)[emailField] ?? "").trim().toLowerCase();
   const draft = await prisma.outreachCampaign.findFirst({
     where: { officeId: input.officeId, listId: list.id, status: "DRAFT" },
     select: { id: true },
@@ -431,12 +411,26 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     }),
     select: { recipient: true },
   });
-  const eligibleWithoutContacted = excludeContactedRecipients({
-    rows: eligible,
-    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
-    contacted: new Set(contactedElsewhere.map((send) => send.recipient.trim().toLowerCase())),
+  const suppressedAtPlan = await listSuppressedEmails(input.officeId, records.map(planRecipientOf));
+  const audience = selectCampaignAudience({
+    records: records.map((record) => ({ ...record, data: record.data as Record<string, unknown> })),
+    statuses,
+    countries: input.countries,
+    segments: input.segments,
+    emailField,
+    countryField: input.countryField,
+    segmentField: input.segmentField,
+    excludeEmails: filters.excludeEmails,
+    suppressed: new Set(suppressedAtPlan.keys()),
+    contacted: new Set(contactedElsewhere.map((send) => send.recipient)),
   });
-  const alreadyContactedElsewhere = eligible.length - eligibleWithoutContacted.length;
+  const { pruned } = audience;
+  const eligibleWithoutContacted = audience.eligible;
+  const alreadyContactedElsewhere = audience.contacted;
+  tallyKeptRecipientCaveats(pruned, eligibleWithoutContacted, (record) => ({
+    email: planRecipientOf(record),
+    data: record.data as Record<string, unknown>,
+  }));
   const missingEmail = records.filter((record) => {
     const data = record.data as Record<string, unknown>;
     return !String(data[emailField] ?? "").trim();
@@ -545,6 +539,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     followUps,
     spotCheck,
     audienceQuality,
+    pruned,
+    suppressed: audience.suppressed,
     spotCheckCampaignId,
     blockers: [
       ...campaignBlockers({
@@ -601,19 +597,6 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const filters = campaignFilters(input);
-  const eligibleRecords = dedupeRecipients({
-    rows: records.filter((record) => campaignRowEligible({
-      row: recordRow({ ...record, data: record.data as ResearchRecordData }),
-      statuses: input.statuses?.length ? input.statuses : ["new", "reviewed"],
-      countries: input.countries,
-      segments: input.segments,
-      emailField,
-      countryField: input.countryField,
-      segmentField: input.segmentField,
-      excludeEmails: filters.excludeEmails,
-    })),
-    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
-  });
   const now = new Date();
   const contactedElsewhere = await prisma.outreachCampaignSend.findMany({
     where: outreachCampaignContactedWhere({
@@ -623,11 +606,22 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     }),
     select: { recipient: true },
   });
-  const audienceRecordIds = excludeContactedRecipients({
-    rows: eligibleRecords,
-    recipientOf: (record) => String((record.data as Record<string, unknown>)[emailField] ?? ""),
-    contacted: new Set(contactedElsewhere.map((send) => send.recipient.trim().toLowerCase())),
-  }).map((record) => record.id);
+  const suppressedAtSave = await listSuppressedEmails(
+    input.officeId,
+    records.map((record) => String((record.data as Record<string, unknown>)[emailField] ?? "")),
+  );
+  const audienceRecordIds = selectCampaignAudience({
+    records: records.map((record) => ({ ...record, data: record.data as Record<string, unknown> })),
+    statuses: input.statuses?.length ? input.statuses : ["new", "reviewed"],
+    countries: input.countries,
+    segments: input.segments,
+    emailField,
+    countryField: input.countryField,
+    segmentField: input.segmentField,
+    excludeEmails: filters.excludeEmails,
+    suppressed: new Set(suppressedAtSave.keys()),
+    contacted: new Set(contactedElsewhere.map((send) => send.recipient)),
+  }).eligible.map((record) => record.id);
   const audiencePersonalization = campaignPersonalizationMap({
     rows: records
       .filter((record) => audienceRecordIds.includes(record.id))

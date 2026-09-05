@@ -31,6 +31,7 @@
     "test:ops-secret": "tsx scripts/ops-secret.test.ts",
     "test:ops-input": "tsx scripts/ops-input.test.ts",
     "test:outreach-campaign-copy": "tsx scripts/outreach-campaign-copy.test.ts",
+    "test:outreach-recipient-quality": "tsx scripts/outreach-recipient-quality.test.ts",
     "test:batch-review": "tsx scripts/batch-review.test.ts",
     "test:outreach-campaign-planning-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/outreach-campaign-planning-database.test.ts",
     "test:outreach-campaign-send": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/outreach-campaign-send.test.ts",

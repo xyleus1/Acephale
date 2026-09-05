@@ -13,6 +13,7 @@ import {
 import { SENDER_PAUSED_ERROR } from "../src/lib/supply-os/supplier-email-provider";
 import { outreachCampaignStatusAllowsSend } from "../src/lib/outreach-campaign-send";
 import { isHumanReplyMessage } from "../src/lib/outreach-campaign-copy";
+import type { LiveRecipientCheck } from "../src/lib/outreach-recipient-quality";
 import { SHARED_MAILBOX_POOL_FILTER } from "../src/lib/email-account-pool";
 
 type FollowUpRow = {
@@ -70,9 +71,12 @@ function fakeDatabase(input: {
   // Open RESERVED reservations by sender-pool idempotency key.
   openReservations?: Record<string, string>;
   suppressions?: Array<{ officeId: string; email: string; reason: string }>;
+  // Current list rows by record id, as the send gate reads them.
+  researchData?: Record<string, Record<string, unknown>>;
   now: Date;
 }) {
   const followUps: FollowUpRow[] = input.followUps ?? [];
+  const researchReads: Array<{ officeId: string; ids: string[] }> = [];
   const suppressions = input.suppressions ?? [];
   const repliedThreads = new Set(input.repliedThreadIds ?? []);
   const inboundMessages = () => [
@@ -196,7 +200,7 @@ function fakeDatabase(input: {
         assert.equal(args.where.officeId, "office-1");
         assert.equal(args.where.status, "RESERVED");
         const id = openReservations[args.where.idempotencyKey];
-        return id && reservedIds.has(id) ? { id, account: { email: "sender@example.com" } } : null;
+        return id && reservedIds.has(id) ? { id, account: { email: "sender@buyerco.com" } } : null;
       },
       count: async (args: { where: { id: { in: string[] } } }) => args.where.id.in.filter((id) => reservedIds.has(id)).length,
     },
@@ -214,6 +218,15 @@ function fakeDatabase(input: {
       findMany: async (args: { where: { officeId: string; email: { in: string[] } } }) => suppressions
         .filter((row) => row.officeId === args.where.officeId && args.where.email.in.includes(row.email))
         .map((row) => ({ email: row.email, reason: row.reason })),
+    },
+    researchReads,
+    researchRecord: {
+      findMany: async (args: { where: { officeId: string; id: { in: string[] } } }) => {
+        researchReads.push({ officeId: args.where.officeId, ids: args.where.id.in });
+        return Object.entries(input.researchData ?? {})
+          .filter(([id]) => args.where.officeId === "office-1" && args.where.id.in.includes(id))
+          .map(([id, data]) => ({ id, data }));
+      },
     },
     $queryRaw: async () => [{ locked: 1 }],
     $transaction: async <T>(callback: (tx: typeof db) => Promise<T>) => callback(db),
@@ -235,15 +248,15 @@ const campaign = {
     { waitDays: 4, subject: "Last note for {{company}}", body: "Closing the loop. Reply STOP to opt out." },
   ],
   audiencePersonalization: {
-    "record-1": { email: "buyer@example.com", company: "Buyer Co", country: "DE" },
-    "record-2": { email: "other@example.com", company: "Other Co", country: "NL" },
+    "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: "DE" },
+    "record-2": { email: "other@buyerco.com", company: "Other Co", country: "NL" },
   },
 };
 const reservation = {
   ok: true as const,
   reservationId: "reservation-1",
   accountId: "account-1",
-  senderEmail: "sender@example.com",
+  senderEmail: "sender@buyerco.com",
   dailySendLimit: 30,
   sentToday: 0,
   reservedToday: 1,
@@ -287,6 +300,12 @@ async function main() {
     reserveKeys.push(input.idempotencyKey);
     return reservation;
   };
+  // Tests never touch DNS or a paid verifier: every domain resolves to a
+  // usable MX unless a scenario injects its own resolver.
+  const offlineRecipientCheck: LiveRecipientCheck = {
+    verifier: null,
+    resolveMx: async () => [{ exchange: "mx.buyerco.com", priority: 10 }],
+  };
   const baseInput = {
     campaign,
     provider,
@@ -295,11 +314,13 @@ async function main() {
     reserve,
     release: async () => undefined,
     statusAllowsSend: outreachCampaignStatusAllowsSend,
+    recipientCheck: offlineRecipientCheck,
+    suppress: (async () => { throw new Error("no follow-up in this scenario is a permanent quality refusal"); }) as never,
   };
 
   // Due first follow-up stays in the original thread and records a SENT ledger row.
   const dueDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const dueRun = await runOutreachCampaignFollowUps({ ...baseInput, db: dueDb as never });
@@ -341,7 +362,7 @@ async function main() {
 
   // Not yet due: nothing is claimed or sent, but the sequence remains outstanding.
   const earlyDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-1), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-1), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const earlyRun = await runOutreachCampaignFollowUps({ ...baseInput, db: earlyDb as never });
@@ -352,7 +373,7 @@ async function main() {
 
   // A reply in the local thread skips the sequence and records the reason.
   const repliedDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     inboundMessages: [{ threadId: "thread-1", classification: null, deliveryKind: null }],
     now,
   });
@@ -368,7 +389,7 @@ async function main() {
   // (classification set, deliveryKind still null): a transient bounce or an
   // auto-reply in the thread leaves the sequence running.
   const feedbackDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     inboundMessages: [
       // Transient 4.x.x bounce, persistence still pending.
       { threadId: "thread-1", classification: "DELIVERY_FEEDBACK", deliveryKind: null },
@@ -382,12 +403,12 @@ async function main() {
   assert.equal(feedbackRun.sent, 1, "the sequence continues past unfinished delivery feedback");
   assert.equal(feedbackDb.followUps[0].status, "SENT");
   assert.equal(feedbackDb.followUps[0].skipReason, null);
-  assert.equal(providerCalls.at(-1)?.recipient, "buyer@example.com");
+  assert.equal(providerCalls.at(-1)?.recipient, "buyer@buyerco.com");
   providerCalls.pop();
   // Finished feedback (deliveryKind set) is excluded as before, and a real reply
   // next to feedback in the same thread still skips.
   const mixedInboundDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     inboundMessages: [
       { threadId: "thread-1", classification: "DELIVERY_FEEDBACK", deliveryKind: "BOUNCE" },
       { threadId: "thread-1", classification: "SUPPLIER_QUOTE", deliveryKind: null },
@@ -400,13 +421,13 @@ async function main() {
 
   // Suppressed recipients never receive follow-ups.
   const suppressedDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const suppressedRun = await runOutreachCampaignFollowUps({
     ...baseInput,
     db: suppressedDb as never,
-    suppressedRecipients: new Set(["buyer@example.com"]),
+    suppressedRecipients: new Set(["buyer@buyerco.com"]),
   });
   assert.equal(suppressedRun.skipped, 1);
   assert.equal(suppressedDb.followUps[0].skipReason, "SUPPRESSED");
@@ -418,14 +439,14 @@ async function main() {
   const callsBeforePersisted = providerCalls.length;
   const persistedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
-      { recordId: "record-3", recipient: "third@example.com", sentAt: day(-3), localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-3", recipient: "third@buyerco.com", sentAt: day(-3), localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
     ],
     suppressions: [
-      { officeId: "office-1", email: "buyer@example.com", reason: "BOUNCED" },
-      { officeId: "office-1", email: "other@example.com", reason: "OPTED_OUT" },
-      { officeId: "office-2", email: "third@example.com", reason: "BOUNCED" },
+      { officeId: "office-1", email: "buyer@buyerco.com", reason: "BOUNCED" },
+      { officeId: "office-1", email: "other@buyerco.com", reason: "OPTED_OUT" },
+      { officeId: "office-2", email: "third@buyerco.com", reason: "BOUNCED" },
     ],
     now,
   });
@@ -436,7 +457,7 @@ async function main() {
       ...campaign,
       audiencePersonalization: {
         ...campaign.audiencePersonalization,
-        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
+        "record-3": { email: "third@buyerco.com", company: "Third Co", country: "FR" },
       },
     },
   });
@@ -446,14 +467,14 @@ async function main() {
   assert.equal(persistedDb.followUps.find((row) => row.recordId === "record-2")?.skipReason, "SUPPRESSED");
   assert.equal(persistedDb.followUps.find((row) => row.recordId === "record-3")?.status, "SENT");
   assert.equal(providerCalls.length, callsBeforePersisted + 1);
-  assert.equal(providerCalls.at(-1)?.recipient, "third@example.com");
+  assert.equal(providerCalls.at(-1)?.recipient, "third@buyerco.com");
   // Later scenarios assert absolute provider call counts.
   providerCalls.pop();
 
   // Paused campaigns do not claim, skip, or send anything.
   const pausedDb = fakeDatabase({
     status: "PAUSED",
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     repliedThreadIds: ["thread-1"],
     now,
   });
@@ -465,8 +486,8 @@ async function main() {
   // First touches sent today count against the shared daily cap.
   const cappedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: now, localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: now, localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     now,
   });
@@ -479,8 +500,8 @@ async function main() {
   // The limit argument bounds a single run.
   const limitedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     now,
   });
@@ -491,7 +512,7 @@ async function main() {
 
   // A completed reservation means the follow-up already went out: no second provider call.
   const idempotentDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const idempotentRun = await runOutreachCampaignFollowUps({
@@ -508,7 +529,7 @@ async function main() {
   // Rejected follow-ups release the reservation, end the sequence, and are not retried.
   let released = 0;
   const rejectedDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const rejectedRun = await runOutreachCampaignFollowUps({
@@ -528,7 +549,7 @@ async function main() {
 
   // Unknown outcomes keep the ledger row for reconciliation and never advance the sequence.
   const unknownDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const unknownRun = await runOutreachCampaignFollowUps({
@@ -545,7 +566,7 @@ async function main() {
   // A final step left UNKNOWN with a live reservation keeps the campaign open until
   // a later cron run confirms it as SENT.
   const pendingDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     reservedIds: ["reservation-1"],
     now,
   });
@@ -586,7 +607,7 @@ async function main() {
   // A recovered step 1 must not restart the wait for step 2: confirmed a day
   // late, step 2 is still due from the original delivery.
   const lateRecoveryDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     reservedIds: ["reservation-1"],
     now,
   });
@@ -632,7 +653,7 @@ async function main() {
   // the open reservation so reconciliation settles it.
   const uncertainKey = outreachFollowUpIdempotencyKey("campaign-1", "record-1", 1);
   const uncertainDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     reservedIds: ["reservation-orphan"],
     openReservations: { [uncertainKey]: "reservation-orphan" },
     now,
@@ -649,7 +670,7 @@ async function main() {
   assert.equal(uncertainDb.followUps.length, 1, "the claim is settled, not released");
   assert.equal(uncertainDb.followUps[0].status, "UNKNOWN");
   assert.equal(uncertainDb.followUps[0].reservationId, "reservation-orphan");
-  assert.equal(uncertainDb.followUps[0].senderEmail, "sender@example.com");
+  assert.equal(uncertainDb.followUps[0].senderEmail, "sender@buyerco.com");
   assert.equal(await unresolvedOutreachCampaignDeliveries(uncertainDb as never, { id: "campaign-1", officeId: "office-1" }), 1);
   // Reconciliation on the next run confirms the delivery from the provider and
   // records it against the orphaned reservation at its original time.
@@ -677,7 +698,7 @@ async function main() {
   // after the timeout instead of looping.
   let orphanReleases = 0;
   const orphanExpiredDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     reservedIds: ["reservation-orphan"],
     openReservations: { [uncertainKey]: "reservation-orphan" },
     now,
@@ -700,7 +721,7 @@ async function main() {
 
   // A terminal reservation conflict is recorded as REJECTED and never claimed again.
   const conflictDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const conflictReserve = async () => ({ error: "key used for different content", code: "IDEMPOTENCY_CONFLICT" as const });
@@ -720,7 +741,7 @@ async function main() {
   assert.equal(outreachUnknownDeliveryExpired(now, new Date(now.getTime() + 24 * 3_600_000)), true);
   let expiredReleases = 0;
   const expiredDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     reservedIds: ["reservation-1"],
     now,
   });
@@ -744,8 +765,8 @@ async function main() {
   // A reply that lands after planning but before the provider call skips that candidate.
   const lateReplyDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     now,
   });
@@ -775,8 +796,8 @@ async function main() {
   const lateBounceSuppressions: Array<{ officeId: string; email: string; reason: string }> = [];
   const lateBounceDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     suppressions: lateBounceSuppressions,
     now,
@@ -788,7 +809,7 @@ async function main() {
     provider: {
       ...provider,
       send: async (sendInput) => {
-        lateBounceSuppressions.push({ officeId: "office-1", email: "other@example.com", reason: "BOUNCED" });
+        lateBounceSuppressions.push({ officeId: "office-1", email: "other@buyerco.com", reason: "BOUNCED" });
         return provider.send(sendInput);
       },
     },
@@ -805,7 +826,7 @@ async function main() {
 
   // QUEUED first-touch claims count against the shared cap.
   const queuedFirstTouchDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     queuedSends: 1,
     now,
   });
@@ -815,13 +836,13 @@ async function main() {
 
   // QUEUED follow-up claims for other recipients count against the shared cap too.
   const otherClaimDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     followUps: [{
       officeId: "office-1",
       campaignId: "campaign-1",
       recordId: "record-9",
       step: 1,
-      recipient: "nine@example.com",
+      recipient: "nine@buyerco.com",
       status: "QUEUED",
       skipReason: null,
       senderEmail: null,
@@ -844,8 +865,8 @@ async function main() {
   // Pool exhaustion releases every unprocessed claim so the next run can take them at once.
   const exhaustedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     now,
   });
@@ -863,8 +884,8 @@ async function main() {
   // A pause after the first reservation releases the current and later claims.
   const pauseMidBatchDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     now,
   });
@@ -885,13 +906,13 @@ async function main() {
 
   // Stale QUEUED claims are reclaimed after the reclaim window.
   const staleDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     followUps: [{
       officeId: "office-1",
       campaignId: "campaign-1",
       recordId: "record-1",
       step: 1,
-      recipient: "buyer@example.com",
+      recipient: "buyer@buyerco.com",
       status: "QUEUED",
       skipReason: null,
       senderEmail: null,
@@ -921,7 +942,7 @@ async function main() {
   // Recovering a delivery that happened earlier keeps the original send time and
   // provider ids, so the next step is scheduled from delivery, not from recovery.
   const recoveredDb = fakeDatabase({
-    sends: [{ recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-9), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-9), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
     now,
   });
   const recoveredRun = await runOutreachCampaignFollowUps({
@@ -970,12 +991,12 @@ async function main() {
   // office still resolves.
   const rotatedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "alpha@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-4), senderEmail: "beta@buyerco.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     emailAccounts: [
-      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
-      { id: "account-beta", email: "beta@example.com", officeId: "office-2", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-alpha", email: "alpha@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@buyerco.com", officeId: "office-2", connected: true, sendEnabled: true, sendPausedAt: null },
     ],
     now,
   });
@@ -997,7 +1018,7 @@ async function main() {
       if (input.accountId === "account-alpha") {
         return { error: "mailbox at its daily limit", code: "POOL_EXHAUSTED" as const };
       }
-      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@buyerco.com" };
     },
   });
   assert.deepEqual(rotatedReservations, ["account-alpha", "account-beta"], "each follow-up reserves its first-touch mailbox");
@@ -1016,13 +1037,13 @@ async function main() {
   // same blocked mailbox are not refilled in this run.
   const starvedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-3", recipient: "third@example.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "alpha@example.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: new Date(day(-4).getTime() + 120_000), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "alpha@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-3", recipient: "third@buyerco.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "alpha@buyerco.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: new Date(day(-4).getTime() + 120_000), senderEmail: "beta@buyerco.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     emailAccounts: [
-      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
-      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-alpha", email: "alpha@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
     ],
     now,
   });
@@ -1035,7 +1056,7 @@ async function main() {
       senderAccountId: null,
       audiencePersonalization: {
         ...campaign.audiencePersonalization,
-        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
+        "record-3": { email: "third@buyerco.com", company: "Third Co", country: "FR" },
       },
     },
     db: starvedDb as never,
@@ -1044,7 +1065,7 @@ async function main() {
       if (input.accountId === "account-alpha") {
         return { error: "mailbox at its daily limit", code: "POOL_EXHAUSTED" as const };
       }
-      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@buyerco.com" };
     },
   });
   assert.deepEqual(starvedReservations, ["account-alpha", "account-beta"], "the freed slot goes to a recipient on another mailbox");
@@ -1057,16 +1078,16 @@ async function main() {
   // past each newly blocked mailbox until it reaches the ready recipient.
   const chainDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-3", recipient: "third@example.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "gamma@example.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
-      { recordId: "record-4", recipient: "fourth@example.com", sentAt: new Date(day(-4).getTime() + 120_000), senderEmail: "delta@example.com", localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: new Date(day(-4).getTime() + 180_000), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "alpha@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-3", recipient: "third@buyerco.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "gamma@buyerco.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-4", recipient: "fourth@buyerco.com", sentAt: new Date(day(-4).getTime() + 120_000), senderEmail: "delta@buyerco.com", localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: new Date(day(-4).getTime() + 180_000), senderEmail: "beta@buyerco.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     emailAccounts: [
-      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
-      { id: "account-gamma", email: "gamma@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
-      { id: "account-delta", email: "delta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
-      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-alpha", email: "alpha@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-gamma", email: "gamma@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+      { id: "account-delta", email: "delta@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
     ],
     now,
   });
@@ -1079,8 +1100,8 @@ async function main() {
       senderAccountId: null,
       audiencePersonalization: {
         ...campaign.audiencePersonalization,
-        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
-        "record-4": { email: "fourth@example.com", company: "Fourth Co", country: "IT" },
+        "record-3": { email: "third@buyerco.com", company: "Third Co", country: "FR" },
+        "record-4": { email: "fourth@buyerco.com", company: "Fourth Co", country: "IT" },
       },
     },
     db: chainDb as never,
@@ -1089,7 +1110,7 @@ async function main() {
       if (input.accountId === "account-alpha" || input.accountId === "account-delta") {
         return { error: "mailbox at its daily limit", code: "POOL_EXHAUSTED" as const };
       }
-      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@buyerco.com" };
     },
   });
   assert.deepEqual(chainReservations, ["account-alpha", "account-delta", "account-beta"], "the chain skips the paused mailbox and continues past each refusal");
@@ -1101,12 +1122,12 @@ async function main() {
   // its claim without a reservation and the ready recipient behind it sends.
   const pausedFrontDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "alpha@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: new Date(day(-4).getTime() + 60_000), senderEmail: "beta@buyerco.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     emailAccounts: [
-      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
-      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-alpha", email: "alpha@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+      { id: "account-beta", email: "beta@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
     ],
     now,
   });
@@ -1118,7 +1139,7 @@ async function main() {
     db: pausedFrontDb as never,
     reserve: async (input: { accountId?: string }) => {
       pausedFrontReservations.push(input.accountId);
-      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@example.com" };
+      return { ...reservation, reservationId: "reservation-beta", accountId: "account-beta", senderEmail: "beta@buyerco.com" };
     },
   });
   assert.deepEqual(pausedFrontReservations, ["account-beta"]);
@@ -1133,15 +1154,15 @@ async function main() {
   // reservation attempt.
   const unusableDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "gone@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), senderEmail: "disconnected@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
-      { recordId: "record-3", recipient: "third@example.com", sentAt: day(-4), senderEmail: "disabled@example.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
-      { recordId: "record-4", recipient: "fourth@example.com", sentAt: day(-4), senderEmail: "paused@example.com", localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "gone@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-4), senderEmail: "disconnected@buyerco.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-3", recipient: "third@buyerco.com", sentAt: day(-4), senderEmail: "disabled@buyerco.com", localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-4", recipient: "fourth@buyerco.com", sentAt: day(-4), senderEmail: "paused@buyerco.com", localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
     ],
     emailAccounts: [
-      { id: "account-disconnected", email: "disconnected@example.com", officeId: "office-1", connected: false, sendEnabled: true, sendPausedAt: null },
-      { id: "account-disabled", email: "disabled@example.com", officeId: "office-1", connected: true, sendEnabled: false, sendPausedAt: null },
-      { id: "account-paused", email: "paused@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+      { id: "account-disconnected", email: "disconnected@buyerco.com", officeId: "office-1", connected: false, sendEnabled: true, sendPausedAt: null },
+      { id: "account-disabled", email: "disabled@buyerco.com", officeId: "office-1", connected: true, sendEnabled: false, sendPausedAt: null },
+      { id: "account-paused", email: "paused@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
     ],
     now,
   });
@@ -1153,8 +1174,8 @@ async function main() {
       senderAccountId: null,
       audiencePersonalization: {
         ...campaign.audiencePersonalization,
-        "record-3": { email: "third@example.com", company: "Third Co", country: "FR" },
-        "record-4": { email: "fourth@example.com", company: "Fourth Co", country: "ES" },
+        "record-3": { email: "third@buyerco.com", company: "Third Co", country: "FR" },
+        "record-4": { email: "fourth@buyerco.com", company: "Fourth Co", country: "ES" },
       },
     },
     db: unusableDb as never,
@@ -1176,12 +1197,12 @@ async function main() {
   // The same address connected twice, once disabled and once paused: the
   // resumable row wins whatever order the rows come back in, so the step waits
   // instead of settling as REJECTED.
-  const disabledRow = { id: "account-dup-disabled", email: "dup@example.com", officeId: "office-1", connected: true, sendEnabled: false, sendPausedAt: null };
-  const pausedRow = { id: "account-dup-paused", email: "dup@example.com", officeId: "office-2", connected: true, sendEnabled: true, sendPausedAt: day(-1) };
+  const disabledRow = { id: "account-dup-disabled", email: "dup@buyerco.com", officeId: "office-1", connected: true, sendEnabled: false, sendPausedAt: null };
+  const pausedRow = { id: "account-dup-paused", email: "dup@buyerco.com", officeId: "office-2", connected: true, sendEnabled: true, sendPausedAt: day(-1) };
   for (const emailAccounts of [[disabledRow, pausedRow], [pausedRow, disabledRow]]) {
     const duplicateDb = fakeDatabase({
       sends: [
-        { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "dup@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+        { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "dup@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
       ],
       emailAccounts,
       now,
@@ -1209,12 +1230,12 @@ async function main() {
   // and the recipient behind it on another mailbox still sends.
   const pausedLateDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "alpha@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), senderEmail: "beta@example.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "alpha@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-4), senderEmail: "beta@buyerco.com", localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     emailAccounts: [
-      { id: "account-alpha", email: "alpha@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
-      { id: "account-beta", email: "beta@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-alpha", email: "alpha@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
+      { id: "account-beta", email: "beta@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: null },
     ],
     now,
   });
@@ -1233,7 +1254,7 @@ async function main() {
     },
     reserve: async (input: { accountId?: string }) => {
       pausedLateReservations.push(input.accountId);
-      return { ...reservation, reservationId: `reservation-${input.accountId}`, accountId: input.accountId ?? "", senderEmail: `${input.accountId?.replace("account-", "")}@example.com` };
+      return { ...reservation, reservationId: `reservation-${input.accountId}`, accountId: input.accountId ?? "", senderEmail: `${input.accountId?.replace("account-", "")}@buyerco.com` };
     },
     release: async () => { pausedLateReleases += 1; },
   });
@@ -1250,8 +1271,8 @@ async function main() {
   // every remaining claim goes back for the next run.
   const pausedPinnedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
-      { recordId: "record-2", recipient: "other@example.com", sentAt: day(-4), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-4), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
     ],
     now,
   });
@@ -1277,10 +1298,10 @@ async function main() {
   // of leaving the step waiting for the resume.
   const pausedRepliedDb = fakeDatabase({
     sends: [
-      { recordId: "record-1", recipient: "buyer@example.com", sentAt: day(-4), senderEmail: "paused@example.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-4), senderEmail: "paused@buyerco.com", localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
     ],
     emailAccounts: [
-      { id: "account-paused", email: "paused@example.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
+      { id: "account-paused", email: "paused@buyerco.com", officeId: "office-1", connected: true, sendEnabled: true, sendPausedAt: day(-1) },
     ],
     now,
   });
@@ -1311,6 +1332,244 @@ async function main() {
   });
   assert.equal(pausedRepliedRerun.skipped, 1);
   assert.equal(pausedRepliedRerun.outstanding, 0, "a human reply ends the sequence; nothing is rerouted");
+
+  // The live recipient gate runs before the follow-up mailbox is reserved: a
+  // domain that stopped accepting mail since the first touch ends the sequence
+  // as REJECTED, is suppressed for the office, takes no sender slot, and does
+  // not disturb the other recipient's thread or mailbox.
+  const gateDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@deadmail.eu", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    now,
+  });
+  const gateReserveKeys: string[] = [];
+  const gateSuppressions: Array<{ officeId: string; email: string; reason: string; source: string }> = [];
+  const gateProviderCalls: Array<Record<string, unknown>> = [];
+  const gateCampaign = {
+    ...campaign,
+    audiencePersonalization: {
+      "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: "DE" },
+      "record-2": { email: "other@deadmail.eu", company: "Other Co", country: "NL" },
+    },
+  };
+  const gateRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: gateCampaign,
+    db: gateDb as never,
+    reserve: async (input: { idempotencyKey: string }) => {
+      gateReserveKeys.push(input.idempotencyKey);
+      return reservation;
+    },
+    provider: {
+      ...provider,
+      send: async (input: Record<string, unknown>) => {
+        gateProviderCalls.push(input);
+        return provider.send(input);
+      },
+    },
+    recipientCheck: {
+      verifier: null,
+      resolveMx: async (domain) => (domain === "deadmail.eu" ? [{ exchange: ".", priority: 0 }] : [{ exchange: "mx.buyerco.com", priority: 10 }]),
+    },
+    suppress: (async (_db: unknown, row: { officeId: string; email: string; reason: string; source: string }) => {
+      gateSuppressions.push({ officeId: row.officeId, email: row.email, reason: row.reason, source: row.source });
+    }) as never,
+  });
+  assert.equal(gateRun.sent, 1, "the live recipient still receives its follow-up");
+  assert.equal(gateRun.rejected, 1, "the dead domain is refused by the live gate");
+  assert.equal(gateRun.verificationChecks, 0, "no paid verifier is configured");
+  assert.deepEqual(gateReserveKeys, ["outreach-campaign:campaign-1:record-1:follow-up:1"], "a refused follow-up never reserves a mailbox slot");
+  assert.deepEqual(gateProviderCalls.map((call) => call.recipient), ["buyer@buyerco.com"]);
+  assert.deepEqual(
+    gateRun.outcomes.map((outcome) => [outcome.recordId, outcome.state, outcome.senderEmail]),
+    [["record-1", "SENT", "sender@buyerco.com"], ["record-2", "REJECTED", null]],
+  );
+  assert.match(
+    gateRun.outcomes[1].error ?? "",
+    /^Recipient skipped: domain accepts no mail \(deadmail\.eu publishes a Null MX record/,
+  );
+  assert.deepEqual(gateSuppressions, [
+    { officeId: "office-1", email: "other@deadmail.eu", reason: "UNDELIVERABLE", source: "RECIPIENT_QUALITY_GATE" },
+  ], "a permanent refusal is suppressed for the campaign's office");
+  const rejectedFollowUp = gateDb.followUps.find((row) => row.recordId === "record-2");
+  assert.equal(rejectedFollowUp?.status, "REJECTED", "the claimed step settles as REJECTED so it is never retried");
+  assert.equal(rejectedFollowUp?.step, 1);
+  assert.equal(gateDb.followUps.find((row) => row.recordId === "record-1")?.status, "SENT");
+  assert.equal(gateRun.outstanding, 1, "only the live recipient still has a step ahead");
+  const rerunAfterGate = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: gateCampaign,
+    db: gateDb as never,
+    reserve: async () => { throw new Error("nothing is due on the same day"); },
+    recipientCheck: {
+      verifier: null,
+      resolveMx: async () => { throw new Error("a settled REJECTED step is not rechecked"); },
+    },
+  });
+  assert.equal(rerunAfterGate.rejected, 0);
+  assert.equal(rerunAfterGate.sent, 0);
+
+  // A recipient the gate refuses frees its slot: with a run limit of one (and,
+  // separately, a daily cap of one) the refused recipient at the front of the
+  // plan is replaced by the next due recipient in the same run, so capacity is
+  // not left unused. Each recipient is checked once, the refill goes through
+  // the claim ledger, and the run still delivers at most `limit` messages.
+  for (const bound of [{ limit: 1 }, { dailyCap: 1 }] as const) {
+    const label = "limit" in bound ? "run limit 1" : "daily cap 1";
+    const backfillDb = fakeDatabase({
+      sends: [
+        { recordId: "record-1", recipient: "dead@deadmail.eu", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+        { recordId: "record-2", recipient: "gone@deadmail.eu", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+        { recordId: "record-3", recipient: "live@buyerco.com", sentAt: day(-3), localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+        { recordId: "record-4", recipient: "later@buyerco.com", sentAt: day(-3), localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
+      ],
+      now,
+    });
+    const backfillChecks: string[] = [];
+    const backfillProviderCalls: Array<Record<string, unknown>> = [];
+    const backfillRun = await runOutreachCampaignFollowUps({
+      ...baseInput,
+      campaign: {
+        ...campaign,
+        ...("dailyCap" in bound ? { dailyCap: bound.dailyCap } : {}),
+        audiencePersonalization: {
+          "record-1": { email: "dead@deadmail.eu", company: "Dead Co", country: "NL" },
+          "record-2": { email: "gone@deadmail.eu", company: "Gone Co", country: "NL" },
+          "record-3": { email: "live@buyerco.com", company: "Live Co", country: "DE" },
+          "record-4": { email: "later@buyerco.com", company: "Later Co", country: "DE" },
+        },
+      },
+      db: backfillDb as never,
+      ...("limit" in bound ? { limit: bound.limit } : {}),
+      provider: {
+        ...provider,
+        send: async (input: Record<string, unknown>) => {
+          backfillProviderCalls.push(input);
+          return provider.send(input);
+        },
+      },
+      recipientCheck: {
+        verifier: null,
+        resolveMx: async (domain) => {
+          backfillChecks.push(domain);
+          return domain === "deadmail.eu" ? [{ exchange: ".", priority: 0 }] : [{ exchange: "mx.buyerco.com", priority: 10 }];
+        },
+      },
+      suppress: (async () => undefined) as never,
+    });
+    assert.equal(backfillRun.rejected, 2, `${label}: both dead recipients settle as REJECTED`);
+    assert.equal(backfillRun.sent, 1, `${label}: the freed slot is refilled with the next due recipient`);
+    assert.deepEqual(backfillProviderCalls.map((call) => call.recipient), ["live@buyerco.com"], `${label}: the run still delivers at most one`);
+    assert.deepEqual(
+      backfillRun.outcomes.map((outcome) => [outcome.recordId, outcome.state]),
+      [["record-1", "REJECTED"], ["record-2", "REJECTED"], ["record-3", "SENT"]],
+      `${label}: refused recipients are replaced in order; the fourth waits for the next run`,
+    );
+    assert.deepEqual(backfillChecks, ["deadmail.eu", "buyerco.com"], `${label}: one lookup per domain, cached across the chain`);
+    assert.deepEqual(
+      backfillDb.followUps.map((row) => [row.recordId, row.status]).sort(),
+      [["record-1", "REJECTED"], ["record-2", "REJECTED"], ["record-3", "SENT"]],
+      `${label}: every refill is claimed through the ledger; the unclaimed recipient has no row`,
+    );
+    assert.equal(backfillRun.outstanding, 2, `${label}: only the two live recipients still have steps ahead`);
+  }
+
+  // The gate reads the row's current list data, scoped to the office: an
+  // `undeliverable` verdict stored after the first touch blocks the follow-up
+  // without any lookup, a `deliverable_likely` verdict skips the paid check,
+  // and a row with no stored verdict is verified. The recipient stays the
+  // approved first-touch address; a verdict stored for a row whose address was
+  // edited to another mailbox is about that mailbox and neither blocks nor
+  // exempts the recipient.
+  const verdictDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@buyerco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+      { recordId: "record-3", recipient: "third@buyerco.com", sentAt: day(-3), localThreadId: "thread-3", providerThreadId: "provider-thread-3" },
+      { recordId: "record-4", recipient: "fourth@buyerco.com", sentAt: day(-3), localThreadId: "thread-4", providerThreadId: "provider-thread-4" },
+    ],
+    researchData: {
+      "record-1": { email: "Buyer@BuyerCo.com", email_verdict: "deliverable_likely" },
+      "record-2": { email: "other@buyerco.com", email_verdict: "undeliverable" },
+      "record-3": { email: "third@buyerco.com" },
+      "record-4": { email: "replacement@buyerco.com", email_verdict: "deliverable_likely" },
+    },
+    now,
+  });
+  const verdictVerifierCalls: string[] = [];
+  const verdictProviderCalls: Array<Record<string, unknown>> = [];
+  const verdictSuppressions: string[] = [];
+  const verdictRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    campaign: {
+      ...campaign,
+      audiencePersonalization: {
+        "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: "DE" },
+        "record-2": { email: "other@buyerco.com", company: "Other Co", country: "NL" },
+        "record-3": { email: "third@buyerco.com", company: "Third Co", country: "NL" },
+        "record-4": { email: "fourth@buyerco.com", company: "Fourth Co", country: "NL" },
+      },
+    },
+    db: verdictDb as never,
+    provider: {
+      ...provider,
+      send: async (input: Record<string, unknown>) => {
+        verdictProviderCalls.push(input);
+        return provider.send(input);
+      },
+    },
+    recipientCheck: {
+      resolveMx: async () => [{ exchange: "mx.buyerco.com", priority: 10 }],
+      verifier: {
+        name: "fake",
+        async verify(email) {
+          verdictVerifierCalls.push(email);
+          return {
+            provider: "fake",
+            status: "deliverable",
+            reason: "fixture",
+            score: null,
+            acceptAll: null,
+            disposable: null,
+            free: null,
+            role: null,
+            disabled: null,
+            fullMailbox: null,
+            checkedAt: new Date(0).toISOString(),
+          };
+        },
+        usage: () => ({ provider: "fake", calls: verdictVerifierCalls.length, cached: 0, failures: 0, exhausted: false }),
+      },
+    },
+    suppress: (async (_db: unknown, row: { email: string }) => {
+      verdictSuppressions.push(row.email);
+    }) as never,
+  });
+  assert.deepEqual(verdictDb.researchReads, [{ officeId: "office-1", ids: ["record-1", "record-2", "record-3", "record-4"] }], "list rows are read once, scoped to the campaign office");
+  assert.deepEqual(
+    verdictRun.outcomes.map((outcome) => [outcome.recordId, outcome.recipient, outcome.state]),
+    [
+      ["record-1", "buyer@buyerco.com", "SENT"],
+      ["record-2", "other@buyerco.com", "REJECTED"],
+      ["record-3", "third@buyerco.com", "SENT"],
+      ["record-4", "fourth@buyerco.com", "SENT"],
+    ],
+  );
+  assert.match(verdictRun.outcomes[1].error ?? "", /^Recipient skipped: mailbox verified undeliverable/);
+  assert.deepEqual(verdictSuppressions, ["other@buyerco.com"]);
+  assert.deepEqual(
+    verdictVerifierCalls,
+    ["third@buyerco.com", "fourth@buyerco.com"],
+    "a stored deliverable verdict skips the paid check; unverified rows and rows whose address changed are checked",
+  );
+  assert.equal(verdictRun.verificationChecks, 2);
+  assert.deepEqual(verdictProviderCalls.map((call) => call.recipient), ["buyer@buyerco.com", "third@buyerco.com", "fourth@buyerco.com"]);
+  const followUpSource = readFileSync(path.join(process.cwd(), "src/lib/outreach-campaign-follow-ups.ts"), "utf8");
+  const followUpLoop = followUpSource.slice(followUpSource.indexOf("export async function runOutreachCampaignFollowUps"));
+  const followUpGate = followUpLoop.indexOf("gate.check(candidate, candidate.recipient");
+  assert.ok(followUpGate >= 0 && followUpGate < followUpLoop.indexOf("await reserveSender({"), "the live gate runs before the follow-up sender reservation");
   console.log("Outreach campaign follow-up checks passed.");
 }
 

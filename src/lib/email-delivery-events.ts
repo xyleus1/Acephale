@@ -6,6 +6,7 @@ import {
   classifyDeliveryFeedback,
   decodeStoredDeliveryFeedback,
   DELIVERY_FEEDBACK_CLASSIFICATION,
+  encodeStoredDeliveryFeedback,
   senderProtectionDecision,
   senderProtectionRecoveryDecision,
   SENDER_PROTECTION_COOLDOWN_HOURS,
@@ -377,6 +378,123 @@ export async function recoverUnfinishedDeliveryFeedback(
         where: { id: message.id },
         data: { classificationAt: now },
       }).catch(() => null);
+    }
+  }
+  return { pending: pending.length, completed };
+}
+
+// Inbound rows stored before the parser existed (or before the parser learned
+// a provider's format) carry an AI classification and no deliveryKind, so a
+// bounce among them counts as a human reply and its address is never
+// suppressed. Only rows that look like provider reports are revisited: daemon
+// senders and delivery-failure subjects within the lookback window.
+export const LEGACY_FEEDBACK_LOOKBACK_DAYS = 90;
+const LEGACY_FEEDBACK_SENDER_PREFIXES = ["mailer-daemon", "postmaster", "mail-daemon", "maildaemon"];
+const LEGACY_FEEDBACK_SUBJECT_TERMS = [
+  "delivery status notification",
+  "undeliverable",
+  "undelivered",
+  "mail delivery failed",
+  "mail delivery failure",
+  "delivery failure",
+  "failure notice",
+  "returned to sender",
+];
+
+export function legacyDeliveryFeedbackWhere(input: { accountId: string; since: Date }): Prisma.EmailMessageWhereInput {
+  return {
+    accountId: input.accountId,
+    direction: "INBOUND",
+    deliveryKind: null,
+    sentAt: { gte: input.since },
+    AND: [
+      // SQL `<>` drops NULL rows, so unclassified rows are listed explicitly.
+      { OR: [{ classification: null }, { classification: { not: DELIVERY_FEEDBACK_CLASSIFICATION } }] },
+      {
+        OR: [
+          ...LEGACY_FEEDBACK_SENDER_PREFIXES.map((prefix) => ({
+            fromEmail: { startsWith: prefix, mode: "insensitive" as const },
+          })),
+          ...LEGACY_FEEDBACK_SUBJECT_TERMS.map((term) => ({
+            subject: { contains: term, mode: "insensitive" as const },
+          })),
+        ],
+      },
+    ],
+  };
+}
+
+// Re-parses report-looking legacy rows from their stored body. A recognised
+// row is first re-labelled as stored delivery feedback (so a failure after
+// that point is finished by recoverUnfinishedDeliveryFeedback), then
+// persisted. Rows the parser does not recognise are stamped so they move to
+// the back of the queue like unfinished rows do.
+export async function recoverLegacyDeliveryFeedback(
+  db: DeliveryDb,
+  input: {
+    accountId: string;
+    accountEmail: string;
+    fallbackOfficeId: string;
+    source: DeliveryFeedbackSource;
+    now?: Date;
+  },
+): Promise<{ pending: number; completed: number }> {
+  const now = input.now ?? new Date();
+  const since = new Date(now.getTime() - LEGACY_FEEDBACK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const pending = await db.emailMessage.findMany({
+    where: legacyDeliveryFeedbackWhere({ accountId: input.accountId, since }),
+    orderBy: [{ classificationAt: { sort: "asc", nulls: "first" } }, { sentAt: "asc" }],
+    take: DELIVERY_FEEDBACK_RECOVERY_BATCH,
+    select: {
+      id: true,
+      threadId: true,
+      sentAt: true,
+      fromEmail: true,
+      subject: true,
+      bodyText: true,
+      thread: { select: { officeId: true, autoLinkSkipReason: true } },
+    },
+  });
+  let completed = 0;
+  for (const message of pending) {
+    const feedback = classifyDeliveryFeedback({
+      fromEmail: message.fromEmail,
+      subject: message.subject ?? "",
+      bodyText: message.bodyText ?? "",
+      headers: [],
+      ownAddresses: [input.accountEmail],
+    });
+    if (!feedback) {
+      await db.emailMessage.updateMany({
+        where: { id: message.id },
+        data: { classificationAt: now },
+      }).catch(() => null);
+      continue;
+    }
+    try {
+      await db.emailMessage.updateMany({
+        where: { id: message.id, deliveryKind: null },
+        data: {
+          classification: DELIVERY_FEEDBACK_CLASSIFICATION,
+          classificationReason: encodeStoredDeliveryFeedback(feedback),
+          classificationAt: now,
+        },
+      });
+      await recordDeliveryFeedback(db, {
+        routing: message.thread.autoLinkSkipReason === UNROUTED_MAIL_THREAD_MARKER
+          ? { routed: false, fallbackOfficeId: input.fallbackOfficeId }
+          : { routed: true, officeId: message.thread.officeId },
+        accountId: input.accountId,
+        messageId: message.id,
+        threadId: message.threadId,
+        occurredAt: message.sentAt,
+        source: input.source,
+        feedback,
+        now,
+      });
+      completed++;
+    } catch {
+      // Once re-labelled, the unfinished-feedback sweep retries persistence.
     }
   }
   return { pending: pending.length, completed };

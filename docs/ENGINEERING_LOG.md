@@ -1,5 +1,112 @@
 # Engineering Log
 
+## 2026-09-05: One recipient quality gate for every campaign, at planning and right before each send
+
+- Trigger: the first 472-send campaign bounced 33 times (7 percent), one of
+  them to `someone@example.com`, and two Gmail delivery failures were never
+  suppressed. Verification lived only in prospecting, so hand-imported rows,
+  rows edited after research, and rows whose domain publishes Null MX reached
+  the provider untouched, and each office would have needed its own fix.
+- `src/lib/outreach-recipient-quality.ts` is the shared module. The static
+  verdict is pure and identical at planning and send: syntax
+  (`emailSyntaxValid` in `leadgen/verify.ts`, shared with `verifyEmail`:
+  dot-atom local part with no leading, trailing or doubled dot, LDH domain
+  labels with no leading or trailing hyphen and no empty label, 64/254 length
+  limits), disposable providers, `placeholderEmailReason` (exported from
+  `leadgen/verify.ts` together with `FREE_PROVIDERS`, `DISPOSABLE_PROVIDERS`:
+  `example.*`, `company.com`, `yourdomain.com`, reserved TLDs, `test@`,
+  `someone@`, `noemail@` style local parts, and 32+ hex-character local parts
+  that are scraped error-tracker keys; `PLACEHOLDER_DOMAINS` holds only
+  reserved or template domains, never a real organisation or mailbox provider
+  such as `email.com`, `sentry.io`, `w3.org`, `schema.org`, `domain.com`,
+  `test.com`, `testing.com`, `sample.com`, `website.com`, because a hit
+  suppresses office-wide), stored `email_verdict undeliverable`. Sendable rows carry typed caveats (`UNCONFIRMED_MAILBOX`,
+  `DOMAIN_MISMATCH`, `NO_ORGANIZATION_EVIDENCE`) that the planner tallies over
+  the reviewed audience and prints as "Kept with caveats" in the proposal, so a
+  list with no website or source evidence is visible before approval.
+  `LiveRecipientGate` adds a cached MX lookup (explicit Null MX and NXDOMAIN
+  block; an empty or ENODATA MX answer falls back to A/AAAA per RFC 5321
+  implicit MX and stays sendable; resolver failures are temporary and stay
+  sendable), then the Bouncer
+  verifier for rows not already `deliverable_likely`, within
+  `OUTREACH_SEND_VERIFICATION_BUDGET` per batch; a spent budget, missing key
+  or provider error falls back to the MX result.
+- Planning: `selectCampaignAudience` (filters, gate, office suppressions and
+  already-contacted recipients removed, dedupe, `capRecipientsPerDomain` at
+  three per registrable company domain with free-mail exempt) replaces the
+  inline filter in `planOutreachCampaign`, `saveDraftCampaign` and
+  `eligibleRecords`. Office-scoped suppressions are loaded with
+  `listSuppressedEmails` and passed in together with the contacted set, so a
+  suppressed or contacted row never occupies a domain slot;
+  `registrableDomain` (`leadgen/extract.ts`) handles multi-label public
+  suffixes so `alpha.com.au` and `beta.com.au` are capped separately;
+  `CampaignPlan.pruned` and `CampaignPlan.suppressed` are returned to the chat
+  proposal (`recipientQualityPruneLines`) and the ops API. The gate version is
+  hashed into the revision so a rule change invalidates unsent approvals.
+- Send: `runOutreachCampaignBatch` reads `outreachCampaignRemainingCapacity`
+  first and bounds verification to it (`outreachCampaignVerificationLimit`):
+  a campaign parked at its daily cap does no DNS or Bouncer lookups, and the
+  claim transaction remains the enforcement under the campaign lock. It then
+  runs `LiveRecipientGate.check` on each candidate before the ledger claim and
+  sender reservation. Blocked rows are
+  recorded `REJECTED` with the reason; permanent blocks
+  (`recipientQualityBlockIsPermanent`) are also written as office-scoped
+  `EmailSuppression` rows (`UNDELIVERABLE`, source `RECIPIENT_QUALITY_GATE`),
+  and `EMAIL_SUPPRESSION_REASONS` gained `UNDELIVERABLE`. Rejected rows do not
+  consume daily-cap or run-budget slots; the loop keeps paging later rows.
+  Suppression and mailbox state are still rechecked after the reservation.
+  Follow-ups (`runOutreachCampaignFollowUps`) and bulk RFQs
+  (`runProcurementBulkRfq`) run the same per-run `LiveRecipientGate` before
+  their sender reservation: a refused follow-up step settles `REJECTED`, a
+  refused RFQ supplier is `BLOCKED`, both suppress permanent findings for the
+  office through the shared `recipientQualityRefusal` helper, and neither takes
+  a mailbox slot. Follow-ups read the claimed rows' current list data
+  (`loadFollowUpResearchData`, office-scoped) so an `email_verdict` stored
+  after the first touch blocks (`undeliverable`) or skips the paid check
+  (`deliverable_likely`); the recipient stays the approved first-touch address
+  and a verdict on a row whose address was since edited is ignored. The same
+  rule covers the first touch: `rejectUnqualifiedCampaignRows` layers the
+  approved snapshot over the current list row, and the current row now passes
+  through `recipientQualityDataFor` (shared with `loadFollowUpResearchData`),
+  so a verdict stored for a replacement address can neither block nor exempt
+  the approved recipient (`scripts/outreach-campaign-send.test.ts`).
+  `rejectUnqualifiedCampaignRows` writes the office suppression before the
+  terminal `REJECTED` ledger row, so a failed suppression write leaves the
+  record unhandled and is retried next run rather than leaving the address
+  eligible elsewhere. A follow-up rejected before its reservation (quality
+  refusal or dead first-touch mailbox) refills its slot through `claimNext`,
+  the refill shared with the paused-mailbox path, so a run limit or single
+  remaining daily slot goes to the next due recipient in the same run.
+  Regressions: `scripts/outreach-campaign-follow-ups.test.ts`,
+  `scripts/procurement-bulk-rfq.test.ts`, suppression-before-cap ordering in
+  `scripts/outreach-campaign-copy.test.ts`, implicit MX and `.com.au` cases in
+  `scripts/outreach-recipient-quality.test.ts`.
+- Supplier side: `partitionSuppressedRfqTargets` applies the static gate after
+  suppression, so placeholder, disposable and malformed vendor addresses are
+  `BLOCKED` before the bounded batch is selected. Nudges reply into threads
+  with a counterparty that already exchanged mail and keep suppression only.
+- Bounce recovery: `recoverLegacyDeliveryFeedback` (gmail and imap sync) finds
+  inbound rows with `deliveryKind` null that look like delivery reports
+  (daemon sender or failure subject, 90-day lookback, bounded batch),
+  re-parses the stored body, labels them `DELIVERY_FEEDBACK`, persists the
+  encoded feedback and suppresses permanent bounces. Unrecognised daemon
+  rows are stamped so they move to the back of the queue instead of being
+  reparsed forever. Routing follows the thread office, else the account's
+  office; suppression is skipped when attribution is unsafe.
+- Verification: `npm run test:outreach-recipient-quality` (new, added to
+  `.github/workflows/supply-os-tests.yml`), `test:outreach-campaign-copy`,
+  `test:outreach-campaign-planning-db` (real Postgres: pruning counts,
+  examples, caveats, cross-office suppression isolation, draft audience),
+  `test:outreach-campaign-send` (placeholder, Null MX, verifier-undeliverable
+  and clean rows in one batch: one send, three suppressions, no slot lost),
+  `test:outreach-campaign-follow-ups`, `test:procurement-bulk-rfq`,
+  `test:batch-review`, `test:email-delivery-feedback`,
+  `test:supply-os-context-prospecting`, `test:leadgen`, `npx tsc --noEmit`,
+  `npm run build`, `git diff --check`. Fixtures that used `example.com`,
+  `.example` or `.test` for valid recipients moved to `buyerco.com` / `.eu`
+  names. `npm run lint` reports only pre-existing findings outside this change.
+  No migration.
+
 ## 2026-09-04: A sender protection pause expires instead of lasting forever
 
 - Production had four mailboxes left in the shared sender pool and several

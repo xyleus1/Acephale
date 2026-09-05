@@ -21,7 +21,14 @@ import {
 } from "@/lib/email-sender-pool";
 import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
-import { listSuppressedEmails } from "@/lib/email-delivery-events";
+import { listSuppressedEmails, upsertEmailSuppression } from "@/lib/email-delivery-events";
+import {
+  LiveRecipientGate,
+  RECIPIENT_QUALITY_SUPPRESSION_SOURCE,
+  recipientQualityDataFor,
+  recipientQualityRefusal,
+  type LiveRecipientCheck,
+} from "@/lib/outreach-recipient-quality";
 import {
   SENDER_PAUSED_ERROR,
   type SupplierEmailProvider,
@@ -98,6 +105,8 @@ export type CampaignFollowUpOutcome = {
   error: string | null;
 };
 
+type FollowUpOutcomeBase = Pick<CampaignFollowUpOutcome, "campaignId" | "recordId" | "recipient" | "step" | "skipReason">;
+
 export type CampaignFollowUpBatchResult = {
   steps: number;
   attempted: number;
@@ -107,6 +116,8 @@ export type CampaignFollowUpBatchResult = {
   unknown: number;
   skipped: number;
   outstanding: number;
+  // Paid mailbox verifications spent by the live recipient gate this run.
+  verificationChecks: number;
   poolExhausted: boolean;
   outcomes: CampaignFollowUpOutcome[];
 };
@@ -120,6 +131,8 @@ export type FollowUpCampaign = {
   dailyCap: number;
   followUps: Prisma.JsonValue | null;
   variants?: Prisma.JsonValue | null;
+  // List column holding the recipient address; defaults to `email`.
+  emailField?: string | null;
   audiencePersonalization: Record<string, CampaignPersonalization>;
 };
 
@@ -144,6 +157,7 @@ export function emptyFollowUpResult(steps = 0): CampaignFollowUpBatchResult {
     unknown: 0,
     skipped: 0,
     outstanding: 0,
+    verificationChecks: 0,
     poolExhausted: false,
     outcomes: [],
   };
@@ -328,6 +342,37 @@ export async function followUpSenderAccounts(
     if (account) byRecord.set(send.recordId, account);
   }
   return byRecord;
+}
+
+// Current list data for the claimed rows, so the send gate sees a verdict
+// stored after the first touch (an `undeliverable` now blocks, a
+// `deliverable_likely` skips the paid check). The approved recipient address
+// comes from the first-touch ledger, never from here; a verdict stored for a
+// row whose address has since been edited to another mailbox is not about the
+// recipient and is left out.
+export async function loadFollowUpResearchData(
+  db: FollowUpDb,
+  campaign: Pick<FollowUpCampaign, "officeId" | "emailField">,
+  candidates: readonly { recordId: string; recipient: string }[],
+) {
+  const data = new Map<string, Record<string, unknown>>();
+  const recipients = new Map(candidates.map((candidate) => [candidate.recordId, candidate.recipient.trim().toLowerCase()]));
+  const ids = [...recipients.keys()];
+  if (!ids.length) return data;
+  const records = await db.researchRecord.findMany({
+    where: { officeId: campaign.officeId, id: { in: ids } },
+    select: { id: true, data: true },
+  });
+  for (const record of records) {
+    if (!record.data || typeof record.data !== "object" || Array.isArray(record.data)) continue;
+    const row = recipientQualityDataFor(
+      record.data as Record<string, unknown>,
+      campaign.emailField,
+      recipients.get(record.id) ?? "",
+    );
+    if (row) data.set(record.id, row);
+  }
+  return data;
 }
 
 function mergeSuppressed(persisted: ReadonlySet<string>, extra: ReadonlySet<string> | undefined) {
@@ -600,6 +645,8 @@ export async function runOutreachCampaignFollowUps(input: {
   suppressedRecipients?: ReadonlySet<string>;
   reserve?: typeof reserveEmailSender;
   release?: typeof releaseEmailSenderReservation;
+  recipientCheck?: LiveRecipientCheck;
+  suppress?: typeof upsertEmailSuppression;
   statusAllowsSend: (status: string | null | undefined) => boolean;
 }): Promise<CampaignFollowUpBatchResult> {
   const { db, campaign, now } = input;
@@ -642,6 +689,9 @@ export async function runOutreachCampaignFollowUps(input: {
   const senderAccounts = await followUpSenderAccounts(db, campaign, state.sends);
   const reserveSender = input.reserve ?? reserveEmailSender;
   const releaseReservation = input.release ?? releaseEmailSenderReservation;
+  const suppress = input.suppress ?? upsertEmailSuppression;
+  const gate = new LiveRecipientGate(input.recipientCheck);
+  const researchData = await loadFollowUpResearchData(db, campaign, claimed);
   const dropQueued = (candidate: CampaignFollowUpCandidate) => db.outreachCampaignFollowUp.deleteMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: candidate.recordId, step: candidate.step, status: "QUEUED" },
   });
@@ -672,16 +722,11 @@ export async function runOutreachCampaignFollowUps(input: {
   let pending = plan.due.filter((candidate) => !claimedKeys.has(claimKey(candidate)));
   const blockedAccounts = new Set<string>();
   let backfill = true;
-  // A rotated campaign releases the claim of a recipient whose mailbox is paused
-  // or at capacity, then refills the freed slot from the remaining due
-  // recipients on mailboxes that have not refused in this run, so blocked
-  // recipients at the front of the plan cannot starve the rest. Each refilled
-  // recipient that defers blocks one more mailbox, so the chain is bounded by
-  // the number of distinct first-touch mailboxes, and every refill goes through
-  // claimFollowUps so the daily cap still applies.
-  const deferRotated = async (candidate: CampaignFollowUpCandidate) => {
-    const account = senderAccounts.get(candidate.recordId);
-    if (account) blockedAccounts.add(account.accountId);
+  // Refills one freed slot from the remaining due recipients, skipping
+  // mailboxes that refused in this run. Every refill goes through
+  // claimFollowUps under the claims lock, so the daily cap still applies, and
+  // the freed slot was never sent, so the run limit still bounds deliveries.
+  const claimNext = async () => {
     if (!backfill) return;
     pending = pending.filter((next) => {
       const nextAccount = senderAccounts.get(next.recordId);
@@ -693,7 +738,29 @@ export async function runOutreachCampaignFollowUps(input: {
       return;
     }
     pending = pending.filter((row) => claimKey(row) !== claimKey(next));
+    for (const [id, data] of await loadFollowUpResearchData(db, campaign, [next])) researchData.set(id, data);
     queue.push(next);
+  };
+  // A rotated campaign releases the claim of a recipient whose mailbox is paused
+  // or at capacity, then refills the freed slot from recipients on mailboxes
+  // that have not refused in this run, so blocked recipients at the front of
+  // the plan cannot starve the rest. Each refilled recipient that defers blocks
+  // one more mailbox, so the chain is bounded by the number of distinct
+  // first-touch mailboxes.
+  const deferRotated = async (candidate: CampaignFollowUpCandidate) => {
+    const account = senderAccounts.get(candidate.recordId);
+    if (account) blockedAccounts.add(account.accountId);
+    await claimNext();
+  };
+  // A recipient settled as REJECTED before any mailbox slot was reserved (dead
+  // first-touch mailbox, failed recipient quality gate) also frees its slot, so
+  // the next due recipient is claimed in its place instead of waiting for
+  // another run while capacity sits unused.
+  const rejectBeforeReservation = async (candidate: CampaignFollowUpCandidate, base: FollowUpOutcomeBase, error: string) => {
+    await recordOutcome(candidate, { status: "REJECTED", error });
+    output.rejected += 1;
+    output.outcomes.push({ ...base, state: "REJECTED", senderEmail: null, error });
+    await claimNext();
   };
   let processed = 0;
   const releaseUnprocessedClaims = async () => {
@@ -713,7 +780,7 @@ export async function runOutreachCampaignFollowUps(input: {
       continue;
     }
     const email = renderFollowUpEmail({ step, campaignSubject: followUpInitialSubject(campaign, candidate.recordId), personalization });
-    const base = {
+    const base: FollowUpOutcomeBase = {
       campaignId: campaign.id,
       recordId: candidate.recordId,
       recipient: candidate.recipient,
@@ -726,9 +793,7 @@ export async function runOutreachCampaignFollowUps(input: {
       const error = senderAccount
         ? "The mailbox that sent the first touch is no longer enabled for sending."
         : "The mailbox that sent the first touch is no longer connected.";
-      await recordOutcome(candidate, { status: "REJECTED", error });
-      output.rejected += 1;
-      output.outcomes.push({ ...base, state: "REJECTED", senderEmail: null, error });
+      await rejectBeforeReservation(candidate, base, error);
       continue;
     }
     // A follow-up stays on the first-touch mailbox so the recipient keeps one
@@ -751,6 +816,29 @@ export async function runOutreachCampaignFollowUps(input: {
     };
     if (senderAccount.state === "PAUSED") {
       if (await deferPaused("The mailbox that sent the first touch is paused by sender protection.") === "STOP") break;
+      continue;
+    }
+    // The same live recipient gate as the first touch, before the mailbox slot
+    // is reserved: a domain that died or an address the verifier now reports
+    // undeliverable ends the sequence and is suppressed for the office. The
+    // recipient stays the approved first-touch address; only the row's current
+    // quality fields (stored verdict, company domain) come from the list.
+    const quality = await gate.check(candidate, candidate.recipient, researchData.get(candidate.recordId));
+    output.verificationChecks = gate.paidChecks;
+    if (!quality.ok) {
+      const refusal = recipientQualityRefusal(quality);
+      if (refusal.permanent) {
+        await suppress(db, {
+          officeId: campaign.officeId,
+          email: candidate.recipient,
+          reason: "UNDELIVERABLE",
+          source: RECIPIENT_QUALITY_SUPPRESSION_SOURCE,
+          detail: refusal.detail,
+          evidenceMessageId: null,
+          accountId: null,
+        });
+      }
+      await rejectBeforeReservation(candidate, base, refusal.error);
       continue;
     }
     const reservation = await reserveSender({

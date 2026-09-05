@@ -5232,6 +5232,52 @@ Use this log for durable product and engineering decisions. Do not put every imp
   with mocked transports and delete both keys from `process.env` so a
   credentialed machine or CI never spends credits.
 
+## 2026-09-05: Recipient quality is one product-wide gate, applied twice
+
+- Status: accepted
+- Owner: engineering
+- Decision: Every outbound path that emails a prospect or supplier (outreach
+  campaign first touches and follow-ups for any office or agent, bulk RFQs)
+  runs the same evaluator in
+  `src/lib/outreach-recipient-quality.ts`. Quality rules live there and
+  nowhere else: no campaign, office, or agent prompt carries its own list of
+  bad domains or its own verification call. A rule that should apply to one
+  company is out of scope for this module; a rule for the product goes here
+  and applies everywhere at once.
+- The gate runs at two points and both are required. Planning applies the
+  static verdict (syntax, placeholder, disposable, stored undeliverable),
+  removes office-scoped suppressions and already-contacted recipients, then
+  dedupes and applies per-domain concentration to what remains, so the
+  reviewer approves the audience that will actually be sent and a suppressed
+  row never spends a domain slot; pruning counts, examples and kept-row
+  caveats go in the proposal. Send applies the static verdict again plus live
+  MX and the optional Bouncer verifier immediately before the sender
+  reservation on every path (first touch, follow-up, bulk RFQ), because rows
+  change between approval and send and DNS state is only known at send time.
+  Rejected rows are recorded, never silently dropped, and never consume
+  capacity.
+- "Domain accepts no mail" means an explicit Null MX record or NXDOMAIN. An
+  empty or ENODATA MX answer is not a block: RFC 5321 implicit MX falls back
+  to the A/AAAA host, and small suppliers rely on that. Transient resolver
+  failures stay sendable.
+- Company identity for concentration and mismatch checks is the registrable
+  domain with multi-label public suffixes recognised (`alpha.com.au` and
+  `beta.com.au` are different companies), implemented in
+  `leadgen/extract.ts` without a dependency; a pinned PSL package is the
+  upgrade path if the heuristic proves insufficient.
+- Permanent findings about an address (placeholder, disposable, verified
+  undeliverable, domain accepts no mail) are stored as office-scoped
+  `EmailSuppression` rows so the office does not rediscover them per list.
+  Transient findings (resolver failure, provider outage, exhausted budget,
+  risky or unknown verdicts) never suppress; they degrade to a caveat.
+- The gate version is part of the campaign revision hash. Tightening a rule
+  invalidates unsent approvals rather than letting a stale approval send to
+  rows the new rule would reject.
+- Not covered: organisation liveness (website reachable, LinkedIn presence).
+  Rows without any organisation evidence are surfaced as a caveat for the
+  reviewer; a fetch-guarded probe may promote that to a block later, and it
+  must be added to this module, not to a campaign.
+
 ## Supply OS company workspace is organised by project (sourcing or prospecting), not by feature tab
 
 - Status: accepted

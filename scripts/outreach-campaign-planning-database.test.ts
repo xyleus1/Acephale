@@ -19,6 +19,13 @@ import {
   campaignFollowUpBlockers,
   normalizeCampaignFollowUps,
 } from "../src/lib/outreach-campaign-copy";
+import type { LiveRecipientCheck } from "../src/lib/outreach-recipient-quality";
+
+// Keeps the pre-send gate offline: no DNS and no paid verifier from the test run.
+const offlineRecipientCheck: LiveRecipientCheck = {
+  verifier: null,
+  resolveMx: async () => [{ exchange: "mx.buyerco.eu", priority: 10 }],
+};
 
 async function main() {
   assert(process.env.DATABASE_URL, "DATABASE_URL is required for the outreach planning database test.");
@@ -44,7 +51,7 @@ async function main() {
         data: {
           company_name: "Wens Test Bakery",
           country_name: "GB",
-          primary_email: `wens-${suffix}@example.test`,
+          primary_email: `wens-${suffix}@buyerco.eu`,
         },
       },
     });
@@ -64,7 +71,7 @@ async function main() {
         officeId: office.id,
         listId: duplicateList.id,
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
-        data: { company: "First Duplicate", email: ` Duplicate-${suffix}@example.test ` },
+        data: { company: "First Duplicate", email: ` Duplicate-${suffix}@buyerco.eu ` },
       },
       select: { id: true },
     });
@@ -73,7 +80,7 @@ async function main() {
         officeId: office.id,
         listId: duplicateList.id,
         createdAt: new Date("2026-01-01T00:00:01.000Z"),
-        data: { company: "Second Duplicate", email: `duplicate-${suffix}@EXAMPLE.TEST` },
+        data: { company: "Second Duplicate", email: `duplicate-${suffix}@BUYERCO.EU` },
       },
       select: { id: true },
     });
@@ -81,7 +88,7 @@ async function main() {
     const sender = await prisma.emailAccount.create({
       data: {
         officeId: office.id,
-        email: `sender-${suffix}@example.test`,
+        email: `sender-${suffix}@buyerco.eu`,
         displayName: "Wens Test",
         provider: "GMAIL_APP_PASSWORD",
         credentialSecret: "test-secret",
@@ -148,6 +155,7 @@ async function main() {
       officeId: office.id,
       campaignId: rejectedDraft.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
     });
     assert.equal(rejectedRun.sent, 0);
     assert.equal(await prisma.outreachCampaignSend.count({
@@ -172,7 +180,7 @@ async function main() {
         data: {
           company_name: "Feedback Test Bakery",
           country_name: "GB",
-          primary_email: `feedback-clean-${suffix}@example.test`,
+          primary_email: `feedback-clean-${suffix}@buyerco.eu`,
         },
       },
     });
@@ -193,8 +201,8 @@ async function main() {
         audienceTotal: 2,
         audienceRecordIds: [record.id, feedbackRecord.id],
         audiencePersonalization: {
-          [record.id]: { email: `feedback-bounced-${suffix}@example.test` },
-          [feedbackRecord.id]: { email: `feedback-clean-${suffix}@example.test` },
+          [record.id]: { email: `feedback-bounced-${suffix}@buyerco.eu` },
+          [feedbackRecord.id]: { email: `feedback-clean-${suffix}@buyerco.eu` },
         },
         revisionHash: "feedback",
       },
@@ -225,42 +233,42 @@ async function main() {
       data: {
         officeId: office.id,
         subject: "Re: Feedback",
-        participants: JSON.stringify([`feedback-clean-${suffix}@example.test`, sender.email]),
+        participants: JSON.stringify([`feedback-clean-${suffix}@buyerco.eu`, sender.email]),
       },
     });
     const awaitingReplyThread = await prisma.emailThread.create({
       data: {
         officeId: office.id,
         subject: "Re: Feedback awaiting",
-        participants: JSON.stringify([`feedback-awaiting-${suffix}@example.test`, sender.email]),
+        participants: JSON.stringify([`feedback-awaiting-${suffix}@buyerco.eu`, sender.email]),
       },
     });
     const autoReplyThread = await prisma.emailThread.create({
       data: {
         officeId: office.id,
         subject: "Out of office",
-        participants: JSON.stringify([`feedback-auto-${suffix}@example.test`, sender.email]),
+        participants: JSON.stringify([`feedback-auto-${suffix}@buyerco.eu`, sender.email]),
       },
     });
     const bounceThread = await prisma.emailThread.create({
       data: {
         officeId: office.id,
         subject: "Delivery failure",
-        participants: JSON.stringify([`feedback-bounced-${suffix}@example.test`, sender.email]),
+        participants: JSON.stringify([`feedback-bounced-${suffix}@buyerco.eu`, sender.email]),
       },
     });
     const unfinishedFeedbackThread = await prisma.emailThread.create({
       data: {
         officeId: office.id,
         subject: "Delivery feedback pending",
-        participants: JSON.stringify([`feedback-pending-${suffix}@example.test`, sender.email]),
+        participants: JSON.stringify([`feedback-pending-${suffix}@buyerco.eu`, sender.email]),
       },
     });
     const unclassifiedReplyThread = await prisma.emailThread.create({
       data: {
         officeId: office.id,
         subject: "Unclassified reply",
-        participants: JSON.stringify([`feedback-unclassified-${suffix}@example.test`, sender.email]),
+        participants: JSON.stringify([`feedback-unclassified-${suffix}@buyerco.eu`, sender.email]),
       },
     });
     await prisma.emailMessage.createMany({
@@ -269,7 +277,7 @@ async function main() {
           officeId: office.id,
           threadId: answeredReplyThread.id,
           direction: "INBOUND",
-          fromEmail: `feedback-clean-${suffix}@example.test`,
+          fromEmail: `feedback-clean-${suffix}@buyerco.eu`,
           fromName: "Clean Bakery",
           toEmails: JSON.stringify([sender.email]),
           subject: "Re: Feedback",
@@ -283,7 +291,7 @@ async function main() {
           threadId: answeredReplyThread.id,
           direction: "OUTBOUND",
           fromEmail: sender.email,
-          toEmails: JSON.stringify([`feedback-clean-${suffix}@example.test`]),
+          toEmails: JSON.stringify([`feedback-clean-${suffix}@buyerco.eu`]),
           subject: "Re: Feedback",
           bodyText: "Thanks.",
           sentAt: new Date("2026-01-02T11:00:00.000Z"),
@@ -293,7 +301,7 @@ async function main() {
           threadId: awaitingReplyThread.id,
           direction: "OUTBOUND",
           fromEmail: sender.email,
-          toEmails: JSON.stringify([`feedback-awaiting-${suffix}@example.test`]),
+          toEmails: JSON.stringify([`feedback-awaiting-${suffix}@buyerco.eu`]),
           subject: "Feedback awaiting",
           bodyText: "Please let us know.",
           sentAt: new Date("2026-01-03T09:00:00.000Z"),
@@ -302,7 +310,7 @@ async function main() {
           officeId: office.id,
           threadId: awaitingReplyThread.id,
           direction: "INBOUND",
-          fromEmail: `feedback-awaiting-${suffix}@example.test`,
+          fromEmail: `feedback-awaiting-${suffix}@buyerco.eu`,
           fromName: "Awaiting Bakery",
           toEmails: JSON.stringify([sender.email]),
           subject: "Re: Feedback awaiting",
@@ -315,7 +323,7 @@ async function main() {
           officeId: office.id,
           threadId: autoReplyThread.id,
           direction: "INBOUND",
-          fromEmail: `feedback-auto-${suffix}@example.test`,
+          fromEmail: `feedback-auto-${suffix}@buyerco.eu`,
           toEmails: JSON.stringify([sender.email]),
           subject: "Out of office",
           bodyText: "I am away.",
@@ -327,7 +335,7 @@ async function main() {
           officeId: office.id,
           threadId: bounceThread.id,
           direction: "INBOUND",
-          fromEmail: "mailer-daemon@example.test",
+          fromEmail: "mailer-daemon@buyerco.eu",
           toEmails: JSON.stringify([sender.email]),
           subject: "Delivery failure",
           bodyText: "Delivery failed.",
@@ -339,7 +347,7 @@ async function main() {
           officeId: office.id,
           threadId: unfinishedFeedbackThread.id,
           direction: "INBOUND",
-          fromEmail: "mailer-daemon@example.test",
+          fromEmail: "mailer-daemon@buyerco.eu",
           toEmails: JSON.stringify([sender.email]),
           subject: "Delivery feedback pending",
           bodyText: "Delivery feedback is still being processed.",
@@ -351,7 +359,7 @@ async function main() {
           officeId: office.id,
           threadId: unclassifiedReplyThread.id,
           direction: "INBOUND",
-          fromEmail: `feedback-unclassified-${suffix}@example.test`,
+          fromEmail: `feedback-unclassified-${suffix}@buyerco.eu`,
           fromName: "Unclassified Bakery",
           toEmails: JSON.stringify([sender.email]),
           subject: "Unclassified reply",
@@ -368,7 +376,7 @@ async function main() {
           officeId: office.id,
           campaignId: feedbackCampaign.id,
           recordId: record.id,
-          recipient: `feedback-bounced-${suffix}@example.test`,
+          recipient: `feedback-bounced-${suffix}@buyerco.eu`,
           status: "SENT",
           localThreadId: bounceThread.id,
         },
@@ -376,7 +384,7 @@ async function main() {
           officeId: office.id,
           campaignId: feedbackCampaign.id,
           recordId: feedbackRecord.id,
-          recipient: `feedback-clean-${suffix}@example.test`,
+          recipient: `feedback-clean-${suffix}@buyerco.eu`,
           status: "SENT",
           localThreadId: answeredReplyThread.id,
         },
@@ -384,7 +392,7 @@ async function main() {
           officeId: office.id,
           campaignId: feedbackCampaign.id,
           recordId: `feedback-awaiting-${suffix}`,
-          recipient: `feedback-awaiting-${suffix}@example.test`,
+          recipient: `feedback-awaiting-${suffix}@buyerco.eu`,
           status: "SENT",
           localThreadId: awaitingReplyThread.id,
         },
@@ -392,7 +400,7 @@ async function main() {
           officeId: office.id,
           campaignId: feedbackCampaign.id,
           recordId: `feedback-auto-${suffix}`,
-          recipient: `feedback-auto-${suffix}@example.test`,
+          recipient: `feedback-auto-${suffix}@buyerco.eu`,
           status: "SENT",
           localThreadId: autoReplyThread.id,
         },
@@ -400,7 +408,7 @@ async function main() {
           officeId: office.id,
           campaignId: feedbackCampaign.id,
           recordId: `feedback-pending-${suffix}`,
-          recipient: `feedback-pending-${suffix}@example.test`,
+          recipient: `feedback-pending-${suffix}@buyerco.eu`,
           status: "SENT",
           localThreadId: unfinishedFeedbackThread.id,
         },
@@ -408,7 +416,7 @@ async function main() {
           officeId: office.id,
           campaignId: feedbackCampaign.id,
           recordId: `feedback-unclassified-${suffix}`,
-          recipient: `feedback-unclassified-${suffix}@example.test`,
+          recipient: `feedback-unclassified-${suffix}@buyerco.eu`,
           status: "SENT",
           localThreadId: unclassifiedReplyThread.id,
         },
@@ -417,7 +425,7 @@ async function main() {
     await prisma.emailSuppression.create({
       data: {
         officeId: office.id,
-        email: `feedback-bounced-${suffix}@example.test`,
+        email: `feedback-bounced-${suffix}@buyerco.eu`,
         reason: "BOUNCED",
         source: "GMAIL",
       },
@@ -447,6 +455,7 @@ async function main() {
       replyThreads: 3,
       answered: 1,
       awaitingAnswer: 2,
+      activeThreads: 2,
       autoReplies: 1,
       bounces: 1,
       optOuts: 0,
@@ -457,8 +466,8 @@ async function main() {
     assert.deepEqual(digest.replies.find((reply) => reply.threadId === awaitingReplyThread.id), {
       campaignId: feedbackCampaign.id,
       threadId: awaitingReplyThread.id,
-      recipient: `feedback-awaiting-${suffix}@example.test`,
-      fromEmail: `feedback-awaiting-${suffix}@example.test`,
+      recipient: `feedback-awaiting-${suffix}@buyerco.eu`,
+      fromEmail: `feedback-awaiting-${suffix}@buyerco.eu`,
       fromName: "Awaiting Bakery",
       subject: "Re: Feedback awaiting",
       variantKey: null,
@@ -538,6 +547,7 @@ async function main() {
       officeId: office.id,
       campaignId: duplicateDraft.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: {
         send: async () => ({
           state: "SENT" as const,
@@ -553,6 +563,111 @@ async function main() {
     assert.equal(await prisma.outreachCampaignSend.count({
       where: { officeId: office.id, campaignId: duplicateDraft.id },
     }), 1);
+
+    // Planning-time quality gate on a real list: placeholder rows, an
+    // undeliverable research verdict, the fourth address at one company domain,
+    // and an address this office already suppressed never reach the reviewed
+    // audience; another office's suppression does not leak in.
+    const pruneList = await prisma.researchList.create({
+      data: {
+        officeId: office.id,
+        slug: `prune-${suffix}`,
+        name: `Prune ${suffix}`,
+        fields: [
+          { key: "company", label: "Company", type: "text" },
+          { key: "email", label: "Email", type: "email" },
+        ],
+      },
+    });
+    const pruneRows = [
+      { company: "Template Co", email: "someone@example.com" },
+      { company: "Reserved Co", email: `buyer-${suffix}@reserved.test` },
+      { company: "Verified Gone", email: `gone-${suffix}@verified-gone.eu`, email_verdict: "undeliverable" },
+      { company: "Bounced Before", email: `bounced-${suffix}@bounced-before.eu` },
+      { company: "Other Office Bounce", email: `elsewhere-${suffix}@other-office.eu` },
+      { company: "Crowded 1", email: `one-${suffix}@crowded.eu` },
+      { company: "Crowded 2", email: `two-${suffix}@crowded.eu` },
+      { company: "Crowded 3", email: `three-${suffix}@crowded.eu` },
+      { company: "Crowded 4", email: `four-${suffix}@crowded.eu` },
+      { company: "Clean Co", email: `clean-${suffix}@clean-co.eu`, website: "https://clean-co.eu" },
+    ];
+    for (const [index, data] of pruneRows.entries()) {
+      await prisma.researchRecord.create({
+        data: {
+          officeId: office.id,
+          listId: pruneList.id,
+          createdAt: new Date(`2026-01-01T00:00:${String(index).padStart(2, "0")}.000Z`),
+          data,
+        },
+      });
+    }
+    const otherOffice = await prisma.office.create({ data: { name: `Outreach other office ${suffix}` } });
+    try {
+      await prisma.emailSuppression.createMany({
+        data: [
+          {
+            officeId: office.id,
+            email: `bounced-${suffix}@bounced-before.eu`,
+            reason: "BOUNCED",
+            source: "TEST",
+          },
+          {
+            officeId: otherOffice.id,
+            email: `elsewhere-${suffix}@other-office.eu`,
+            reason: "BOUNCED",
+            source: "TEST",
+          },
+        ],
+      });
+      const pruneInput = {
+        officeId: office.id,
+        list: pruneList.slug,
+        senderAccountId: sender.id,
+        subject: "Prune test",
+        bodyTemplate: "Hello {{company}}. Reply STOP to opt out.",
+      };
+      const prunePlan = await planOutreachCampaign(pruneInput);
+      assert.equal(prunePlan.emailField, "email");
+      assert.equal(prunePlan.pruned.total, 4);
+      assert.deepEqual(prunePlan.pruned.reasons, [
+        { reason: "PLACEHOLDER_ADDRESS", count: 2 },
+        { reason: "DOMAIN_CONCENTRATION", count: 1 },
+        { reason: "UNDELIVERABLE", count: 1 },
+      ]);
+      assert.deepEqual(prunePlan.pruned.examples, [
+        "someone@example.com",
+        `buyer-${suffix}@reserved.test`,
+        `gone-${suffix}@verified-gone.eu`,
+        `four-${suffix}@crowded.eu`,
+      ]);
+      assert.deepEqual(
+        prunePlan.pruned.caveats,
+        [{ warning: "NO_ORGANIZATION_EVIDENCE", count: 4 }],
+        "kept rows without website or source URL are tallied; the clean row with a website is not",
+      );
+      assert.equal(prunePlan.suppressed, 1, "only this office's suppression applies");
+      assert.equal(prunePlan.eligible, 5, "other-office bounce, three crowded rows, and the clean row remain");
+      assert.equal(prunePlan.audienceTotal, 5);
+      const pruneDraft = await saveDraftCampaign({ ...pruneInput, emailField: prunePlan.emailField });
+      const storedPruneAudience = await prisma.outreachCampaign.findUniqueOrThrow({
+        where: { id: pruneDraft.id },
+        select: { audienceTotal: true, audiencePersonalization: true },
+      });
+      const storedRecipients = Object.values(
+        (storedPruneAudience.audiencePersonalization ?? {}) as Record<string, { email?: string }>,
+      ).map((entry) => entry.email).sort();
+      assert.deepEqual(storedRecipients, [
+        `clean-${suffix}@clean-co.eu`,
+        `elsewhere-${suffix}@other-office.eu`,
+        `one-${suffix}@crowded.eu`,
+        `three-${suffix}@crowded.eu`,
+        `two-${suffix}@crowded.eu`,
+      ]);
+      assert.equal(storedPruneAudience.audienceTotal, 5);
+      assert.equal(pruneDraft.revisionHash, prunePlan.revisionHash, "the saved draft matches the reviewed plan");
+    } finally {
+      await prisma.office.delete({ where: { id: otherOffice.id } });
+    }
 
     await assert.rejects(
       () => saveDraftCampaign({
@@ -723,7 +838,7 @@ async function main() {
         campaignId: rotationDraft.id,
         recordId: record.id,
         step: 1,
-        recipient: `wens-${suffix}@example.test`,
+        recipient: `wens-${suffix}@buyerco.eu`,
         status: "QUEUED",
         dueAt: new Date("2026-09-06T00:00:00.000Z"),
       },
@@ -770,7 +885,7 @@ async function main() {
         officeId: office.id,
         campaignId: contactedCampaign.id,
         recordId: `contacted-${suffix}`,
-        recipient: `wens-${suffix}@example.test`,
+        recipient: `wens-${suffix}@buyerco.eu`,
         status: "SENT",
       },
     });
@@ -798,7 +913,7 @@ async function main() {
         audienceTotal: 1,
         audienceRecordIds: [record.id],
         audiencePersonalization: {
-          [record.id]: { email: ` WENS-${suffix}@EXAMPLE.TEST ` },
+          [record.id]: { email: ` WENS-${suffix}@BUYERCO.EU ` },
         },
         revisionHash: "overlap",
       },
@@ -830,7 +945,7 @@ async function main() {
         audienceTotal: 1,
         audienceRecordIds: [record.id],
         audiencePersonalization: {
-          [record.id]: { email: `wens-${suffix}@example.test` },
+          [record.id]: { email: `wens-${suffix}@buyerco.eu` },
         },
         revisionHash: "compare-and-set-old",
       },
@@ -878,8 +993,8 @@ async function main() {
       },
     });
     const capEmails = [
-      `cap-one-${suffix}@example.test`,
-      `cap-two-${suffix}@example.test`,
+      `cap-one-${suffix}@buyerco.eu`,
+      `cap-two-${suffix}@buyerco.eu`,
     ];
     const capRecords = await prisma.researchRecord.createManyAndReturn({
       data: [
@@ -917,7 +1032,7 @@ async function main() {
         officeId: office.id,
         campaignId: capCampaign.id,
         recordId: capRecords[0].id,
-        recipient: `cap-one-${suffix}@example.test`,
+        recipient: `cap-one-${suffix}@buyerco.eu`,
         status: "SENT",
       },
     });
@@ -944,7 +1059,7 @@ async function main() {
         data: {
           officeId: office.id,
           listId: claimList.id,
-          data: { email: `${label}-${suffix}@example.test` },
+          data: { email: `${label}-${suffix}@buyerco.eu` },
         },
       });
       return { claimList, claimRecord };
@@ -995,7 +1110,7 @@ async function main() {
       reconcile: async () => ({ state: "UNKNOWN" as const, error: "unused" }),
     };
     const liveFixture = await createClaimFixture("live-claim");
-    const liveEmail = `live-claim-${suffix}@example.test`;
+    const liveEmail = `live-claim-${suffix}@buyerco.eu`;
     const liveOwner = await createClaimCampaign({
       name: `Live owner ${suffix}`,
       listId: liveFixture.claimList.id,
@@ -1052,6 +1167,7 @@ async function main() {
       officeId: office.id,
       campaignId: liveBlockedTarget.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: claimProvider,
     });
     assert.equal(liveBlockedRun.sent, 0);
@@ -1078,12 +1194,13 @@ async function main() {
       officeId: office.id,
       campaignId: liveTarget.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: claimProvider,
     });
     assert.equal(releasedRun.sent, 1);
 
     const reservedFixture = await createClaimFixture("reserved-claim");
-    const reservedEmail = `reserved-claim-${suffix}@example.test`;
+    const reservedEmail = `reserved-claim-${suffix}@buyerco.eu`;
     const reservedOwner = await createClaimCampaign({
       name: `Reserved owner ${suffix}`,
       listId: reservedFixture.claimList.id,
@@ -1137,12 +1254,13 @@ async function main() {
       officeId: office.id,
       campaignId: reservedTarget.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: claimProvider,
     });
     assert.equal(staleReservedRun.sent, 1);
 
     const staleFixture = await createClaimFixture("stale-claim");
-    const staleEmail = `stale-claim-${suffix}@example.test`;
+    const staleEmail = `stale-claim-${suffix}@buyerco.eu`;
     const staleOwner = await createClaimCampaign({
       name: `Stale owner ${suffix}`,
       listId: staleFixture.claimList.id,
@@ -1171,12 +1289,13 @@ async function main() {
       officeId: office.id,
       campaignId: staleTarget.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: claimProvider,
     });
     assert.equal(staleRun.sent, 1);
 
     const sentFixture = await createClaimFixture("cancelled-sent");
-    const sentEmail = `cancelled-sent-${suffix}@example.test`;
+    const sentEmail = `cancelled-sent-${suffix}@buyerco.eu`;
     const cancelledSentOwner = await createClaimCampaign({
       name: `Cancelled sent owner ${suffix}`,
       listId: sentFixture.claimList.id,
@@ -1204,6 +1323,7 @@ async function main() {
       officeId: office.id,
       campaignId: sentTarget.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: claimProvider,
     });
     assert.equal(cancelledSentRun.sent, 0);
@@ -1216,13 +1336,14 @@ async function main() {
       name: `Rejected claim ${suffix}`,
       listId: failureFixture.claimList.id,
       recordId: failureFixture.claimRecord.id,
-      email: `rejected-claim-${suffix}@example.test`,
+      email: `rejected-claim-${suffix}@buyerco.eu`,
       status: "ACTIVE",
     });
     const providerFailureRun = await runOutreachCampaignBatch({
       officeId: office.id,
       campaignId: failureCampaign.id,
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       provider: {
         ...claimProvider,
         send: async () => ({ state: "REJECTED" as const, error: "rejected" }),

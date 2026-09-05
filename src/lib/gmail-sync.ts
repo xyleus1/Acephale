@@ -14,6 +14,7 @@ import {
 import {
   deliveryFeedbackNeedsRecovery,
   recordDeliveryFeedback,
+  recoverLegacyDeliveryFeedback,
   recoverUnfinishedDeliveryFeedback,
   type DeliveryFeedbackRouting,
 } from "./email-delivery-events";
@@ -566,6 +567,12 @@ async function _syncEmailAccountInternal({
   // Feedback rows whose persistence failed on an earlier sync are outside the
   // fetch window by now, so they are completed from the database instead.
   await recoverUnfinishedDeliveryFeedback(prisma, {
+    accountId: account.id,
+    accountEmail: account.email,
+    fallbackOfficeId: account.officeId,
+    source: "GMAIL",
+  }).catch(() => null);
+  await recoverLegacyDeliveryFeedback(prisma, {
     accountId: account.id,
     accountEmail: account.email,
     fallbackOfficeId: account.officeId,

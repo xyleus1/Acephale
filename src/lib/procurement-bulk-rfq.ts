@@ -6,7 +6,15 @@ import {
   releaseEmailSenderReservation,
   reserveEmailSender,
 } from "@/lib/email-sender-pool";
-import { listSuppressedEmails, type EmailSuppressionReason } from "@/lib/email-delivery-events";
+import { listSuppressedEmails, upsertEmailSuppression, type EmailSuppressionReason } from "@/lib/email-delivery-events";
+import {
+  describeRecipientQualityBlock,
+  LiveRecipientGate,
+  RECIPIENT_QUALITY_SUPPRESSION_SOURCE,
+  recipientQualityRefusal,
+  recipientQualityVerdict,
+  type LiveRecipientCheck,
+} from "@/lib/outreach-recipient-quality";
 import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
@@ -108,6 +116,12 @@ export type BulkRfqRunResult = {
   alreadySent: number;
   rejected: number;
   unknown: number;
+  // Reviewed suppliers the live recipient gate refused right before sending
+  // (Null MX, dead domain, verifier undeliverable). Reported as BLOCKED
+  // outcomes; they never reserve a mailbox slot.
+  pruned: number;
+  // Paid mailbox verifications spent by this run.
+  verificationChecks: number;
   poolExhausted: boolean;
   outcomes: BulkRfqOutcome[];
 };
@@ -334,18 +348,16 @@ export async function listUncontactedBulkRfqTargets(
 // an operator for this office) are reported as BLOCKED and never reach the
 // sender pool. The vendor row stays uncontacted so a corrected address can be
 // picked up by a later run.
+// Suppressed suppliers and suppliers whose address fails the product-wide
+// recipient quality gate (placeholder, disposable, invalid) are blocked alike,
+// so the preview and the send agree on who can actually be mailed.
 export function partitionSuppressedRfqTargets(
   targets: readonly BulkRfqTarget[],
   suppressed: ReadonlyMap<string, EmailSuppressionReason>,
 ) {
   const blocked: BulkRfqOutcome[] = [];
   const sendable: BulkRfqTarget[] = [];
-  for (const target of targets) {
-    const reason = suppressed.get(target.contactEmail.trim().toLowerCase());
-    if (!reason) {
-      sendable.push(target);
-      continue;
-    }
+  const block = (target: BulkRfqTarget, error: string) => {
     blocked.push({
       vendorId: target.vendorId,
       vendorName: target.name,
@@ -353,8 +365,21 @@ export function partitionSuppressedRfqTargets(
       state: "BLOCKED",
       senderEmail: null,
       providerMessageId: null,
-      error: suppressionSkipMessage(reason),
+      error,
     });
+  };
+  for (const target of targets) {
+    const reason = suppressed.get(target.contactEmail.trim().toLowerCase());
+    if (reason) {
+      block(target, suppressionSkipMessage(reason));
+      continue;
+    }
+    const quality = recipientQualityVerdict({ email: target.contactEmail, data: { website: target.website ?? "" } });
+    if (quality.blocked) {
+      block(target, `Recipient skipped: ${describeRecipientQualityBlock(quality.reason, quality.detail)}.`);
+      continue;
+    }
+    sendable.push(target);
   }
   return { blocked, sendable };
 }
@@ -607,6 +632,8 @@ export async function runProcurementBulkRfq(input: {
   loadTargets?: typeof listUncontactedBulkRfqTargets;
   listSuppressed?: typeof listSuppressedEmails;
   reserveSender?: typeof reserveEmailSender;
+  recipientCheck?: LiveRecipientCheck;
+  suppress?: typeof upsertEmailSuppression;
 } & BulkRfqBatchOptions): Promise<BulkRfqRunResult> {
   const advanceStatus = input.advanceStatus ?? advanceProcurementOrderStatus;
   const reconcileStatus = input.reconcileStatus ?? reconcileProcurementOrderStatus;
@@ -652,11 +679,45 @@ export async function runProcurementBulkRfq(input: {
     alreadySent: 0,
     rejected: 0,
     unknown: 0,
+    pruned: 0,
+    verificationChecks: 0,
     poolExhausted: false,
     outcomes: [...blocked],
   };
+  // One gate per run so each domain's MX is looked up once and the paid
+  // verifier budget covers the whole reviewed batch.
+  const gate = new LiveRecipientGate(input.recipientCheck);
 
   for (const target of targets) {
+    // Live recipient gate before any mailbox capacity is reserved: the batch
+    // was reviewed by hash, so a refused supplier is reported, never replaced.
+    const quality = await gate.check(target, target.contactEmail, { website: target.website ?? "" });
+    result.verificationChecks = gate.paidChecks;
+    if (!quality.ok) {
+      const refusal = recipientQualityRefusal(quality);
+      if (refusal.permanent) {
+        await (input.suppress ?? upsertEmailSuppression)(prisma, {
+          officeId: order.officeId,
+          email: target.contactEmail,
+          reason: "UNDELIVERABLE",
+          source: RECIPIENT_QUALITY_SUPPRESSION_SOURCE,
+          detail: refusal.detail,
+          evidenceMessageId: null,
+          accountId: null,
+        });
+      }
+      result.pruned += 1;
+      result.outcomes.push({
+        vendorId: target.vendorId,
+        vendorName: target.name,
+        recipient: target.contactEmail,
+        state: "BLOCKED",
+        senderEmail: null,
+        providerMessageId: null,
+        error: refusal.error,
+      });
+      continue;
+    }
     const body = buildBulkRfqBody(order, target, files);
     const hash = requestHash({ orderId: order.orderId, vendorId: target.vendorId, recipient: target.contactEmail, subject, body });
     const reservation = await (input.reserveSender ?? reserveEmailSender)({

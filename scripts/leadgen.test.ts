@@ -1333,7 +1333,7 @@ const deadlineBatch = await runProspectingBatch({
     url,
     status: 200,
     contentType: "application/pdf",
-    body: "Alpha Steel GmbH alpha@alpha-steel.example\nBeta Steel GmbH beta@beta-steel.example\nGamma Steel GmbH gamma@gamma-steel.example\n",
+    body: "Alpha Steel GmbH alpha@alpha-steel.eu\nBeta Steel GmbH beta@beta-steel.eu\nGamma Steel GmbH gamma@gamma-steel.eu\n",
     isPdf: true,
   }),
   resolveMx: async () => {

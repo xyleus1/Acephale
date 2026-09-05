@@ -182,6 +182,34 @@ export function emailDomain(email: string) {
   return email.split("@")[1]?.toLowerCase() ?? "";
 }
 
+// Second-level labels that country registries hand out registrations under
+// (com.au, co.uk, com.tr, co.jp, ...). Applied only beneath a two-letter
+// country code, so alpha.com.au and beta.com.au are two organisations while
+// alpha.com stays alpha.com. Mirrors the ICANN section of the Public Suffix
+// List for the categories that appear in supplier and buyer research.
+const COUNTRY_SECOND_LEVEL_LABELS = new Set([
+  "com", "co", "net", "org", "gov", "gob", "gouv", "govt", "edu", "ac", "sch",
+  "or", "ne", "go", "gr", "ed", "lg", "re", "pe", "mil", "biz", "info", "nom",
+  "ltd", "plc", "nhs", "me", "firm", "gen", "ind", "nic", "id", "asn", "web",
+  "art", "adv", "eng", "tur", "int", "msk", "spb", "in", "idv", "school",
+  "kiwi", "geek", "k12", "mod", "police", "health", "med", "pro", "store",
+  "tv", "name", "coop", "mobi", "tm", "press", "priv", "ltda", "srl", "agro",
+  "shop", "cc", "law", "eco", "ong", "not", "emp", "sld", "assn",
+]);
+
+// Multi-label suffixes outside the two-letter-country rule that still show up
+// in company websites and mailboxes.
+const OTHER_PUBLIC_SUFFIXES = new Set(["com.de", "co.com", "us.com", "eu.com", "uk.com", "de.com"]);
+
+function publicSuffixLength(labels: readonly string[]) {
+  if (labels.length < 2) return labels.length;
+  const tld = labels[labels.length - 1];
+  const second = labels[labels.length - 2];
+  if (OTHER_PUBLIC_SUFFIXES.has(`${second}.${tld}`)) return 2;
+  if (/^[a-z]{2}$/.test(tld) && COUNTRY_SECOND_LEVEL_LABELS.has(second)) return 2;
+  return 1;
+}
+
 export function registrableDomain(hostOrUrl: string) {
   let host = hostOrUrl;
   try {
@@ -189,13 +217,11 @@ export function registrableDomain(hostOrUrl: string) {
   } catch {
     // Fall through with the raw value.
   }
-  host = host.toLowerCase().replace(/^www\./, "");
-  const parts = host.split(".");
-  if (parts.length <= 2) return host;
-  const twoLevelTlds = ["com.tr", "net.tr", "org.tr", "gov.tr", "co.uk", "com.de"];
-  const lastTwo = parts.slice(-2).join(".");
-  if (twoLevelTlds.includes(lastTwo)) return parts.slice(-3).join(".");
-  return lastTwo;
+  host = host.toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  const parts = host.split(".").filter(Boolean);
+  const keep = publicSuffixLength(parts) + 1;
+  if (parts.length <= keep) return parts.join(".");
+  return parts.slice(-keep).join(".");
 }
 
 /** Pull absolute and relative links out of raw HTML, resolved against baseUrl. */

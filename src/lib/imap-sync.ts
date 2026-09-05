@@ -12,6 +12,7 @@ import {
 import {
   deliveryFeedbackNeedsRecovery,
   recordDeliveryFeedback,
+  recoverLegacyDeliveryFeedback,
   recoverUnfinishedDeliveryFeedback,
   type DeliveryFeedbackRouting,
 } from "@/lib/email-delivery-events";
@@ -52,6 +53,7 @@ export type ImapSyncDependencies = {
   classifyInbound: typeof classifyInboundEmail;
   recordDelivery: typeof recordDeliveryFeedback;
   recoverDelivery: typeof recoverUnfinishedDeliveryFeedback;
+  recoverLegacyDelivery: typeof recoverLegacyDeliveryFeedback;
   ingestMemory: typeof ingestKnowledgeObject;
   recordMemory: typeof recordMemoryEvent;
   logTouch: typeof logEmailTouch;
@@ -67,6 +69,7 @@ const defaultDependencies: ImapSyncDependencies = {
   classifyInbound: classifyInboundEmail,
   recordDelivery: recordDeliveryFeedback,
   recoverDelivery: recoverUnfinishedDeliveryFeedback,
+  recoverLegacyDelivery: recoverLegacyDeliveryFeedback,
   ingestMemory: ingestKnowledgeObject,
   recordMemory: recordMemoryEvent,
   logTouch: logEmailTouch,
@@ -584,6 +587,13 @@ export async function syncGmailAppPasswordAccountInternal(input: {
   // fetch window by now, so they are completed from the database instead.
   if (!input.demoObservation) {
     await dependencies.recoverDelivery(dependencies.db, {
+      accountId: account.id,
+      accountEmail: account.email,
+      fallbackOfficeId: account.officeId,
+      source: "GMAIL_IMAP",
+      now: dependencies.now(),
+    }).catch(() => null);
+    await dependencies.recoverLegacyDelivery(dependencies.db, {
       accountId: account.id,
       accountEmail: account.email,
       fallbackOfficeId: account.officeId,

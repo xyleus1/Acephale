@@ -165,7 +165,7 @@ async function main() {
   let pageCalls = 0;
   let firstQueryId = "";
   const page: FetchedPage = {
-  url: "https://example-steel.test/",
+  url: "https://example-steel.eu/",
   status: 200,
   contentType: "text/html",
   body: "<title>Example Steel Manufacturing</title><p>steel fabrication manufacturing</p><a href='/contact'>Contact</a>",
@@ -173,8 +173,8 @@ async function main() {
   };
   const contact: FetchedPage = {
   ...page,
-  url: "https://example-steel.test/contact",
-  body: "<p>sales@example-steel.test +90 212 555 12 34</p>",
+  url: "https://example-steel.eu/contact",
+  body: "<p>sales@example-steel.eu +90 212 555 12 34</p>",
   };
   const result = await runProspectingBatch({
   profile,
@@ -184,13 +184,13 @@ async function main() {
   search: async (query) => {
     searchCalls += 1;
     firstQueryId = query.id;
-    return [{ url: page.url, domain: "example-steel.test", engine: "brave", rank: 1 }];
+    return [{ url: page.url, domain: "example-steel.eu", engine: "brave", rank: 1 }];
   },
   fetchPage: async (url) => {
     pageCalls += 1;
     return url.endsWith("/contact") ? contact : page;
   },
-  resolveMx: async () => [{ exchange: "mx.example-steel.test", priority: 10 }],
+  resolveMx: async () => [{ exchange: "mx.example-steel.eu", priority: 10 }],
   });
   assert.equal(searchCalls, 1);
   assert.equal(pageCalls, 2);
@@ -212,7 +212,7 @@ async function main() {
       return [];
     },
     fetchPage: async () => null,
-    resolveMx: async () => [{ exchange: "mx.example-steel.test", priority: 10 }],
+    resolveMx: async () => [{ exchange: "mx.example-steel.eu", priority: 10 }],
   });
   assert.equal(resumedQueryIds.length, 1);
   assert.notEqual(resumedQueryIds[0], firstQueryId);
@@ -224,7 +224,7 @@ async function main() {
       contentType: "text/html",
       body: url.includes("duckduckgo")
         ? ""
-        : `<a href="https://fallback-steel.test/">Fallback Steel</a>`,
+        : `<a href="https://fallback-steel.eu/">Fallback Steel</a>`,
       isPdf: false,
     }),
   );
@@ -302,7 +302,7 @@ async function main() {
     const admin = await prisma.user.create({
       data: {
         officeId: office.id,
-        email: `prospecting-${suffix}@example.test`,
+        email: `prospecting-${suffix}@prospecting-fixture.eu`,
         passwordHash: "test",
         fullName: "Prospecting Test",
         role: "ADMIN",
@@ -358,11 +358,11 @@ async function main() {
     assert.equal((await listCompanyContextProspectingActions(context, workspace.id)).length, 1);
     const candidate = {
       candidate: {
-        domain: "fixture-steel.test",
-        website: "https://fixture-steel.test",
+        domain: "fixture-steel.eu",
+        website: "https://fixture-steel.eu",
         companyName: "Fixture Steel",
         city: "Caracas",
-        emails: ["buyer@fixture-steel.test"],
+        emails: ["buyer@fixture-steel.eu"],
         phones: ["+58 1 555 0100"],
         segmentKey: "prospect_segment_1",
         fit: {
@@ -373,9 +373,9 @@ async function main() {
           rejectionReason: null,
         },
         evidence: [{
-          url: "https://fixture-steel.test/about",
+          url: "https://fixture-steel.eu/about",
           kind: "home",
-          emails: ["buyer@fixture-steel.test"],
+          emails: ["buyer@fixture-steel.eu"],
           phones: ["+58 1 555 0100"],
         }],
         discoveredVia: "fixture query",
@@ -388,8 +388,8 @@ async function main() {
       ...candidate,
       candidate: {
         ...candidate.candidate,
-        domain: "fixture-low-fit.test",
-        website: "https://fixture-low-fit.test",
+        domain: "fixture-low-fit.eu",
+        website: "https://fixture-low-fit.eu",
         companyName: "Low Fit Steel",
         fit: {
           ...candidate.candidate.fit,
@@ -399,7 +399,7 @@ async function main() {
       },
     } satisfies ProspectingBatchCandidate;
     const namedPerson = {
-      email: "maria.perez@fixture-steel.test",
+      email: "maria.perez@fixture-steel.eu",
       fullName: "Maria Perez",
       firstName: "Maria",
       lastName: "Perez",
@@ -411,7 +411,7 @@ async function main() {
       verificationStatus: "valid" as const,
       linkedin: null,
       phone: "+58 1 555 0199",
-      sourceUrls: ["https://fixture-steel.test/team"],
+      sourceUrls: ["https://fixture-steel.eu/team"],
       provider: "hunter",
       enrichedAt: new Date().toISOString(),
     };
@@ -421,7 +421,7 @@ async function main() {
       confidence: verdict === "undeliverable" ? 5 : 90,
       reasons: [],
       hasMx: true,
-      mxHost: "mx.fixture-steel.test",
+      mxHost: "mx.fixture-steel.eu",
       isRole: false,
       isFreeProvider: false,
       domainMatchesCompany: true,
@@ -437,7 +437,7 @@ async function main() {
         },
         verifications: [
           verificationFor(namedPerson.email, "deliverable_likely"),
-          verificationFor("buyer@fixture-steel.test", "deliverable_likely"),
+          verificationFor("buyer@fixture-steel.eu", "deliverable_likely"),
         ],
       },
       {
@@ -449,7 +449,7 @@ async function main() {
         },
         verifications: [
           verificationFor(namedPerson.email, "undeliverable"),
-          verificationFor("buyer@fixture-steel.test", "deliverable_likely"),
+          verificationFor("buyer@fixture-steel.eu", "deliverable_likely"),
         ],
       },
       candidate,
@@ -461,19 +461,19 @@ async function main() {
     assert.equal(namedRow?.contact_title, "Head of Procurement");
     assert.equal(namedRow?.email, namedPerson.email);
     assert.equal(namedRow?.email_verdict, "deliverable_likely");
-    assert.ok(String(namedRow?.evidence_urls).includes("https://fixture-steel.test/team"), "enrichment sources join the evidence trail");
+    assert.ok(String(namedRow?.evidence_urls).includes("https://fixture-steel.eu/team"), "enrichment sources join the evidence trail");
     assert.equal(bouncedNamedRow?.contact_name, null, "an undeliverable named contact yields to the public inbox");
-    assert.equal(bouncedNamedRow?.email, "buyer@fixture-steel.test");
+    assert.equal(bouncedNamedRow?.email, "buyer@fixture-steel.eu");
     assert.ok(!String(bouncedNamedRow?.evidence_urls).includes("/team"), "sources of an unused contact stay out of the row evidence");
     assert.equal(publicRow?.contact_name, null);
-    assert.equal(publicRow?.email, "buyer@fixture-steel.test");
+    assert.equal(publicRow?.email, "buyer@fixture-steel.eu");
     assert.equal(publicRow?.email_verdict, "unknown");
     assert.ok(
       enrichedRows.every((entry) => entry.dedupeField === "domain"),
       "company rows dedupe on the stable domain, not on the contact email that enrichment may change",
     );
     let runnerCalls = 0;
-    const resolveMx = async () => [{ exchange: "mx.fixture-steel.test", priority: 10 }];
+    const resolveMx = async () => [{ exchange: "mx.fixture-steel.eu", priority: 10 }];
     const runBatch = async ({
       queryOffset,
       resolveMx: suppliedResolveMx,
@@ -845,9 +845,9 @@ async function main() {
       candidate: {
         ...candidate.candidate,
         companyName: "Mixed Key Steel",
-        domain: "mixed-key.test",
-        website: "https://mixed-key.test",
-        emails: ["sales@mixed-key.test"],
+        domain: "mixed-key.eu",
+        website: "https://mixed-key.eu",
+        emails: ["sales@mixed-key.eu"],
       },
     } satisfies ProspectingBatchCandidate;
     const mixedNameCandidate = {
@@ -875,10 +875,10 @@ async function main() {
     });
     assert.equal(mixedList.records.length, 1, "domain and name sightings of one company share a row");
     const mixedRecord = mixedList.records[0]!;
-    assert.equal(mixedRecord.dedupeKey, "mixed-key.test");
+    assert.equal(mixedRecord.dedupeKey, "mixed-key.eu");
     assert.equal(mixedRecord.officeId, office.id);
-    assert.equal((mixedRecord.data as Record<string, unknown>).domain, "mixed-key.test");
-    assert.equal((mixedRecord.data as Record<string, unknown>).email, "sales@mixed-key.test");
+    assert.equal((mixedRecord.data as Record<string, unknown>).domain, "mixed-key.eu");
+    assert.equal((mixedRecord.data as Record<string, unknown>).email, "sales@mixed-key.eu");
     await prisma.researchRecord.update({ where: { id: mixedRecord.id }, data: { status: "contacted" } });
     const mixedSecond = await runCompanyContextProspectingAction({
       context,
@@ -887,7 +887,7 @@ async function main() {
       runBatch: async () => ({
         candidates: [{
           ...mixedDomainCandidate,
-          candidate: { ...mixedDomainCandidate.candidate, emails: ["buyer@mixed-key.test"] },
+          candidate: { ...mixedDomainCandidate.candidate, emails: ["buyer@mixed-key.eu"] },
         }],
         stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 1 },
         nextQueryOffset: 2,
@@ -902,10 +902,10 @@ async function main() {
     });
     assert.equal(mixedAfter.length, 1);
     assert.equal(mixedAfter[0]!.id, mixedRecord.id);
-    assert.equal(mixedAfter[0]!.dedupeKey, "mixed-key.test");
+    assert.equal(mixedAfter[0]!.dedupeKey, "mixed-key.eu");
     assert.equal(mixedAfter[0]!.status, "contacted");
-    assert.equal((mixedAfter[0]!.data as Record<string, unknown>).domain, "mixed-key.test");
-    assert.equal((mixedAfter[0]!.data as Record<string, unknown>).email, "buyer@mixed-key.test");
+    assert.equal((mixedAfter[0]!.data as Record<string, unknown>).domain, "mixed-key.eu");
+    assert.equal((mixedAfter[0]!.data as Record<string, unknown>).email, "buyer@mixed-key.eu");
     // Pre-fix state: a name-keyed duplicate already sits next to the domain row.
     // A name-only sighting must not keep feeding the duplicate.
     const staleDuplicate = await prisma.researchRecord.create({
@@ -914,7 +914,7 @@ async function main() {
         listId: mixedList.id,
         dedupeKey: "mixed key steel",
         status: "new",
-        data: { company_name: "Mixed Key Steel", domain: null, email: "old@directory.test" },
+        data: { company_name: "Mixed Key Steel", domain: null, email: "old@directory.eu" },
       },
     });
     const mixedThird = await runCompanyContextProspectingAction({
@@ -933,7 +933,7 @@ async function main() {
     assert.equal(mixedThird.stats.rowsUpdated, 1, "the name sighting is routed to the domain row, not written");
     const duplicateAfter = await prisma.researchRecord.findUniqueOrThrow({ where: { id: staleDuplicate.id } });
     assert.equal(duplicateAfter.updatedAt.getTime(), staleDuplicate.updatedAt.getTime(), "the name-keyed duplicate is left untouched");
-    assert.equal((duplicateAfter.data as Record<string, unknown>).email, "old@directory.test");
+    assert.equal((duplicateAfter.data as Record<string, unknown>).email, "old@directory.eu");
     assert.equal(await prisma.researchRecord.count({ where: { listId: mixedList.id } }), 2);
 
     await prisma.researchRecord.update({

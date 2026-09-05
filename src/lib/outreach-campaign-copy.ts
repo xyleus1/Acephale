@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 import { DELIVERY_FEEDBACK_CLASSIFICATION } from "@/lib/email-delivery-feedback";
 import { stripEmDashes } from "@/lib/no-em-dash";
+import {
+  RECIPIENT_QUALITY_GATE_VERSION,
+  addPrunedRecipient,
+  capRecipientsPerDomain,
+  emptyPruneCounts,
+  recipientQualityVerdict,
+  type RecipientQualityBlock,
+  type RecipientQualityPruneCounts,
+} from "@/lib/outreach-recipient-quality";
 
 export const CAMPAIGN_STATUSES = ["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
@@ -234,7 +243,7 @@ export function renderCampaignEmail(input: {
   };
 }
 
-export function campaignRowEligible(input: {
+export type CampaignRowFilterInput = {
   row: CampaignRow;
   statuses: readonly string[];
   countries?: readonly string[];
@@ -243,24 +252,97 @@ export function campaignRowEligible(input: {
   countryField?: string;
   segmentField?: string;
   excludeEmails?: readonly string[];
-}) {
+};
+
+export type CampaignRowExclusion =
+  | { kind: "filter"; detail: "status" | "email" | "excluded" | "country" | "segment" }
+  | { kind: "quality"; reason: RecipientQualityBlock; detail: string; email: string };
+
+// Campaign filters first (the reviewer chose them), then the product-wide
+// recipient quality gate, so a pruned row is reported for the gate reason
+// rather than hidden behind a filter it would have failed anyway.
+export function campaignRowExclusion(input: CampaignRowFilterInput): CampaignRowExclusion | null {
   const data = rowData(input.row);
   const status = textValue(input.row.status || data.status).toLowerCase();
-  if (!input.statuses.map((value) => value.toLowerCase()).includes(status)) return false;
+  if (!input.statuses.map((value) => value.toLowerCase()).includes(status)) return { kind: "filter", detail: "status" };
   const email = textValue(data[input.emailField]);
-  if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email)) return false;
+  if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email)) return { kind: "filter", detail: "email" };
   if (input.excludeEmails?.length && normalizeCampaignExcludeEmails(input.excludeEmails).includes(email.toLowerCase())) {
-    return false;
+    return { kind: "filter", detail: "excluded" };
   }
   const countries = (input.countries ?? []).map((value) => value.toLowerCase());
   if (countries.length && !countries.includes(textValue(data[input.countryField ?? "country"]).toLowerCase())) {
-    return false;
+    return { kind: "filter", detail: "country" };
   }
   const segments = (input.segments ?? []).map((value) => value.toLowerCase());
   if (segments.length && !segments.includes(textValue(data[input.segmentField ?? "segment"]).toLowerCase())) {
-    return false;
+    return { kind: "filter", detail: "segment" };
   }
-  return true;
+  const quality = recipientQualityVerdict({ email, data });
+  if (quality.blocked) {
+    return { kind: "quality", reason: quality.reason, detail: quality.detail, email };
+  }
+  return null;
+}
+
+export function campaignRowEligible(input: CampaignRowFilterInput) {
+  return campaignRowExclusion(input) === null;
+}
+
+// Shared audience selection for planning, drafting, and activation: campaign
+// filters, the recipient quality gate, one send per address, then the
+// per-domain cap. Every caller must use this so the reviewed audience, the
+// saved snapshot, and the activation recheck agree row for row.
+export function selectCampaignAudience<T extends { id: string; status: string; data: Record<string, unknown> }>(input: {
+  records: readonly T[];
+  statuses: readonly string[];
+  countries?: readonly string[];
+  segments?: readonly string[];
+  emailField: string;
+  countryField?: string;
+  segmentField?: string;
+  excludeEmails?: readonly string[];
+  // Office-scoped suppressions and recipients already contacted by another
+  // campaign. Removed before dedupe and the per-domain cap so they never hold
+  // a domain slot a later valid row could have used.
+  suppressed?: ReadonlySet<string>;
+  contacted?: ReadonlySet<string>;
+}): { eligible: T[]; pruned: RecipientQualityPruneCounts; suppressed: number; contacted: number } {
+  const pruned = emptyPruneCounts();
+  const recipientOf = (record: T) => textValue(record.data[input.emailField]);
+  const suppressedSet = new Set([...(input.suppressed ?? [])].map(normalizeCampaignRecipient));
+  const contactedSet = new Set([...(input.contacted ?? [])].map(normalizeCampaignRecipient));
+  let suppressed = 0;
+  let contacted = 0;
+  const passing = input.records.filter((record) => {
+    const exclusion = campaignRowExclusion({
+      row: { status: record.status, data: record.data },
+      statuses: input.statuses,
+      countries: input.countries,
+      segments: input.segments,
+      emailField: input.emailField,
+      countryField: input.countryField,
+      segmentField: input.segmentField,
+      excludeEmails: input.excludeEmails,
+    });
+    if (exclusion?.kind === "quality") addPrunedRecipient(pruned, { email: exclusion.email, reason: exclusion.reason });
+    if (exclusion !== null) return false;
+    const recipient = normalizeCampaignRecipient(recipientOf(record));
+    if (suppressedSet.has(recipient)) {
+      suppressed += 1;
+      return false;
+    }
+    if (contactedSet.has(recipient)) {
+      contacted += 1;
+      return false;
+    }
+    return true;
+  });
+  const capped = capRecipientsPerDomain({ rows: dedupeRecipients({ rows: passing, recipientOf }), recipientOf });
+  for (const record of capped.dropped) {
+    addPrunedRecipient(pruned, { email: recipientOf(record), reason: "DOMAIN_CONCENTRATION" });
+  }
+  return { eligible: capped.kept, pruned, suppressed, contacted };
 }
 
 // Reviewer exclusions travel inside the campaign filters, so they take part in
@@ -545,6 +627,7 @@ export function campaignRevisionHash(input: {
   );
   const variants = normalizeCampaignVariants(input.variants);
   return createHash("sha256").update(JSON.stringify({
+    recipientQualityGate: RECIPIENT_QUALITY_GATE_VERSION,
     subject: input.subject,
     bodyTemplate: input.bodyTemplate,
     emailField: input.emailField,

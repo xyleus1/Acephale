@@ -21,6 +21,7 @@ import {
   campaignSendCountsAsAttempt,
   campaignSnapshotOutstandingRecordIds,
   dedupeRecipients,
+  selectCampaignAudience,
   outreachCampaignContactedWhere,
   outreachCampaignReclaimBefore,
   normalizeResearchListQuery,
@@ -43,7 +44,7 @@ const row = {
     company_name: "Baker House",
     country_name: "United Kingdom",
     segment_name: "Bakery",
-    email_address: "buyer@baker-house.example",
+    email_address: "buyer@baker-house.eu",
   },
 };
 
@@ -51,11 +52,11 @@ assert.equal(normalizeResearchListQuery("  Maneks   prospects  "), "Maneks prosp
 assert.equal(normalizeResearchListQuery("Maneks prospects (2046)"), "Maneks prospects");
 assert.equal(normalizeResearchListQuery("  Wens\tpilot   primary (123)  "), "Wens pilot primary");
 assert.equal(normalizeResearchListQuery("wens-pilot-primary (abc)"), "wens-pilot-primary (abc)");
-assert.equal(buildCampaignFromHeader("addr@example.com", "Name"), '"Name" <addr@example.com>');
-assert.equal(buildCampaignFromHeader("addr@example.com", 'Na"me\\Co'), '"NameCo" <addr@example.com>');
-assert.equal(buildCampaignFromHeader("addr@example.com", "Wens Österreich"), "addr@example.com");
-assert.equal(buildCampaignFromHeader("addr@example.com", ""), "addr@example.com");
-assert.equal(buildCampaignFromHeader("addr@example.com", "   "), "addr@example.com");
+assert.equal(buildCampaignFromHeader("addr@buyerco.com", "Name"), '"Name" <addr@buyerco.com>');
+assert.equal(buildCampaignFromHeader("addr@buyerco.com", 'Na"me\\Co'), '"NameCo" <addr@buyerco.com>');
+assert.equal(buildCampaignFromHeader("addr@buyerco.com", "Wens Österreich"), "addr@buyerco.com");
+assert.equal(buildCampaignFromHeader("addr@buyerco.com", ""), "addr@buyerco.com");
+assert.equal(buildCampaignFromHeader("addr@buyerco.com", "   "), "addr@buyerco.com");
 assert.equal(asciiCampaignSenderDisplayName("Wens"), "Wens");
 assert.equal(asciiCampaignSenderDisplayName("Wens Österreich"), null);
 assert.equal(asciiCampaignSenderDisplayName(""), null);
@@ -152,7 +153,7 @@ assert.ok(!rendered.body.includes("\u2014"));
 assert.deepEqual(renderCampaignEmail({
   subject: "Variant {{company}}",
   bodyTemplate: "Dear {{company}} in {{country}}. Reply STOP to opt out.",
-  row: { data: { id: "record-1", email: "buyer@example.com", company: "Baker House", country: "GB" } },
+  row: { data: { id: "record-1", email: "buyer@buyerco.com", company: "Baker House", country: "GB" } },
 }), {
   subject: "Variant Baker House",
   body: "Dear Baker House in GB. Reply STOP to opt out.",
@@ -169,7 +170,7 @@ assert.ok(previewVariant);
 const previewEmail = renderCampaignEmail({
   subject: previewVariant.subject,
   bodyTemplate: previewVariant.bodyTemplate,
-  row: { data: { id: "record-1", email: "buyer@example.com", company: "Baker House", country: "GB" } },
+  row: { data: { id: "record-1", email: "buyer@buyerco.com", company: "Baker House", country: "GB" } },
 });
 assert.ok(previewEmail.body.includes("Baker House in GB."));
 
@@ -191,7 +192,7 @@ assert.deepEqual(campaignSampleRecipients({
   rows: Array.from({ length: 11 }, (_, index) => ({
     id: `record-${index}`,
     data: {
-      email: `buyer-${index}@example.com`,
+      email: `buyer-${index}@buyerco.com`,
       company: `Company ${index}`,
       country: "United Kingdom",
     },
@@ -199,7 +200,7 @@ assert.deepEqual(campaignSampleRecipients({
   emailField: "email",
 }), Array.from({ length: 10 }, (_, index) => ({
   id: `record-${index}`,
-  email: `buyer-${index}@example.com`,
+  email: `buyer-${index}@buyerco.com`,
   company: `Company ${index}`,
   country: "United Kingdom",
 })));
@@ -216,8 +217,8 @@ const revisionInput = {
   variants: null,
   audienceRecordIds: ["record-1", "record-2"],
   audiencePersonalization: {
-    "record-1": { email: "one@example.com", company: "One", country: "UK" },
-    "record-2": { email: "two@example.com", company: null, country: "DE" },
+    "record-1": { email: "one@buyerco.com", company: "One", country: "UK" },
+    "record-2": { email: "two@buyerco.com", company: null, country: "DE" },
   },
 };
 const revision = campaignRevisionHash(revisionInput);
@@ -227,7 +228,7 @@ assert.notEqual(campaignRevisionHash({
   ...revisionInput,
   audiencePersonalization: {
     ...revisionInput.audiencePersonalization,
-    "record-1": { ...revisionInput.audiencePersonalization["record-1"], email: "changed@example.com" },
+    "record-1": { ...revisionInput.audiencePersonalization["record-1"], email: "changed@buyerco.com" },
   },
 }), revision);
 assert.notEqual(campaignRevisionHash({
@@ -266,13 +267,13 @@ assert.notEqual(campaignRevisionHash({
 assert.deepEqual(campaignPersonalizationMap({
   rows: [{
     id: "record-1",
-    data: { email_address: "one@example.com", company_name: "One", country_name: "UK" },
+    data: { email_address: "one@buyerco.com", company_name: "One", country_name: "UK" },
   }],
   emailField: "email_address",
   companyField: "company_name",
   countryField: "country_name",
 }), {
-  "record-1": { email: "one@example.com", company: "One", country: "UK" },
+  "record-1": { email: "one@buyerco.com", company: "One", country: "UK" },
 });
 assert.doesNotThrow(() => campaignRevisionHash({
   ...revisionInput,
@@ -282,7 +283,7 @@ assert.deepEqual(campaignSnapshotOutstandingRecordIds({
   rows: [{ id: "rejected", status: "rejected" }],
   audienceRecordIds: ["rejected"],
   audiencePersonalization: {
-    rejected: { email: "rejected@example.com" },
+    rejected: { email: "rejected@buyerco.com" },
   },
   statuses: ["new"],
   attemptedRecordIds: new Set(),
@@ -308,31 +309,31 @@ assert.deepEqual(campaignSnapshotOutstandingRecordIds({
   rows: [{ id: "queued", status: "new" }],
   audienceRecordIds: ["queued"],
   audiencePersonalization: {
-    queued: { email: "queued@example.com" },
+    queued: { email: "queued@buyerco.com" },
   },
   statuses: ["new"],
   attemptedRecordIds: new Set(),
 }), ["queued"]);
 assert.deepEqual(dedupeRecipients({
   rows: [
-    { id: "first", email: " Buyer@Example.com " },
-    { id: "second", email: "buyer@example.com" },
-    { id: "third", email: "other@example.com" },
+    { id: "first", email: " Buyer@BuyerCo.com " },
+    { id: "second", email: "buyer@buyerco.com" },
+    { id: "third", email: "other@buyerco.com" },
   ],
   recipientOf: (item) => item.email,
 }), [
-  { id: "first", email: " Buyer@Example.com " },
-  { id: "third", email: "other@example.com" },
+  { id: "first", email: " Buyer@BuyerCo.com " },
+  { id: "third", email: "other@buyerco.com" },
 ]);
 assert.deepEqual(campaignSnapshotOutstandingRecordIds({
   rows: [{ id: "blocked", status: "new" }],
   audienceRecordIds: ["blocked"],
   audiencePersonalization: {
-    blocked: { email: "blocked@example.com" },
+    blocked: { email: "blocked@buyerco.com" },
   },
   statuses: ["new"],
   attemptedRecordIds: new Set(),
-  blockedRecipients: new Set([" BLOCKED@EXAMPLE.COM ".trim().toLowerCase()]),
+  blockedRecipients: new Set([" BLOCKED@BUYERCO.COM ".trim().toLowerCase()]),
 }), []);
 assert.equal(campaignDefaultName("Outreach: Wens", new Set()), "Outreach: Wens");
 assert.equal(campaignDefaultName("Outreach: Wens", new Set(["Outreach: Wens", "Outreach: Wens (2)"])), "Outreach: Wens (3)");
@@ -437,13 +438,64 @@ assert.deepEqual(campaignBlockers({
 }), ["Daily cap must be between 1 and 500."]);
 assert.deepEqual(excludeContactedRecipients({
   rows: [
-    { id: "one", email: " First@Example.com " },
-    { id: "two", email: "second@example.com" },
-    { id: "three", email: "third@example.com" },
+    { id: "one", email: " First@BuyerCo.com " },
+    { id: "two", email: "second@buyerco.com" },
+    { id: "three", email: "third@buyerco.com" },
   ],
   recipientOf: (row) => row.email,
-  contacted: new Set(["first@example.com", " THIRD@example.com "].map((email) => email.trim().toLowerCase())),
-}), [{ id: "two", email: "second@example.com" }]);
+  contacted: new Set(["first@buyerco.com", " THIRD@buyerco.com "].map((email) => email.trim().toLowerCase())),
+}), [{ id: "two", email: "second@buyerco.com" }]);
+
+// Office suppression and already-contacted rows leave the audience before the
+// same-domain cap, so a suppressed or contacted address never consumes one of
+// the domain's slots that a later valid address on the same domain needs.
+{
+  const buyerRow = (id: string, email: string) => ({ id, status: "new", data: { email, website: "https://buyerco.com" } });
+  const audience = selectCampaignAudience({
+    records: [
+      buyerRow("suppressed", "bounced@buyerco.com"),
+      buyerRow("contacted", "reached@buyerco.com"),
+      buyerRow("dup", "Reached@BuyerCo.com"),
+      buyerRow("placeholder", "someone@example.com"),
+      buyerRow("one", "one@buyerco.com"),
+      buyerRow("two", "two@buyerco.com"),
+      buyerRow("three", "three@buyerco.com"),
+      buyerRow("four", "four@buyerco.com"),
+    ],
+    statuses: ["new"],
+    emailField: "email",
+    suppressed: new Set(["bounced@buyerco.com"]),
+    contacted: new Set(["reached@buyerco.com"]),
+  });
+  assert.deepEqual(audience.eligible.map((row) => row.id), ["one", "two", "three"], "the first three valid, unsuppressed, uncontacted addresses fill the domain cap");
+  assert.equal(audience.suppressed, 1);
+  assert.equal(audience.contacted, 2, "contacted matching is case-insensitive");
+  assert.deepEqual(audience.pruned.reasons, [
+    { reason: "DOMAIN_CONCENTRATION", count: 1 },
+    { reason: "PLACEHOLDER_ADDRESS", count: 1 },
+  ]);
+  assert.deepEqual(audience.pruned.examples, ["someone@example.com", "four@buyerco.com"], "only the fourth valid address is over the cap");
+
+  // Malformed dot-atom or domain-label addresses are pruned at planning, and a
+  // real mailbox provider or organisation domain is not mistaken for a
+  // placeholder.
+  const syntaxAudience = selectCampaignAudience({
+    records: [
+      buyerRow("leading-dot", ".ops@buyerco.com"),
+      buyerRow("double-dot", "ops..team@buyerco.com"),
+      buyerRow("hyphen-label", "ops@-buyerco.com"),
+      buyerRow("empty-label", "ops@buyerco..com"),
+      { id: "provider", status: "new", data: { email: "buyer@email.com", website: "https://email.com" } },
+      { id: "org", status: "new", data: { email: "team@w3.org", website: "https://w3.org" } },
+    ],
+    statuses: ["new"],
+    emailField: "email",
+    suppressed: new Set(),
+    contacted: new Set(),
+  });
+  assert.deepEqual(syntaxAudience.eligible.map((row) => row.id), ["provider", "org"]);
+  assert.deepEqual(syntaxAudience.pruned.reasons, [{ reason: "INVALID_SYNTAX", count: 4 }]);
+}
 assert.deepEqual(campaignProgress({ total: 2, sent: 4, rejected: 0, unknown: 0 }), {
   total: 2,
   sent: 4,
@@ -490,16 +542,16 @@ const sequenceSteps = [
 ];
 const day = (offset: number) => new Date(Date.UTC(2026, 0, 1 + offset, 9));
 const sends = [
-  { recordId: "r-late", recipient: "Late@Example.com", sentAt: day(0), localThreadId: "t-late", providerThreadId: "p-late" },
-  { recordId: "r-early", recipient: "early@example.com", sentAt: day(-4), localThreadId: "t-early", providerThreadId: "p-early" },
-  { recordId: "r-replied", recipient: "replied@example.com", sentAt: day(-6), localThreadId: "t-replied", providerThreadId: null },
-  { recordId: "r-bounced", recipient: "bounced@example.com", sentAt: day(-6), localThreadId: "t-bounced", providerThreadId: null },
-  { recordId: "r-suppressed", recipient: "gone@example.com", sentAt: day(-6), localThreadId: null, providerThreadId: null },
-  { recordId: "r-queued", recipient: "queued@example.com", sentAt: day(-6), localThreadId: "t-queued", providerThreadId: null },
-  { recordId: "r-rejected", recipient: "rejected@example.com", sentAt: day(-9), localThreadId: "t-rejected", providerThreadId: null },
-  { recordId: "r-step2", recipient: "step2@example.com", sentAt: day(-9), localThreadId: "t-step2", providerThreadId: "p-step2" },
-  { recordId: "r-done", recipient: "done@example.com", sentAt: day(-20), localThreadId: "t-done", providerThreadId: null },
-  { recordId: "r-unsent", recipient: "unsent@example.com", sentAt: null, localThreadId: null, providerThreadId: null },
+  { recordId: "r-late", recipient: "Late@BuyerCo.com", sentAt: day(0), localThreadId: "t-late", providerThreadId: "p-late" },
+  { recordId: "r-early", recipient: "early@buyerco.com", sentAt: day(-4), localThreadId: "t-early", providerThreadId: "p-early" },
+  { recordId: "r-replied", recipient: "replied@buyerco.com", sentAt: day(-6), localThreadId: "t-replied", providerThreadId: null },
+  { recordId: "r-bounced", recipient: "bounced@buyerco.com", sentAt: day(-6), localThreadId: "t-bounced", providerThreadId: null },
+  { recordId: "r-suppressed", recipient: "gone@buyerco.com", sentAt: day(-6), localThreadId: null, providerThreadId: null },
+  { recordId: "r-queued", recipient: "queued@buyerco.com", sentAt: day(-6), localThreadId: "t-queued", providerThreadId: null },
+  { recordId: "r-rejected", recipient: "rejected@buyerco.com", sentAt: day(-9), localThreadId: "t-rejected", providerThreadId: null },
+  { recordId: "r-step2", recipient: "step2@buyerco.com", sentAt: day(-9), localThreadId: "t-step2", providerThreadId: "p-step2" },
+  { recordId: "r-done", recipient: "done@buyerco.com", sentAt: day(-20), localThreadId: "t-done", providerThreadId: null },
+  { recordId: "r-unsent", recipient: "unsent@buyerco.com", sentAt: null, localThreadId: null, providerThreadId: null },
 ];
 const plan = planCampaignFollowUps({
   steps: sequenceSteps,
@@ -512,8 +564,8 @@ const plan = planCampaignFollowUps({
     { recordId: "r-done", step: 2, status: "SENT", sentAt: day(-10) },
   ],
   repliedThreadIds: new Set(["t-replied"]),
-  bouncedRecipients: new Set(["bounced@example.com"]),
-  suppressedRecipients: new Set(["gone@example.com"]),
+  bouncedRecipients: new Set(["bounced@buyerco.com"]),
+  suppressedRecipients: new Set(["gone@buyerco.com"]),
   now: day(0),
 });
 assert.deepEqual(plan.due.map((item) => [item.recordId, item.step, item.dueAt.toISOString(), item.providerThreadId]), [
@@ -521,9 +573,9 @@ assert.deepEqual(plan.due.map((item) => [item.recordId, item.step, item.dueAt.to
   ["r-early", 1, day(-1).toISOString(), "p-early"],
 ]);
 assert.deepEqual(plan.skips, [
-  { recordId: "r-bounced", recipient: "bounced@example.com", step: 1, reason: "BOUNCED" },
-  { recordId: "r-replied", recipient: "replied@example.com", step: 1, reason: "REPLIED" },
-  { recordId: "r-suppressed", recipient: "gone@example.com", step: 1, reason: "SUPPRESSED" },
+  { recordId: "r-bounced", recipient: "bounced@buyerco.com", step: 1, reason: "BOUNCED" },
+  { recordId: "r-replied", recipient: "replied@buyerco.com", step: 1, reason: "REPLIED" },
+  { recordId: "r-suppressed", recipient: "gone@buyerco.com", step: 1, reason: "SUPPRESSED" },
 ]);
 assert.equal(plan.outstanding, 4, "queued, step2, early, and late (not yet due) sequences remain outstanding");
 assert.deepEqual(planCampaignFollowUps({ steps: [], sends, followUps: [], repliedThreadIds: new Set(), now: day(0) }), {

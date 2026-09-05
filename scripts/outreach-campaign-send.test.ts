@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Prisma } from "@prisma/client";
+import type { LiveRecipientCheck } from "../src/lib/outreach-recipient-quality";
 
 process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/test?sslmode=require";
 
@@ -23,10 +24,15 @@ async function main() {
   } = await import("../src/lib/outreach-campaign-send");
   const { SENDER_PAUSED_ERROR } = await import("../src/lib/supply-os/supplier-email-provider");
   const { renderCampaignEmail, selectCampaignVariant } = await import("../src/lib/outreach-campaign-copy");
+  const { RECIPIENT_QUALITY_SUPPRESSION_SOURCE } = await import("../src/lib/outreach-campaign-send");
+  const offlineRecipientCheck: LiveRecipientCheck = {
+    verifier: null,
+    resolveMx: async () => [{ exchange: "mx.buyerco.com", priority: 10 }],
+  };
   const rows = [
-    { id: "late", status: "new", data: { email: "late@example.com" }, createdAt: new Date("2026-01-02") },
-    { id: "early", status: "new", data: { email: "early@example.com" }, createdAt: new Date("2026-01-01") },
-    { id: "bad", status: "rejected", data: { email: "bad@example.com" }, createdAt: new Date("2026-01-01") },
+    { id: "late", status: "new", data: { email: "late@buyerco.com" }, createdAt: new Date("2026-01-02") },
+    { id: "early", status: "new", data: { email: "early@buyerco.com" }, createdAt: new Date("2026-01-01") },
+    { id: "bad", status: "rejected", data: { email: "bad@buyerco.com" }, createdAt: new Date("2026-01-01") },
   ];
   assert.equal(outreachCampaignBatchLimit(undefined, 40, 12), 28);
   assert.equal(outreachCampaignBatchLimit(5, 40, 12), 5);
@@ -43,29 +49,29 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     rows: [{
       id: "record-1",
       status: "new",
-      data: { email: "changed@example.com", company: "Changed Co", country: "FR" },
+      data: { email: "changed@buyerco.com", company: "Changed Co", country: "FR" },
       createdAt: new Date("2026-01-01"),
     }, {
       id: "record-2",
       status: "new",
-      data: { email: "other@example.com" },
+      data: { email: "other@buyerco.com" },
       createdAt: new Date("2026-01-02"),
     }],
     audienceRecordIds: ["record-1", "missing", "record-2"],
     audiencePersonalization: {
-      "record-1": { email: "pinned@example.com", company: "Pinned Co", country: "GB" },
-      "record-2": { email: "other-pinned@example.com", company: null, country: null },
+      "record-1": { email: "pinned@buyerco.com", company: "Pinned Co", country: "GB" },
+      "record-2": { email: "other-pinned@buyerco.com", company: null, country: null },
     },
     statuses: ["new"],
     emailField: "email",
     limit: 10,
   });
   assert.deepEqual(pinnedRows.map((row) => row.data), [{
-    email: "pinned@example.com",
+    email: "pinned@buyerco.com",
     company: "Pinned Co",
     country: "GB",
   }, {
-    email: "other-pinned@example.com",
+    email: "other-pinned@buyerco.com",
     company: null,
     country: null,
   }]);
@@ -81,18 +87,18 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     rows: [{
       id: "record-1",
       status: "new",
-      data: { email: "changed@example.com" },
+      data: { email: "changed@buyerco.com" },
       createdAt: new Date("2026-01-01"),
     }, {
       id: "record-2",
       status: "rejected",
-      data: { email: "rejected@example.com" },
+      data: { email: "rejected@buyerco.com" },
       createdAt: new Date("2026-01-02"),
     }],
     audienceRecordIds: ["record-1", "record-2"],
     audiencePersonalization: {
-      "record-1": { email: "pinned@example.com", company: null, country: null },
-      "record-2": { email: "rejected-pinned@example.com", company: null, country: null },
+      "record-1": { email: "pinned@buyerco.com", company: null, country: null },
+      "record-2": { email: "rejected-pinned@buyerco.com", company: null, country: null },
     },
     statuses: ["new"],
     emailField: "email",
@@ -114,7 +120,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   const hash = outreachCampaignRequestHash({
     campaignId: "campaign-1",
     recordId: "record-1",
-    recipient: "early@example.com",
+    recipient: "early@buyerco.com",
     subject: "Hello",
     body: "Reply STOP to opt out.",
   });
@@ -182,19 +188,20 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
           listId: "list-1",
           audienceRecordIds: ["record-1"],
           audiencePersonalization: {
-            "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
+            "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
           },
           ...campaignOverrides,
         }),
         updateMany: async () => undefined,
       },
       outreachCampaignSend: send,
+      outreachCampaignFollowUp: { count: async () => 0 },
       emailSenderReservation: { findUnique: async () => null },
       researchRecord: {
         findMany: async () => [{
           id: "record-1",
           status: "new",
-          data: { email: "buyer@example.com", company: "Buyer Co" },
+          data: { email: "buyer@buyerco.com", company: "Buyer Co" },
           createdAt: new Date("2026-01-01"),
         }],
       },
@@ -255,7 +262,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     const sendModel = {
       count: async () => 0,
       findMany: async (args: { where?: { status?: string } }) => (args.where?.status === "SENT"
-        ? [{ recordId: "record-2", recipient: "other@example.com", sentAt: new Date(now.getTime() - 3 * 86_400_000), localThreadId: "thread-2", providerThreadId: "provider-thread-2" }]
+        ? [{ recordId: "record-2", recipient: "other@buyerco.com", sentAt: new Date(now.getTime() - 3 * 86_400_000), localThreadId: "thread-2", providerThreadId: "provider-thread-2" }]
         : []),
       deleteMany: async () => undefined,
       createMany: async () => undefined,
@@ -265,8 +272,8 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     const base = fakeDatabase({
       audienceRecordIds: ["record-1", "record-2"],
       audiencePersonalization: {
-        "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
-        "record-2": { email: "other@example.com", company: "Other Co", country: null },
+        "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+        "record-2": { email: "other@buyerco.com", company: "Other Co", country: null },
       },
       followUps: [{ waitDays: 3, subject: null, body: "Still interested, {{company}}? Reply STOP to opt out." }],
     });
@@ -295,7 +302,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     ok: true as const,
     reservationId: "reservation-1",
     accountId: "account-1",
-    senderEmail: "sender@example.com",
+    senderEmail: "sender@buyerco.com",
     dailySendLimit: 30,
     sentToday: 0,
     reservedToday: 1,
@@ -324,7 +331,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     dailyCap: 5,
     audienceRecordIds: ["record-1"],
     audiencePersonalization: {
-      "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
+      "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
     },
   });
   const noSenderRun = await runOutreachCampaignBatch({
@@ -333,6 +340,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     db: noSenderDb,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(noSenderRun.blocked, "NO_SENDER");
   let completionCalled = false;
@@ -345,6 +353,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       return { completed: false };
     },
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(noAudienceRun.blocked, "NO_AUDIENCE");
   assert.equal(completionCalled, false);
@@ -356,10 +365,335 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
     now: new Date("2026-01-01T12:00:00Z"),
   });
   assert.equal(sentRun.sent, 1);
+  assert.equal(sentRun.pruned, 0);
   assert.equal(sentProviderInput?.senderDisplayName, "Wens");
+
+  // Pre-send gate: a placeholder, a Null MX domain, and a verifier-undeliverable
+  // mailbox are refused before any claim, so with a run limit of one the fourth,
+  // clean recipient still goes out. Refusals about the address itself are
+  // suppressed office-wide with the gate as source.
+  const gateSuppressions: Array<Record<string, unknown>> = [];
+  const gateRejections: Array<Record<string, unknown>> = [];
+  const gateDb = fakeDatabase({
+    dailyCap: 1,
+    audienceRecordIds: ["record-placeholder", "record-nullmx", "record-gone", "record-1"],
+    audiencePersonalization: {
+      "record-placeholder": { email: "someone@example.com", company: "Template Co", country: null },
+      "record-nullmx": { email: "buyer@nullmx.com", company: "Null Co", country: null },
+      "record-gone": { email: "gone@buyerco.com", company: "Gone Co", country: null },
+      "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+    },
+  });
+  gateDb.researchRecord.findMany = async () => [
+    { id: "record-placeholder", status: "new", data: { email: "someone@example.com", company: "Template Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-nullmx", status: "new", data: { email: "buyer@nullmx.com", company: "Null Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-gone", status: "new", data: { email: "gone@buyerco.com", company: "Gone Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+  ];
+  (gateDb.emailSuppression as { upsert?: (args: Record<string, unknown>) => Promise<unknown> }).upsert = async (args) => {
+    gateSuppressions.push(args);
+    return null;
+  };
+  gateDb.outreachCampaignSend.createMany = async (args: { data: Array<Record<string, unknown>> }) => {
+    gateRejections.push(...args.data);
+  };
+  const verifierCalls: string[] = [];
+  const gateRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: gateDb as never,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    limit: 1,
+    recipientCheck: {
+      resolveMx: async (domain) => (domain === "nullmx.com" ? [{ exchange: ".", priority: 0 }] : [{ exchange: "mx.buyerco.com", priority: 10 }]),
+      verifier: {
+        name: "fake",
+        async verify(email) {
+          verifierCalls.push(email);
+          return {
+            provider: "fake",
+            status: email.startsWith("gone@") ? "undeliverable" : "deliverable",
+            reason: "fixture",
+            score: null,
+            acceptAll: null,
+            disposable: null,
+            free: null,
+            role: null,
+            disabled: null,
+            fullMailbox: null,
+            checkedAt: new Date(0).toISOString(),
+          };
+        },
+        usage: () => ({ provider: "fake", calls: verifierCalls.length, cached: 0, failures: 0, exhausted: false }),
+      },
+    },
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(gateRun.sent, 1, "the clean recipient fills the single slot");
+  assert.equal(gateRun.pruned, 3);
+  assert.equal(gateRun.rejected, 3);
+  assert.equal(gateRun.verificationChecks, 2, "placeholder and Null MX rows never reach the paid verifier");
+  assert.deepEqual(verifierCalls, ["gone@buyerco.com", "buyer@buyerco.com"]);
+  assert.equal(sentProviderInput?.recipient, "buyer@buyerco.com");
+  const rejectedLedger = gateRejections.filter((row) => row.status === "REJECTED").map((row) => [row.recipient, row.error]);
+  assert.deepEqual(rejectedLedger, [
+    ["someone@example.com", "Recipient skipped: placeholder or template address (placeholder address)."],
+    ["buyer@nullmx.com", "Recipient skipped: domain accepts no mail (nullmx.com publishes a Null MX record and does not accept email)."],
+    ["gone@buyerco.com", "Recipient skipped: mailbox verified undeliverable (fake: fixture)."],
+  ]);
+  assert.deepEqual(
+    gateSuppressions.map((args) => (args.create as Record<string, unknown>).email),
+    ["someone@example.com", "buyer@nullmx.com", "gone@buyerco.com"],
+    "permanent refusals are suppressed office-wide",
+  );
+
+  // The office-wide suppression is written before the terminal ledger row. If
+  // the suppression write fails, no REJECTED row marks the record handled, the
+  // run surfaces the failure, and the next run repeats the check so the
+  // suppression is retried instead of the address staying eligible elsewhere.
+  const failingSuppressionDb = fakeDatabase({
+    dailyCap: 1,
+    audiencePersonalization: {
+      "record-1": { email: "someone@example.com", company: "Template Co", country: null },
+    },
+  });
+  failingSuppressionDb.researchRecord.findMany = async () => [
+    { id: "record-1", status: "new", data: { email: "someone@example.com", company: "Template Co" }, createdAt: new Date("2026-01-01") },
+  ];
+  (failingSuppressionDb.emailSuppression as { upsert?: (args: Record<string, unknown>) => Promise<unknown> }).upsert = async () => {
+    throw new Error("suppression store unavailable");
+  };
+  const ledgerWritesAfterFailedSuppression: Array<Record<string, unknown>> = [];
+  failingSuppressionDb.outreachCampaignSend.createMany = async (args: { data: Array<Record<string, unknown>> }) => {
+    ledgerWritesAfterFailedSuppression.push(...args.data);
+  };
+  await assert.rejects(
+    runOutreachCampaignBatch({
+      officeId: "office-1",
+      campaignId: "campaign-1",
+      db: failingSuppressionDb as never,
+      provider,
+      reserve: async () => reservation,
+      complete: async () => ({ completed: false }),
+      pauseMs: 0,
+      limit: 1,
+      recipientCheck: { resolveMx: async () => [{ exchange: "mx.example.com", priority: 10 }] },
+      now: new Date("2026-01-01T12:00:00Z"),
+    }),
+    /suppression store unavailable/,
+  );
+  assert.deepEqual(
+    ledgerWritesAfterFailedSuppression.filter((row) => row.status === "REJECTED"),
+    [],
+    "a failed suppression must not leave a terminal ledger row behind",
+  );
+
+  // A stored verdict belongs to the address the row carried when it was
+  // verified. After the row's address is edited past approval, the approved
+  // recipient still goes out: a current `undeliverable` for the new mailbox
+  // does not block it, and a current `deliverable_likely` does not let it skip
+  // its own paid check.
+  for (const currentVerdict of ["undeliverable", "deliverable_likely"]) {
+    const editedDb = fakeDatabase({
+      dailyCap: 1,
+      audiencePersonalization: {
+        "record-1": { email: "approved@buyerco.com", company: "Buyer Co", country: null },
+      },
+    });
+    editedDb.researchRecord.findMany = async () => [
+      { id: "record-1", status: "new", data: { email: "replacement@buyerco.com", company: "Buyer Co", email_verdict: currentVerdict }, createdAt: new Date("2026-01-01") },
+    ];
+    const editedRejections: Array<Record<string, unknown>> = [];
+    editedDb.outreachCampaignSend.createMany = async (args: { data: Array<Record<string, unknown>> }) => {
+      editedRejections.push(...args.data);
+    };
+    const editedVerifierCalls: string[] = [];
+    const editedRun = await runOutreachCampaignBatch({
+      officeId: "office-1",
+      campaignId: "campaign-1",
+      db: editedDb as never,
+      provider,
+      reserve: async () => reservation,
+      complete: async () => ({ completed: false }),
+      pauseMs: 0,
+      limit: 1,
+      recipientCheck: {
+        resolveMx: async () => [{ exchange: "mx.buyerco.com", priority: 10 }],
+        verifier: {
+          name: "fake",
+          async verify(email) {
+            editedVerifierCalls.push(email);
+            return {
+              provider: "fake",
+              status: "deliverable",
+              reason: "fixture",
+              score: null,
+              acceptAll: null,
+              disposable: null,
+              free: null,
+              role: null,
+              disabled: null,
+              fullMailbox: null,
+              checkedAt: new Date(0).toISOString(),
+            };
+          },
+          usage: () => ({ provider: "fake", calls: editedVerifierCalls.length, cached: 0, failures: 0, exhausted: false }),
+        },
+      },
+      now: new Date("2026-01-01T12:00:00Z"),
+    });
+    assert.equal(editedRun.sent, 1, `current ${currentVerdict} on the replacement address must not decide the approved one`);
+    assert.equal(editedRun.pruned, 0, currentVerdict);
+    assert.deepEqual(editedRejections.filter((row) => row.status === "REJECTED"), [], currentVerdict);
+    assert.equal(sentProviderInput?.recipient, "approved@buyerco.com", currentVerdict);
+    assert.deepEqual(editedVerifierCalls, ["approved@buyerco.com"], `${currentVerdict}: the approved address is verified itself`);
+  }
+
+  // The same row with an unchanged address keeps its stored verdict: a
+  // `deliverable_likely` skips the paid check for the approved recipient.
+  const confirmedDb = fakeDatabase({
+    dailyCap: 1,
+    audiencePersonalization: {
+      "record-1": { email: "approved@buyerco.com", company: "Buyer Co", country: null },
+    },
+  });
+  confirmedDb.researchRecord.findMany = async () => [
+    { id: "record-1", status: "new", data: { email: "approved@buyerco.com", company: "Buyer Co", email_verdict: "deliverable_likely" }, createdAt: new Date("2026-01-01") },
+  ];
+  const confirmedVerifierCalls: string[] = [];
+  const confirmedRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: confirmedDb as never,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    limit: 1,
+    recipientCheck: {
+      resolveMx: async () => [{ exchange: "mx.buyerco.com", priority: 10 }],
+      verifier: {
+        name: "fake",
+        async verify(email) {
+          confirmedVerifierCalls.push(email);
+          throw new Error("must not be called");
+        },
+        usage: () => ({ provider: "fake", calls: confirmedVerifierCalls.length, cached: 0, failures: 0, exhausted: false }),
+      },
+    },
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(confirmedRun.sent, 1);
+  assert.deepEqual(confirmedVerifierCalls, [], "a matching stored deliverable_likely skips the paid check");
+
+  // A campaign parked at its daily cap must not buy DNS or verifier checks for
+  // recipients it cannot claim today, however often the cron retries it.
+  const cappedDb = fakeDatabase({
+    dailyCap: 2,
+    audienceRecordIds: ["record-1", "record-2", "record-3"],
+    audiencePersonalization: {
+      "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+      "record-2": { email: "ops@buyerco.com", company: "Buyer Co", country: null },
+      "record-3": { email: "sales@buyerco.com", company: "Buyer Co", country: null },
+    },
+  });
+  cappedDb.researchRecord.findMany = async () => [
+    { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-2", status: "new", data: { email: "ops@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-3", status: "new", data: { email: "sales@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+  ];
+  const cappedLookups: string[] = [];
+  const cappedCheck: LiveRecipientCheck = {
+    resolveMx: async (domain) => {
+      cappedLookups.push(`mx:${domain}`);
+      return [{ exchange: "mx.buyerco.com", priority: 10 }];
+    },
+    verifier: {
+      name: "fake",
+      async verify(email) {
+        cappedLookups.push(`verify:${email}`);
+        return {
+          provider: "fake",
+          status: "deliverable",
+          reason: "fixture",
+          score: null,
+          acceptAll: null,
+          disposable: null,
+          free: null,
+          role: null,
+          disabled: null,
+          fullMailbox: null,
+          checkedAt: new Date(0).toISOString(),
+        };
+      },
+      usage: () => ({ provider: "fake", calls: 0, cached: 0, failures: 0, exhausted: false }),
+    },
+  };
+  let cappedSentToday = 2;
+  (cappedDb.outreachCampaignSend as { count: (args: { where?: { status?: string } }) => Promise<number> }).count =
+    async (args) => (args.where?.status === "SENT" ? cappedSentToday : 0);
+  let cappedProviderCalls = 0;
+  const cappedRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: cappedDb as never,
+    provider: { ...provider, send: async (input: Record<string, unknown>) => { cappedProviderCalls += 1; return provider.send(input); } },
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: cappedCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(cappedRun.sent, 0);
+  assert.equal(cappedRun.verificationChecks, 0, "no paid check when no daily capacity remains");
+  assert.deepEqual(cappedLookups, [], "no DNS or verifier lookups when no daily capacity remains");
+  assert.equal(cappedProviderCalls, 0);
+  // With one slot left, verification is bounded by that slot rather than the
+  // whole audience: at most the claimable count of rows is checked.
+  cappedSentToday = 1;
+  const oneSlotRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: cappedDb as never,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: cappedCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(oneSlotRun.sent, 1);
+  assert.equal(oneSlotRun.verificationChecks, 1, "verification stops at the claimable capacity");
+  assert.deepEqual(cappedLookups, ["mx:buyerco.com", "verify:buyer@buyerco.com"]);
+  assert.deepEqual(
+    gateSuppressions.map((args) => {
+      const create = args.create as Record<string, unknown>;
+      return [create.officeId, create.email, create.reason, create.source];
+    }),
+    [
+      ["office-1", "someone@example.com", "UNDELIVERABLE", RECIPIENT_QUALITY_SUPPRESSION_SOURCE],
+      ["office-1", "buyer@nullmx.com", "UNDELIVERABLE", RECIPIENT_QUALITY_SUPPRESSION_SOURCE],
+      ["office-1", "gone@buyerco.com", "UNDELIVERABLE", RECIPIENT_QUALITY_SUPPRESSION_SOURCE],
+    ],
+    "permanent refusals are suppressed for the office, scoped by officeId",
+  );
+  assert.deepEqual(
+    gateRun.outcomes.map((outcome) => [outcome.recipient, outcome.state]),
+    [
+      ["someone@example.com", "REJECTED"],
+      ["buyer@nullmx.com", "REJECTED"],
+      ["gone@buyerco.com", "REJECTED"],
+      ["buyer@buyerco.com", "SENT"],
+    ],
+  );
+
   let reservationMarkerInput: { where?: Record<string, unknown>; data?: Record<string, unknown> } | undefined;
   const reservationMarkerDb = fakeDatabase() as unknown as {
     outreachCampaignSend: {
@@ -377,6 +711,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.deepEqual(reservationMarkerInput, {
     where: {
@@ -400,6 +735,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(rotationRun.sent, 1);
   assert.equal("accountId" in (rotationReservationInput ?? {}), false);
@@ -430,6 +766,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(retryAttempts, 3);
   assert.equal(retryRun.sent, 1);
@@ -447,6 +784,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(exhaustedAttempts, 2);
   assert.equal(serializationExhaustedRun.sent, 0);
@@ -458,7 +796,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       ...base.outreachCampaignSend,
       findMany: async (args: { where?: { campaignId?: { not?: string } } }) => (
         args.where?.campaignId?.not
-          ? (status === "REJECTED" ? [] : [{ recipient: " BUYER@example.com " }])
+          ? (status === "REJECTED" ? [] : [{ recipient: " BUYER@buyerco.com " }])
           : []
       ),
       createMany: async (args: { data: unknown[] }) => {
@@ -489,6 +827,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       reserve: async () => reservation,
       complete: async () => ({ completed: false }),
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
     });
     return { run, createdRows };
   }
@@ -512,6 +851,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   const expectedVariant = selectCampaignVariant({
     campaignId: "campaign-1",
@@ -535,6 +875,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     release: async () => { released += 1; },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(rejectedRun.rejected, 1);
   assert.equal(released, 1);
@@ -551,6 +892,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     release: async () => { released += 1; },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(unknownRun.unknown, 1);
   assert.equal(released, 1);
@@ -573,12 +915,13 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
     now: budgetNow,
     limit: 1,
   });
   assert.equal(limitedRun.sent, 1);
   assert.equal(limitedRun.followUps?.attempted, 0, "follow-ups get no budget after one first touch with limit 1");
-  assert.deepEqual(budgetProviderCalls, ["buyer@example.com"]);
+  assert.deepEqual(budgetProviderCalls, ["buyer@buyerco.com"]);
   assert.equal(limitedDb.followUpRows.length, 0);
   const unlimitedDb = budgetDatabase(budgetNow);
   const unlimitedRun = await runOutreachCampaignBatch({
@@ -589,12 +932,13 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
     now: budgetNow,
     limit: 2,
   });
   assert.equal(unlimitedRun.sent, 1);
   assert.equal(unlimitedRun.followUps?.sent, 1);
-  assert.deepEqual(budgetProviderCalls, ["buyer@example.com", "buyer@example.com", "other@example.com"]);
+  assert.deepEqual(budgetProviderCalls, ["buyer@buyerco.com", "buyer@buyerco.com", "other@buyerco.com"]);
 
   // A persisted suppression for this office is recorded as REJECTED before any
   // claim and never reaches the reservation or provider. Another office's
@@ -604,18 +948,18 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     {
       audienceRecordIds: ["record-1", "record-2"],
       audiencePersonalization: {
-        "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
-        "record-2": { email: "other@example.com", company: "Other Co", country: null },
+        "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+        "record-2": { email: "other@buyerco.com", company: "Other Co", country: null },
       },
     },
     [
-      { officeId: "office-1", email: "buyer@example.com", reason: "BOUNCED" },
-      { officeId: "office-2", email: "other@example.com", reason: "COMPLAINED" },
+      { officeId: "office-1", email: "buyer@buyerco.com", reason: "BOUNCED" },
+      { officeId: "office-2", email: "other@buyerco.com", reason: "COMPLAINED" },
     ],
   );
   suppressedDb.researchRecord.findMany = async () => [
-    { id: "record-1", status: "new", data: { email: "buyer@example.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
-    { id: "record-2", status: "new", data: { email: "other@example.com", company: "Other Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-2", status: "new", data: { email: "other@buyerco.com", company: "Other Co" }, createdAt: new Date("2026-01-01") },
   ];
   suppressedDb.outreachCampaignSend.createMany = async (args: { data: Array<Record<string, unknown>> }) => {
     suppressedLedger.push(...args.data);
@@ -640,11 +984,12 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
     now: new Date("2026-01-01T12:00:00Z"),
   });
   assert.equal(suppressedRun.rejected, 1);
   assert.equal(suppressedRun.sent, 1);
-  assert.deepEqual(suppressedProviderCalls, ["other@example.com"]);
+  assert.deepEqual(suppressedProviderCalls, ["other@buyerco.com"]);
   assert.equal(suppressedReserveCalls, 1, "a suppressed recipient never reserves a sender");
   const suppressedRow = suppressedLedger.find((row) => row.recordId === "record-1");
   assert.equal(suppressedRow?.status, "REJECTED");
@@ -664,22 +1009,22 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       dailyCap: 2,
       audienceRecordIds: ["record-1", "record-2", "record-3", "record-4"],
       audiencePersonalization: {
-        "record-1": { email: "gone@example.com", company: "Gone Co", country: null },
-        "record-2": { email: "buyer@example.com", company: "Buyer Co", country: null },
-        "record-3": { email: "left@example.com", company: "Left Co", country: null },
-        "record-4": { email: "other@example.com", company: "Other Co", country: null },
+        "record-1": { email: "gone@buyerco.com", company: "Gone Co", country: null },
+        "record-2": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+        "record-3": { email: "left@buyerco.com", company: "Left Co", country: null },
+        "record-4": { email: "other@buyerco.com", company: "Other Co", country: null },
       },
     },
     [
-      { officeId: "office-1", email: "gone@example.com", reason: "BOUNCED" },
-      { officeId: "office-1", email: "left@example.com", reason: "OPTED_OUT" },
+      { officeId: "office-1", email: "gone@buyerco.com", reason: "BOUNCED" },
+      { officeId: "office-1", email: "left@buyerco.com", reason: "OPTED_OUT" },
     ],
   );
   displacedDb.researchRecord.findMany = async () => [
-    { id: "record-1", status: "new", data: { email: "gone@example.com", company: "Gone Co" }, createdAt: new Date("2026-01-01") },
-    { id: "record-2", status: "new", data: { email: "buyer@example.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
-    { id: "record-3", status: "new", data: { email: "left@example.com", company: "Left Co" }, createdAt: new Date("2026-01-01") },
-    { id: "record-4", status: "new", data: { email: "other@example.com", company: "Other Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-1", status: "new", data: { email: "gone@buyerco.com", company: "Gone Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-2", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-3", status: "new", data: { email: "left@buyerco.com", company: "Left Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-4", status: "new", data: { email: "other@buyerco.com", company: "Other Co" }, createdAt: new Date("2026-01-01") },
   ];
   displacedDb.outreachCampaignSend.createMany = async (args: { data: Array<Record<string, unknown>> }) => {
     displacedLedger.push(...args.data);
@@ -699,11 +1044,12 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
     now: new Date("2026-01-01T12:00:00Z"),
   });
   assert.equal(displacedRun.sent, 2, "suppressed rows do not shrink the batch");
   assert.equal(displacedRun.rejected, 2);
-  assert.deepEqual(displacedProviderCalls, ["buyer@example.com", "other@example.com"]);
+  assert.deepEqual(displacedProviderCalls, ["buyer@buyerco.com", "other@buyerco.com"]);
   assert.deepEqual(
     displacedLedger.filter((row) => row.status === "REJECTED").map((row) => row.recordId).sort(),
     ["record-1", "record-3"],
@@ -719,15 +1065,15 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     {
       audienceRecordIds: ["record-1", "record-2"],
       audiencePersonalization: {
-        "record-1": { email: "buyer@example.com", company: "Buyer Co", country: null },
-        "record-2": { email: "other@example.com", company: "Other Co", country: null },
+        "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+        "record-2": { email: "other@buyerco.com", company: "Other Co", country: null },
       },
     },
     lateSuppressions,
   );
   lateDb.researchRecord.findMany = async () => [
-    { id: "record-1", status: "new", data: { email: "buyer@example.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
-    { id: "record-2", status: "new", data: { email: "other@example.com", company: "Other Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-2", status: "new", data: { email: "other@buyerco.com", company: "Other Co" }, createdAt: new Date("2026-01-01") },
   ];
   const lateUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   lateDb.outreachCampaignSend.updateMany = async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
@@ -746,7 +1092,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
         lateProviderCalls.push(String(input.recipient));
         // The first delivery takes long enough for a bounce report about the
         // second recipient to be synced and suppressed.
-        lateSuppressions.push({ officeId: "office-1", email: "other@example.com", reason: "OPTED_OUT" });
+        lateSuppressions.push({ officeId: "office-1", email: "other@buyerco.com", reason: "OPTED_OUT" });
         return provider.send(input);
       },
     },
@@ -754,11 +1100,12 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     release: async () => { lateReleased += 1; },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
     now: new Date("2026-01-01T12:00:00Z"),
   });
   assert.equal(lateRun.sent, 1);
   assert.equal(lateRun.rejected, 1);
-  assert.deepEqual(lateProviderCalls, ["buyer@example.com"], "a recipient suppressed mid-batch never reaches the provider");
+  assert.deepEqual(lateProviderCalls, ["buyer@buyerco.com"], "a recipient suppressed mid-batch never reaches the provider");
   assert.equal(lateReleased, 1, "the reservation taken for the suppressed recipient is released");
   const lateRejected = lateUpdates.find((update) => update.where.recordId === "record-2" && update.data.status === "REJECTED");
   assert.ok(lateRejected, "the suppressed claim is settled as REJECTED");
@@ -773,6 +1120,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => ({ error: "pool exhausted", code: "POOL_EXHAUSTED" as const }),
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(exhaustedRun.poolExhausted, true);
 
@@ -796,7 +1144,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
         assert.equal(args.where.officeId, "office-1");
         assert.equal(args.where.idempotencyKey, outreachCampaignIdempotencyKey("campaign-1", "record-1"));
         assert.equal(args.where.status, "RESERVED");
-        return { id: "reservation-orphan", account: { email: "sender@example.com" } };
+        return { id: "reservation-orphan", account: { email: "sender@buyerco.com" } };
       },
     },
   };
@@ -808,6 +1156,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => ({ error: "delivery outcome unknown", code: "DELIVERY_UNCERTAIN" as const }),
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(uncertainRun.unknown, 1);
   assert.equal(uncertainRun.rejected, 0);
@@ -816,7 +1165,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   assert.equal(uncertainUpserts.length, 1);
   assert.equal(uncertainUpserts[0].status, "UNKNOWN");
   assert.equal(uncertainUpserts[0].reservationId, "reservation-orphan");
-  assert.equal(uncertainUpserts[0].senderEmail, "sender@example.com");
+  assert.equal(uncertainUpserts[0].senderEmail, "sender@buyerco.com");
   assert.equal(uncertainRun.outcomes[0].state, "UNKNOWN");
 
   const conflictBase = fakeDatabase();
@@ -841,6 +1190,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => ({ error: "key used for different content", code: "IDEMPOTENCY_CONFLICT" as const }),
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(conflictRun.rejected, 1);
   assert.equal(conflictRun.unknown, 0);
@@ -855,7 +1205,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   const exhaustedBase = fakeDatabase({
     audienceRecordIds: ["record-1", "record-2", "record-3"],
     audiencePersonalization: Object.fromEntries(["record-1", "record-2", "record-3"].map((id) => [id, {
-      email: `${id}@example.com`,
+      email: `${id}@buyerco.com`,
       company: `Company ${id}`,
       country: null,
     }])),
@@ -872,7 +1222,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       findMany: async () => ["record-1", "record-2", "record-3"].map((id, index) => ({
         id,
         status: "new",
-        data: { email: `${id}@example.com`, company: `Company ${id}` },
+        data: { email: `${id}@buyerco.com`, company: `Company ${id}` },
         createdAt: new Date(2026, 0, 1 + index),
       })),
     },
@@ -889,6 +1239,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(exhaustedMidBatch.sent, 1);
   assert.equal(exhaustedMidBatch.poolExhausted, true);
@@ -930,6 +1281,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => { throw new Error("a paused campaign must not reserve a sender"); },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(pausedRun.sent, 0);
   assert.equal(pausedRun.attempted, 0);
@@ -945,7 +1297,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   const pagingLedger: Array<{ recordId: string; recipient: string; status: string; sentAt: Date | null; createdAt: Date }> = [];
   const pagingAudience = ["record-1", "record-2", "record-3"];
   const pagingPersonalization = Object.fromEntries(pagingAudience.map((id) => [id, {
-    email: `${id}@example.com`,
+    email: `${id}@buyerco.com`,
     company: `Company ${id}`,
     country: null,
   }]));
@@ -1009,7 +1361,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       findMany: async () => pagingAudience.map((id, index) => ({
         id,
         status: "new",
-        data: { email: `${id}@example.com`, company: `Company ${id}` },
+        data: { email: `${id}@buyerco.com`, company: `Company ${id}` },
         createdAt: new Date(2026, 0, 1 + index),
       })),
     },
@@ -1040,11 +1392,12 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       reserve: async () => reservation,
       complete: async () => ({ completed: false }),
       pauseMs: 0,
+      recipientCheck: offlineRecipientCheck,
       now: new Date(`2026-02-0${day}T12:00:00Z`),
     });
     assert.equal(run.sent, 1, `day ${day} should send exactly one first touch`);
   }
-  assert.deepEqual(sentRecipients, ["record-1@example.com", "record-2@example.com", "record-3@example.com"]);
+  assert.deepEqual(sentRecipients, ["record-1@buyerco.com", "record-2@buyerco.com", "record-3@buyerco.com"]);
 
   // A mailbox paused by sender protection between the reservation and the
   // provider call: a rotated first touch moves to another ready mailbox once,
@@ -1087,11 +1440,12 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       rerouteReservations.push({ idempotencyKey: input.idempotencyKey, requestHash: input.requestHash, accountId: input.accountId });
       return rerouteReservations.length === 1
         ? reservation
-        : { ...reservation, accountId: "account-2", senderEmail: "second@example.com" };
+        : { ...reservation, accountId: "account-2", senderEmail: "second@buyerco.com" };
     },
     release: async () => { rerouteReleases += 1; },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.deepEqual(rerouteSends, ["account-1", "account-2"]);
   assert.equal(rerouteReservations.length, 2);
@@ -1104,7 +1458,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   assert.equal(rerouteRun.rejected, 0);
   assert.equal(rerouteRun.poolExhausted, false);
   assert.equal(rerouteUpdates.filter((update) => update.data.status === "REJECTED").length, 0, "a pause is not a durable rejection");
-  assert.deepEqual(rerouteRun.outcomes.map((outcome) => [outcome.state, outcome.senderEmail]), [["SENT", "second@example.com"]]);
+  assert.deepEqual(rerouteRun.outcomes.map((outcome) => [outcome.state, outcome.senderEmail]), [["SENT", "second@buyerco.com"]]);
 
   // The replacement mailbox pausing too is not retried again in this run: the
   // claim is released and the recipient waits for the next run.
@@ -1134,6 +1488,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     reserve: async () => reservation,
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.equal(doublePauseSends, 2);
   assert.equal(doublePauseRun.rerouted, 1);
@@ -1173,6 +1528,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     },
     complete: async () => ({ completed: false }),
     pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
   });
   assert.deepEqual(pinnedPauseReservations, ["account-1"], "a pinned campaign never asks the pool for another mailbox");
   assert.equal(pinnedPauseRun.rerouted, 0);

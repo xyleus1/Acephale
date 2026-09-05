@@ -65,6 +65,7 @@ import {
   saveDraftCampaign,
 } from "@/lib/outreach-campaigns";
 import { recipientQualityLines, spotCheckLabel } from "@/lib/batch-review";
+import { recipientQualityPruneLines } from "@/lib/outreach-recipient-quality";
 import { outreachCampaignRunNowLimitValid, runOutreachCampaignBatch } from "@/lib/outreach-campaign-send";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 
@@ -4343,6 +4344,11 @@ export async function dispatchTool(
               `Body (rendered from the first eligible row):\n${plan.renderedBody}`,
               `Eligible recipients: ${plan.eligible}. Approval covers all ${plan.eligible}; the ${plan.spotCheck.length} review items below are a spot check spread across the audience, each with the exact email that recipient gets.`,
               ...recipientQualityLines(plan.audienceQuality),
+              ...recipientQualityPruneLines(plan.pruned),
+              ...(plan.suppressed
+                ? [`Already suppressed for this office (bounced, complained, opted out, or failed an earlier check): ${plan.suppressed} left out.`]
+                : []),
+              "Right before each send the address is checked again (mail server, mailbox verifier when available); anything that fails is skipped and suppressed for this office.",
               ...(plan.filters.excludeEmails?.length ? [`Excluded by reviewer: ${plan.filters.excludeEmails.join(", ")}`] : []),
               ...(plan.followUps.length
                 ? [

@@ -32,8 +32,15 @@ import {
 } from "@/lib/email-sender-pool";
 import { logEmailTouch } from "@/lib/crm/email-touch";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
-import { listSuppressedEmails } from "@/lib/email-delivery-events";
+import { listSuppressedEmails, upsertEmailSuppression } from "@/lib/email-delivery-events";
 import { suppressionSkipMessage } from "@/lib/email-delivery-feedback";
+import {
+  LiveRecipientGate,
+  RECIPIENT_QUALITY_SUPPRESSION_SOURCE,
+  recipientQualityDataFor,
+  recipientQualityRefusal,
+  type LiveRecipientCheck,
+} from "@/lib/outreach-recipient-quality";
 import { prisma } from "@/lib/prisma";
 import {
   gmailSupplierEmailProvider,
@@ -69,6 +76,10 @@ export type CampaignBatchResult = {
   rejected: number;
   unknown: number;
   rerouted: number;
+  // Recipients the pre-send quality gate refused this run (a subset of
+  // `rejected`) and the paid verifier calls it spent.
+  pruned: number;
+  verificationChecks: number;
   poolExhausted: boolean;
   blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER" | "NO_AUDIENCE";
   outcomes: CampaignBatchSend[];
@@ -190,6 +201,19 @@ export function outreachCampaignClaimLimit(
   queuedToday: number,
 ) {
   return Math.max(0, Math.min(limit ?? dailyCap, dailyCap - sentToday - queuedToday));
+}
+
+// Rows worth verifying this run: never more than the cap capacity the claim
+// can still take, so a campaign parked at its daily cap does not buy DNS and
+// verifier checks for recipients it cannot claim today. The claim transaction
+// re-reads capacity under the campaign lock, so this bound is an upper limit,
+// not the enforcement.
+export function outreachCampaignVerificationLimit(
+  limit: number | undefined,
+  dailyCap: number,
+  remainingCapacity: number,
+) {
+  return Math.max(0, Math.min(limit ?? dailyCap, remainingCapacity));
 }
 
 export function outreachCampaignReconcileState(state: "SENT" | "NOT_FOUND" | "UNKNOWN") {
@@ -447,6 +471,8 @@ function result(campaignId: string): CampaignBatchResult {
     rejected: 0,
     unknown: 0,
     rerouted: 0,
+    pruned: 0,
+    verificationChecks: 0,
     poolExhausted: false,
     outcomes: [],
   };
@@ -593,21 +619,106 @@ async function rejectSuppressedCampaignRows(
   return rows.filter((row) => !blockedIds.has(row.id));
 }
 
+export { RECIPIENT_QUALITY_SUPPRESSION_SOURCE };
+
+// The product-wide recipient quality gate, run on the rows about to be claimed:
+// static checks, the domain's MX, and the mailbox verifier within the batch
+// budget. Refused rows are recorded as REJECTED so they never take a slot, and
+// refusals that describe the address itself are suppressed for the office so
+// no later campaign rediscovers them. The gate sees the current list row
+// underneath the approved snapshot, so a verdict stored after approval counts,
+// unless the row's address was edited away from the approved recipient.
+async function rejectUnqualifiedCampaignRows(
+  db: CampaignDb,
+  campaign: LoadedCampaign,
+  rows: CampaignBatchRow[],
+  researchData: ReadonlyMap<string, Record<string, unknown>>,
+  gate: LiveRecipientGate,
+  output: CampaignBatchResult,
+) {
+  if (!rows.length) return rows;
+  const refused: Array<{ row: CampaignBatchRow; recipient: string; error: string; permanent: boolean; detail: string }> = [];
+  for (const row of rows) {
+    const recipient = campaignRowRecipient(campaign, row);
+    const outcome = await gate.check(row, recipient, {
+      ...recipientQualityDataFor(researchData.get(row.id), campaign.emailField, recipient),
+      ...row.data,
+    });
+    if (outcome.ok) continue;
+    refused.push({ row, recipient, ...recipientQualityRefusal(outcome) });
+  }
+  output.verificationChecks = gate.paidChecks;
+  if (!refused.length) return rows;
+  const existing = await db.outreachCampaignSend.findMany({
+    where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: { in: refused.map((item) => item.row.id) } },
+    select: { recordId: true },
+  });
+  const handled = new Set(existing.map((item) => item.recordId));
+  const fresh = refused.filter((item) => !handled.has(item.row.id));
+  if (fresh.length) {
+    // Suppression is written before the terminal ledger row: the ledger row is
+    // what marks the record handled, so a failed suppression write leaves the
+    // row unhandled and the next run repeats the check (and the suppression)
+    // instead of silently keeping the address eligible for other campaigns.
+    for (const item of fresh) {
+      if (!item.permanent) continue;
+      await upsertEmailSuppression(db, {
+        officeId: campaign.officeId,
+        email: item.recipient,
+        reason: "UNDELIVERABLE",
+        source: RECIPIENT_QUALITY_SUPPRESSION_SOURCE,
+        detail: item.detail,
+        evidenceMessageId: null,
+        accountId: null,
+      });
+    }
+    await db.outreachCampaignSend.createMany({
+      data: fresh.map((item) => ({
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        recordId: item.row.id,
+        recipient: item.recipient,
+        status: "REJECTED",
+        error: item.error,
+      })),
+      skipDuplicates: true,
+    });
+    for (const item of fresh) {
+      output.rejected += 1;
+      output.pruned += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: item.row.id,
+        recipient: item.recipient,
+        state: "REJECTED",
+        senderEmail: null,
+        variantKey: null,
+        error: item.error,
+      });
+    }
+  }
+  const refusedIds = new Set(refused.map((item) => item.row.id));
+  return rows.filter((row) => !refusedIds.has(row.id));
+}
+
 // Walks the unhandled audience in run-sized chunks until `limit` sendable rows
-// are found, so suppressed rows are recorded as REJECTED without occupying a
-// slot of the run budget or the daily cap.
+// are found, so suppressed and unqualified rows are recorded as REJECTED
+// without occupying a slot of the run budget or the daily cap.
 async function selectSendableCampaignRows(
   db: CampaignDb,
   campaign: LoadedCampaign,
   candidates: CampaignBatchRow[],
+  researchData: ReadonlyMap<string, Record<string, unknown>>,
   limit: number,
   output: CampaignBatchResult,
+  gate: LiveRecipientGate,
 ) {
   const sendable: CampaignBatchRow[] = [];
   const chunk = Math.max(1, limit);
   for (let offset = 0; offset < candidates.length && sendable.length < limit; offset += chunk) {
     const page = candidates.slice(offset, offset + chunk);
-    const rows = await rejectSuppressedCampaignRows(db, campaign, page, output);
+    const unsuppressed = await rejectSuppressedCampaignRows(db, campaign, page, output);
+    const rows = await rejectUnqualifiedCampaignRows(db, campaign, unsuppressed, researchData, gate, output);
     sendable.push(...rows.slice(0, limit - sendable.length));
   }
   return sendable;
@@ -697,6 +808,7 @@ export async function runOutreachCampaignBatch(input: {
   reserve?: typeof reserveEmailSender;
   release?: typeof releaseEmailSenderReservation;
   complete?: typeof completeCampaignIfDone;
+  recipientCheck?: LiveRecipientCheck;
 }): Promise<CampaignBatchResult> {
   const db = input.db ?? prisma;
   const campaign = await db.outreachCampaign.findFirst({
@@ -780,6 +892,7 @@ export async function runOutreachCampaignBatch(input: {
       dailyCap: campaign.dailyCap,
       followUps: campaign.followUps ?? null,
       variants: campaign.variants,
+      emailField: campaign.emailField,
       audiencePersonalization,
     },
     provider: sendProvider,
@@ -788,10 +901,29 @@ export async function runOutreachCampaignBatch(input: {
     pauseMs: input.pauseMs,
     reserve: reserveSender,
     release: releaseReservation,
+    recipientCheck: input.recipientCheck,
     statusAllowsSend: outreachCampaignStatusAllowsSend,
   });
-  const sendableRows = await selectSendableCampaignRows(db, campaign, rows, input.limit ?? campaign.dailyCap, output);
-  const claimedRows = await claimOutreachCampaignRows(db, campaign, sendableRows, input.limit, now);
+  const researchData = new Map(records.map((record) => [record.id, record.data]));
+  const verificationLimit = outreachCampaignVerificationLimit(
+    input.limit,
+    campaign.dailyCap,
+    await outreachCampaignRemainingCapacity(db, campaign, now),
+  );
+  const sendableRows = verificationLimit > 0
+    ? await selectSendableCampaignRows(
+      db,
+      campaign,
+      rows,
+      researchData,
+      verificationLimit,
+      output,
+      new LiveRecipientGate(input.recipientCheck),
+    )
+    : [];
+  const claimedRows = sendableRows.length
+    ? await claimOutreachCampaignRows(db, campaign, sendableRows, input.limit, now)
+    : [];
   if (claimedRows.length === 0) {
     const { start, end } = utcDayBounds(now);
     const sentToday = await db.outreachCampaignSend.count({

@@ -57,22 +57,78 @@ export type MailboxVerifier = {
   usage(): MailboxVerifierUsage;
 };
 
-const SYNTAX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}$/;
+// Dot-atom local part (no leading, trailing or consecutive dots) at a domain of
+// LDH labels (no leading or trailing hyphen, no empty label) ending in an
+// alphabetic TLD. Shared by discovery, the campaign planner and the send gate.
+export const EMAIL_SYNTAX =
+  /^[A-Za-z0-9_%+-]+(?:\.[A-Za-z0-9_%+-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$/;
 
-const FREE_PROVIDERS = new Set([
+export function emailSyntaxValid(email: string) {
+  const normalized = email.trim();
+  return normalized.length <= 254 && normalized.indexOf("@") <= 64 && EMAIL_SYNTAX.test(normalized);
+}
+
+export const FREE_PROVIDERS = new Set([
   "gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "yandex.com", "yandex.com.tr",
   "mynet.com", "windowslive.com", "icloud.com", "live.com", "msn.com", "superonline.com",
   "ttmail.com", "mail.ru", "gmx.com", "aol.com",
 ]);
 
-const DISPOSABLE_PROVIDERS = new Set([
+export const DISPOSABLE_PROVIDERS = new Set([
   "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com", "yopmail.com",
   "sharklasers.com", "trashmail.com", "getnada.com", "temp-mail.org",
 ]);
 
-const PLACEHOLDER_LOCAL_PARTS = new Set([
+export const PLACEHOLDER_LOCAL_PARTS = new Set([
   "email", "eposta", "mail", "adres", "ornek", "example", "test", "yourname", "isim",
+  "someone", "name", "firstname", "lastname", "user", "username", "sample", "demo",
+  "your-email", "youremail", "your.email", "emailaddress", "e-mail", "xxx", "asdf",
+  "noemail", "none", "null", "n-a", "unknown",
 ]);
+
+// Domains that only ever appear in templates, documentation, and scraped form
+// placeholders. Several of them resolve (example.com publishes a Null MX), so
+// an MX lookup alone does not catch them. Real organisations and mailbox
+// providers never belong here: a hit suppresses the address office-wide.
+export const PLACEHOLDER_DOMAINS = new Set([
+  "example.com", "example.net", "example.org", "example.edu", "example.co.uk", "example.de",
+  "domain.tld", "yourdomain.com", "yourcompany.com", "yoursite.com", "yourwebsite.com",
+  "companyname.com", "emailaddress.com", "mail.example", "placeholder.com", "adres.com",
+  "sirket.com", "firma.com", "ornek.com", "eposta.com", "mailinator.test", "localhost.com",
+]);
+
+const PLACEHOLDER_TLDS = new Set(["example", "test", "invalid", "localhost", "local", "internal", "lan"]);
+
+// Error-tracker DSNs (`<32 hex>@o123.ingest.sentry.io`, `<hex>@sentry-next.wixpress.com`)
+// match the email pattern when a page's scripts are scraped. The key, not the
+// domain, identifies them: a 32+ character hex local part is never a mailbox.
+const GENERATED_TOKEN_LOCAL_PART = /^[0-9a-f]{32,}$/;
+
+// Both the address and the domain are inspected so the same rule serves the
+// discovery scoring, the campaign planner, and the pre-send gate.
+export function placeholderEmailReason(email: string): string | null {
+  const normalized = email.trim().toLowerCase();
+  const at = normalized.lastIndexOf("@");
+  if (at < 0) return "invalid syntax";
+  const localPart = normalized.slice(0, at);
+  const domain = normalized.slice(at + 1);
+  if (PLACEHOLDER_LOCAL_PARTS.has(localPart)) return "placeholder address";
+  if (GENERATED_TOKEN_LOCAL_PART.test(localPart)) return "generated token, not a mailbox";
+  if (PLACEHOLDER_DOMAINS.has(domain)) return "placeholder domain";
+  const tld = domain.split(".").pop() ?? "";
+  if (PLACEHOLDER_TLDS.has(tld)) return "reserved domain";
+  if (/(?:^|\.)(?:example|placeholder|yourdomain|yourcompany)\./.test(domain)) return "placeholder domain";
+  return null;
+}
+
+// RFC 7505: a single MX record whose exchange is "." (or empty) declares that
+// the domain accepts no mail at all.
+export function usableMxRecords<T extends { exchange: string; priority: number }>(records: readonly T[]) {
+  return records.filter((record) => {
+    const exchange = record.exchange.trim().replace(/\.$/, "");
+    return exchange.length > 0;
+  });
+}
 
 export type VerifyOptions = {
   /** Injectable for tests. Defaults to a real MX lookup. */
@@ -132,7 +188,6 @@ export async function verifyEmail(email: string, options: VerifyOptions = {}): P
   const reasons: string[] = [];
   const domain = emailDomain(normalized);
   const isRole = isRoleEmail(normalized);
-  const localPart = normalized.split("@")[0] ?? "";
   const isFreeProvider = FREE_PROVIDERS.has(domain);
   const companyDomain = options.companyDomain ? registrableDomain(options.companyDomain) : null;
   const domainMatchesCompany = companyDomain ? registrableDomain(domain) === companyDomain : false;
@@ -150,21 +205,22 @@ export async function verifyEmail(email: string, options: VerifyOptions = {}): P
     provider: null,
   };
 
-  if (!SYNTAX.test(normalized)) {
+  if (!emailSyntaxValid(normalized)) {
     return { ...base, verdict: "undeliverable", reasons: ["invalid syntax"] };
   }
   if (DISPOSABLE_PROVIDERS.has(domain)) {
     return { ...base, verdict: "undeliverable", reasons: ["disposable provider"] };
   }
-  if (PLACEHOLDER_LOCAL_PARTS.has(localPart)) {
-    return { ...base, verdict: "undeliverable", reasons: ["placeholder address"] };
+  const placeholder = placeholderEmailReason(normalized);
+  if (placeholder) {
+    return { ...base, verdict: "undeliverable", reasons: [placeholder] };
   }
 
   const resolver = options.resolveMx ?? ((value: string) => dns.resolveMx(value));
   let hasMx: boolean | null = null;
   let mxHost: string | null = null;
   try {
-    const records = await resolver(domain);
+    const records = usableMxRecords(await resolver(domain));
     const sorted = [...records].sort((a, b) => a.priority - b.priority);
     hasMx = sorted.length > 0;
     mxHost = sorted[0]?.exchange ?? null;

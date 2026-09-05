@@ -9,13 +9,14 @@ export const DELIVERY_FEEDBACK_KINDS = ["BOUNCE", "COMPLAINT", "AUTO_REPLY", "OP
 export const DELIVERY_FEEDBACK_CLASSIFICATION = "DELIVERY_FEEDBACK";
 export type DeliveryFeedbackKind = (typeof DELIVERY_FEEDBACK_KINDS)[number];
 
-export const EMAIL_SUPPRESSION_REASONS = ["BOUNCED", "COMPLAINED", "OPTED_OUT", "MANUAL"] as const;
+export const EMAIL_SUPPRESSION_REASONS = ["BOUNCED", "COMPLAINED", "OPTED_OUT", "UNDELIVERABLE", "MANUAL"] as const;
 export type EmailSuppressionReason = (typeof EMAIL_SUPPRESSION_REASONS)[number];
 
 const SUPPRESSION_SKIP_MESSAGES: Record<EmailSuppressionReason, string> = {
   BOUNCED: "Recipient skipped: the address bounced permanently.",
   COMPLAINED: "Recipient skipped: the address filed a spam complaint.",
   OPTED_OUT: "Recipient skipped: the recipient asked not to be contacted.",
+  UNDELIVERABLE: "Recipient skipped: the address failed the pre-send quality check.",
   MANUAL: "Recipient skipped: the address is on the do-not-email list.",
 };
 

@@ -29,7 +29,7 @@ import {
 
 const audience = Array.from({ length: 250 }, (_, index) => ({
   id: `rec-${index}`,
-  email: `buyer${index}@company-${index}.example`,
+  email: `buyer${index}@company-${index}.eu`,
   country: index % 3 === 0 ? "Germany" : index % 3 === 1 ? "Turkey" : "Netherlands",
 }));
 
@@ -62,12 +62,12 @@ assert.equal(spotCheckLabel(sample[0], 250), "Row 1 of 250");
 assert.equal(spotCheckLabel(sample[3], 250), `Spot check, row ${sample[3].position + 1} of 250`);
 
 // Audience quality counts are deterministic and warn on the risky shapes.
-assert.equal(isRoleAddress("info@acme.example"), true);
-assert.equal(isRoleAddress("Sales.Team@acme.example"), true);
-assert.equal(isRoleAddress("no-reply@acme.example"), true);
-assert.equal(isRoleAddress("jane.doe@acme.example"), false);
+assert.equal(isRoleAddress("info@acme.eu"), true);
+assert.equal(isRoleAddress("Sales.Team@acme.eu"), true);
+assert.equal(isRoleAddress("no-reply@acme.eu"), true);
+assert.equal(isRoleAddress("jane.doe@acme.eu"), false);
 assert.equal(isFreeMailAddress("someone@gmail.com"), true);
-assert.equal(isFreeMailAddress("someone@acme.example"), false);
+assert.equal(isFreeMailAddress("someone@acme.eu"), false);
 
 const clean = summarizeRecipientQuality(audience);
 assert.equal(clean.total, 250);
@@ -77,10 +77,10 @@ assert.deepEqual(clean.countries.map((entry) => entry.country), ["Germany", "Net
 assert.equal(clean.countries.reduce((sum, entry) => sum + entry.count, 0), 250);
 
 const risky = summarizeRecipientQuality([
-  { email: "info@one.example", country: "Turkey" },
-  { email: "sales@one.example", country: "Turkey" },
-  { email: "INFO@one.example", country: null },
-  { email: "contact@two.example" },
+  { email: "info@one.eu", country: "Turkey" },
+  { email: "sales@one.eu", country: "Turkey" },
+  { email: "INFO@one.eu", country: null },
+  { email: "contact@two.eu" },
   { email: "jane@gmail.com" },
   { email: "not-an-email" },
 ]);
@@ -89,9 +89,9 @@ assert.equal(risky.invalidAddresses, 1);
 assert.equal(risky.duplicateAddresses, 1, "case-insensitive duplicate detected");
 assert.equal(risky.roleAddresses, 4);
 assert.equal(risky.freeMailAddresses, 1);
-assert.deepEqual(risky.repeatedDomains, [{ domain: "one.example", count: 3 }]);
+assert.deepEqual(risky.repeatedDomains, [{ domain: "one.eu", count: 3 }]);
 assert.deepEqual(risky.countries, [{ country: "unknown", count: 3 }, { country: "Turkey", count: 2 }]);
-assert.ok(risky.warnings.some((warning) => warning.includes("share the domain one.example")), "domain concentration warning");
+assert.ok(risky.warnings.some((warning) => warning.includes("share the domain one.eu")), "domain concentration warning");
 assert.ok(risky.warnings.some((warning) => warning.includes("role mailboxes")), "role mailbox warning");
 assert.ok(risky.warnings.some((warning) => warning.includes("appears more than once")), "duplicate warning");
 assert.ok(risky.warnings.some((warning) => warning.includes("not valid email syntax")), "invalid syntax warning");
@@ -101,20 +101,20 @@ assert.equal(lines.filter((line) => line.startsWith("Warning: ")).length, risky.
 for (const line of [...lines, ...risky.warnings]) assert.ok(!line.includes("\u2014"), "no em dashes in review copy");
 
 // The approved procurement scope is pinned by an order-independent hash.
-const entries = [{ id: "v1", email: "A@one.example" }, { id: "v2", email: "b@two.example" }];
+const entries = [{ id: "v1", email: "A@one.eu" }, { id: "v2", email: "b@two.eu" }];
 assert.equal(batchRecipientHash(entries), batchRecipientHash([...entries].reverse()));
-assert.equal(batchRecipientHash(entries), batchRecipientHash([{ id: "v1", email: "a@one.example" }, entries[1]]), "address case does not change the batch");
+assert.equal(batchRecipientHash(entries), batchRecipientHash([{ id: "v1", email: "a@one.eu" }, entries[1]]), "address case does not change the batch");
 assert.notEqual(batchRecipientHash(entries), batchRecipientHash(entries.slice(0, 1)));
-assert.notEqual(batchRecipientHash(entries), batchRecipientHash([entries[0], { id: "v2", email: "c@two.example" }]));
+assert.notEqual(batchRecipientHash(entries), batchRecipientHash([entries[0], { id: "v2", email: "c@two.eu" }]));
 assert.match(batchRecipientHash([]), /^[a-f0-9]{64}$/);
 
 // Reviewer exclusions remove rows from eligibility and change the revision.
-assert.deepEqual(normalizeCampaignExcludeEmails([" Buyer1@Company-1.example ", "buyer1@company-1.example", "junk", 4]), ["buyer1@company-1.example"]);
-assert.deepEqual(normalizeCampaignExcludeEmails("buyer1@company-1.example"), [], "only arrays are accepted");
-const row = { status: "new", data: { email: "Buyer1@Company-1.example", country: "Germany" } };
+assert.deepEqual(normalizeCampaignExcludeEmails([" Buyer1@Company-1.eu ", "buyer1@company-1.eu", "junk", 4]), ["buyer1@company-1.eu"]);
+assert.deepEqual(normalizeCampaignExcludeEmails("buyer1@company-1.eu"), [], "only arrays are accepted");
+const row = { status: "new", data: { email: "Buyer1@Company-1.eu", country: "Germany" } };
 assert.equal(campaignRowEligible({ row, statuses: ["new"], emailField: "email" }), true);
-assert.equal(campaignRowEligible({ row, statuses: ["new"], emailField: "email", excludeEmails: ["buyer1@company-1.example"] }), false, "excluded addresses are ineligible regardless of case");
-assert.equal(campaignRowEligible({ row, statuses: ["new"], emailField: "email", excludeEmails: ["someone-else@company-1.example"] }), true);
+assert.equal(campaignRowEligible({ row, statuses: ["new"], emailField: "email", excludeEmails: ["buyer1@company-1.eu"] }), false, "excluded addresses are ineligible regardless of case");
+assert.equal(campaignRowEligible({ row, statuses: ["new"], emailField: "email", excludeEmails: ["someone-else@company-1.eu"] }), true);
 const base = {
   subject: "Hello {{company}}",
   bodyTemplate: "Body",
@@ -124,11 +124,11 @@ const base = {
   senderAccountId: null,
   senderDisplayName: null,
   audienceRecordIds: ["rec-0"],
-  audiencePersonalization: { "rec-0": { email: "buyer0@company-0.example", company: null, country: null } },
+  audiencePersonalization: { "rec-0": { email: "buyer0@company-0.eu", company: null, country: null } },
 };
 assert.notEqual(
   campaignRevisionHash({ ...base, filters: { countries: ["Germany"] } }),
-  campaignRevisionHash({ ...base, filters: { countries: ["Germany"], excludeEmails: ["buyer1@company-1.example"] } }),
+  campaignRevisionHash({ ...base, filters: { countries: ["Germany"], excludeEmails: ["buyer1@company-1.eu"] } }),
   "an exclusion is part of the approved revision",
 );
 assert.equal(
@@ -165,10 +165,10 @@ const review = outreachProposalReviewFromPayload({
     action: "START_OUTREACH_CAMPAIGN",
     actionInput: { campaignId: "camp-1", revisionHash: "rev-1" },
     actionLabel: "Start campaign to 240 recipients",
-    actionDetails: ["Sender: sales@acme.example", "Daily cap: 30"],
+    actionDetails: ["Sender: sales@acme.eu", "Daily cap: 30"],
     reviewItems: [
-      { id: "rec-0", title: "buyer0@company-0.example", meta: "Row 1 of 240 · Company 0 · Germany", detail: "Subject: Hello Company 0\nBody line one\n\nOpt out: reply STOP" },
-      { id: "rec-7", title: "buyer7@company-7.example", meta: "Row 8 of 240", detail: "Subject: Hello Company 7\nBody seven" },
+      { id: "rec-0", title: "buyer0@company-0.eu", meta: "Row 1 of 240 · Company 0 · Germany", detail: "Subject: Hello Company 0\nBody line one\n\nOpt out: reply STOP" },
+      { id: "rec-7", title: "buyer7@company-7.eu", meta: "Row 8 of 240", detail: "Subject: Hello Company 7\nBody seven" },
       { id: "", title: "dropped", meta: "", detail: "no id" },
     ],
   },
@@ -176,7 +176,7 @@ const review = outreachProposalReviewFromPayload({
 assert.ok(review, "a START_OUTREACH_CAMPAIGN proposal is reviewable");
 assert.equal(review.campaignId, "camp-1");
 assert.equal(review.revisionHash, "rev-1");
-assert.deepEqual(review.actionDetails, ["Sender: sales@acme.example", "Daily cap: 30"]);
+assert.deepEqual(review.actionDetails, ["Sender: sales@acme.eu", "Daily cap: 30"]);
 assert.equal(review.reviewItems.length, 2, "review items without an id cannot be marked read and are dropped");
 assert.equal(review.reviewItems[0].subject, "Hello Company 0");
 assert.equal(review.reviewItems[0].body, "Body line one\n\nOpt out: reply STOP", "the rendered body is kept verbatim for the reviewer");
@@ -199,8 +199,8 @@ const legacyReview = outreachProposalReviewFromPayload({
     action: "START_OUTREACH_CAMPAIGN",
     actionInput: { campaignId: "camp-0" },
     reviewItems: [
-      { id: "rec-1", title: "buyer1@company-1.example", meta: "Company 1", detail: "Eligible research-list row." },
-      { id: "rec-2", title: "buyer2@company-2.example", meta: "Company 2", detail: "Subject: Hello Company 2\nBody two" },
+      { id: "rec-1", title: "buyer1@company-1.eu", meta: "Company 1", detail: "Eligible research-list row." },
+      { id: "rec-2", title: "buyer2@company-2.eu", meta: "Company 2", detail: "Subject: Hello Company 2\nBody two" },
     ],
   },
 });
