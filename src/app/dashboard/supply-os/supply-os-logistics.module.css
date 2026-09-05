@@ -1203,6 +1203,27 @@
   display: block;
 }
 
+/* A prospecting project stacks the prospects workspace over the approvals
+   list; the approvals scroll on their own so a long proposal keeps its
+   Start and Discard controls reachable. */
+.prospectingTabPanel[data-state="active"] {
+  display: flex;
+  flex-direction: column;
+}
+
+.prospectingTabPanel > .prospectsWorkspace {
+  flex: 1 1 auto;
+  height: auto;
+}
+
+.prospectingTabPanel > .approvals {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: 60%;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
 .prospectsWorkspace {
   min-width: 0;
   min-height: 0;

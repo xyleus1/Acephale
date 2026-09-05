@@ -69,6 +69,11 @@ function fakeDatabase(input: {
   // persistence has not finished (classification set, deliveryKind null).
   inboundMessages?: Array<{ threadId: string; classification: string | null; deliveryKind: string | null }>;
   reservedIds?: string[];
+  // Latest reservation attempt per RESERVED reservation (its updatedAt, and
+  // the UTC day of its usageDate); defaults to `now`.
+  reservedAt?: Record<string, Date>;
+  // First reservation attempt per RESERVED reservation; defaults to the latest.
+  reservedFirstAt?: Record<string, Date>;
   // Open RESERVED reservations by sender-pool idempotency key.
   openReservations?: Record<string, string>;
   suppressions?: Array<{ officeId: string; email: string; reason: string }>;
@@ -196,14 +201,28 @@ function fakeDatabase(input: {
         reservationUpdates.push(args.data);
         return { count: 1 };
       },
-      findUnique: async (args: { where: { id: string } }) => (reservedIds.has(args.where.id) ? { accountId: "account-1", createdAt: input.now } : null),
+      findUnique: async (args: { where: { id: string } }) => {
+        if (!reservedIds.has(args.where.id)) return null;
+        const updatedAt = input.reservedAt?.[args.where.id] ?? input.now;
+        return { accountId: "account-1", createdAt: input.reservedFirstAt?.[args.where.id] ?? updatedAt, updatedAt };
+      },
       findFirst: async (args: { where: { officeId: string; idempotencyKey: string; status: string } }) => {
         assert.equal(args.where.officeId, "office-1");
         assert.equal(args.where.status, "RESERVED");
         const id = openReservations[args.where.idempotencyKey];
         return id && reservedIds.has(id) ? { id, account: { email: "sender@buyerco.com" } } : null;
       },
-      count: async (args: { where: { id: { in: string[] } } }) => args.where.id.in.filter((id) => reservedIds.has(id)).length,
+      count: async (args: { where: { id: { in: string[] }; usageDate?: Date; createdAt?: unknown } }) => {
+        assert.equal(args.where.createdAt, undefined, "reservation day accounting must not read createdAt (stale after reuse)");
+        return args.where.id.in
+          .filter((id) => reservedIds.has(id))
+          .filter((id) => {
+            if (!args.where.usageDate) return true;
+            const attempt = input.reservedAt?.[id] ?? input.now;
+            return Date.UTC(attempt.getUTCFullYear(), attempt.getUTCMonth(), attempt.getUTCDate()) === args.where.usageDate.getTime();
+          })
+          .length;
+      },
     },
     emailAccount: {
       findMany: async (args: { where: Record<string, unknown> & { email: { in: string[] } } }) => {
@@ -1589,6 +1608,157 @@ async function main() {
   const followUpLoop = followUpSource.slice(followUpSource.indexOf("export async function runOutreachCampaignFollowUps"));
   const followUpGate = followUpLoop.indexOf("gate.check(candidate, candidate.recipient");
   assert.ok(followUpGate >= 0 && followUpGate < followUpLoop.indexOf("await reserveSender({"), "the live gate runs before the follow-up sender reservation");
+  // A follow-up the provider accepted but the ledger could not record (UNKNOWN,
+  // reservation still RESERVED today) holds its slot on the next run.
+  const unrecordedFollowUp = (reservationId: string): FollowUpRow => ({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    recordId: "record-9",
+    step: 1,
+    recipient: "nine@buyerco.com",
+    status: "UNKNOWN",
+    skipReason: null,
+    senderEmail: "sender@buyerco.com",
+    reservationId,
+    providerMessageId: null,
+    providerThreadId: null,
+    localThreadId: null,
+    error: "Delivered, but the send could not be recorded",
+    dueAt: day(0),
+    sentAt: null,
+    createdAt: now,
+  });
+  const providerCallsBefore = providerCalls.length;
+  const unrecordedDb = fakeDatabase({
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    followUps: [unrecordedFollowUp("reservation-unrecorded")],
+    reservedIds: ["reservation-unrecorded"],
+    now,
+  });
+  const unrecordedRun = await runOutreachCampaignFollowUps({ ...baseInput, db: unrecordedDb as never, campaign: { ...campaign, dailyCap: 1 } });
+  assert.equal(unrecordedRun.attempted, 0);
+  assert.equal(unrecordedDb.followUps.length, 1, "no new claim while a delivered-but-unrecorded follow-up holds the last slot");
+  assert.equal(providerCalls.length, providerCallsBefore);
+
+  // A reservation first taken yesterday (claim reclaimed after a crash) and
+  // reused today counts against today: the sender pool moves its usageDate on
+  // reuse while createdAt stays at the first attempt.
+  const reusedDb = fakeDatabase({
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    followUps: [unrecordedFollowUp("reservation-reused")],
+    reservedIds: ["reservation-reused"],
+    reservedAt: { "reservation-reused": now },
+    reservedFirstAt: { "reservation-reused": day(-1) },
+    now,
+  });
+  const reusedCampaign = {
+    ...campaign,
+    dailyCap: 1,
+    audiencePersonalization: {
+      ...campaign.audiencePersonalization,
+      "record-9": { email: "nine@buyerco.com", company: "Nine Co", country: "DE" },
+    },
+  };
+  const reusedRun = await runOutreachCampaignFollowUps({ ...baseInput, db: reusedDb as never, campaign: reusedCampaign });
+  assert.equal(reusedRun.attempted, 0, "a reservation reused today holds today's slot even though it was first created yesterday");
+  assert.equal(providerCalls.length, providerCallsBefore);
+  // Once the provider confirms it, the recovered send is dated from the reuse,
+  // not from the first attempt, so the next step waits from the real delivery.
+  await runOutreachCampaignFollowUps({
+    ...baseInput,
+    db: reusedDb as never,
+    now: day(1),
+    limit: 0,
+    campaign: reusedCampaign,
+    provider: {
+      send: async () => { throw new Error("reconciliation must not send again"); },
+      reconcile: async () => ({
+        state: "SENT" as const,
+        provider: "GMAIL" as const,
+        providerMessageId: "provider-reused",
+        providerThreadId: "provider-thread-1",
+        sourceUrl: "https://mail.google.com",
+      }),
+    },
+  });
+  const reusedRow = reusedDb.followUps.find((row) => row.recordId === "record-9" && row.step === 1);
+  assert.equal(reusedRow?.status, "SENT");
+  assert.equal(reusedRow?.sentAt?.getTime(), now.getTime(), "a reused reservation dates the recovered send from its latest attempt");
+
+  // An UNKNOWN row whose reservation counts against an earlier day, or has
+  // since been settled, does not consume today's cap.
+  for (const stale of [
+    fakeDatabase({
+      sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+      followUps: [unrecordedFollowUp("reservation-yesterday")],
+      reservedIds: ["reservation-yesterday"],
+      reservedAt: { "reservation-yesterday": day(-1) },
+      now,
+    }),
+    fakeDatabase({
+      sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+      followUps: [unrecordedFollowUp("reservation-settled")],
+      now,
+    }),
+  ]) {
+    const staleRun = await runOutreachCampaignFollowUps({ ...baseInput, db: stale as never, campaign: { ...campaign, dailyCap: 1 } });
+    assert.equal(staleRun.sent, 1, "an older or settled UNKNOWN row does not hold today's slot");
+  }
+  assert.equal(providerCalls.length, providerCallsBefore + 2);
+
+  // An ambiguous commit: the recording transaction marks the step SENT and
+  // settles the reservation, then the call still throws (lost response). The
+  // committed step must stay SENT, not be downgraded to an unreconcilable
+  // UNKNOWN behind a RECORDED reservation.
+  const ambiguousDb = fakeDatabase({
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    now,
+  });
+  let ambiguousCommits = 0;
+  ambiguousDb.$transaction = async (callback) => {
+    const result = await callback(ambiguousDb);
+    if (ambiguousDb.followUps.some((row) => row.status === "SENT")) {
+      ambiguousCommits += 1;
+      throw new Error("connection closed before the commit acknowledgement arrived");
+    }
+    return result;
+  };
+  const ambiguousRun = await runOutreachCampaignFollowUps({ ...baseInput, db: ambiguousDb as never, campaign: { ...campaign, dailyCap: 1 } });
+  assert.equal(ambiguousCommits, 1);
+  assert.equal(ambiguousRun.sent, 1, "a committed SENT step is reported as sent");
+  assert.equal(ambiguousRun.unknown, 0);
+  assert.deepEqual(ambiguousRun.outcomes.map((outcome) => [outcome.recordId, outcome.state, outcome.error]), [["record-1", "SENT", null]]);
+  const ambiguousRow = ambiguousDb.followUps.find((row) => row.recordId === "record-1" && row.step === 1);
+  assert.equal(ambiguousRow?.status, "SENT", "the committed step is not overwritten with UNKNOWN");
+  assert.equal(ambiguousRow?.error, null);
+
+  // A recording that fails before the ledger write (database blip) settles
+  // the step as UNKNOWN with the recording error and the run continues to
+  // the next recipient.
+  const outageDb = fakeDatabase({
+    sends: [
+      { recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" },
+      { recordId: "record-2", recipient: "other@otherco.com", sentAt: day(-3), localThreadId: "thread-2", providerThreadId: "provider-thread-2" },
+    ],
+    now,
+  });
+  let outageRecordings = 0;
+  outageDb.emailSenderReservation.updateMany = async () => {
+    outageRecordings += 1;
+    if (outageRecordings === 1) throw new Error("Can't reach database server");
+    return { count: 1 };
+  };
+  const outageRun = await runOutreachCampaignFollowUps({ ...baseInput, db: outageDb as never });
+  assert.equal(outageRecordings, 2);
+  assert.equal(outageRun.attempted, 2, "a failed recording does not abort the run");
+  assert.equal(outageRun.sent, 1);
+  assert.equal(outageRun.unknown, 1);
+  assert.deepEqual(outageRun.outcomes.map((outcome) => [outcome.recordId, outcome.state]), [["record-1", "UNKNOWN"], ["record-2", "SENT"]]);
+  assert.match(outageRun.outcomes[0].error ?? "", /could not be recorded/);
+  const outageRow = outageDb.followUps.find((row) => row.recordId === "record-1" && row.step === 1);
+  assert.equal(outageRow?.status, "UNKNOWN");
+  assert.ok(outageRow?.reservationId, "the delivered step keeps its reservation for reconciliation");
+
   console.log("Outreach campaign follow-up checks passed.");
 }
 

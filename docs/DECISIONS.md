@@ -5345,6 +5345,39 @@ Use this log for durable product and engineering decisions. Do not put every imp
   slot, with inline fallback rendering retained for other hosts and tests.
 
 
+## 2026-09-06: A send the provider accepted but the ledger could not record is UNKNOWN, never released or rejected
+
+- Status: accepted
+- Owner: engineering
+- Decision: When a first-touch or follow-up provider call returns `SENT` and
+  the local recording (`recordSent` / `recordFollowUpSent`) fails for any
+  reason, the row is written as `UNKNOWN` with
+  `outreachCampaignRecordingFailure(error)`, the sender reservation is kept,
+  and the runner moves on to the next claim. The reservation is never released
+  (a retry would deliver the message a second time) and the row is never
+  `REJECTED` (the recipient did receive the message and must stay in the
+  follow-up sequence). The reconcile pass owns recovery: it asks the provider
+  by reservation and records the send once confirmed, and its own recording
+  failures only refresh the row's error.
+- Consequence: one bad row (duplicate provider id, constraint, connection
+  drop after delivery) costs that row a reconcile cycle instead of aborting the
+  batch and leaving later claims queued. Such a row still holds its slot under
+  the campaign daily cap: `outreachCampaignRemainingCapacity` counts UNKNOWN
+  rows whose reservation is `RESERVED` with `usageDate` on the capped UTC day,
+  so a recording outage cannot let a campaign exceed its cap. Reservation
+  `createdAt` is not a delivery time: a reused reservation keeps it from the
+  first attempt. Day accounting reads `usageDate` and a recovered send is dated
+  from the reservation's `updatedAt`. A throw from the recording call is not
+  proof the write failed, and a verification read can fail in the same
+  outage, so the UNKNOWN settlement is a conditional `updateMany` on the
+  office-scoped row with `status: { not: "SENT" }`: the database decides in
+  one statement whether the row was committed. Zero rows updated means the
+  send is SENT and is reported as sent; a committed row is never downgraded,
+  and an UNKNOWN row always has a `RESERVED` reservation for reconcile.
+- Verification: `scripts/outreach-campaign-send.test.ts` (duplicate provider
+  message id isolates one row; dailyCap 1 holds across consecutive runs),
+  `scripts/outreach-campaign-follow-ups.test.ts`.
+
 ## 2026-09-04: Paid prospecting spend is budgeted per run and never stops the run
 
 - Status: accepted

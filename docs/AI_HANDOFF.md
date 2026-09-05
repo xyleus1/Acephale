@@ -1,6 +1,47 @@
 Context research operations are stored as typed CompanyContext action payloads. Status and audit run inline; pause, resume, purge, region expansion, requalification, and contact enrichment require operator approval and never touch outreach.
 # AI Handoff
 
+## 2026-09-06: A delivered send whose receipt cannot be recorded fails one row, not the batch
+
+- Context: the end-to-end pruning-gate run used a mock provider that handed out
+  the same native message id twice. The second `recordSent` hit the unique
+  `(messageId, accountId, officeId)` reservation link and the exception left
+  `runOutreachCampaignBatch` with the remaining claims unprocessed.
+- First-touch (`outreach-campaign-send.ts`) and follow-up
+  (`outreach-campaign-follow-ups.ts`) runners now catch a persistence failure
+  after the provider returned `SENT`: the row settles as `UNKNOWN` with
+  `outreachCampaignRecordingFailure(error)` as its error, the reservation is
+  kept (never released, because the message left), and the batch continues.
+  The existing reconcile pass records the send once the provider confirms it;
+  a failure inside reconcile only refreshes the row's error. The UNKNOWN
+  write is a conditional `updateMany` on the office-scoped row with
+  `status: { not: "SENT" }` (`settleUnrecordedSend`, follow-up
+  `recordOutcome`): a recording transaction that committed and still threw
+  (lost response, post-commit side effect) updates zero rows, stays SENT and
+  is reported as sent; there is no separate verification read that an outage
+  could turn into a wrong "not committed" answer. The existing-
+  message lookup in both `recordSent` helpers ignores a message already linked
+  to another reservation so a provider id collision cannot adopt a different
+  send's local message.
+- Daily cap: `outreachCampaignRemainingCapacity` also subtracts UNKNOWN rows
+  in either ledger whose reservation is still `RESERVED` with `usageDate` on
+  the capped UTC day (`unresolvedOutreachCampaignDeliveries` with a
+  `usageDate`). A delivery the provider accepted holds its slot until
+  reconcile settles it; an UNKNOWN row counted against an earlier day or with
+  a settled reservation does not count. Reservation `createdAt` is never used
+  for day accounting or as the recovered `sentAt`: a reservation reused after a
+  reclaimed claim keeps its first `createdAt` while the sender pool moves its
+  `usageDate`; the reconcile paths date a recovered send from the reservation's
+  `updatedAt` (last written by the attempt that preceded the delivery).
+- Pending approvals: on a prospecting project the projects tab is a flex
+  column (`prospectingTabPanel`); the approvals list scrolls on its own (max
+  60 percent of the panel) so the Start and Discard controls of a long
+  proposal are reachable.
+- Tests: `npm run test:outreach-campaign-send` (duplicate provider id row
+  isolation, dailyCap 1 across consecutive runs),
+  `npm run test:outreach-campaign-follow-ups` (dailyCap 1 with an unrecorded
+  follow-up).
+
 ## 2026-09-07: An automatic notice never takes a supplier question away from the reply that answers it
 
 - Context: an out of office note or a bounce report landing after a supplier

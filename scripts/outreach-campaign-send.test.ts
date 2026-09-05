@@ -161,7 +161,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       findMany: async () => [],
       deleteMany: async () => undefined,
       createMany: async () => undefined,
-      updateMany: async () => undefined,
+      updateMany: async () => ({ count: 1 }),
       upsert: async () => undefined,
     };
     const db = {
@@ -195,7 +195,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
         updateMany: async () => undefined,
       },
       outreachCampaignSend: send,
-      outreachCampaignFollowUp: { count: async () => 0 },
+      outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
       emailSenderReservation: { findUnique: async () => null },
       researchRecord: {
         findMany: async () => [{
@@ -218,7 +218,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
           createMany: () => Promise<void>;
           updateMany: () => Promise<void>;
         };
-        outreachCampaignFollowUp: { count: () => Promise<number> };
+        outreachCampaignFollowUp: { count: () => Promise<number>; findMany: () => Promise<never[]> };
         outreachCampaign: { updateMany: () => Promise<void> };
       }) => Promise<unknown>) => callback({
         $queryRaw: async () => [{ locked: 1 }],
@@ -236,7 +236,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
           createMany: async () => undefined,
           updateMany: async () => undefined,
         },
-        outreachCampaignFollowUp: { count: async () => 0 },
+        outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
         outreachCampaign: { updateMany: async () => undefined },
       }),
     };
@@ -371,6 +371,350 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   assert.equal(sentRun.sent, 1);
   assert.equal(sentRun.pruned, 0);
   assert.equal(sentProviderInput?.senderDisplayName, "Wens");
+
+  // A provider that accepts the message but whose receipt cannot be recorded
+  // (here: the same native message id handed out twice, tripping the
+  // reservation's unique message link) settles that one row as UNKNOWN with
+  // its reservation kept for reconciliation; the batch carries on.
+  const recordedMessageIds = new Map<string, string>();
+  const recordingOutcomes: Array<Record<string, unknown>> = [];
+  const recordingReleases: string[] = [];
+  const recordingDb = fakeDatabase({
+    audienceRecordIds: ["record-1", "record-2"],
+    audiencePersonalization: {
+      "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+      "record-2": { email: "other@otherco.com", company: "Other Co", country: null },
+    },
+  });
+  recordingDb.researchRecord.findMany = async () => [
+    { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-2", status: "new", data: { email: "other@otherco.com", company: "Other Co" }, createdAt: new Date("2026-01-02") },
+  ];
+  recordingDb.outreachCampaignSend.updateMany = (async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+    if (args.data.status) recordingOutcomes.push({ ...args.where, ...args.data });
+    return { count: 1 };
+  }) as () => Promise<{ count: number }>;
+  recordingDb.$transaction = async (callback) => callback({
+    $queryRaw: async () => [{ locked: 1 }],
+    emailMessage: { findFirst: async () => null, create: async () => ({ id: "message-1" }) },
+    emailThread: { create: async () => ({ id: "thread-1" }) },
+    emailSenderReservation: {
+      updateMany: (async (args: { where: { id: string }; data: { messageId: string } }) => {
+        const owner = recordedMessageIds.get(args.data.messageId);
+        if (owner && owner !== args.where.id) {
+          throw new Error("Unique constraint failed on the fields: (`messageId`,`accountId`,`officeId`)");
+        }
+        recordedMessageIds.set(args.data.messageId, args.where.id);
+      }) as () => Promise<void>,
+    },
+    outreachCampaignSend: {
+      upsert: (async (args: { create: Record<string, unknown> }) => { recordingOutcomes.push(args.create); }) as () => Promise<void>,
+      deleteMany: async () => undefined,
+      findMany: async () => [],
+      count: async () => 0,
+      createMany: async () => undefined,
+      updateMany: async () => undefined,
+    },
+    outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
+    outreachCampaign: { updateMany: async () => undefined },
+  });
+  let recordingReservations = 0;
+  const recordingRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: recordingDb as never,
+    provider,
+    reserve: async () => {
+      recordingReservations += 1;
+      return { ...reservation, reservationId: `reservation-${recordingReservations}` };
+    },
+    release: async (args) => {
+      recordingReleases.push(args.reservationId);
+      return { ok: true, released: true } as never;
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(recordingRun.attempted, 2, "the batch continues past the row whose receipt could not be recorded");
+  assert.equal(recordingRun.sent, 1);
+  assert.equal(recordingRun.unknown, 1);
+  assert.deepEqual(
+    recordingRun.outcomes.map((outcome) => [outcome.recordId, outcome.state]),
+    [["record-1", "SENT"], ["record-2", "UNKNOWN"]],
+  );
+  assert.match(recordingRun.outcomes[1].error ?? "", /could not be recorded/);
+  assert.deepEqual(recordingReleases, [], "a delivered message keeps its reservation for reconciliation");
+  const unknownLedger = recordingOutcomes.find((row) => row.recordId === "record-2");
+  assert.equal(unknownLedger?.status, "UNKNOWN");
+  assert.equal(unknownLedger?.reservationId, "reservation-2");
+  assert.equal(unknownLedger?.senderEmail, "sender@buyerco.com");
+
+  // An ambiguous commit: the recording transaction writes SENT and settles
+  // the reservation, then the call still throws (lost response, post-commit
+  // side effect). The committed row must not be downgraded to UNKNOWN, which
+  // would leave it unreconcilable behind a RECORDED reservation. The UNKNOWN
+  // write is conditional on the row not being SENT, so it touches nothing.
+  const ambiguousLedger: Array<Record<string, unknown>> = [];
+  const ambiguousOuterWrites: Array<Record<string, unknown>> = [];
+  const ambiguousDb = fakeDatabase();
+  ambiguousDb.outreachCampaignSend.upsert = (async (args: { create: Record<string, unknown> }) => {
+    ambiguousOuterWrites.push(args.create);
+  }) as () => Promise<void>;
+  ambiguousDb.outreachCampaignSend.updateMany = (async (args: {
+    where: { officeId: string; campaignId: string; recordId: string; status: string | { not: string } };
+    data: Record<string, unknown>;
+  }) => {
+    if (!args.data.status) return { count: 1 };
+    assert.deepEqual(args.where.status, { not: "SENT" }, "the UNKNOWN write must be conditional on the row not being SENT");
+    if (typeof args.where.status === "string") return { count: 0 };
+    const rows = ambiguousLedger.filter((row) =>
+      row.officeId === args.where.officeId
+      && row.campaignId === args.where.campaignId
+      && row.recordId === args.where.recordId
+      && row.status !== args.where.status.not);
+    for (const row of rows) {
+      Object.assign(row, args.data);
+      ambiguousOuterWrites.push({ ...row });
+    }
+    return { count: rows.length };
+  }) as () => Promise<{ count: number }>;
+  ambiguousDb.$transaction = async (callback) => {
+    let recorded = false;
+    const result = await callback({
+      $queryRaw: async () => [{ locked: 1 }],
+      emailMessage: { findFirst: async () => null, create: async () => ({ id: "message-1" }) },
+      emailThread: { create: async () => ({ id: "thread-1" }) },
+      emailSenderReservation: { updateMany: async () => undefined },
+      outreachCampaignSend: {
+        upsert: (async (args: { create: Record<string, unknown> }) => {
+          ambiguousLedger.push(args.create);
+          recorded = true;
+        }) as () => Promise<void>,
+        deleteMany: async () => undefined,
+        findMany: async () => [],
+        count: async () => 0,
+        createMany: async () => undefined,
+        updateMany: async () => undefined,
+      },
+      outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
+      outreachCampaign: { updateMany: async () => undefined },
+    });
+    if (recorded) throw new Error("connection closed before the commit acknowledgement arrived");
+    return result;
+  };
+  const ambiguousReleases: string[] = [];
+  const ambiguousRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: ambiguousDb as never,
+    provider,
+    reserve: async () => reservation,
+    release: async (args) => {
+      ambiguousReleases.push(args.reservationId);
+      return { ok: true, released: true } as never;
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(ambiguousRun.sent, 1, "a committed SENT row is reported as sent");
+  assert.equal(ambiguousRun.unknown, 0);
+  assert.deepEqual(ambiguousRun.outcomes.map((outcome) => [outcome.recordId, outcome.state, outcome.error]), [["record-1", "SENT", null]]);
+  assert.deepEqual(ambiguousOuterWrites, [], "the committed SENT row is not overwritten with UNKNOWN");
+  assert.deepEqual(ambiguousReleases, []);
+
+  // A recording that fails before the ledger write (database blip) settles
+  // the row as UNKNOWN with the recording error and the batch continues to
+  // the next recipient.
+  const outageOuterWrites: Array<Record<string, unknown>> = [];
+  const outageReleases: string[] = [];
+  const outageDb = fakeDatabase({
+    audienceRecordIds: ["record-1", "record-2"],
+    audiencePersonalization: {
+      "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+      "record-2": { email: "other@otherco.com", company: "Other Co", country: null },
+    },
+  });
+  outageDb.researchRecord.findMany = async () => [
+    { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+    { id: "record-2", status: "new", data: { email: "other@otherco.com", company: "Other Co" }, createdAt: new Date("2026-01-02") },
+  ];
+  outageDb.outreachCampaignSend.updateMany = (async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+    if (args.data.status) outageOuterWrites.push({ ...args.where, ...args.data });
+    return { count: 1 };
+  }) as () => Promise<{ count: number }>;
+  let outageRecordings = 0;
+  outageDb.$transaction = async (callback) => callback({
+    $queryRaw: async () => [{ locked: 1 }],
+    emailMessage: { findFirst: async () => null, create: async () => ({ id: "message-1" }) },
+    emailThread: { create: async () => ({ id: "thread-1" }) },
+    emailSenderReservation: {
+      updateMany: (async () => {
+        outageRecordings += 1;
+        if (outageRecordings === 1) throw new Error("Can't reach database server");
+      }) as () => Promise<void>,
+    },
+    outreachCampaignSend: {
+      upsert: (async (args: { create: Record<string, unknown> }) => { outageOuterWrites.push(args.create); }) as () => Promise<void>,
+      deleteMany: async () => undefined,
+      findMany: async () => [],
+      count: async () => 0,
+      createMany: async () => undefined,
+      updateMany: async () => undefined,
+    },
+    outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
+    outreachCampaign: { updateMany: async () => undefined },
+  });
+  let outageReservations = 0;
+  const outageRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: outageDb as never,
+    provider,
+    reserve: async () => {
+      outageReservations += 1;
+      return { ...reservation, reservationId: `reservation-${outageReservations}` };
+    },
+    release: async (args) => {
+      outageReleases.push(args.reservationId);
+      return { ok: true, released: true } as never;
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(outageRecordings, 2);
+  assert.equal(outageRun.attempted, 2, "a failed recording does not abort the batch");
+  assert.equal(outageRun.sent, 1);
+  assert.equal(outageRun.unknown, 1);
+  assert.deepEqual(outageRun.outcomes.map((outcome) => [outcome.recordId, outcome.state]), [["record-1", "UNKNOWN"], ["record-2", "SENT"]]);
+  assert.match(outageRun.outcomes[0].error ?? "", /could not be recorded/);
+  assert.deepEqual(outageReleases, [], "the delivered message keeps its reservation for reconciliation");
+  const outageLedger = outageOuterWrites.find((row) => row.recordId === "record-1");
+  assert.equal(outageLedger?.status, "UNKNOWN");
+  assert.equal(outageLedger?.reservationId, "reservation-1");
+
+  // Consecutive runs at dailyCap 1: the delivered-but-unrecorded row's
+  // reservation, still RESERVED and taken today, holds the campaign's only
+  // slot, so the next run sends nothing. The day a reservation counts against
+  // is its usageDate (moved by every reuse), not its first createdAt: a
+  // reservation from an earlier day reused today still holds today's slot,
+  // one that stayed on the earlier day (or has been settled) does not.
+  const capLedger: Array<Record<string, unknown>> = [];
+  const capReservationCounts: Array<Record<string, unknown>> = [];
+  const capNow = new Date("2026-01-01T12:00:00Z");
+  const capProviderCalls: string[] = [];
+  const capProvider = {
+    ...provider,
+    send: async (input: { recipient: string }) => {
+      capProviderCalls.push(input.recipient);
+      return provider.send(input);
+    },
+  };
+  // `retained` is the RESERVED reservation behind the UNKNOWN rows, or null once settled.
+  function capDatabase(capLedger: Array<Record<string, unknown>>, retained: { createdAt: Date; usageDate: Date } | null) {
+    const db = fakeDatabase({
+      dailyCap: 1,
+      audienceRecordIds: ["record-1", "record-2"],
+      audiencePersonalization: {
+        "record-1": { email: "buyer@buyerco.com", company: "Buyer Co", country: null },
+        "record-2": { email: "other@otherco.com", company: "Other Co", country: null },
+      },
+    });
+    db.researchRecord.findMany = async () => [
+      { id: "record-1", status: "new", data: { email: "buyer@buyerco.com", company: "Buyer Co" }, createdAt: new Date("2026-01-01") },
+      { id: "record-2", status: "new", data: { email: "other@otherco.com", company: "Other Co" }, createdAt: new Date("2026-01-02") },
+    ];
+    const ledgerRows = (args: { where?: { status?: string } }) => capLedger
+      .filter((row) => !args.where?.status || row.status === args.where.status)
+      .map((row) => ({ ...row, id: `send-${row.recordId}`, updatedAt: capNow }));
+    db.outreachCampaignSend.findMany = ledgerRows as () => Promise<never[]>;
+    db.outreachCampaignSend.upsert = async (args: { create: Record<string, unknown> }) => {
+      capLedger.push(args.create);
+    };
+    db.outreachCampaignSend.updateMany = (async (args: { where: { recordId: string }; data: Record<string, unknown> }) => {
+      if (!args.data.status) return { count: 1 };
+      const existing = capLedger.find((row) => row.recordId === args.where.recordId && row.status !== "SENT");
+      if (existing) Object.assign(existing, args.data);
+      else {
+        // The fake's claim createMany is a no-op, so the settled QUEUED row is materialized here.
+        const recipient = args.where.recordId === "record-1" ? "buyer@buyerco.com" : "other@otherco.com";
+        capLedger.push({ officeId: "office-1", campaignId: "campaign-1", recordId: args.where.recordId, recipient, ...args.data });
+      }
+      return { count: 1 };
+    }) as () => Promise<{ count: number }>;
+    const reservationModel = {
+      findUnique: async () => null,
+      count: async (args: { where: { id: { in: string[] }; status: string; usageDate: Date; createdAt?: unknown } }) => {
+        capReservationCounts.push(args.where);
+        if (!retained || args.where.status !== "RESERVED") return 0;
+        return retained.usageDate.getTime() === args.where.usageDate.getTime() ? args.where.id.in.length : 0;
+      },
+      updateMany: async () => {
+        throw new Error("Unique constraint failed on the fields: (`messageId`,`accountId`,`officeId`)");
+      },
+    };
+    db.emailSenderReservation = reservationModel as typeof db.emailSenderReservation;
+    db.$transaction = async (callback) => callback({
+      $queryRaw: async () => [{ locked: 1 }],
+      emailMessage: { findFirst: async () => null, create: async () => ({ id: "message-1" }) },
+      emailThread: { create: async () => ({ id: "thread-1" }) },
+      emailSenderReservation: reservationModel,
+      outreachCampaignSend: {
+        upsert: (async (args: { create: Record<string, unknown> }) => { capLedger.push(args.create); }) as () => Promise<void>,
+        deleteMany: async () => undefined,
+        findMany: ledgerRows as () => Promise<never[]>,
+        count: async () => 0,
+        createMany: async () => undefined,
+        updateMany: async () => undefined,
+      },
+      outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
+      outreachCampaign: { updateMany: async () => undefined },
+    });
+    return db;
+  }
+  const capRun = (db: ReturnType<typeof capDatabase>) => runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: db as never,
+    provider: capProvider,
+    reserve: async () => ({ ...reservation, reservationId: "reservation-cap" }),
+    release: async () => ({ ok: true, released: true } as never),
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: capNow,
+  });
+  const today = new Date("2026-01-01T00:00:00Z");
+  const yesterday = new Date("2025-12-31T00:00:00Z");
+  const firstCapRun = await capRun(capDatabase(capLedger, { createdAt: capNow, usageDate: today }));
+  assert.equal(firstCapRun.unknown, 1);
+  assert.equal(firstCapRun.sent, 0);
+  assert.deepEqual(capProviderCalls, ["buyer@buyerco.com"]);
+  assert.equal(capLedger.filter((row) => row.status === "UNKNOWN").length, 1);
+  const secondCapRun = await capRun(capDatabase(capLedger, { createdAt: capNow, usageDate: today }));
+  assert.equal(secondCapRun.attempted, 0, "the unrecorded delivery still holds the only daily slot");
+  assert.equal(secondCapRun.blocked, "DAILY_CAP");
+  assert.deepEqual(capProviderCalls, ["buyer@buyerco.com"], "no second message goes out while the cap is held");
+  assert.ok(capReservationCounts.length > 0);
+  for (const where of capReservationCounts) {
+    assert.equal(where.status, "RESERVED", "only retained reservations are counted");
+    assert.deepEqual(where.usageDate, today, "reservations are matched on the day the sender pool counts them against");
+    assert.equal(where.createdAt, undefined, "a reused reservation keeps its first createdAt, so it is not a day filter");
+  }
+  const reusedCapRun = await capRun(capDatabase([...capLedger], { createdAt: new Date("2025-12-31T12:00:00Z"), usageDate: today }));
+  assert.equal(reusedCapRun.attempted, 0, "a reservation first taken yesterday but reused today holds today's slot");
+  assert.equal(reusedCapRun.blocked, "DAILY_CAP");
+  assert.deepEqual(capProviderCalls, ["buyer@buyerco.com"]);
+  const yesterdayCapRun = await capRun(capDatabase([...capLedger], { createdAt: new Date("2025-12-31T12:00:00Z"), usageDate: yesterday }));
+  assert.equal(yesterdayCapRun.attempted, 1, "an UNKNOWN row still counted against an earlier day does not hold today's slot");
+  assert.deepEqual(capProviderCalls, ["buyer@buyerco.com", "other@otherco.com"]);
+  const settledCapRun = await capRun(capDatabase([...capLedger], null));
+  assert.equal(settledCapRun.attempted, 1, "an UNKNOWN row whose reservation was settled does not hold today's slot");
 
   // Pre-send gate: a placeholder, a Null MX domain, and a verifier-undeliverable
   // mailbox are refused before any claim, so with a run limit of one the fourth,
@@ -815,7 +1159,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
         emailThread: { create: async () => ({ id: "thread-1" }) },
         emailSenderReservation: { updateMany: async () => undefined },
         outreachCampaignSend: sendModel,
-        outreachCampaignFollowUp: { count: async () => 0 },
+        outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
         outreachCampaign: { updateMany: async () => undefined },
       }),
     };
@@ -1371,7 +1715,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       emailThread: { create: async () => ({ id: "thread-1" }) },
       emailSenderReservation: { updateMany: async () => undefined },
       outreachCampaignSend: pagingSendModel,
-      outreachCampaignFollowUp: { count: async () => 0 },
+      outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
       outreachCampaign: { updateMany: async () => undefined },
     }),
   };

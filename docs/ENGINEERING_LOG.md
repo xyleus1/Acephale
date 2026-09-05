@@ -3,6 +3,91 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-06: Delivered-but-unrecorded sends settle as UNKNOWN per row; approvals list scrolls
+
+- Trigger: in the pruning-gate runtime test the mock provider returned one
+  native message id for two recipients. `recordSent` for the second row failed
+  on the unique `(messageId, accountId, officeId)` reservation link and the
+  exception aborted the batch, leaving later claims queued. Gmail ids do not
+  repeat, but any persistence failure after the provider accepted the message
+  (connection drop, constraint) had the same blast radius.
+- The runners distinguish three states now: provider refused (existing
+  REJECTED/UNKNOWN handling), provider accepted and recorded (SENT), provider
+  accepted and not recorded. The third writes the ledger row as `UNKNOWN` with
+  `outreachCampaignRecordingFailure(error)` (shared by first touch and
+  follow-ups), keeps the reservation, counts as `unknown` in the run output,
+  and moves to the next claim. Releasing the reservation would let a retry
+  deliver the message twice; REJECTED would drop a delivered recipient from
+  follow-ups. The reconcile pass then asks the provider and records the send,
+  and a recording failure inside reconcile updates the row's error instead of
+  stopping the pass.
+- Both `recordSent` helpers ignore an existing message that belongs to another
+  reservation when looking up the local copy, so a colliding provider id
+  cannot link the current send to a different recipient's message.
+- Review follow-up: an UNKNOWN row has no `sentAt`, so the campaign daily cap
+  (`outreachCampaignRemainingCapacity`, counting SENT and QUEUED rows) treated
+  a delivered-but-unrecorded slot as free and the next run could exceed the
+  cap for as long as recording kept failing. The capacity now also subtracts
+  UNKNOWN rows in either ledger whose reservation is still `RESERVED` with a
+  `usageDate` on the capped UTC day (`unresolvedOutreachCampaignDeliveries`
+  takes an optional `usageDate`). Older UNKNOWN rows, whose delivery is
+  unconfirmed and which reconcile expires after 24 hours, and rows whose
+  reservation has been settled are not counted. `runOutreachCampaignBatch`
+  reports `DAILY_CAP` when that capacity is zero.
+- Second review round: the first cut filtered on reservation `createdAt`, and
+  both reconcile paths dated a recovered send from it. `reserveEmailSender`
+  reuses a released reservation for the same idempotency key (a claim reclaimed
+  after a crash, a first touch rerouted off a paused mailbox) and moves its
+  `usageDate` and `updatedAt` while `createdAt` stays at the first attempt, so
+  a reuse across midnight would have counted against the wrong day and dated
+  the recovered send, and the next follow-up wait, a day early. Day accounting
+  now uses `usageDate`, the same column the sender pool counts, and the
+  recovered `sentAt` is the reservation's `updatedAt`: a `RESERVED` row is
+  last written by the reservation attempt that immediately preceded the
+  delivery, and every later write (record, release) leaves `RESERVED`.
+- Third review round: the catch around `recordSent` / `recordFollowUpSent`
+  treated every throw as a failed recording. A transaction can commit and the
+  call still throw (the commit acknowledgement is lost, or `logEmailTouch`
+  fails after the commit), in which case the row is already SENT and the
+  reservation `RECORDED`; writing UNKNOWN over it would have stopped the
+  follow-up sequence and left the row unreconcilable, since reconcile only
+  looks at `RESERVED` reservations. A separate verification read cannot
+  settle this: in an outage it fails like the recording did, and treating
+  that as "not committed" would still overwrite a committed SENT row. Both
+  runners now write UNKNOWN through a conditional `updateMany` on the
+  office-scoped row (campaign, record and step) with `status: { not: "SENT" }`
+  (`settleUnrecordedSend`, follow-up `recordOutcome`). The predicate and the
+  write are one statement, so there is no window in which a committed row can
+  be downgraded. Zero rows updated means the row is SENT and the send is
+  reported as sent; a genuinely unrecorded row settles UNKNOWN with the
+  original recording error and keeps its `RESERVED` reservation for reconcile.
+  If the conditional write itself fails the batch aborts with the claim still
+  QUEUED and the reservation `RESERVED`; the next run's re-claim is refused by
+  the sender pool as `DELIVERY_UNCERTAIN` (same idempotency key, reservation
+  not released) and `settleOutreachReservationFailure` writes UNKNOWN then, so
+  the send cannot be repeated and still reaches reconcile.
+- Pending approvals panel: `inventoryTabPanel` is `overflow: hidden`, so a
+  proposal taller than the panel clipped its Start and Discard controls. On a
+  prospecting project the tab now adds `prospectingTabPanel` (flex column),
+  the prospects workspace fills the remaining height and the approvals section
+  scrolls within at most 60 percent of the panel.
+- Regression in `scripts/outreach-campaign-send.test.ts`: two recipients, the
+  second `emailSenderReservation.updateMany` throws the unique violation;
+  asserts `attempted 2`, `sent 1`, `unknown 1`, no reservation release, and
+  an UNKNOWN ledger row pinned to its reservation. A second scenario runs a
+  dailyCap 1 campaign twice: the first run leaves an unrecorded UNKNOWN row,
+  the second sends nothing and reports `DAILY_CAP`; the same ledger with the
+  reservation created the day before but reused today still blocks, with its
+  `usageDate` on the day before, or settled, sends the next recipient.
+  `scripts/outreach-campaign-follow-ups.test.ts` covers the follow-up ledger
+  the same way (reservation `count` matches `usageDate` and rejects a
+  `createdAt` filter) and reconciles a reused reservation, asserting the
+  recovered `sentAt` is the reuse time, not the first attempt. Both suites
+  also run an ambiguous commit (the recording transaction applies its writes,
+  then throws) and assert the row stays SENT with no UNKNOWN write, and an
+  outage where the recording and the ledger re-read both throw, asserting the
+  row settles UNKNOWN and the next recipient is still sent.
+
 ## 2026-09-07: A machine notice on a supplier thread is not a supplier message
 
 - Trigger: review of the draft retirement work. An out of office note or a

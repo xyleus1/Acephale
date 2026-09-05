@@ -41,6 +41,11 @@ type FollowUpTx = Prisma.TransactionClient;
 export const OUTREACH_FOLLOW_UP_RECLAIM_MINUTES = 30;
 export const OUTREACH_UNKNOWN_DELIVERY_TIMEOUT_HOURS = 24;
 
+export function outreachCampaignRecordingFailure(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return `Delivered, but the send could not be recorded: ${detail.slice(0, 200)}. It is reconciled on the next run.`;
+}
+
 type CapacityCampaign = { id: string; officeId: string; dailyCap: number };
 
 export { humanReplyMessageFilter };
@@ -55,7 +60,9 @@ export async function lockOutreachCampaignClaims(tx: FollowUpTx, campaignId: str
 }
 
 // Remaining sends under the campaign daily cap for the UTC day across both the
-// first-touch and follow-up ledgers, including live QUEUED claims.
+// first-touch and follow-up ledgers, including live QUEUED claims and
+// deliveries the provider may have accepted but the ledger has not settled
+// (UNKNOWN rows whose reservation is still RESERVED against today).
 export async function outreachCampaignRemainingCapacity(tx: FollowUpTx, campaign: CapacityCampaign, now: Date) {
   const { start, end } = utcDayBounds(now);
   const scope = { officeId: campaign.officeId, campaignId: campaign.id };
@@ -67,7 +74,8 @@ export async function outreachCampaignRemainingCapacity(tx: FollowUpTx, campaign
   });
   const queuedSends = await tx.outreachCampaignSend.count({ where: { ...scope, status: "QUEUED" } });
   const queuedFollowUps = await tx.outreachCampaignFollowUp.count({ where: { ...scope, status: "QUEUED" } });
-  return Math.max(0, campaign.dailyCap - sentToday - followUpsToday - queuedSends - queuedFollowUps);
+  const unresolvedToday = await unresolvedOutreachCampaignDeliveries(tx, campaign, start);
+  return Math.max(0, campaign.dailyCap - sentToday - followUpsToday - queuedSends - queuedFollowUps - unresolvedToday);
 }
 
 export function outreachUnknownDeliveryExpired(createdAt: Date, now: Date) {
@@ -75,22 +83,25 @@ export function outreachUnknownDeliveryExpired(createdAt: Date, now: Date) {
 }
 
 // UNKNOWN ledger rows in either ledger whose sender reservation is still
-// RESERVED. These keep a campaign ACTIVE so cron reconciliation can settle them.
+// RESERVED. These keep a campaign ACTIVE so cron reconciliation can settle
+// them, and hold their slot under the daily cap when `usageDate` narrows them
+// to reservations the sender pool counts against that UTC day. A reservation
+// reused on a later attempt moves its usageDate; its createdAt stays at the
+// first attempt, so it must not be used for day accounting.
 export async function unresolvedOutreachCampaignDeliveries(
-  db: FollowUpDb,
+  db: FollowUpDb | FollowUpTx,
   campaign: { id: string; officeId: string },
+  usageDate?: Date,
 ) {
   const scope = { officeId: campaign.officeId, campaignId: campaign.id, status: "UNKNOWN", reservationId: { not: null } };
-  const [sends, followUps] = await Promise.all([
-    db.outreachCampaignSend.findMany({ where: scope, select: { reservationId: true } }),
-    db.outreachCampaignFollowUp.findMany({ where: scope, select: { reservationId: true } }),
-  ]);
+  const sends = await db.outreachCampaignSend.findMany({ where: scope, select: { reservationId: true } });
+  const followUps = await db.outreachCampaignFollowUp.findMany({ where: scope, select: { reservationId: true } });
   const reservationIds = [...sends, ...followUps]
     .map((row) => row.reservationId)
     .filter((value): value is string => typeof value === "string");
   if (!reservationIds.length) return 0;
   return db.emailSenderReservation.count({
-    where: { officeId: campaign.officeId, id: { in: reservationIds }, status: "RESERVED" },
+    where: { officeId: campaign.officeId, id: { in: reservationIds }, status: "RESERVED", ...(usageDate ? { usageDate } : {}) },
   });
 }
 
@@ -489,10 +500,13 @@ async function recordFollowUpSent(
 ) {
   const { campaign, candidate } = input;
   await db.$transaction(async (tx) => {
+    // A message already linked to another reservation belongs to that send,
+    // even if the provider handed out the same native id twice.
     const existing = await tx.emailMessage.findFirst({
       where: {
         thread: { officeId: campaign.officeId },
         OR: [{ gmailMessageId: input.providerMessageId }, { externalId: input.rfcMessageId }],
+        AND: [{ OR: [{ senderReservation: null }, { senderReservation: { id: input.reservationId } }] }],
       },
       select: { id: true, threadId: true },
     });
@@ -588,7 +602,7 @@ async function reconcileUnknownFollowUps(
     if (!row.reservationId || !row.senderEmail) continue;
     const reservation = await db.emailSenderReservation.findUnique({
       where: { id: row.reservationId, officeId: campaign.officeId, status: "RESERVED" },
-      select: { accountId: true, createdAt: true },
+      select: { accountId: true, updatedAt: true },
     });
     if (!reservation) continue;
     const rfcMessageId = outreachFollowUpRfcMessageId(campaign.id, row.recordId, row.step);
@@ -611,29 +625,37 @@ async function reconcileUnknownFollowUps(
     const personalization = campaign.audiencePersonalization[row.recordId];
     if (!step || !personalization) continue;
     const email = renderFollowUpEmail({ step, campaignSubject: followUpInitialSubject(campaign, row.recordId), personalization });
-    await recordFollowUpSent(db, {
-      campaign,
-      candidate: {
-        recordId: row.recordId,
-        recipient: row.recipient,
-        step: row.step,
-        dueAt: row.dueAt,
-        previousSentAt: row.dueAt,
-        localThreadId: row.localThreadId,
-        providerThreadId: row.providerThreadId,
-      },
-      senderEmail: row.senderEmail,
-      accountId: reservation.accountId,
-      reservationId: row.reservationId,
-      subject: email.subject,
-      body: email.body,
-      rfcMessageId,
-      providerMessageId: receipt.providerMessageId,
-      providerThreadId: receipt.providerThreadId,
-      // The reservation was taken immediately before the original delivery
-      // attempt, so the next step waits from delivery, not from recovery.
-      sentAt: reservation.createdAt,
-    });
+    try {
+      await recordFollowUpSent(db, {
+        campaign,
+        candidate: {
+          recordId: row.recordId,
+          recipient: row.recipient,
+          step: row.step,
+          dueAt: row.dueAt,
+          previousSentAt: row.dueAt,
+          localThreadId: row.localThreadId,
+          providerThreadId: row.providerThreadId,
+        },
+        senderEmail: row.senderEmail,
+        accountId: reservation.accountId,
+        reservationId: row.reservationId,
+        subject: email.subject,
+        body: email.body,
+        rfcMessageId,
+        providerMessageId: receipt.providerMessageId,
+        providerThreadId: receipt.providerThreadId,
+        // A RESERVED reservation was last written by the reservation attempt
+        // that preceded this delivery (a reused reservation keeps its first
+        // createdAt), so the next step waits from delivery, not from recovery.
+        sentAt: reservation.updatedAt,
+      });
+    } catch (error) {
+      await db.outreachCampaignFollowUp.updateMany({
+        where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: row.recordId, step: row.step, status: "UNKNOWN" },
+        data: { error: outreachCampaignRecordingFailure(error) },
+      });
+    }
   }
 }
 
@@ -697,11 +719,15 @@ export async function runOutreachCampaignFollowUps(input: {
   const dropQueued = (candidate: CampaignFollowUpCandidate) => db.outreachCampaignFollowUp.deleteMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: candidate.recordId, step: candidate.step, status: "QUEUED" },
   });
-  const recordOutcome = (candidate: CampaignFollowUpCandidate, data: { status: "REJECTED" | "UNKNOWN"; senderEmail?: string; reservationId?: string; error: string }) =>
-    db.outreachCampaignFollowUp.updateMany({
-      where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: candidate.recordId, step: candidate.step },
+  // A settled step is never downgraded: the write is conditional on the step
+  // not being SENT and reports whether it applied.
+  const recordOutcome = async (candidate: CampaignFollowUpCandidate, data: { status: "REJECTED" | "UNKNOWN"; senderEmail?: string; reservationId?: string; error: string }) => {
+    const updated = await db.outreachCampaignFollowUp.updateMany({
+      where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: candidate.recordId, step: candidate.step, status: { not: "SENT" } },
       data,
     });
+    return updated.count > 0;
+  };
   const skipClaimed = async (candidate: CampaignFollowUpCandidate, skipReason: CampaignFollowUpSkipReason) => {
     await db.outreachCampaignFollowUp.updateMany({
       where: { officeId: campaign.officeId, campaignId: campaign.id, recordId: candidate.recordId, step: candidate.step, status: "QUEUED" },
@@ -942,21 +968,41 @@ export async function runOutreachCampaignFollowUps(input: {
       senderDisplayName: campaign.senderDisplayName,
     });
     if (receipt.state === "SENT") {
-      await recordFollowUpSent(db, {
-        campaign,
-        candidate,
-        senderEmail: reservation.senderEmail,
-        accountId: reservation.accountId,
-        reservationId: reservation.reservationId,
-        subject: email.subject,
-        body: email.body,
-        rfcMessageId,
-        providerMessageId: receipt.providerMessageId,
-        providerThreadId: receipt.providerThreadId,
-        sentAt: now,
-      });
-      output.sent += 1;
-      output.outcomes.push({ ...base, state: "SENT", senderEmail: reservation.senderEmail, error: null });
+      // The provider accepted the message, so a ledger failure here must not
+      // abort the run or release the reservation: the step settles as UNKNOWN
+      // and the reconcile pass records it once the provider confirms it. The
+      // recording transaction can commit and still throw (lost response, a
+      // post-commit side effect), so the UNKNOWN write is conditional on the
+      // step not being SENT: a committed step is left alone and reported as sent.
+      let recordingError: string | null = null;
+      try {
+        await recordFollowUpSent(db, {
+          campaign,
+          candidate,
+          senderEmail: reservation.senderEmail,
+          accountId: reservation.accountId,
+          reservationId: reservation.reservationId,
+          subject: email.subject,
+          body: email.body,
+          rfcMessageId,
+          providerMessageId: receipt.providerMessageId,
+          providerThreadId: receipt.providerThreadId,
+          sentAt: now,
+        });
+      } catch (error) {
+        recordingError = outreachCampaignRecordingFailure(error);
+      }
+      if (recordingError) {
+        const settled = await recordOutcome(candidate, { status: "UNKNOWN", senderEmail: reservation.senderEmail, reservationId: reservation.reservationId, error: recordingError });
+        if (!settled) recordingError = null;
+      }
+      if (recordingError) {
+        output.unknown += 1;
+        output.outcomes.push({ ...base, state: "UNKNOWN", senderEmail: reservation.senderEmail, error: recordingError });
+      } else {
+        output.sent += 1;
+        output.outcomes.push({ ...base, state: "SENT", senderEmail: reservation.senderEmail, error: null });
+      }
     } else if (receipt.state === "REJECTED") {
       await releaseReservation({ officeId: campaign.officeId, reservationId: reservation.reservationId });
       if (receipt.error === SENDER_PAUSED_ERROR) {

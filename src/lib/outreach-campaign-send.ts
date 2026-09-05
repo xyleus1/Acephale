@@ -16,6 +16,7 @@ import {
 } from "@/lib/outreach-campaign-copy";
 import {
   lockOutreachCampaignClaims,
+  outreachCampaignRecordingFailure,
   outreachCampaignRemainingCapacity,
   outreachUnknownDeliveryExpired,
   OUTREACH_UNKNOWN_DELIVERY_TIMEOUT_HOURS,
@@ -318,10 +319,13 @@ async function recordSent(
   let localThreadId: string | null = null;
   let localMessageId: string | null = null;
   await db.$transaction(async (tx) => {
+    // A message already linked to another reservation belongs to that send,
+    // even if the provider handed out the same native id twice.
     const existing = await tx.emailMessage.findFirst({
       where: {
         thread: { officeId: input.officeId },
         OR: [{ gmailMessageId: input.providerMessageId }, { externalId: input.rfcMessageId }],
+        AND: [{ OR: [{ senderReservation: null }, { senderReservation: { id: input.reservationId } }] }],
       },
       select: { id: true, threadId: true },
     });
@@ -463,6 +467,37 @@ async function recordOutcome(
   });
 }
 
+/**
+ * Settles a delivered-but-unrecorded claim as UNKNOWN. The write is
+ * conditional on the row not already being SENT, so it is both the check and
+ * the write: when the recording transaction committed before its call threw,
+ * nothing is touched and `false` reports the committed send.
+ */
+async function settleUnrecordedSend(
+  db: CampaignDb,
+  input: {
+    officeId: string;
+    campaignId: string;
+    recordId: string;
+    senderEmail: string;
+    variantKey: string | null;
+    error: string;
+    reservationId: string;
+  },
+) {
+  const updated = await db.outreachCampaignSend.updateMany({
+    where: { officeId: input.officeId, campaignId: input.campaignId, recordId: input.recordId, status: { not: "SENT" } },
+    data: {
+      status: "UNKNOWN",
+      senderEmail: input.senderEmail,
+      variantKey: input.variantKey,
+      reservationId: input.reservationId,
+      error: input.error,
+    },
+  });
+  return updated.count > 0;
+}
+
 function result(campaignId: string): CampaignBatchResult {
   return {
     campaignId,
@@ -509,7 +544,7 @@ async function reconcileUnknownCampaignSends(
     if (!send.reservationId || !send.senderEmail) continue;
     const reservation = await db.emailSenderReservation.findUnique({
       where: { id: send.reservationId, officeId: campaign.officeId, status: "RESERVED" },
-      select: { accountId: true, createdAt: true },
+      select: { accountId: true, updatedAt: true },
     });
     if (!reservation) continue;
     const receipt = await provider.reconcile({
@@ -540,22 +575,31 @@ async function reconcileUnknownCampaignSends(
       bodyTemplate: variant?.bodyTemplate ?? campaign.bodyTemplate,
       row: personalization,
     });
-    await recordSent(db, {
-      officeId: campaign.officeId,
-      campaignId: campaign.id,
-      recordId: send.recordId,
-      recipient,
-      senderEmail: send.senderEmail,
-      accountId: reservation.accountId,
-      reservationId: send.reservationId,
-      subject: email.subject,
-      body: email.body,
-      rfcMessageId: outreachCampaignRfcMessageId(campaign.id, send.recordId),
-      providerMessageId: receipt.providerMessageId,
-      providerThreadId: receipt.providerThreadId,
-      sentAt: reservation.createdAt,
-      variantKey: variant?.key ?? null,
-    });
+    try {
+      await recordSent(db, {
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        recordId: send.recordId,
+        recipient,
+        senderEmail: send.senderEmail,
+        accountId: reservation.accountId,
+        reservationId: send.reservationId,
+        subject: email.subject,
+        body: email.body,
+        rfcMessageId: outreachCampaignRfcMessageId(campaign.id, send.recordId),
+        providerMessageId: receipt.providerMessageId,
+        providerThreadId: receipt.providerThreadId,
+        // Last write on a RESERVED reservation is the attempt that preceded
+        // this delivery; a reused reservation keeps its first createdAt.
+        sentAt: reservation.updatedAt,
+        variantKey: variant?.key ?? null,
+      });
+    } catch (error) {
+      await db.outreachCampaignSend.updateMany({
+        where: { id: send.id, officeId: campaign.officeId, status: "UNKNOWN" },
+        data: { error: outreachCampaignRecordingFailure(error) },
+      });
+    }
   }
 }
 
@@ -908,11 +952,8 @@ export async function runOutreachCampaignBatch(input: {
     statusAllowsSend: outreachCampaignStatusAllowsSend,
   });
   const researchData = new Map(records.map((record) => [record.id, record.data]));
-  const verificationLimit = outreachCampaignVerificationLimit(
-    input.limit,
-    campaign.dailyCap,
-    await outreachCampaignRemainingCapacity(db, campaign, now),
-  );
+  const remainingCapacity = await outreachCampaignRemainingCapacity(db, campaign, now);
+  const verificationLimit = outreachCampaignVerificationLimit(input.limit, campaign.dailyCap, remainingCapacity);
   const sendableRows = verificationLimit > 0
     ? await selectSendableCampaignRows(
       db,
@@ -939,7 +980,7 @@ export async function runOutreachCampaignBatch(input: {
       officeId: input.officeId,
       campaignId: input.campaignId,
     });
-    return { ...output, blocked: sentToday >= campaign.dailyCap ? "DAILY_CAP" : undefined };
+    return { ...output, blocked: sentToday >= campaign.dailyCap || remainingCapacity === 0 ? "DAILY_CAP" : undefined };
   }
   // Claims this run will no longer attempt go back to the ledger immediately
   // instead of holding cap capacity until the reclaim window passes.
@@ -1142,32 +1183,68 @@ export async function runOutreachCampaignBatch(input: {
       senderDisplayName: campaign.senderDisplayName,
     });
     if (receipt.state === "SENT") {
-      await recordSent(db, {
-        officeId: input.officeId,
-        campaignId: campaign.id,
-        recordId: row.id,
-        recipient,
-        senderEmail: reservation.senderEmail,
-        reservationId: reservation.reservationId,
-        accountId: reservation.accountId,
-        subject: email.subject,
-        body: email.body,
-        rfcMessageId,
-        providerMessageId: receipt.providerMessageId,
-        providerThreadId: receipt.providerThreadId,
-        sentAt: now,
-        variantKey: variant?.key ?? null,
-      });
-      output.sent += 1;
-      output.outcomes.push({
-        campaignId: campaign.id,
-        recordId: row.id,
-        recipient,
-        state: "SENT",
-        senderEmail: reservation.senderEmail,
-        variantKey: variant?.key ?? null,
-        error: null,
-      });
+      // The provider accepted the message, so a ledger failure here must not
+      // abort the batch or release the reservation: the row settles as UNKNOWN
+      // and the reconcile pass records it once the provider confirms it. The
+      // recording transaction can commit and still throw (lost response, a
+      // post-commit side effect), so the UNKNOWN write is conditional on the
+      // row not being SENT: a committed row is left alone and reported as sent.
+      let recordingError: string | null = null;
+      try {
+        await recordSent(db, {
+          officeId: input.officeId,
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          senderEmail: reservation.senderEmail,
+          reservationId: reservation.reservationId,
+          accountId: reservation.accountId,
+          subject: email.subject,
+          body: email.body,
+          rfcMessageId,
+          providerMessageId: receipt.providerMessageId,
+          providerThreadId: receipt.providerThreadId,
+          sentAt: now,
+          variantKey: variant?.key ?? null,
+        });
+      } catch (error) {
+        recordingError = outreachCampaignRecordingFailure(error);
+      }
+      if (recordingError) {
+        const settled = await settleUnrecordedSend(db, {
+          officeId: input.officeId,
+          campaignId: campaign.id,
+          recordId: row.id,
+          senderEmail: reservation.senderEmail,
+          error: recordingError,
+          reservationId: reservation.reservationId,
+          variantKey: variant?.key ?? null,
+        });
+        if (!settled) recordingError = null;
+      }
+      if (recordingError) {
+        output.unknown += 1;
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          state: "UNKNOWN",
+          senderEmail: reservation.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: recordingError,
+        });
+      } else {
+        output.sent += 1;
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: row.id,
+          recipient,
+          state: "SENT",
+          senderEmail: reservation.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: null,
+        });
+      }
     } else if (receipt.state === "REJECTED") {
       await releaseReservation({ officeId: input.officeId, reservationId: reservation.reservationId });
       const pausedAction = outreachCampaignPausedSenderAction({

@@ -658,7 +658,12 @@ export function SupplyInventoryWorkspace({
             <MessageSquare size={14} /> Messages
           </Tabs.Trigger>
         </Tabs.List>
-        <Tabs.Content value="projects" className={styles.inventoryTabPanel}>
+        <Tabs.Content
+          value="projects"
+          className={selectedProject?.kind === "prospecting"
+            ? `${styles.inventoryTabPanel} ${styles.prospectingTabPanel}`
+            : styles.inventoryTabPanel}
+        >
         {selectedProject ? (
           <header className={styles.projectViewHeader}>
             <button type="button" onClick={() => onProjectChange(null)}>All projects</button>
