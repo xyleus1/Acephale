@@ -100,7 +100,10 @@ export function LeadStatusPanel({
       setError(loadError instanceof Error ? loadError.message : "Lead status unavailable.");
     }
   }, [listSlug, onReportChange, projectId, workspaceId]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => { requestIdRef.current += 1; };
+  }, [load]);
   useEffect(() => {
     const timer = window.setInterval(() => void load(), report && (report.live.activeJobs > 0 || report.live.pendingOperations > 0) ? 30_000 : 120_000);
     return () => window.clearInterval(timer);

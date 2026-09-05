@@ -58,7 +58,6 @@ const procurement = readFileSync(resolve(root, "src/app/dashboard/supply-os/supp
 const researchRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/route.ts"), "utf8");
 const researchRouteContract = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-route-contract.ts"), "utf8");
 const supplierResearchWorker = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-worker.ts"), "utf8");
-const supplierResearch = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
 const openAiSupplierResearch = readFileSync(resolve(root, "src/lib/supply-os/openai-supplier-research.ts"), "utf8");
 const intakeRoute = readFileSync(resolve(root, "src/app/api/supply-os/sourcing-request/route.ts"), "utf8");
 const procurementCasesRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/route.ts"), "utf8");
@@ -103,10 +102,6 @@ const purchaseOrderFollowUpApprovalRoute = readFileSync(resolve(root, "src/app/a
 const purchaseOrderFollowUpDecisionRoute = readFileSync(resolve(root, "src/app/api/supply-os/purchase-order-follow-up-email-approvals/[approvalId]/decision/route.ts"), "utf8");
 const purchaseOrderFollowUpDeliveryRoute = readFileSync(resolve(root, "src/app/api/supply-os/purchase-order-follow-up-email-actions/[actionId]/delivery/route.ts"), "utf8");
 const connectedOrderAcknowledgmentsRoute = readFileSync(resolve(root, "src/app/api/supply-os/purchase-actions/[actionId]/connected-acknowledgments/route.ts"), "utf8");
-const composerSource = workbench.slice(
-  workbench.indexOf('<form className={styles.sourcingComposer}'),
-  workbench.indexOf('<header className={styles.sourcingQueueHeader}'),
-);
 const illustrativeRowsSource = workbench.slice(
   workbench.indexOf('{sourcingItems.map((item) =>'),
   workbench.indexOf('{customRuns.map((run) =>'),
@@ -213,10 +208,8 @@ assert.doesNotMatch(dashboard, /demoCompanyId|ATLAS_ROBOTICS_INVENTORY|SAMPLE_SU
 assert.match(dashboard, /filter\(visibleSourcingRun\)/, "campaign child attempts must be removed at the history boundary");
 assert.match(workbench, /Show source/);
 assert.match(workbench, /Hide map/);
-assert.match(workbench, /New sourcing request/);
+assert.doesNotMatch(workbench, /New sourcing request/);
 assert.match(workbench, /Sourcing queue/);
-assert.match(composerSource, /disabled=\{!query\.trim\(\) \|\| !researchWorkspaceReady\}/);
-assert.doesNotMatch(composerSource, /dataState/, "saved-work loading errors must not disable a new sourcing request");
 assert.doesNotMatch(illustrativeRowsSource, /disabled=\{run\?\.status === "RUNNING"\}/, "running research must remain reopenable");
 assert.doesNotMatch(illustrativeRowsSource, /dataState/, "saved-work loading errors must not disable illustrative research");
 assert.match(workbench, /pendingRequests\.map/);
@@ -255,7 +248,6 @@ assert.match(workbench, /Load older requests/);
 assert.match(workbench, /Retry older work/);
 assert.match(workbench, /Office-shared work/);
 assert.match(workbench, /source-backed candidate.*unqualified/);
-assert.match(workbench, /if \(!researchWorkspaceReady\) return;/, "manual research must fail closed until a company workspace is selected");
 assert.match(illustrativeRowsSource, /disabled=\{!researchWorkspaceReady\}/, "inventory research actions must require a selected company workspace");
 assert.doesNotMatch(workbench, /researchCampaign|GUILD2|guild2|Starting 38|Item 027|Item 039/, "the generic customer queue must not contain a compiled campaign");
 assert.doesNotMatch(workbench, /<th>Next step<\/th>/);

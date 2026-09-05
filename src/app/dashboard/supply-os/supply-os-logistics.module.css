@@ -1150,8 +1150,17 @@
   min-width: 0;
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+}
+
+.inventoryTabs > .inventoryTabList {
+  flex: 0 0 auto;
+}
+
+.inventoryTabs > .inventoryTabPanel[data-state="active"] {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .inventoryTabList {
