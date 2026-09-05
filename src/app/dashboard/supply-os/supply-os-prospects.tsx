@@ -46,8 +46,6 @@ export function SupplyOsProspects({
   initialStatus = "all",
   initialStage,
   initialPage = 1,
-  workspaceId,
-  onLeadStatusOpen,
   onListChange,
   externalStage,
   externalQuery,
@@ -60,8 +58,6 @@ export function SupplyOsProspects({
   initialStatus?: ResearchStatus | "all";
   initialStage?: ResearchRecordStage;
   initialPage?: number;
-  workspaceId?: string;
-  onLeadStatusOpen?: () => void;
   onListChange?: (slug: string | null) => void;
   externalStage?: ResearchRecordStage | "all";
   externalQuery?: string;
@@ -270,24 +266,6 @@ export function SupplyOsProspects({
     });
   }, [appliedQuery, listStorageKey, listsLoaded, loadRecords, page, projectStorageKey, selectedProjectId, selectedSlug, stage, status]);
 
-  const autoOpenedSlugRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!selectedSlug || !records || records.total !== 0 || appliedQuery || status !== "all" || stage !== "all" || !onLeadStatusOpen) return;
-    if (autoOpenedSlugRef.current === selectedSlug) return;
-    const params = new URLSearchParams({ projectId: selectedProjectId || OTHER_PROJECT });
-    if (workspaceId) params.set("workspaceId", workspaceId);
-    let cancelled = false;
-    void fetch(`/api/research/pipeline?${params}`, { cache: "no-store", headers: { accept: "application/json" } })
-      .then((response) => response.ok ? response.json() : null)
-      .then((body: { live?: { activeJobs?: number } } | null) => {
-        if (!cancelled && body?.live?.activeJobs && body.live.activeJobs > 0) {
-          autoOpenedSlugRef.current = selectedSlug;
-          onLeadStatusOpen();
-        }
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [appliedQuery, onLeadStatusOpen, records, selectedProjectId, selectedSlug, stage, status, workspaceId]);
   useEffect(() => {
     if (!externalFilterNonce) return;
     const nextStage = externalStage ?? "all";

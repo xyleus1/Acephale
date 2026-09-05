@@ -20,6 +20,7 @@ import {
   createCompanyContextProspectingActions,
   dismissCompanyContextProspectingAction,
   groupProspectingResearchRows,
+  leadSourceLabel,
   hideCompanyContextProspectingAction,
   listCompanyContextProspectingActions,
   normalizeProspectingDraft,
@@ -380,6 +381,7 @@ async function main() {
           phones: ["+58 1 555 0100"],
         }],
         discoveredVia: "fixture query",
+        discoveryProvider: "jsonl",
         harvestedAt: new Date().toISOString(),
       },
       verifications: [],
@@ -469,6 +471,23 @@ async function main() {
     assert.equal(publicRow?.contact_name, null);
     assert.equal(publicRow?.email, "buyer@fixture-steel.eu");
     assert.equal(publicRow?.email_verdict, "unknown");
+    assert.equal(publicRow?.source, "Search fixture");
+    assert.equal(leadSourceLabel(candidate.candidate), "Search fixture");
+    assert.equal(leadSourceLabel({ ...candidate.candidate, discoveryProvider: "serper" }), "Serper");
+    assert.equal(leadSourceLabel({ ...candidate.candidate, discoveryProvider: "html:bing" }), "Web search");
+    assert.equal(leadSourceLabel({ ...candidate.candidate, discoveryProvider: "openai" }), "AI discovery");
+    assert.equal(leadSourceLabel({ ...candidate.candidate, discoveryProvider: "unknown" }), "Web search");
+    assert.equal(leadSourceLabel(candidate.candidate, {
+      companyName: "Directory Steel",
+      domain: "directory-steel.eu",
+      city: null,
+      phones: [],
+      emails: [],
+      rawLine: "Directory row",
+      rowIndex: 1,
+      sourceUrl: "https://directory.example",
+      needsResolution: false,
+    }), "Directory page");
     assert.ok(
       enrichedRows.every((entry) => entry.dedupeField === "domain"),
       "company rows dedupe on the stable domain, not on the contact email that enrichment may change",

@@ -121,6 +121,14 @@ Context chat now reports and manages existing prospect research through office-s
   Enriched uses the same marker-based email predicate as the pipeline.
 - Stored research operation payloads now exclude read-only row metadata, and AppSelect highlights keyboard choices before commit.
 
+## 2026-09-06: Project screen redesign
+
+- Projects now uses back navigation, always-on Lead status, local Lead list,
+  Messages, and Replies tabs, origin-first flow, and a country ring.
+- Sourcing entry boxes were removed from Projects. New prospecting rows store a
+  `source` column, and `leadOriginFor` provides deterministic fallbacks for
+  older rows.
+
 ## 2026-09-06: Delivered-but-unrecorded sends settle as UNKNOWN per row; approvals list scrolls
 
 - Trigger: in the pruning-gate runtime test the mock provider returned one

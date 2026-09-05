@@ -1231,17 +1231,6 @@ function CaseCommandCenter({
     }
   }
 
-  const saveResearchRun = useCallback((run: SavedSourcingResearchRun) => {
-    setResearchRuns((current) => [run, ...current.filter((candidate) => candidate.id !== run.id)]);
-    const requestId = activePendingRequestIdRef.current;
-    if (requestId) {
-      setPendingSourcingRequests((current) => current.filter((request) => request.id !== requestId));
-    }
-    setProcurementRequest((current) => current?.requestText === run.input.requestText
-      ? { ...current, requestId: run.id, savedRun: run }
-      : current);
-  }, []);
-
   const saveProcurementCase = useCallback((procurementCase: SavedProcurementCase) => {
     setProcurementCases((current) => [
       procurementCase,
@@ -1332,47 +1321,6 @@ function CaseCommandCenter({
       initialQuestion: completePublishedItem || item.source !== "published-snapshot"
         ? null
         : "Provide the missing quantity, delivery location, or need-by date before research starts.",
-    });
-  }
-
-  function createProcurementRequest(requestText: string) {
-    const normalized = requestText.toLowerCase();
-    const matchedItem = inventoryItems.find((item) => (
-      normalized.includes(item.sku.toLowerCase())
-      || normalized.includes(item.name.toLowerCase())
-    )) ?? null;
-    if (matchedItem) setSelectedInventorySku(matchedItem.sku);
-    setSourceMapCandidateId(null);
-    setSourceMapObjectId("");
-    if (matchedItem) {
-      setProcurementRequest({
-        requestId: crypto.randomUUID(),
-        requestText,
-        itemSku: matchedItem.sku,
-        initialDraft: null,
-        initialMissingFields: [],
-        initialQuestion: null,
-      });
-      return;
-    }
-    const requestId = crypto.randomUUID();
-    const request: PendingSourcingQueueItem = {
-      id: requestId,
-      requestText,
-      title: requestText,
-      draft: null,
-      missingFields: [],
-      lastQuestion: null,
-      status: "Clarification needed",
-    };
-    setPendingSourcingRequests((current) => [request, ...current]);
-    setProcurementRequest({
-      requestId,
-      requestText,
-      itemSku: null,
-      initialDraft: null,
-      initialMissingFields: [],
-      initialQuestion: null,
     });
   }
 
@@ -1522,7 +1470,6 @@ function CaseCommandCenter({
             canImportSupplyData={canImportSupplyData}
             onSnapshotPublished={() => setWorkspaceSnapshotRevision((revision) => revision + 1)}
             onSelect={selectInventoryItem}
-            onCreateRequest={createProcurementRequest}
             onRetryResearch={retrySavedResearch}
             pendingRequests={pendingSourcingRequests}
             customerProcurementOrders={visibleCustomerProcurementOrders}

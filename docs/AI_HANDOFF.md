@@ -7,6 +7,12 @@ airy pipeline region. It derives stages, sources, replies, job state, and
 cleanup actions without an LLM. Stage filters are carried in
 `researchStage`, and inline research operations first append an operator
 Context message before creating an approval-gated operation.
+
+The project screen now uses back navigation, an always-on Lead status region,
+origin-first flow and a country ring, with local Lead list, Messages, and
+Replies tabs. Sourcing entry boxes were removed from Projects. New prospecting
+rows persist a `source` column, while `leadOriginFor` supplies deterministic
+fallbacks for older rows.
 # AI Handoff
 
 ## 2026-09-08: A thread is owned by the addresses mailed before the first reply

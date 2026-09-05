@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { Prisma } from "@prisma/client";
 import {
   derivePipeline,
+  leadOriginFor,
   pipelineReplyReceivedAt,
   selectPipelineOperations,
   type PipelineRow,
@@ -11,6 +12,7 @@ import { researchRecordStageWhere } from "@/lib/research-record-stages";
 const rows: PipelineRow[] = Array.from({ length: 11 }, (_, index) => ({
   id: String(index + 1),
   data: {
+    source: index < 2 ? "Serper" : index < 4 ? "Directory page" : `Source ${index}`,
     country: ["TR", "TR", "DE", "DE", "US", "NL", "PL", "FR", "IT", "ES", "SE"][index],
     fit_verdict: index < 6 ? "target" : index < 9 ? "not_target" : "unknown",
     email: index < 8 ? `person${index}@example.com` : null,
@@ -48,8 +50,10 @@ assert.equal(result.funnel.sent, 3);
 assert.equal(result.funnel.replied, 2);
 assert.equal(result.funnel.positive, 1);
 assert.equal(result.funnel.bounced, 1);
-assert.deepEqual(result.sources.slice(0, 2), [{ label: "DE", rows: 2 }, { label: "TR", rows: 2 }]);
+assert.deepEqual(result.sources.slice(0, 2), [{ label: "Directory page", rows: 2 }, { label: "Serper", rows: 2 }]);
 assert.ok(result.sources.some((source) => source.label === "Other"));
+assert.deepEqual(result.countries.slice(0, 2), [{ label: "DE", rows: 2 }, { label: "TR", rows: 2 }]);
+assert.equal(result.sankey.nodes[0]?.name, "Directory page");
 assert.equal(result.live.target, 100);
 assert.equal(result.live.activeJobs, 1);
 assert.equal(result.live.lastBatchAt, "2026-01-01T00:00:00.000Z");
@@ -59,6 +63,11 @@ const linkedNodes = new Set(result.sankey.links.flatMap((link) => [link.source, 
 assert.ok(result.sankey.nodes.every((_, index) => linkedNodes.has(index)));
 assert.equal(result.actions.unscreened, 2);
 assert.equal(result.replies.length, 0);
+
+assert.equal(leadOriginFor({ source: "Serper", buys: "Directory row 1" }), "Serper");
+assert.equal(leadOriginFor({ buys: "Directory row 1" }), "Directory page");
+assert.equal(leadOriginFor({ source_query: "steel suppliers" }), "Web search");
+assert.equal(leadOriginFor({}), "Imported");
 
 const replyResult = derivePipeline(rows, new Set(), new Set(), new Set(), new Set(), [], {
   replies: [{

@@ -95,7 +95,21 @@ const LIST_FIELDS = [
   { key: "entity_type", label: "Entity", type: "text" },
   { key: "fit_reason", label: "Why it fits", type: "text" },
   { key: "fit_verdict", label: "Verdict", type: "text" },
+  { key: "source", label: "Source", type: "text" },
 ] as const;
+
+export function leadSourceLabel(
+  candidate: ProspectingBatchCandidate["candidate"],
+  directoryRow?: ProspectingBatchCandidate["directoryRow"],
+) {
+  if (directoryRow) return "Directory page";
+  const provider = candidate.discoveryProvider;
+  if (provider === "serper") return "Serper";
+  if (provider?.startsWith("html:")) return "Web search";
+  if (provider === "openai") return "AI discovery";
+  if (provider === "jsonl") return "Search fixture";
+  return "Web search";
+}
 
 type ProspectingStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
 
@@ -520,6 +534,7 @@ export function candidateRows(
     ].slice(0, 8).join("\n");
     const row: ResearchInputRow = {
       company_name: qualified?.displayName || candidate.companyName,
+      source: leadSourceLabel(candidate),
       website: candidate.website,
       domain: candidate.domain,
       country: region,
@@ -564,6 +579,7 @@ function directoryInputRows(
     const rawLine = directoryRow.rawLine.slice(0, 300);
     const row: ResearchInputRow = {
       company_name: qualified?.displayName || directoryRow.companyName,
+      source: leadSourceLabel(candidate, directoryRow),
       website: domain ? `https://${domain}` : null,
       domain,
       country: region,

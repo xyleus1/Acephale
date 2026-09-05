@@ -36,6 +36,7 @@ export type LeadPipelineReport = {
   };
   stages: Array<{ key: PipelineStageKey; label: string; count: number; of: number }>;
   sources: Array<{ label: string; rows: number }>;
+  countries: Array<{ label: string; rows: number }>;
   replies: Array<{
     recordId: string;
     company: string;
@@ -154,6 +155,14 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim() : value === null || value === undefined ? "" : String(value).trim();
 }
 
+export function leadOriginFor(data: Record<string, unknown>): string {
+  const source = text(data.source);
+  if (source) return source;
+  if (text(data.buys).startsWith("Directory row")) return "Directory page";
+  if (text(data.source_query)) return "Web search";
+  return "Imported";
+}
+
 function verdictFor(row: PipelineRow): "target" | "not_target" | "unscreened" {
   const value = row.data.fit_verdict;
   return isUnscreenedVerdict(value) ? "unscreened" : value as "target" | "not_target";
@@ -171,21 +180,26 @@ function addLink(
 }
 
 function buildSankey(rows: readonly PipelineRow[], sets: PipelineSets) {
-  const countryCounts = new Map<string, number>();
+  const originCounts = new Map<string, number>();
   for (const row of rows) {
-    const country = text(row.data.country) || "Unknown";
-    countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
+    const origin = leadOriginFor(row.data);
+    originCounts.set(origin, (originCounts.get(origin) ?? 0) + 1);
   }
-  const topCountries = new Set(
-    [...countryCounts.entries()]
+  const topOrigins = new Set(
+    [...originCounts.entries()]
       .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
       .slice(0, 5)
-      .map(([country]) => country),
+      .map(([origin]) => origin),
   );
   const sourceFor = (row: PipelineRow) => {
-    const country = text(row.data.country) || "Unknown";
-    return topCountries.has(country) ? country : "Other";
+    const origin = leadOriginFor(row.data);
+    return topOrigins.has(origin) ? origin : "Other";
   };
+  const orderedSources = [...originCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 5)
+    .map(([origin]) => origin);
+  if (originCounts.size > orderedSources.length) orderedSources.push("Other");
   const links = new Map<string, number>();
   for (const row of rows) {
     const screening = verdictFor(row);
@@ -204,6 +218,7 @@ function buildSankey(rows: readonly PipelineRow[], sets: PipelineSets) {
   const ensureNode = (name: string) => {
     if (!orderedNames.includes(name)) orderedNames.push(name);
   };
+  for (const source of orderedSources) ensureNode(source);
   for (const [key, value] of links) {
     if (value <= 0) continue;
     const [source, target] = key.split("\u0000");
@@ -235,7 +250,7 @@ export function derivePipeline(
     replies?: readonly PipelineReply[];
     actionInput?: PipelineActionInput;
   } = {},
-): Pick<LeadPipelineReport, "live" | "funnel" | "stages" | "sources" | "sankey" | "replies" | "actions"> {
+): Pick<LeadPipelineReport, "live" | "funnel" | "stages" | "sources" | "countries" | "sankey" | "replies" | "actions"> {
   const targetRows = rows.filter((row) => verdictFor(row) === "target");
   const notTargetRows = rows.filter((row) => verdictFor(row) === "not_target");
   const unscreenedRows = rows.filter((row) => verdictFor(row) === "unscreened");
@@ -275,18 +290,23 @@ export function derivePipeline(
     of,
   }));
   const sourceCounts = new Map<string, number>();
+  const countryCounts = new Map<string, number>();
   for (const row of rows) {
-    const label = text(row.data.country) || "Unknown";
-    sourceCounts.set(label, (sourceCounts.get(label) ?? 0) + 1);
+    const origin = leadOriginFor(row.data);
+    sourceCounts.set(origin, (sourceCounts.get(origin) ?? 0) + 1);
+    const country = text(row.data.country) || "Unknown";
+    countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
   }
-  const sources = [...sourceCounts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 8);
-  const remainingRows = [...sourceCounts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(8)
-    .reduce((total, [, count]) => total + count, 0);
-  if (remainingRows) sources.push(["Other", remainingRows]);
+  const groupedCounts = (counts: Map<string, number>, limit: number) => {
+    const ordered = [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+    const visible = ordered.slice(0, limit);
+    const remaining = ordered.slice(limit).reduce((total, [, count]) => total + count, 0);
+    if (remaining) visible.push(["Other", remaining]);
+    return visible;
+  };
+  const sources = groupedCounts(sourceCounts, 8);
+  const countries = groupedCounts(countryCounts, 6);
   const dates = jobs.filter((job) => job.status !== "DISMISSED").map((job) => job.lastBackgroundRunAt)
     .filter((value): value is string => typeof value === "string" && !Number.isNaN(new Date(value).valueOf()))
     .sort((left, right) => new Date(right).valueOf() - new Date(left).valueOf());
@@ -321,6 +341,7 @@ export function derivePipeline(
     funnel,
     stages,
     sources: sources.map(([label, rows]) => ({ label, rows })),
+    countries: countries.map(([label, rows]) => ({ label, rows })),
     sankey: buildSankey(rows, { sentIds, repliedIds, positiveIds, bouncedIds }),
     replies: [...(details.replies ?? [])]
       .sort((left, right) => Date.parse(right.receivedAt) - Date.parse(left.receivedAt))

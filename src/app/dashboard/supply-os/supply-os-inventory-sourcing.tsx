@@ -3,13 +3,13 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   ArrowRight,
+  ArrowLeft,
   CheckCircle2,
   ChevronUp,
   MapPin,
   MessageSquare,
   PackageSearch,
   Pencil,
-  Sparkles,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -45,11 +45,11 @@ import { ActiveSourcingWorkspace } from "./supply-os-active-sourcing";
 import { SupplyOsProspects } from "./supply-os-prospects";
 import { SupplyOsOutreachApprovals } from "./supply-os-outreach-approvals";
 import { SupplyOsMail } from "./supply-os-mail";
-import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 import { ProjectStatusStrip } from "./project-status-strip";
 import { LeadStatusPanel } from "./lead-status-panel";
 import type { ResearchProjectSummary } from "@/lib/research-projects";
 import type { ResearchRecordStage } from "@/lib/research-record-stages";
+import type { LeadPipelineReport } from "@/lib/research-pipeline";
 import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
 
 export type PendingSourcingQueueItem = {
@@ -111,6 +111,14 @@ function formatResearchDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
+function timeAgo(value: string | null) {
+  if (!value) return "not yet";
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(value)) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} hr ago`;
+}
+
 export function SupplyInventoryWorkspace({
   activeView,
   onViewChange,
@@ -120,7 +128,6 @@ export function SupplyInventoryWorkspace({
   canImportSupplyData,
   onSnapshotPublished,
   onSelect,
-  onCreateRequest,
   onRetryResearch,
   pendingRequests,
   customerProcurementOrders,
@@ -166,7 +173,6 @@ export function SupplyInventoryWorkspace({
   canImportSupplyData: boolean;
   onSnapshotPublished?: () => void;
   onSelect: (sku: string) => void;
-  onCreateRequest: (query: string) => void;
   onRetryResearch: (run: SavedSourcingResearchRun) => void;
   pendingRequests: PendingSourcingQueueItem[];
   customerProcurementOrders: CustomerProcurementListItem[];
@@ -204,7 +210,6 @@ export function SupplyInventoryWorkspace({
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
   initialResearchPage?: number;
 }) {
-  const [query, setQuery] = useState("");
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
   const [itemDraft, setItemDraft] = useState({
     name: "",
@@ -230,11 +235,16 @@ export function SupplyInventoryWorkspace({
   const [newProjectDescription, setNewProjectDescription] = useState("");
   const [newProjectError, setNewProjectError] = useState("");
   const [newProjectBusy, setNewProjectBusy] = useState(false);
-  const [leadStatusProjectId, setLeadStatusProjectId] = useState<string | null>(null);
   const [leadStatusListSlug, setLeadStatusListSlug] = useState<string | null>(null);
   const [leadStatusStage, setLeadStatusStage] = useState<ResearchRecordStage | "all">("all");
   const [leadStatusQuery, setLeadStatusQuery] = useState("");
   const [leadStatusFilterNonce, setLeadStatusFilterNonce] = useState(0);
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
+  const [projectSection, setProjectSection] = useState<"leads" | "messages" | "replies">(
+    activeView === "messages" ? "messages" : "leads",
+  );
+  const [leadReport, setLeadReport] = useState<LeadPipelineReport | null>(null);
   const reduceMotion = useReducedMotion();
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
@@ -452,33 +462,23 @@ export function SupplyInventoryWorkspace({
   const selectedProjectName = selectedProject
     ? projectRows.find((project) => project.kind === selectedProject.kind && project.key === selectedProject.key)?.name ?? "Project"
     : "";
-  const leadStatusOpen = selectedProject?.kind === "prospecting"
-    && leadStatusProjectId === selectedProject.key;
-  const currentProspectingProjectId = selectedProject?.kind === "prospecting"
-    ? selectedProject.key
-    : null;
-  const openLeadStatus = useCallback((projectId: string | null) => {
-    setLeadStatusProjectId(projectId);
-    setLeadStatusStage("all");
-    setLeadStatusQuery("");
-    setLeadStatusFilterNonce((nonce) => nonce + 1);
-  }, []);
   const selectLeadStatusStage = useCallback((stage: ResearchRecordStage | null) => {
-    setLeadStatusProjectId((current) => current ?? currentProspectingProjectId);
     setLeadStatusStage(stage ?? "all");
     setLeadStatusQuery("");
     setLeadStatusFilterNonce((nonce) => nonce + 1);
-  }, [currentProspectingProjectId]);
+  }, []);
   const selectLeadStatusQuery = useCallback((query: string) => {
-    setLeadStatusProjectId((current) => current ?? currentProspectingProjectId);
     setLeadStatusQuery(query);
     setLeadStatusStage("all");
     setLeadStatusFilterNonce((nonce) => nonce + 1);
-  }, [currentProspectingProjectId]);
-  const handleProspectsLeadStatusOpen = useCallback(() => {
-    if (currentProspectingProjectId) openLeadStatus(currentProspectingProjectId);
-  }, [currentProspectingProjectId, openLeadStatus]);
-  const closeLeadStatus = () => setLeadStatusProjectId(null);
+  }, []);
+  useEffect(() => {
+    setLeadReport(null);
+    setLeadStatusStage("all");
+    setLeadStatusQuery("");
+    setLeadStatusFilterNonce((nonce) => nonce + 1);
+    setProjectSection(activeViewRef.current === "messages" ? "messages" : "leads");
+  }, [selectedProject?.key, selectedProject?.kind]);
   useEffect(() => {
     if (!selectedProject || selectedProject.kind !== "sourcing") return;
     const row = document.querySelector<HTMLElement>('[data-project-active="true"]');
@@ -650,16 +650,9 @@ export function SupplyInventoryWorkspace({
     return "Start research";
   }
 
-  function submitRequest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!researchWorkspaceReady) return;
-    const normalized = query.trim();
-    if (!normalized) return;
-    onCreateRequest(normalized);
-    setQuery("");
-  }
-
-  const workspaceView = activeView === "messages" && !selectedProject ? "projects" : activeView;
+  const workspaceView = selectedProject?.kind === "prospecting" || !selectedProject
+    ? "projects"
+    : activeView;
 
   return (
     <motion.section
@@ -682,16 +675,12 @@ export function SupplyInventoryWorkspace({
             onProjectChange={onProjectChange}
           />
         ) : null}
-        <Tabs.List className={styles.inventoryTabList} aria-label="Projects and messages views">
-          <Tabs.Trigger value="projects">Projects</Tabs.Trigger>
-          <Tabs.Trigger
-            value="messages"
-            disabled={!selectedProject}
-            title={selectedProject ? undefined : "Select a project first"}
-          >
-            <MessageSquare size={14} /> Messages
-          </Tabs.Trigger>
-        </Tabs.List>
+        {selectedProject?.kind === "sourcing" ? (
+          <Tabs.List className={styles.inventoryTabList} aria-label="Projects and messages views">
+            <Tabs.Trigger value="projects">Projects</Tabs.Trigger>
+            <Tabs.Trigger value="messages"><MessageSquare size={14} /> Messages</Tabs.Trigger>
+          </Tabs.List>
+        ) : null}
         <Tabs.Content
           value="projects"
           className={selectedProject?.kind === "prospecting"
@@ -700,43 +689,87 @@ export function SupplyInventoryWorkspace({
         >
         {selectedProject ? (
           <header className={styles.projectViewHeader}>
-            <button type="button" onClick={() => onProjectChange(null)}>All projects</button>
-            <strong>Project: {selectedProjectName}</strong>
-            {selectedProject.kind === "prospecting" ? (
-              <button type="button" className={styles.leadStatusButton} onClick={() => openLeadStatus(selectedProject.key)}>
-                Lead status
-              </button>
-            ) : null}
+            <button type="button" className={styles.backToProjects} onClick={() => onProjectChange(null)}>
+              <ArrowLeft size={14} /> Back to projects
+            </button>
+            <h2>{selectedProjectName}</h2>
+            <span className={styles.projectTypeBadge} data-type={selectedProject.kind}>
+              {selectedProject.kind === "prospecting" ? "Prospecting" : "Sourcing"}
+            </span>
           </header>
         ) : null}
         {selectedProject?.kind === "prospecting" ? (
           <>
-            {leadStatusOpen ? (
-              <LeadStatusPanel
-                projectId={selectedProject.key === OTHER_PROJECT ? null : selectedProject.key}
-                listSlug={leadStatusListSlug}
-                workspaceId={workspaceId ?? undefined}
-                open
-                onClose={closeLeadStatus}
-                onStageSelect={selectLeadStatusStage}
-                onQuerySelect={selectLeadStatusQuery}
-              />
-            ) : null}
-            <SupplyOsProspects
-              storageScope={storageScope}
-              lockedProjectId={selectedProject.key}
+            <LeadStatusPanel
+              key={selectedProject.key}
+              projectId={selectedProject.key === OTHER_PROJECT ? null : selectedProject.key}
+              listSlug={leadStatusListSlug}
               workspaceId={workspaceId ?? undefined}
-              onLeadStatusOpen={handleProspectsLeadStatusOpen}
-              onListChange={setLeadStatusListSlug}
-              externalStage={leadStatusStage}
-              externalQuery={leadStatusQuery}
-              externalFilterNonce={leadStatusFilterNonce}
-              initialListSlug={initialResearchListSlug}
-              initialQuery={initialResearchQuery}
-              initialStatus={initialResearchStatus}
-              initialPage={initialResearchPage}
+              onStageSelect={selectLeadStatusStage}
+              onReportChange={setLeadReport}
             />
-            <SupplyOsOutreachApprovals refreshKey={0} />
+            <Tabs.Root
+              className={styles.projectSectionTabs}
+              value={projectSection}
+              onValueChange={(value) => {
+                const next = value as "leads" | "messages" | "replies";
+                setProjectSection(next);
+                onViewChange(next === "messages" ? "messages" : "projects");
+              }}
+            >
+              <Tabs.List aria-label="Project sections">
+                <Tabs.Trigger value="leads">Lead list</Tabs.Trigger>
+                <Tabs.Trigger value="messages">Messages</Tabs.Trigger>
+                <Tabs.Trigger value="replies">
+                  Replies{leadReport?.replies.length ? ` ${leadReport.replies.length}` : ""}
+                </Tabs.Trigger>
+              </Tabs.List>
+              <Tabs.Content value="leads">
+                <SupplyOsProspects
+                  storageScope={storageScope}
+                  lockedProjectId={selectedProject.key}
+                  onListChange={setLeadStatusListSlug}
+                  externalStage={leadStatusStage}
+                  externalQuery={leadStatusQuery}
+                  externalFilterNonce={leadStatusFilterNonce}
+                  initialListSlug={initialResearchListSlug}
+                  initialQuery={initialResearchQuery}
+                  initialStatus={initialResearchStatus}
+                  initialPage={initialResearchPage}
+                />
+                <SupplyOsOutreachApprovals refreshKey={0} />
+              </Tabs.Content>
+              <Tabs.Content value="messages">
+                {canShowMail ? (
+                  <SupplyOsMail researchProjectId={selectedProject.key} />
+                ) : (
+                  <p>Office mail is restricted to operators</p>
+                )}
+              </Tabs.Content>
+              <Tabs.Content value="replies">
+                <section className={styles.leadReplies} aria-label="Replies">
+                  <h3>Replies</h3>
+                  {leadReport?.replies.length ? leadReport.replies.map((reply) => (
+                    <button
+                      type="button"
+                      key={`${reply.recordId}:${reply.receivedAt}`}
+                      onClick={() => {
+                        selectLeadStatusQuery(reply.company);
+                        setProjectSection("leads");
+                        onViewChange("projects");
+                      }}
+                    >
+                      <span>
+                        <b>{reply.company}</b>
+                        <small>{reply.snippet}</small>
+                      </span>
+                      <time>{timeAgo(reply.receivedAt)}</time>
+                      {reply.positive ? <em>Positive</em> : null}
+                    </button>
+                  )) : <p className={styles.leadStatusEmpty}>No replies yet</p>}
+                </section>
+              </Tabs.Content>
+            </Tabs.Root>
           </>
         ) : selectedProject?.kind !== "sourcing" ? (
           <section className={styles.projectsWorkspace} aria-label="Projects">
@@ -771,31 +804,6 @@ export function SupplyInventoryWorkspace({
                 </div>
               ) : null}
             </header>
-            <div className={styles.projectsCreationControls}>
-              {workspaceId && canImportSupplyData ? (
-                <details className={styles.sourcingCsvImport}>
-                  <summary>Import parts CSV</summary>
-                  <SupplyOsSharedWorkspace
-                    workspaceId={workspaceId}
-                    onPublished={onSnapshotPublished}
-                  />
-                </details>
-              ) : null}
-              <form className={styles.sourcingComposer} onSubmit={submitRequest}>
-                <Sparkles size={17} aria-hidden="true" />
-                <label htmlFor="new-sourcing-request-projects">
-                  <span>New sourcing request</span>
-                  <input
-                    id="new-sourcing-request-projects"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    maxLength={240}
-                    placeholder="Describe the part, quantity, specification, and need-by date"
-                  />
-                </label>
-                <button type="submit" aria-label="Research sourcing request" disabled={!query.trim() || !researchWorkspaceReady}><span>{researchWorkspaceReady ? "Research" : "Select a company"}</span><ArrowRight size={15} /></button>
-              </form>
-            </div>
             {projectRows.length ? (
               <div className={styles.inventoryTableRegion}>
                 <table className={styles.inventoryTable}>
@@ -806,7 +814,7 @@ export function SupplyInventoryWorkspace({
                     {projectRows.map((project) => (
                       <tr key={`${project.kind}:${project.key}`}>
                         <td>
-                          <button type="button" onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
+                          <button type="button" className={styles.projectNameButton} onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
                             <strong>{project.name}</strong>
                             {project.officeWide ? <small>Office-wide</small> : null}
                           </button>
@@ -817,14 +825,6 @@ export function SupplyInventoryWorkspace({
                           <button type="button" className={styles.sourcingQueueAction} onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
                             Open <ArrowRight size={13} />
                           </button>
-                          {project.kind === "prospecting" ? (
-                            <button type="button" className={styles.leadStatusRowAction} onClick={() => {
-                              onProjectChange({ kind: "prospecting", key: project.key });
-                              openLeadStatus(project.key);
-                            }}>
-                              Lead status
-                            </button>
-                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -838,31 +838,6 @@ export function SupplyInventoryWorkspace({
         ) : null}
         {selectedProject?.kind === "sourcing" ? (
           <>
-      {workspaceId && canImportSupplyData ? (
-        <details className={styles.sourcingCsvImport}>
-          <summary>Import parts CSV</summary>
-          <SupplyOsSharedWorkspace
-            workspaceId={workspaceId}
-            onPublished={onSnapshotPublished}
-          />
-        </details>
-      ) : null}
-
-      <form className={styles.sourcingComposer} onSubmit={submitRequest}>
-        <Sparkles size={17} aria-hidden="true" />
-        <label htmlFor="new-sourcing-request">
-          <span>New sourcing request</span>
-          <input
-            id="new-sourcing-request"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            maxLength={240}
-            placeholder="Describe the part, quantity, specification, and need-by date"
-          />
-        </label>
-        <button type="submit" aria-label="Research sourcing request" disabled={!query.trim() || !researchWorkspaceReady}><span>{researchWorkspaceReady ? "Research" : "Select a company"}</span><ArrowRight size={15} /></button>
-      </form>
-
       <header className={styles.sourcingQueueHeader}>
         <h2>Sourcing queue</h2>
         {dataState === "error"

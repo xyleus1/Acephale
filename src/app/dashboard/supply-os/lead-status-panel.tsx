@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ResponsiveContainer, Sankey, Tooltip as ChartTooltip, type SankeyLinkProps, type SankeyNodeProps } from "recharts";
+import {
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Sankey,
+  Tooltip as ChartTooltip,
+  type SankeyLinkProps,
+  type SankeyNodeProps,
+} from "recharts";
 import type { LeadPipelineReport } from "@/lib/research-pipeline";
 import type { ResearchRecordStage } from "@/lib/research-record-stages";
 import styles from "./supply-os-logistics.module.css";
@@ -54,18 +63,14 @@ export function LeadStatusPanel({
   projectId,
   listSlug,
   workspaceId,
-  open,
-  onClose,
   onStageSelect,
-  onQuerySelect,
+  onReportChange,
 }: {
   projectId: string | null;
   listSlug?: string | null;
   workspaceId?: string;
-  open: boolean;
-  onClose(): void;
   onStageSelect(stage: ResearchRecordStage | null): void;
-  onQuerySelect(query: string): void;
+  onReportChange(report: LeadPipelineReport | null): void;
 }) {
   const [report, setReport] = useState<LeadPipelineReport | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -74,7 +79,6 @@ export function LeadStatusPanel({
   const [selectedStage, setSelectedStage] = useState<ResearchRecordStage | "all">("all");
   const requestIdRef = useRef(0);
   const load = useCallback(async () => {
-    if (!open) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setState((current) => current === "ready" ? current : "loading");
@@ -87,6 +91,7 @@ export function LeadStatusPanel({
       if (!response.ok) throw new Error(body.error || "Lead status unavailable.");
       if (requestId !== requestIdRef.current) return;
       setReport(body);
+      onReportChange(body);
       setState("ready");
       setError("");
     } catch (loadError) {
@@ -94,13 +99,12 @@ export function LeadStatusPanel({
       setState("error");
       setError(loadError instanceof Error ? loadError.message : "Lead status unavailable.");
     }
-  }, [listSlug, open, projectId, workspaceId]);
-  useEffect(() => { if (open) void load(); }, [load, open]);
+  }, [listSlug, onReportChange, projectId, workspaceId]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (!open) return;
     const timer = window.setInterval(() => void load(), report && (report.live.activeJobs > 0 || report.live.pendingOperations > 0) ? 30_000 : 120_000);
     return () => window.clearInterval(timer);
-  }, [load, open, report]);
+  }, [load, report]);
 
   async function createOperation(kind: "pause" | "resume" | "purge" | "requalify" | "enrich") {
     if (!workspaceId || projectId === null) return;
@@ -129,14 +133,15 @@ export function LeadStatusPanel({
   }
 
   const chartData = useMemo(() => report ? { nodes: report.sankey.nodes, links: report.sankey.links } : { nodes: [], links: [] }, [report]);
-  if (!open) return null;
+  const countryData = useMemo(() => report?.countries ?? [], [report]);
+  const countryColors = ["#29485c", "#3f6c55", "#a76b45", "#8b9690", "#c7ceca", "#5f7a8c"];
   const totalPurgeable = report ? Object.values(report.actions.purgeable).reduce((sum, value) => sum + value, 0) : 0;
   const emptyActive = Boolean(report && report.funnel.found === 0 && report.live.activeJobs > 0);
 
   return <section className={styles.leadStatusPanel} aria-label="Lead status">
     <header className={styles.leadStatusHeader}>
       <div className={styles.leadStatusTitle}><h2>Lead status</h2><span>{report ? `${report.funnel.found.toLocaleString()} rows` : "Loading"}</span></div>
-      <div className={styles.leadStatusActions}><button type="button" onClick={() => void load()} disabled={state === "loading"}>Refresh</button><button type="button" onClick={onClose}>Close</button></div>
+      <div className={styles.leadStatusActions}><button type="button" onClick={() => void load()} disabled={state === "loading"}>Refresh</button></div>
     </header>
     {state === "error" ? <p className={styles.prospectsError}>{error}</p> : null}
     {report ? <>
@@ -255,8 +260,8 @@ export function LeadStatusPanel({
                           </ul>
                         </details>
                       ) : null}
+                      <i>{operation.status.toLowerCase()}</i>
                     </div>
-                    <i>{operation.status.toLowerCase()}</i>
                     {showDecisionControls ? (
                       <div className={styles.leadOperationActions}>
                         <button
@@ -281,27 +286,43 @@ export function LeadStatusPanel({
             })}
           </div>
         ) : null}
-        {report.funnel.found >= 2 && chartData.nodes.length && chartData.links.length ? <div className={styles.leadSankey}><ResponsiveContainer width="100%" height={220}><Sankey data={chartData} nodePadding={12} nodeWidth={8} margin={{ top: 8, right: 100, bottom: 8, left: 100 }} link={LeadFlowLink} node={LeadFlowNode}><ChartTooltip /></Sankey></ResponsiveContainer></div> : <p className={styles.leadStatusEmpty}>Not enough rows for a flow chart yet</p>}
-        <p className={styles.leadSourceSummary}>{report.sources.slice(0, 5).map((source) => `${source.label} ${source.rows}`).join(", ")}</p>
-        {report.replies.length ? (
-          <section className={styles.leadReplies}>
-            <h3>Replies</h3>
-            {report.replies.map((reply) => (
-              <button
-                type="button"
-                key={`${reply.recordId}:${reply.receivedAt}`}
-                onClick={() => onQuerySelect(reply.company)}
-              >
-                <span>
-                  <b>{reply.company}</b>
-                  <small>{reply.snippet}</small>
-                </span>
-                <time>{timeAgo(reply.receivedAt)}</time>
-                {reply.positive ? <em>Positive</em> : null}
-              </button>
-            ))}
+        <div className={styles.leadCharts}>
+          <section>
+            <span className={styles.leadChartLabel}>Lead flow by origin</span>
+            {report.funnel.found >= 2 && chartData.nodes.length && chartData.links.length ? (
+              <div className={styles.leadSankey}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <Sankey data={chartData} nodePadding={12} nodeWidth={8} margin={{ top: 8, right: 100, bottom: 8, left: 100 }} link={LeadFlowLink} node={LeadFlowNode}>
+                    <ChartTooltip />
+                  </Sankey>
+                </ResponsiveContainer>
+              </div>
+            ) : <p className={styles.leadStatusEmpty}>Not enough rows for a flow chart yet</p>}
           </section>
-        ) : null}
+          <section className={styles.leadCountryChart}>
+            <span className={styles.leadChartLabel}>Rows by country</span>
+            {report.funnel.found >= 2 ? (
+              <div className={styles.leadCountryChartBody}>
+                <ResponsiveContainer width={150} height={150}>
+                  <PieChart>
+                    <Pie data={countryData} dataKey="rows" nameKey="label" innerRadius={42} outerRadius={66} paddingAngle={1}>
+                      {countryData.map((country, index) => <Cell key={country.label} fill={countryColors[index % countryColors.length]} />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <ul>
+                  {countryData.map((country, index) => (
+                    <li key={country.label}>
+                      <i style={{ background: countryColors[index % countryColors.length] }} />
+                      <span>{country.label}</span>
+                      <b>{country.rows.toLocaleString()}</b>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : <p className={styles.leadStatusEmpty}>Not enough rows for a flow chart yet</p>}
+          </section>
+        </div>
       </>}
     </> : null}
   </section>;

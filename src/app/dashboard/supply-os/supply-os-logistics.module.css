@@ -1209,11 +1209,18 @@
 .prospectingTabPanel[data-state="active"] {
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  gap: 32px;
 }
 
 .prospectingTabPanel > .prospectsWorkspace {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   height: auto;
+}
+
+.prospectingTabPanel .prospectsTableRegion {
+  max-height: 60vh;
+  overflow: auto;
 }
 
 .prospectingTabPanel > .approvals {
@@ -2892,6 +2899,10 @@
   background: transparent;
   cursor: pointer;
   text-align: left;
+}
+
+.inventoryTable td:first-child .projectNameButton {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .inventoryStatusDot {
@@ -6667,6 +6678,13 @@
   border-bottom: 1px solid var(--line);
 }
 
+.projectViewHeader h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 620;
+}
+
 .projectViewHeader button {
   border: 0;
   background: transparent;
@@ -6675,21 +6693,11 @@
   font: inherit;
 }
 
-.leadStatusButton,
-.leadStatusRowAction {
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
+.backToProjects {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--ink-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  padding: 10px 4px;
-}
-
-.leadStatusButton:hover,
-.leadStatusRowAction:hover {
-  border-color: var(--line-strong);
 }
 
 .leadStatusPanel {
@@ -6699,6 +6707,47 @@
   padding: 22px 24px;
   border-bottom: 1px solid var(--line);
   background: transparent;
+}
+
+.projectSectionTabs {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 24px 32px;
+}
+
+.projectSectionTabs > [role="tablist"] {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.projectSectionTabs > [role="tablist"] button {
+  min-height: 38px;
+  padding: 0 0 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.projectSectionTabs > [role="tablist"] button[data-state="active"] {
+  border-bottom-color: var(--navy);
+  color: var(--ink);
+}
+
+.projectSectionTabs > [role="tabpanel"] {
+  display: grid;
+  gap: 24px;
+}
+
+.projectSectionTabs .prospectsWorkspace {
+  flex: 0 0 auto;
+  height: auto;
+  overflow: visible;
 }
 
 .leadStatusHeader,
@@ -6742,6 +6791,7 @@
 .leadStatusLiveBlock {
   display: grid;
   gap: 4px;
+  margin-bottom: 32px;
   line-height: 1.5;
 }
 
@@ -6813,11 +6863,60 @@
   max-height: 220px;
 }
 
-.leadSourceSummary {
-  margin: -22px 0 0;
+.leadCharts {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 32px;
+}
+
+.leadCharts > section {
+  min-width: 0;
+}
+
+.leadChartLabel {
+  display: block;
+  margin-bottom: 8px;
   color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.leadCountryChartBody {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.leadCountryChartBody ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.leadCountryChartBody li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-secondary);
+  font-size: 11px;
+}
+
+.leadCountryChartBody li i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.leadCountryChartBody li b {
+  color: var(--ink);
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
+  font-weight: 500;
 }
 
 .leadActionRow {
@@ -6904,8 +7003,16 @@
 }
 
 .leadOperationMain > div:first-child > b,
-.leadOperationMain > div:first-child > small {
+.leadOperationMain > div:first-child > small,
+.leadOperationMain > div:first-child > i {
   display: block;
+}
+
+.leadOperationMain > div:first-child > i {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-style: normal;
+  text-transform: lowercase;
 }
 
 .leadOperationActions {
@@ -6981,6 +7088,16 @@
   background: var(--success-soft);
   font-size: 10px;
   font-style: normal;
+}
+
+@media (max-width: 760px) {
+  .leadCharts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .leadCountryChartBody {
+    align-items: flex-start;
+  }
 }
 
 .prospectsFilterPill {
