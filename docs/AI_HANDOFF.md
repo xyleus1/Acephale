@@ -17,6 +17,22 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-09: Approvals survive tab switches
+
+- `SupplyOsOutreachApprovals` loads its proposals from a fresh task. A server
+  action dispatched in the same effect flush as the sibling
+  `history.replaceState` URL syncs was dropped by the app router queue and never
+  resolved, which is why the approvals vanished after every in-app tab or
+  project switch until a full reload.
+- The dashboard keys the URL-derived project by value, so a router refresh
+  re-delivering the same `project` search param cannot reselect a project the
+  user just closed.
+- Short-window layout of the prospecting panel and the All projects name
+  column landed separately with the project screen (#419): the prospects table
+  is capped at 60vh and the panel scrolls, and `.projectNameButton` drops the
+  status-dot column; #421 made `.inventoryTabs` a flex column so the project
+  screen fills its panel without the Projects/Messages tab list.
+
 ## Request-derived supplier sourcing profiles
 
 Supplier waves now derive deterministic capability profiles from each request, keep curated categories as overrides, and optionally persist one model enrichment proposal with provenance in `request_context.sourcingProfile`.

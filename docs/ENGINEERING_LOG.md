@@ -7,6 +7,36 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-09: Short-window layout, approvals reload, All projects name
+
+- Trigger: browser testing of the scrollable Pending approvals found the
+  prospects table collapsed to zero height at 1280x900, the approvals footer
+  below the viewport at 1024x700, the approvals section missing after any
+  in-app tab or project switch, and All projects names rendering as one letter.
+- Layout and the All projects name column were fixed on main by the project
+  screen work (#419) while this branch was open: the prospects table is capped
+  at 60vh inside a scrolling panel, and `.projectNameButton` uses a single grid
+  column. This branch keeps main's version of both and re-verified them.
+- The project screen collapsing to the 52px tab row after #419 was fixed on
+  main by #421 (`.inventoryTabs` flex column); this branch keeps that version.
+- Approvals: the root cause was a Next.js app-router action queue collision. A
+  restore dispatched by `history.replaceState` from a sibling effect preempted
+  the previous restore without moving the queue tail, so the server action
+  dispatched next in the same flush was chained onto the discarded node and
+  never ran. `SupplyOsOutreachApprovals` now loads from a zero-delay timer, after
+  the restores have settled.
+- The same server actions trigger a router refresh, which re-delivered the
+  `initialProject` prop and reselected a project the user had just closed; the
+  dashboard now keys that prop by `kind:key` value.
+- Verification: `npx tsc --noEmit`, `next lint` on the touched files
+  (pre-existing warning only), `git diff --check`, and a Playwright-over-CDP
+  pass on the local fixtures at 1440x1000, 1280x900 and 1024x700 on the merged
+  tree: the panel fills its column (832px, 732px, 558px) and scrolls the full
+  Lead status, list and approvals stack, no horizontal overflow, approvals
+  present after Messages to Lead list and Back to projects then open twice, the
+  projects list stays put after Back to projects, and the project name at full
+  width.
+
 ## 2026-09-05: World company spine
 
 - Added the isolated `prisma/world/schema.prisma` schema and migration without changing the tenant CRM schema or its migrations.

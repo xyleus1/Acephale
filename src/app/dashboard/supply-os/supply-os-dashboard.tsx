@@ -831,7 +831,15 @@ function CaseCommandCenter({
   const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<SupplyInventoryWorkspaceView>("projects");
   const materialsViewStorageKey = `derya:supply-os:materials-view:${storageScope}`;
   const projectStorageKey = `derya:supply-os:project:${storageScope}:${workspaceId ?? "none"}`;
-  const [selectedProject, setSelectedProject] = useState<SupplyProjectSelection>(initialProject ?? null);
+  const initialProjectKind = initialProject?.kind;
+  const initialProjectKey = initialProject?.key;
+  // Keyed by value so a router refresh that re-delivers the same URL project
+  // does not override a selection the user changed in the meantime.
+  const urlProject = useMemo<SupplyProjectSelection>(
+    () => (initialProjectKind && initialProjectKey ? { kind: initialProjectKind, key: initialProjectKey } : null),
+    [initialProjectKind, initialProjectKey],
+  );
+  const [selectedProject, setSelectedProject] = useState<SupplyProjectSelection>(urlProject);
   const [workspaceCompanyId, setWorkspaceCompanyId] = useState<string | null>(null);
   const [workspaceCompanyState, setWorkspaceCompanyState] = useState<"loading" | "ready" | "error">("ready");
   const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<SupplyInventoryItem[]>([]);
@@ -903,7 +911,7 @@ function CaseCommandCenter({
     previousWorkspaceIdRef.current = workspaceId;
     if (workspaceChanged) initialProjectAppliedRef.current = false;
     if (initialMaterialsView) {
-      setInventoryWorkspaceView(initialMaterialsView === "messages" && !initialProject ? "projects" : initialMaterialsView);
+      setInventoryWorkspaceView(initialMaterialsView === "messages" && !urlProject ? "projects" : initialMaterialsView);
     } else {
       try {
         const stored = window.localStorage.getItem(materialsViewStorageKey);
@@ -912,12 +920,12 @@ function CaseCommandCenter({
         // Local storage is optional.
       }
     }
-    if (initialProject && !initialProjectAppliedRef.current && !workspaceChanged) {
+    if (urlProject && !initialProjectAppliedRef.current && !workspaceChanged) {
       try {
         const requestedProject = new URLSearchParams(window.location.search).get("project");
-        if (requestedProject === `${initialProject.kind}:${initialProject.key}`) {
+        if (requestedProject === `${urlProject.kind}:${urlProject.key}`) {
           initialProjectAppliedRef.current = true;
-          setSelectedProject(initialProject);
+          setSelectedProject(urlProject);
           return;
         }
       } catch {
@@ -938,7 +946,7 @@ function CaseCommandCenter({
     } catch {
       // Local storage is optional.
     }
-  }, [initialMaterialsView, initialProject, materialsViewStorageKey, projectStorageKey, workspaceId]);
+  }, [initialMaterialsView, urlProject, materialsViewStorageKey, projectStorageKey, workspaceId]);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],

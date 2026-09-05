@@ -120,8 +120,13 @@ export function SupplyOsOutreachApprovals({ refreshKey }: { refreshKey: number }
     }
   }, []);
 
+  // Load from a fresh task. Sibling panels sync the URL with
+  // history.replaceState during the same effect flush, and a server action
+  // dispatched while the app router is still settling those restores is
+  // dropped from its queue and never resolves.
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load, refreshKey]);
 
   async function run(action: () => Promise<{ ok: boolean; message: string }>) {
