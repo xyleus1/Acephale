@@ -292,6 +292,33 @@ export const COSMICBRAIN_SUPPLIERS_PROFILE: LeadGenProfile = {
   hardExclusions: COSMICBRAIN_SUPPLIERS_HARD_EXCLUSIONS,
   queryLocales: ["en", "zh", "de"],
   directorySeeds: [],
+  qualification: {
+    target: "Manufacturers (OEMs) of wheeled dual-arm humanoid or semi-humanoid robot platforms that sell the hardware to integrators, based in China first, then South Korea, Japan, Germany and the rest of the EU. CosmicBrain buys the hardware and adds its own teleoperation and learning stack. Worth noting in the summary when present: FCC or CE certification, payload per arm, reach from floor to above shoulder height, ROS2 support, telemetry access, replaceable onboard compute.",
+    mustHave: [
+      "Designs and manufactures its own robot hardware, not a distributor, integrator, research lab or media site",
+      "Offers a wheeled or tracked mobile base with two arms (a dual-arm mobile manipulator); bipedal-only product lines do not count",
+      "Sells or ships hardware to third parties: a product page, spec sheet, ordering or sales contact",
+    ],
+    disqualifiers: [
+      "Bipedal-only humanoid manufacturer with no wheeled dual-arm platform",
+      "Robot hardware only offered bundled with a mandatory proprietary software or service subscription",
+      "Consumer toy, educational kit or single-arm-only robot arm maker",
+      "Marketplace, directory, distributor listing, news article, research paper or university lab",
+    ],
+    wantedCompanyTypes: [
+      "robot OEM or manufacturer",
+      "robot platform maker that ships hardware to integrators",
+    ],
+    rejectedCompanyTypes: [
+      "marketplace",
+      "directory",
+      "distributor or trader",
+      "media or news",
+      "research lab or university",
+      "system integrator without own hardware",
+      "software-only company",
+    ],
+  },
 };
 
 export const COSMICBRAIN_HOSPITALITY_PROFILE: LeadGenProfile = {
@@ -306,4 +333,33 @@ export const COSMICBRAIN_HOSPITALITY_PROFILE: LeadGenProfile = {
   hardExclusions: COSMICBRAIN_HOSPITALITY_HARD_EXCLUSIONS,
   queryLocales: ["en"],
   directorySeeds: [],
+  qualification: {
+    target: "Independent hotels and small hotel groups (100 to 400 rooms, upper-upscale or luxury, owner-operated or a small ownership group) and private multifamily owner-operators (500 to 5,000 units, or a single community above 250 units) in Texas, Arizona, Nevada, Florida and Georgia (the US state).",
+    mustHave: [
+      "Owns or operates hotels or multifamily communities itself: owner, owner-operator or ownership group",
+      "Properties in Texas, Arizona, Nevada, Florida or Georgia (USA)",
+      "Scale within range: hotel of 100 to 400 rooms or a small group of such hotels; multifamily of 500 to 5,000 units or a single community above 250 units",
+    ],
+    disqualifiers: [
+      "California hotel or multifamily property as the primary footprint",
+      "Third-party property manager or hotel management company with no ownership stake",
+      "Affordable-housing nonprofit or public housing authority",
+      "Property in receivership, foreclosure or active workout",
+      "Corporate site of a large national or global hotel chain (Hilton, Marriott, Hyatt, IHG, Wyndham, Choice)",
+      "Booking site, travel agency, directory, media outlet or vendor",
+    ],
+    wantedCompanyTypes: [
+      "independent hotel or small hotel group owner-operator",
+      "private multifamily owner-operator",
+    ],
+    rejectedCompanyTypes: [
+      "marketplace",
+      "directory",
+      "media or news",
+      "booking or travel site",
+      "third-party manager without ownership",
+      "software or service vendor",
+      "nonprofit housing provider",
+    ],
+  },
 };

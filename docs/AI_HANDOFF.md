@@ -9,6 +9,17 @@ cleanup actions without an LLM. Stage filters are carried in
 Context message before creating an approval-gated operation.
 # AI Handoff
 
+## 2026-09-08: OpenAI is the leadgen discovery and qualification backbone
+
+- OpenAI GPT-5.6 web search discovers candidate companies, while Serper and free HTML search supplement sparse results.
+- Company pages remain fetched and guarded by the app, and model output never supplies an email address.
+- OpenAI qualification runs on harvested page text and must provide quoted evidence for each criterion.
+- `scoreLead` remains the deterministic fit gate before qualification, enrichment, verification, and contact lookup.
+- Disqualified candidates remain visible with a qualification flag and do not receive paid enrichment or contact lookup.
+- Qualified candidates without an extracted email can use OpenAI to find same-domain contact pages, which the app fetches and extracts.
+- `OPENAI_API_KEY` enables the backbone; the search runner supports `serper`, `cascade`, and `openai` overrides.
+- Verification: `test:leadgen-openai`, `node --import tsx scripts/leadgen.test.ts`, and `scripts/supply-os-context-prospecting.test.ts`.
+
 ## 2026-09-08: A retry is judged by what happened to the earlier attempt, not by its wording
 
 - Context: production durable tasks were stuck after five attempts on "A

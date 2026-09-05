@@ -5,8 +5,8 @@ import { readFile } from "node:fs/promises";
 import { registrableDomain } from "./extract";
 import { checkPublicUrl, guardedRequest } from "./fetch-guard";
 
-export type SearchEngine = "brave" | "duckduckgo" | "bing" | "serper" | "jsonl";
-export type SearchProviderName = "html" | "serper" | "jsonl";
+export type SearchEngine = "brave" | "duckduckgo" | "bing" | "serper" | "jsonl" | "openai";
+export type SearchProviderName = "html" | "serper" | "jsonl" | "openai";
 
 export type SearchHit = {
   url: string;
@@ -14,6 +14,7 @@ export type SearchHit = {
   engine: SearchEngine;
   rank: number;
   provider?: SearchProviderName;
+  sourceUrl?: string;
   title?: string;
   snippet?: string;
 };
@@ -53,7 +54,7 @@ const NON_LEAD_HOSTS = [
   "play.google.com", "wordpress.org", "blogspot.com", "medium.com", "reddit.com",
 ];
 
-function isNonLeadHost(host: string) {
+export function isNonLeadHost(host: string) {
   return NON_LEAD_HOSTS.some((blocked) =>
     blocked.endsWith(".")
       ? host === blocked.slice(0, -1) || host.startsWith(blocked) || host.includes(`.${blocked}`)
@@ -82,12 +83,13 @@ function normalizeHit(rawUrl: string, engine: SearchEngine, rank: number, metada
   }
   url.hash = "";
   const host = url.hostname.toLowerCase();
-  if (engine !== "serper" && engine !== "jsonl" && ENGINE_HOSTS[engine].some((engineHost) => host.endsWith(engineHost))) return null;
+  if (engine !== "serper" && engine !== "jsonl" && engine !== "openai"
+    && ENGINE_HOSTS[engine].some((engineHost) => host.endsWith(engineHost))) return null;
   if (isNonLeadHost(host)) return null;
   return { url: url.toString(), domain: registrableDomain(host), engine, rank, ...metadata };
 }
 
-export function parseSearchResults(html: string, engine: Exclude<SearchEngine, "serper" | "jsonl">): SearchHit[] {
+export function parseSearchResults(html: string, engine: Exclude<SearchEngine, "serper" | "jsonl" | "openai">): SearchHit[] {
   const hits: SearchHit[] = [];
   const seen = new Set<string>();
   for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
@@ -151,7 +153,7 @@ export function parseJsonlResults(jsonl: string, query: string): SearchHit[] {
   return hits.sort((a, b) => a.rank - b.rank);
 }
 
-export function searchUrl(engine: Exclude<SearchEngine, "serper" | "jsonl">, query: string, offset = 0) {
+export function searchUrl(engine: Exclude<SearchEngine, "serper" | "jsonl" | "openai">, query: string, offset = 0) {
   const encoded = encodeURIComponent(query);
   if (engine === "brave") return `https://search.brave.com/search?q=${encoded}&offset=${offset}`;
   if (engine === "duckduckgo") return `https://html.duckduckgo.com/html/?q=${encoded}`;
@@ -170,7 +172,7 @@ async function defaultHtmlFetch(url: string, signal?: AbortSignal) {
 }
 
 export function createHtmlSearchProvider(options: {
-  engine?: Exclude<SearchEngine, "serper" | "jsonl">;
+  engine?: Exclude<SearchEngine, "serper" | "jsonl" | "openai">;
   fetchPage?: (url: string, signal?: AbortSignal) => Promise<string | null>;
 } = {}): SearchProvider {
   const engine = options.engine ?? "duckduckgo";
@@ -246,7 +248,7 @@ export function createJsonlSearchProvider(filePath: string): SearchProvider {
 }
 
 export function createCascadingSearchProvider(options: {
-  freeEngines?: readonly Exclude<SearchEngine, "serper" | "jsonl">[];
+  freeEngines?: readonly Exclude<SearchEngine, "serper" | "jsonl" | "openai">[];
   threshold?: number;
   serperFallbackThreshold?: number;
   serperApiKey?: string;
@@ -300,17 +302,18 @@ export function createCascadingSearchProvider(options: {
 
 export function createSearchProvider(
   providerName: SearchProviderName,
-  options: { htmlEngine?: Exclude<SearchEngine, "serper" | "jsonl">; jsonlPath?: string } = {},
+  options: { htmlEngine?: Exclude<SearchEngine, "serper" | "jsonl" | "openai">; jsonlPath?: string } = {},
 ): SearchProvider {
   if (providerName === "serper") return createSerperSearchProvider();
   if (providerName === "jsonl") return createJsonlSearchProvider(options.jsonlPath ?? "");
+  if (providerName === "openai") throw new Error("OpenAI search requires a leadgen profile.");
   return createHtmlSearchProvider({ engine: options.htmlEngine });
 }
 
 export function selectSearchProvider(options: {
   provider?: SearchProvider;
   providerName?: SearchProviderName;
-  htmlEngine?: Exclude<SearchEngine, "serper" | "jsonl">;
+  htmlEngine?: Exclude<SearchEngine, "serper" | "jsonl" | "openai">;
   jsonlPath?: string;
 } = {}): SearchProvider {
   if (options.provider) return options.provider;
@@ -318,6 +321,7 @@ export function selectSearchProvider(options: {
     return options.jsonlPath ? createJsonlSearchProvider(options.jsonlPath) : createJsonlSearchProvider("");
   }
   if (options.providerName === "serper") return createSerperSearchProvider();
+  if (options.providerName === "openai") throw new Error("OpenAI search requires a leadgen profile.");
   if (options.providerName === "html") return createHtmlSearchProvider({ engine: options.htmlEngine });
   return createCascadingSearchProvider({ serperApiKey: process.env.SERPER_API_KEY });
 }

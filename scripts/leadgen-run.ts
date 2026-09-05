@@ -6,7 +6,9 @@ import { buildQueryPlan, type LeadGenQueryShape } from "../src/lib/leadgen/query
 import { dedupeByDomain, parseSearchResults, searchUrl, selectSearchProvider, type SearchEngine, type SearchHit } from "../src/lib/leadgen/search";
 import { defaultFetcher, extractDirectoryTargets, harvestSite, type LeadCandidate } from "../src/lib/leadgen/harvest";
 import { verifyEmails, type EmailVerification } from "../src/lib/leadgen/verify";
-import { runProspectingBatch, type ProspectingBatchCandidate } from "../src/lib/leadgen/run";
+import { runProspectingBatch, type ProspectingBatchCandidate, type ProspectingSearch } from "../src/lib/leadgen/run";
+import { openAiProspectingSearchFromEnv } from "../src/lib/leadgen/openai-discovery";
+import { leadQualifierFromEnv } from "../src/lib/leadgen/openai-qualify";
 import { resolveLeadGenProfile } from "../src/lib/leadgen/registry";
 import type { LeadGenProfile } from "../src/lib/leadgen/profile";
 
@@ -134,14 +136,43 @@ function corridorCandidateRecord(record: ProspectingBatchCandidate) {
       },
     } : {}),
     verifications: record.verifications,
+    qualification: candidate.qualification ?? null,
   };
 }
 
 async function commandCorridorHarvest(profile: LeadGenProfile, args: Args) {
-  const jsonlPath = stringArg(args, "jsonl");
+  const jsonlPath = typeof args.jsonl === "string" ? args.jsonl : undefined;
   const out = stringArg(args, "out", ".leadgen/corridor-rows.jsonl");
   await ensureDir(out);
-  const provider = selectSearchProvider({ providerName: "jsonl", jsonlPath });
+  const requestedSearch = typeof args.search === "string"
+    ? args.search
+    : process.env.OPENAI_API_KEY ? "openai" : jsonlPath ? "jsonl" : "cascade";
+  const supplementProvider = selectSearchProvider();
+  const provider = requestedSearch === "serper"
+    ? selectSearchProvider({ providerName: "serper" })
+    : requestedSearch === "cascade"
+      ? supplementProvider
+      : requestedSearch === "jsonl" && jsonlPath
+        ? selectSearchProvider({ providerName: "jsonl", jsonlPath })
+        : null;
+  const openAiSearch = requestedSearch === "openai"
+    ? openAiProspectingSearchFromEnv({
+      profile,
+      supplement: async (query, options) => {
+        const result = await supplementProvider.searchWithStats!(query.query, options);
+        return { hits: result.hits, pagesFetched: result.pagesFetched, providersUsed: result.providersUsed };
+      },
+    })
+    : null;
+  const openAiSearchWithWarnings = openAiSearch as (ProspectingSearch & { warnings: () => readonly string[] }) | null;
+  const providerSearch: ProspectingSearch | null = provider
+    ? async (query, options) => {
+      const result = await provider.searchWithStats!(query.query, options);
+      return { hits: result.hits, pagesFetched: result.pagesFetched, providersUsed: result.providersUsed };
+    }
+    : null;
+  const search = openAiSearch ?? providerSearch;
+  if (!search) throw new Error(`Unsupported search mode: ${requestedSearch}${requestedSearch === "jsonl" ? " requires --jsonl" : ""}`);
   const result = await runProspectingBatch({
     profile,
     queryOffset: numberArg(args, "query-offset", 0),
@@ -149,12 +180,17 @@ async function commandCorridorHarvest(profile: LeadGenProfile, args: Args) {
     maxPages: numberArg(args, "max-pages", 60),
     budgetMs: numberArg(args, "budget-ms", 240_000),
     maxDirectoryRowsPerDocument: numberArg(args, "max-rows-per-doc", 500),
-    search: async (query) => ({
-      hits: await provider.search(query.query),
-      pagesFetched: 0,
-    }),
+    search,
     fetchPage: defaultFetcher,
+    qualifier: leadQualifierFromEnv(),
   });
+  if (openAiSearchWithWarnings) {
+    const warnings = openAiSearchWithWarnings.warnings();
+    console.error(JSON.stringify({
+      openAiDiscoveryWarnings: warnings.length,
+      firstWarnings: warnings.slice(0, 3),
+    }));
+  }
   const lines = result.candidates.map((record) => `${JSON.stringify(corridorCandidateRecord(record))}\n`).join("");
   await appendFile(out, lines, "utf8");
   const domains = new Set(result.candidates.map(({ candidate }) => candidate.domain).filter(Boolean));

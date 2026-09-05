@@ -25,6 +25,16 @@ export type LeadGenProfile = {
   globalQueries?: boolean;
   queryLocales?: readonly import("./query-plan").QueryLocale[];
   sitePatterns?: readonly string[];
+  qualification?: LeadGenQualification;
+};
+
+export type LeadGenQualification = {
+  /** Who the customer wants, in plain English. */
+  target: string;
+  mustHave: readonly string[];
+  disqualifiers: readonly string[];
+  wantedCompanyTypes: readonly string[];
+  rejectedCompanyTypes: readonly string[];
 };
 
 export type LeadGenSegment = {

@@ -3,6 +3,16 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-08: OpenAI-backed leadgen discovery and qualification
+
+- Added a structured GPT-5.6 web-search stage with bounded company discovery, public URL validation, domain deduplication, and Serper or HTML supplementation.
+- Added a page-text qualification stage with strict JSON output, deterministic quote validation, and profile-specific must-have and disqualifier rubrics.
+- Added same-domain contact-page discovery only for qualified candidates with no extracted email.
+- Harvested page text is transient and removed before batch results return, so persistence contracts and existing JSON output remain safe.
+- Disqualified rows remain in research output, skip paid enrichment and contact lookup, and still receive free email verification.
+- CLI and local list drivers now expose qualification fields and use OpenAI by default when configured.
+- No email delivery or database write is part of this discovery path.
+
 ## 2026-09-08: A supplier answer is retried on its outcome, not on its text
 
 - Trigger: a production autopilot pass reported durable conversation tasks stuck

@@ -36,6 +36,7 @@ import {
   type ProspectingDraft,
   type ProspectingSearch,
 } from "@/lib/leadgen/run";
+import { openAiProspectingSearchFromEnv } from "@/lib/leadgen/openai-discovery";
 import { selectPrimaryContact } from "@/lib/leadgen/enrich";
 import { defaultFetcher } from "@/lib/leadgen/harvest";
 import {
@@ -821,7 +822,9 @@ async function executeProspectingAction(args: {
     const result = await (args.runBatch ?? runProspectingBatch)({
       profile,
       queryOffset: args.action.planVersion === QUERY_PLAN_VERSION ? args.action.nextQueryOffset : 0,
-      search: args.search ?? defaultProspectingSearch,
+      search: args.search
+        ?? openAiProspectingSearchFromEnv({ profile, supplement: defaultProspectingSearch })
+        ?? defaultProspectingSearch,
       fetchPage: args.fetchPage ?? defaultFetcher,
       resolveMx: args.resolveMx,
       budgetMs: Math.max(1_000, batchBudgetMs - QUALIFICATION_RESERVE_MS),

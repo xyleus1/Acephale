@@ -26,6 +26,15 @@ import {
   type VerifyOptions,
 } from "./verify";
 import {
+  leadQualifierFromEnv,
+  type LeadQualifier,
+} from "./openai-qualify";
+import {
+  openAiContactPageFinderFromEnv,
+  type OpenAiContactPageFinder,
+} from "./openai-discovery";
+import { extractEmails, htmlToText, registrableDomain } from "./extract";
+import {
   signalsFromProductFocus,
   type LeadGenProfile,
 } from "./profile";
@@ -79,6 +88,20 @@ export type ProspectingBatchStats = {
   }>;
   /** Paid-provider usage for this batch; absent keys mean the provider was off. */
   usage?: ProspectingProviderUsage;
+  qualification?: {
+    calls: number;
+    qualified: number;
+    needsReview: number;
+    disqualified: number;
+    failures: number;
+    skippedByCap: number;
+  };
+  contactLookups?: {
+    calls: number;
+    pagesFetched: number;
+    emailsFound: number;
+    failures: number;
+  };
 };
 
 export type ProspectingProviderUsage = {
@@ -261,6 +284,12 @@ export async function runProspectingBatch(args: {
   maxEnrichments?: number;
   /** Paid verifier calls this batch may make; further addresses keep the heuristic verdict. */
   maxVerifications?: number;
+  /** `undefined` uses `OPENAI_API_KEY` when set; `null` disables qualification. */
+  qualifier?: LeadQualifier | null;
+  maxQualifications?: number;
+  /** `undefined` uses `OPENAI_API_KEY` when set; `null` disables contact lookup. */
+  contactFinder?: OpenAiContactPageFinder | null;
+  maxContactLookups?: number;
 }): Promise<ProspectingBatchResult> {
   const maxQueries = Math.min(DEFAULT_MAX_QUERIES, Math.max(1, Math.floor(args.maxQueries ?? DEFAULT_MAX_QUERIES)));
   const maxPages = Math.min(DEFAULT_MAX_PAGES, Math.max(1, Math.floor(args.maxPages ?? DEFAULT_MAX_PAGES)));
@@ -270,12 +299,25 @@ export async function runProspectingBatch(args: {
   // memos end with the batch instead of outliving it in the process.
   const enricher = args.enricher === undefined ? contactEnricherFromEnv() : args.enricher;
   const verifier = args.verifier === undefined ? mailboxVerifierFromEnv() : args.verifier;
+  const qualifier = args.qualifier === undefined ? leadQualifierFromEnv() : args.qualifier;
+  const contactFinder = args.contactFinder === undefined ? openAiContactPageFinderFromEnv() : args.contactFinder;
   const maxEnrichments = Math.max(0, Math.floor(args.maxEnrichments ?? DEFAULT_MAX_ENRICHMENTS));
   const maxVerifications = args.maxVerifications === undefined
     ? Number.POSITIVE_INFINITY
     : Math.max(0, Math.floor(args.maxVerifications));
   const enrichment = { companiesEnriched: 0, companiesWithContacts: 0, skippedByCap: 0 };
   const verification = { skippedByCap: 0 };
+  const qualification = {
+    calls: 0,
+    qualified: 0,
+    needsReview: 0,
+    disqualified: 0,
+    failures: 0,
+    skippedByCap: 0,
+  };
+  const contactLookups = { calls: 0, pagesFetched: 0, emailsFound: 0, failures: 0 };
+  const maxQualifications = Math.max(0, Math.floor(args.maxQualifications ?? 400));
+  const maxContactLookups = Math.max(0, Math.floor(args.maxContactLookups ?? 100));
 
   /** Free checks for every address; the paid verifier only while the batch budget lasts. */
   async function verifyCandidateEmails(emails: readonly string[], companyDomain: string | undefined) {
@@ -323,6 +365,66 @@ export async function runProspectingBatch(args: {
       ...contacts.map((contact) => contact.email).filter((email) => !known.has(email)),
       ...candidate.emails,
     ];
+  }
+  async function qualifyCandidate(candidate: LeadCandidate) {
+    if (!qualifier || !args.profile.qualification || !candidate.pageText) return null;
+    if (qualification.calls >= maxQualifications) {
+      qualification.skippedByCap += 1;
+      return null;
+    }
+    qualification.calls += 1;
+    try {
+      const result = await qualifier({
+        profile: args.profile,
+        companyName: candidate.companyName,
+        domain: candidate.domain,
+        pageText: candidate.pageText,
+      });
+      if (!result) {
+        qualification.failures += 1;
+        return null;
+      }
+      candidate.qualification = result;
+      if (result.verdict === "qualified") qualification.qualified += 1;
+      else if (result.verdict === "disqualified") qualification.disqualified += 1;
+      else qualification.needsReview += 1;
+      return result;
+    } catch {
+      qualification.failures += 1;
+      return null;
+    }
+  }
+  async function findContactPages(candidate: LeadCandidate) {
+    if (!contactFinder || !candidate.domain || contactLookups.calls >= maxContactLookups) return;
+    contactLookups.calls += 1;
+    try {
+      const urls = await contactFinder({ companyName: candidate.companyName, domain: candidate.domain });
+      const seen = new Set(candidate.evidence.map((item) => item.url));
+      for (const url of urls.slice(0, 3)) {
+        if (seen.has(url) || Date.now() >= deadline || stats.pagesFetched >= maxPages) break;
+        seen.add(url);
+        const page = await args.fetchPage(url);
+        stats.pagesFetched += 1;
+        contactLookups.pagesFetched += 1;
+        if (!page || page.status >= 400 || !page.body) continue;
+        let pageDomain: string;
+        try {
+          pageDomain = registrableDomain(new URL(page.url).hostname);
+        } catch {
+          continue;
+        }
+        if (pageDomain !== registrableDomain(candidate.domain)) continue;
+        const text = page.isPdf ? page.body : htmlToText(page.body);
+        const emails = extractEmails(page.isPdf ? page.body : `${page.body}\n${text}`);
+        const phones: string[] = [];
+        candidate.evidence.push({ url: page.url, kind: "contact", emails, phones });
+        const known = new Set(candidate.emails.map((email) => email.toLowerCase()));
+        candidate.emails = [...candidate.emails, ...emails.filter((email) => !known.has(email.toLowerCase()))];
+        contactLookups.emailsFound += emails.length;
+      }
+    } catch {
+      contactLookups.failures += 1;
+    }
   }
   const plan = buildQueryPlan(args.profile);
   const start = Math.max(0, Math.min(plan.length, Math.floor(args.queryOffset ?? 0)));
@@ -386,7 +488,7 @@ export async function runProspectingBatch(args: {
         discoveryProvider: hit.provider ?? providerNameForHit(hit),
         discoveryEngine: hit.engine,
         discoveryRank: hit.rank,
-        discoverySourceUrl: hit.url,
+        discoverySourceUrl: documentHit ? hit.url : hit.sourceUrl ?? hit.url,
         directoryMode: documentHit,
         directoryRegions: args.profile.regions,
       });
@@ -411,8 +513,17 @@ export async function runProspectingBatch(args: {
         continue;
       }
       if (harvested.fit.tier === "reject") continue;
-      await enrichCandidate(harvested);
-      const verifications = await verifyCandidateEmails(harvested.emails, harvested.domain);
+      const candidateQualification = await qualifyCandidate(harvested);
+      const disqualified = candidateQualification?.verdict === "disqualified";
+      if (!disqualified) {
+        await enrichCandidate(harvested);
+        if (harvested.emails.length === 0 && candidateQualification?.verdict === "qualified") {
+          await findContactPages(harvested);
+        }
+      }
+      const verifications = await (disqualified
+        ? verifyEmails(harvested.emails, { resolveMx: args.resolveMx, companyDomain: harvested.domain, verifier: null })
+        : verifyCandidateEmails(harvested.emails, harvested.domain));
       candidates.push({ candidate: harvested, verifications, region: query.region });
       stats.candidatesFound += 1;
       const providerStats = providerStatsFor(providerNameForHit(hit));
@@ -429,6 +540,9 @@ export async function runProspectingBatch(args: {
       ...(verifier ? { verification: { ...verifier.usage(), ...verification } } : {}),
     };
   }
+  if (qualifier) stats.qualification = qualification;
+  if (contactFinder) stats.contactLookups = contactLookups;
+  for (const record of candidates) delete record.candidate.pageText;
 
   const nextQueryOffset = Math.min(plan.length, start + stats.queriesUsed);
   return {

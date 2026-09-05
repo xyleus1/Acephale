@@ -19,6 +19,7 @@ import { parseDirectoryDocument, type DirectoryRow } from "./directory";
 import type { EnrichedContact } from "./enrich";
 import type { LeadGenProfile } from "./profile";
 import { scoreLead, type LeadFitResult } from "./score";
+import type { LeadQualification } from "./openai-qualify";
 
 export type FetchedPage = {
   url: string;
@@ -56,6 +57,8 @@ export type LeadCandidate = {
   harvestedAt: string;
   /** Named people from a contact enricher, best first. Absent when none ran. */
   contacts?: EnrichedContact[];
+  qualification?: LeadQualification;
+  pageText?: string;
 };
 
 const USER_AGENT =
@@ -236,6 +239,7 @@ export async function harvestSite(
     segmentKey: options.segmentKey ?? null,
     fit,
     evidence,
+    pageText: combinedText.slice(0, 12_000),
     discoveredVia: options.discoveredVia ?? siteUrl,
     discoveryProvider: options.discoveryProvider,
     discoveryEngine: options.discoveryEngine,

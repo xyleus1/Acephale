@@ -146,4 +146,31 @@ export const OLYMPIAN_PROFILE: LeadGenProfile = {
   hardExclusions: OLYMPIAN_HARD_EXCLUSIONS,
   queryLocales: ["en"],
   directorySeeds: [],
+  qualification: {
+    target: "Hotels, resorts, casino resorts, golf resorts and hospitality groups in Nevada, Arizona, Oregon and Utah that operate guest shuttles, sightseeing or property vehicles, utility or maintenance vehicles, or luggage and housekeeping carts on a campus large enough to justify a small fleet, and could build or upfit those vehicles on the Olympus EV skateboard platform.",
+    mustHave: [
+      "An operating hotel, resort or hospitality group, not a booking site, travel agency or media outlet",
+      "Located in Nevada, Arizona, Oregon or Utah, or a group that owns or manages properties there",
+      "Property scale that implies on-site vehicles: resort campus, golf course, casino, shuttle service, multiple buildings or 150 or more rooms",
+    ],
+    disqualifiers: [
+      "Online travel agency, booking aggregator, review or directory site",
+      "Vacation rental or a single small inn under 50 rooms",
+      "Property in receivership, foreclosure or closed",
+    ],
+    wantedCompanyTypes: [
+      "hotel or resort operator",
+      "hospitality ownership or management group",
+      "casino resort",
+      "golf resort",
+    ],
+    rejectedCompanyTypes: [
+      "marketplace",
+      "directory",
+      "media or news",
+      "travel agency or booking site",
+      "software vendor",
+      "consultancy",
+    ],
+  },
 };

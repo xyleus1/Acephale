@@ -138,6 +138,9 @@ assert.ok(
   cosmicbrainSuppliersPlan.some((entry) => entry.region === "China" && entry.locale === "zh"),
   "CosmicBrain supplier China must have zh queries",
 );
+assert.ok(OLYMPIAN_PROFILE.qualification, "Olympian must have a qualification block");
+assert.ok(COSMICBRAIN_SUPPLIERS_PROFILE.qualification, "CosmicBrain suppliers must have a qualification block");
+assert.ok(COSMICBRAIN_HOSPITALITY_PROFILE.qualification, "CosmicBrain hospitality must have a qualification block");
 assert.ok(
   cosmicbrainSuppliersPlan.some((entry) => entry.region === "Shenzhen" && entry.locale === "zh"),
   "CosmicBrain supplier Shenzhen must have zh queries",

@@ -1,6 +1,15 @@
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## OpenAI web search is the leadgen backbone
+Date: 2026-09-08
+
+- Status: accepted
+- Owner: engineering
+- Decision: OpenAI web search is the primary leadgen discovery provider and qualifies candidates with quoted evidence. The deterministic `scoreLead` result remains the gate, emails come only from fetched pages, disqualified rows are kept and flagged, and no candidate is silently dropped because the model rejected it.
+- Contact-page discovery is allowed only after a qualified candidate has no extracted email. Returned URLs are restricted to the candidate's registrable domain, passed through the public URL guard, fetched by the app, and parsed locally.
+- Serper and free HTML search remain supplements for sparse OpenAI discovery or explicit operator overrides.
+
 ## An automatic notice is not a supplier message anywhere in procurement
 Date: 2026-09-07
 - Status: accepted

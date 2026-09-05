@@ -127,6 +127,9 @@ DATABASE_URL="$DERYA_PROD_DATABASE_URL" npm run leadgen -- load --in .leadgen/ve
 Search result collection runs through the browser helpers rather than a paid
 SERP API. Harvest fetches go through the egress guard in
 `src/lib/leadgen/fetch-guard.ts`, which validates every hop at connect time.
+When configured, `OPENAI_API_KEY` enables GPT-5.6 web-search discovery and
+qualification, with `SERPER_API_KEY` and free HTML engines available as
+supplements.
 
 ## 4. Human review before any outreach
 
