@@ -7,6 +7,8 @@ const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply
 const inventorySourcing = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx"), "utf8");
 const prospects = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-prospects.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
+const operatingShell = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.module.css"), "utf8");
+const projectStatus = readFileSync(resolve(root, "src/app/dashboard/supply-os/project-status-strip.tsx"), "utf8");
 
 function cssBlocks(selector: string) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -21,6 +23,15 @@ assert.match(inventorySourcing, /name: "Other lists"/);
 assert.match(inventorySourcing, /key: OTHER_PROJECT/);
 assert.match(inventorySourcing, /list\.projectId \?\? OTHER_PROJECT/);
 assert.match(inventorySourcing, /lockedProjectId=\{selectedProject\.key\}/);
+assert.match(projectStatus, /<dl className=\{styles\.headerProjectFacts\}>/);
+assert.match(projectStatus, /<dt>Leads<\/dt>[\s\S]*<dd>\{facts\.leads\}<\/dd>/);
+assert.match(projectStatus, /<dt>Mails sent<\/dt>[\s\S]*<dd>\{facts\.mailsSent\}<\/dd>/);
+assert.match(projectStatus, /<dt>Replies<\/dt>[\s\S]*<dd>\{facts\.replies\}<\/dd>/);
+assert.match(projectStatus, /<dt>Active threads<\/dt>[\s\S]*<dd>\{facts\.activeThreads\}<\/dd>/);
+assert.match(projectStatus, /<dt>\{facts\.successLabel\.slice/);
+assert.match(operatingShell, /\.headerStatusSlot\s*\{[\s\S]*flex: 1 1 auto;[\s\S]*justify-content: flex-end;/);
+assert.match(operatingShell, /\.headerProjectFacts > div \+ div\s*\{[\s\S]*border-left: 1px solid var\(--os-line\);/);
+assert.doesNotMatch(styles, /projectStatusStrip|projectStatusFacts|projectStatusIdentity|projectStatusLoading/);
 
 const materialsBlocks = cssBlocks('.commandCenter[data-domain="materials"] .commandMapStage');
 assert.ok(materialsBlocks.length >= 3, "Materials layout needs desktop and responsive rules.");

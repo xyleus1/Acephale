@@ -12649,6 +12649,7 @@ Verification caveat:
 - Unprojected office research lists use the `__other__` project sentinel across
   Projects, legacy list links, project status, and office mail, with null
   project filters kept inside the current office.
+- Active project status facts now render inside the company headline header slot.
 
 ## 2026-08-31: Supplier file replies refuse stale sends server side
 

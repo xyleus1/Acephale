@@ -32,5 +32,8 @@ assert.doesNotMatch(shell, /shortLabel: "Fulfillment"|shortLabel: "Tracking"/);
 assert.match(shell, /shortLabel: "Chat"/);
 assert.doesNotMatch(shell, /liveMapDot|Network map available/);
 assert.doesNotMatch(shell, /shortLabel: "Supply"|shortLabel: "Suppliers"/);
+assert.match(shell, /const \[headerSlot, setHeaderSlot\] = useState<HTMLDivElement \| null>\(null\)/);
+assert.match(shell, /!companyIndexOpen \? <div ref=\{setHeaderSlot\} className=\{styles\.headerStatusSlot\} \/> : null/);
+assert.match(shell, /<SupplyOsHeaderSlotContext\.Provider value=\{headerSlot\}>/);
 
 console.log("Supply OS shell routing contract passed.");

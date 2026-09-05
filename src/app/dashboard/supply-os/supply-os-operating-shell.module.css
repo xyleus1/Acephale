@@ -353,6 +353,109 @@
   backdrop-filter: blur(12px);
 }
 
+.headerStatusSlot {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.headerProjectStatus {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+}
+
+.headerProjectSwitcher {
+  min-width: 0;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerProjectName {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--os-soft);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerProjectSelect {
+  min-width: 0;
+  max-width: 190px;
+  padding: 3px 20px 3px 0;
+  border: 0;
+  color: var(--os-ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.headerProjectKind {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 8px;
+  color: var(--os-soft);
+  background: var(--os-subtle);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.headerProjectFacts {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  margin: 0;
+}
+
+.headerProjectFacts > div {
+  min-width: max-content;
+  padding: 0 0 0 14px;
+}
+
+.headerProjectFacts > div + div {
+  border-left: 1px solid var(--os-line);
+  padding: 0 14px;
+}
+
+.headerProjectFacts dt {
+  color: var(--os-soft);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.headerProjectFacts dd {
+  margin: 0;
+  color: var(--os-ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.headerProjectFacts dd.headerProjectSuccess {
+  color: #3f6c55;
+}
+
+.headerProjectFacts dd.headerProjectEscalation {
+  color: #a76b45;
+}
+
+.headerProjectLoading {
+  color: var(--os-muted);
+  font-size: 12px;
+}
+
 .identity {
   min-width: 0;
   display: flex;
@@ -500,6 +603,14 @@
   .commandHeader {
     padding-right: 32px;
     padding-left: 32px;
+  }
+
+  .headerStatusSlot {
+    max-width: 60%;
+  }
+
+  .headerProjectFacts {
+    flex-wrap: wrap;
   }
 
   .panelStage {

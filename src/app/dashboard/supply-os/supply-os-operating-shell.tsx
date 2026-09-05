@@ -16,6 +16,7 @@ import { LogoMark } from "@/components/logo-mark";
 import type { SwitchableOffice } from "@/lib/office-switch";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
+import { SupplyOsHeaderSlotContext } from "./supply-os-header-slot";
 import type { SupplyProjectSelection } from "./supply-os-inventory-sourcing";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import { normalizeSupplyOsPanel, supplyOsPanelHref, type SupplyOsPanel } from "@/lib/supply-os/panel-routing";
@@ -90,6 +91,7 @@ export function SupplyOsOperatingShell({
   const settingsLabel = `${accountRole.slice(0, 1)}${accountRole.slice(1).toLowerCase()} settings`;
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
   const [workspaceToRestore, setWorkspaceToRestore] = useState<string | null | undefined>(undefined);
@@ -247,92 +249,94 @@ export function SupplyOsOperatingShell({
         </motion.aside>
 
         <section className={styles.workspace} data-preview={previewMode}>
-          {previewMode ? (
-            <div className={styles.previewBar}>
-              <span>Customer preview</span>
-              <a href="/dashboard/settings/customers">Exit preview</a>
-            </div>
-          ) : null}
-          <header className={styles.commandHeader}>
-            <div className={styles.identity}>
-              <h1>{companyIndexOpen ? "Companies" : companyName}</h1>
-              {!companyIndexOpen ? (
-                <p className={styles.identityMeta}>
-                  {workspaceProfile?.facilityVerified && workspaceProfile.facilityLabel ? (
-                    <span>{workspaceProfile.facilityLabel}</span>
-                  ) : (
-                    <button type="button" onClick={() => selectPanel("logistics")}>
-                      {workspaceProfile?.facilityLabel
-                        ? `Verify facility: ${workspaceProfile.facilityLabel}`
-                        : "Set operating facility"}
-                    </button>
-                  )}
-                  <span aria-hidden="true">/</span>
-                  <span>
-                    {workspaceSelection?.snapshotVersion
-                      ? `Snapshot v${workspaceSelection.snapshotVersion}`
-                      : workspaceProfile ? "Company profile" : "No inventory"}
-                  </span>
-                </p>
-              ) : null}
-            </div>
-            <motion.button
-              className={styles.companiesButton}
-              type="button"
-              onClick={() => setCompanyIndexOpen(true)}
-              whileTap={{ scale: 0.98 }}
-              disabled={companyIndexOpen}
-            >
-              <ArrowLeft size={15} /> Companies
-            </motion.button>
-          </header>
+          <SupplyOsHeaderSlotContext.Provider value={headerSlot}>
+            {previewMode ? (
+              <div className={styles.previewBar}>
+                <span>Customer preview</span>
+                <a href="/dashboard/settings/customers">Exit preview</a>
+              </div>
+            ) : null}
+            <header className={styles.commandHeader}>
+              <div className={styles.identity}>
+                <h1>{companyIndexOpen ? "Companies" : companyName}</h1>
+                {!companyIndexOpen ? (
+                  <p className={styles.identityMeta}>
+                    {workspaceProfile?.facilityVerified && workspaceProfile.facilityLabel ? (
+                      <span>{workspaceProfile.facilityLabel}</span>
+                    ) : (
+                      <button type="button" onClick={() => selectPanel("logistics")}>
+                        {workspaceProfile?.facilityLabel
+                          ? `Verify facility: ${workspaceProfile.facilityLabel}`
+                          : "Set operating facility"}
+                      </button>
+                    )}
+                    <span aria-hidden="true">/</span>
+                    <span>
+                      {workspaceSelection?.snapshotVersion
+                        ? `Snapshot v${workspaceSelection.snapshotVersion}`
+                        : workspaceProfile ? "Company profile" : "No inventory"}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+              {!companyIndexOpen ? <div ref={setHeaderSlot} className={styles.headerStatusSlot} /> : null}
+              <motion.button
+                className={styles.companiesButton}
+                type="button"
+                onClick={() => setCompanyIndexOpen(true)}
+                whileTap={{ scale: 0.98 }}
+                disabled={companyIndexOpen}
+              >
+                <ArrowLeft size={15} /> Companies
+              </motion.button>
+            </header>
 
-          <div className={styles.panelStage}>
-            {companyIndexOpen ? (
-              <SupplyOsCompanyIndex
-                canCreateCompany={canCreateCompany}
-                canCreateOffice={canCreateOffice}
-                allowedWorkspaceIds={allowedWorkspaceIds}
-                crossOffice={Boolean(!previewMode && switchableOffices && switchableOffices.length > 1)}
-                switchOfficeAction={switchOfficeAction}
-                preferredWorkspaceId={initialWorkspaceId ?? workspaceToRestore}
-                onPreferredWorkspaceUnavailable={clearStoredWorkspace}
-                autoOpenFirstWorkspace={
-                  (activePanel === "context" || allowedWorkspaceIds !== undefined || Boolean(initialMaterialsView))
-                    && !workspaceSelection
-                }
-                onOpenWorkspace={openWorkspace}
-              />
-            ) : (
-              <SupplyOsDashboardWorkspace
-                storageScope={storageScope}
-                workspaceId={workspaceSelection?.workspaceId ?? null}
-                workspaceName={workspaceSelection?.workspaceName ?? null}
-                activePanel={activePanel}
-                canImportSupplyData={canImportSupplyData}
-                canApproveProcurement={canApproveProcurement}
-                canAuthorizePurchase={canAuthorizePurchase}
-                previewMode={previewMode}
-                canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
-                canShowProjectStatus={!previewMode && accountRole !== "CUSTOMER"}
-                canShowMail={
-                  !previewMode &&
-                  accountRole !== "CUSTOMER" &&
-                  accountRole !== "EMPLOYEE" &&
-                  (canViewWholeOffice || accountRole === "ADMIN" || accountRole === "MANAGER")
-                }
-                initialMaterialsView={initialMaterialsView}
-                initialProject={initialProject}
-                initialResearchListSlug={initialResearchListSlug}
-                initialResearchQuery={initialResearchQuery}
-                initialResearchStatus={initialResearchStatus}
-                initialResearchPage={initialResearchPage}
-                onOpenContext={() => selectPanel("context")}
-                onWorkspaceProfile={setWorkspaceProfile}
-              />
-            )}
-          </div>
-
+            <div className={styles.panelStage}>
+              {companyIndexOpen ? (
+                <SupplyOsCompanyIndex
+                  canCreateCompany={canCreateCompany}
+                  canCreateOffice={canCreateOffice}
+                  allowedWorkspaceIds={allowedWorkspaceIds}
+                  crossOffice={Boolean(!previewMode && switchableOffices && switchableOffices.length > 1)}
+                  switchOfficeAction={switchOfficeAction}
+                  preferredWorkspaceId={initialWorkspaceId ?? workspaceToRestore}
+                  onPreferredWorkspaceUnavailable={clearStoredWorkspace}
+                  autoOpenFirstWorkspace={
+                    (activePanel === "context" || allowedWorkspaceIds !== undefined || Boolean(initialMaterialsView))
+                      && !workspaceSelection
+                  }
+                  onOpenWorkspace={openWorkspace}
+                />
+              ) : (
+                <SupplyOsDashboardWorkspace
+                  storageScope={storageScope}
+                  workspaceId={workspaceSelection?.workspaceId ?? null}
+                  workspaceName={workspaceSelection?.workspaceName ?? null}
+                  activePanel={activePanel}
+                  canImportSupplyData={canImportSupplyData}
+                  canApproveProcurement={canApproveProcurement}
+                  canAuthorizePurchase={canAuthorizePurchase}
+                  previewMode={previewMode}
+                  canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
+                  canShowProjectStatus={!previewMode && accountRole !== "CUSTOMER"}
+                  canShowMail={
+                    !previewMode &&
+                    accountRole !== "CUSTOMER" &&
+                    accountRole !== "EMPLOYEE" &&
+                    (canViewWholeOffice || accountRole === "ADMIN" || accountRole === "MANAGER")
+                  }
+                  initialMaterialsView={initialMaterialsView}
+                  initialProject={initialProject}
+                  initialResearchListSlug={initialResearchListSlug}
+                  initialResearchQuery={initialResearchQuery}
+                  initialResearchStatus={initialResearchStatus}
+                  initialResearchPage={initialResearchPage}
+                  onOpenContext={() => selectPanel("context")}
+                  onWorkspaceProfile={setWorkspaceProfile}
+                />
+              )}
+            </div>
+          </SupplyOsHeaderSlotContext.Provider>
         </section>
       </main>
     </MotionConfig>

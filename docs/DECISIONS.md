@@ -5297,6 +5297,8 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Scope boundary: Sourcing replies use RFQ subject-reference linkage, quote goals
   come from the stored sourcing-wave campaign plan, and unavailable autopilot
   escalation state remains zero rather than inventing a count.
+- The status facts render through a React portal in the company headline header
+  slot, with inline fallback rendering retained for other hosts and tests.
 
 
 ## 2026-09-04: Paid prospecting spend is budgeted per run and never stops the run

@@ -1,7 +1,9 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
-import styles from "./supply-os-logistics.module.css";
+import { useSupplyOsHeaderSlot } from "./supply-os-header-slot";
+import styles from "./supply-os-operating-shell.module.css";
 
 type ProjectStatusRow = {
   kind: "sourcing" | "prospecting";
@@ -35,6 +37,7 @@ export function ProjectStatusStrip({
   selectedProject: ProjectSelection;
   onProjectChange: (project: ProjectSelection) => void;
 }) {
+  const headerSlot = useSupplyOsHeaderSlot();
   const activeRows = useMemo(() => projectRows.filter((project) => project.active), [projectRows]);
   const project = selectedProject
     ? projectRows.find((row) => row.kind === selectedProject.kind && row.key === selectedProject.key)
@@ -97,42 +100,66 @@ export function ProjectStatusStrip({
   }, [projectKey, projectKind]);
 
   if (!project || (!activeRows.length && !selectedProject)) return null;
-  return (
-    <section className={styles.projectStatusStrip} aria-label="Project status">
-      <div className={styles.projectStatusIdentity}>
-        <strong>{project.name}</strong>
-        <span>{project.typeLabel}</span>
+  const content = (
+    <section className={styles.headerProjectStatus} aria-label="Project status">
+      <div className={styles.headerProjectSwitcher}>
+        {!selectedProjectIsActive ? <span className={styles.headerProjectName}>{project.name}</span> : null}
+        <select
+          className={styles.headerProjectSelect}
+          aria-label="Active project"
+          value={selectedProjectIsActive ? selectedProjectValue : ""}
+          onChange={(event) => {
+            const [kind, ...rest] = event.target.value.split(":");
+            const key = rest.join(":");
+            if ((kind === "sourcing" || kind === "prospecting") && key) onProjectChange({ kind, key });
+          }}
+        >
+          {!selectedProjectIsActive ? <option value="">Select active project</option> : null}
+          {activeRows.map((row) => (
+            <option key={`${row.kind}:${row.key}`} value={`${row.kind}:${row.key}`}>
+              {row.name}
+            </option>
+          ))}
+        </select>
+        <span className={styles.headerProjectKind}>{project.typeLabel}</span>
       </div>
       {facts ? (
-        <div className={styles.projectStatusFacts}>
-          <span>Leads {facts.leads}</span>
-          <span>Mails sent {facts.mailsSent}</span>
-          <span>Replies {facts.replies}</span>
-          <span>Active threads {facts.activeThreads}</span>
-          <span>{facts.successLabel} {facts.succeeded}{facts.goal === null ? "" : ` / ${facts.goal}`}</span>
-          {facts.escalations > 0 ? <span>Needs you {facts.escalations}</span> : null}
-        </div>
+        <dl className={styles.headerProjectFacts}>
+          <div>
+            <dt>Leads</dt>
+            <dd>{facts.leads}</dd>
+          </div>
+          <div>
+            <dt>Mails sent</dt>
+            <dd>{facts.mailsSent}</dd>
+          </div>
+          <div>
+            <dt>Replies</dt>
+            <dd>{facts.replies}</dd>
+          </div>
+          <div>
+            <dt>Active threads</dt>
+            <dd>{facts.activeThreads}</dd>
+          </div>
+          <div>
+            <dt>{facts.successLabel.slice(0, 1).toUpperCase() + facts.successLabel.slice(1)}</dt>
+            <dd className={styles.headerProjectSuccess}>
+              {facts.succeeded}{facts.goal === null ? "" : ` / ${facts.goal}`}
+            </dd>
+          </div>
+          {facts.escalations > 0 ? (
+            <div>
+              <dt>Needs you</dt>
+              <dd className={styles.headerProjectEscalation}>{facts.escalations}</dd>
+            </div>
+          ) : null}
+        </dl>
       ) : (
-        <span className={styles.projectStatusLoading}>
+        <span className={styles.headerProjectLoading}>
           {factsState === "unavailable" ? "No status yet" : "Loading"}
         </span>
       )}
-      <select
-        aria-label="Active project"
-        value={selectedProjectIsActive ? selectedProjectValue : ""}
-        onChange={(event) => {
-          const [kind, ...rest] = event.target.value.split(":");
-          const key = rest.join(":");
-          if ((kind === "sourcing" || kind === "prospecting") && key) onProjectChange({ kind, key });
-        }}
-      >
-        {!selectedProjectIsActive ? <option value="">Select active project</option> : null}
-        {activeRows.map((row) => (
-          <option key={`${row.kind}:${row.key}`} value={`${row.kind}:${row.key}`}>
-            {row.name} ({row.typeLabel})
-          </option>
-        ))}
-      </select>
     </section>
   );
+  return headerSlot ? createPortal(content, headerSlot) : content;
 }
