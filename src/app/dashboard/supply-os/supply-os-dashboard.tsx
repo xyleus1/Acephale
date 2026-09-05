@@ -869,6 +869,7 @@ function CaseCommandCenter({
   const activePendingRequestIdRef = useRef<string | null>(null);
   const deepLinkedProcurementOrder = useRef<string | null>(null);
   const previousWorkspaceIdRef = useRef(workspaceId);
+  const initialProjectAppliedRef = useRef(false);
   const pendingSourcingStorageKey = useMemo(
     () => sourcingRequestStorageKey({ storageScope, dashboardId: modelDashboard.id, workspaceId }),
     [modelDashboard.id, storageScope, workspaceId],
@@ -900,6 +901,7 @@ function CaseCommandCenter({
   useEffect(() => {
     const workspaceChanged = previousWorkspaceIdRef.current !== workspaceId;
     previousWorkspaceIdRef.current = workspaceId;
+    if (workspaceChanged) initialProjectAppliedRef.current = false;
     if (initialMaterialsView) {
       setInventoryWorkspaceView(initialMaterialsView === "messages" && !initialProject ? "projects" : initialMaterialsView);
     } else {
@@ -910,7 +912,8 @@ function CaseCommandCenter({
         // Local storage is optional.
       }
     }
-    if (initialProject && !workspaceChanged) {
+    if (initialProject && !initialProjectAppliedRef.current && !workspaceChanged) {
+      initialProjectAppliedRef.current = true;
       setSelectedProject(initialProject);
       return;
     }

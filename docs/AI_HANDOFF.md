@@ -13,6 +13,8 @@ origin-first flow and a country ring, with local Lead list, Messages, and
 Replies tabs. Sourcing entry boxes were removed from Projects. New prospecting
 rows persist a `source` column, while `leadOriginFor` supplies deterministic
 fallbacks for older rows.
+Live list selection now survives section remounts, and deep-linked projects
+apply once so Back to projects clears the URL state.
 # AI Handoff
 
 ## Request-derived supplier sourcing profiles

@@ -736,7 +736,7 @@ export function SupplyInventoryWorkspace({
                   externalStage={leadStatusStage}
                   externalQuery={leadStatusQuery}
                   externalFilterNonce={leadStatusFilterNonce}
-                  initialListSlug={initialResearchListSlug}
+                  initialListSlug={leadStatusListSlug ?? initialResearchListSlug}
                   initialQuery={initialResearchQuery}
                   initialStatus={initialResearchStatus}
                   initialPage={initialResearchPage}

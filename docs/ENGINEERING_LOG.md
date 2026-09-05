@@ -138,6 +138,8 @@ Context chat now reports and manages existing prospect research through office-s
 - Sourcing entry boxes were removed from Projects. New prospecting rows store a
   `source` column, and `leadOriginFor` provides deterministic fallbacks for
   older rows.
+- Live list selection survives section remounts, and deep-linked projects apply
+  once so Back to projects clears the URL state.
 
 ## 2026-09-06: Delivered-but-unrecorded sends settle as UNKNOWN per row; approvals list scrolls
 

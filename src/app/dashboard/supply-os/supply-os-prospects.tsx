@@ -70,6 +70,8 @@ export function SupplyOsProspects({
   const [listsLoaded, setListsLoaded] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const selectedProjectRef = useRef("");
+  const initialListSlugRef = useRef(initialListSlug);
+  initialListSlugRef.current = initialListSlug;
   const recordsRequestIdRef = useRef(0);
   const [selectedSlug, setSelectedSlug] = useState(initialListSlug ?? "");
   const [records, setRecords] = useState<ResearchRecordsResponse | null>(null);
@@ -102,9 +104,10 @@ export function SupplyOsProspects({
   const [newProjectBusy, setNewProjectBusy] = useState(false);
 
   const loadLists = useCallback(async () => {
+    const currentInitialListSlug = initialListSlugRef.current;
     let storedListSlug: string | null = null;
     let storedProjectId: string | null = null;
-    if (!initialListSlug) {
+    if (!currentInitialListSlug) {
       try {
         storedListSlug = window.localStorage.getItem(listStorageKey);
         storedProjectId = window.localStorage.getItem(projectStorageKey);
@@ -124,8 +127,8 @@ export function SupplyOsProspects({
     if (!response.ok) throw new Error(body.error || "Prospect lists are unavailable.");
     const nextLists = body.lists ?? [];
     const nextProjects = body.projects ?? [];
-    const preselectedList = initialListSlug
-      ? nextLists.find((list) => list.slug === initialListSlug)
+    const preselectedList = currentInitialListSlug
+      ? nextLists.find((list) => list.slug === currentInitialListSlug)
       : undefined;
     const otherListsExist = nextLists.some((list) => list.projectId === null);
     const lockedProjectIsValid = Boolean(
@@ -176,7 +179,7 @@ export function SupplyOsProspects({
       );
       return highestCountList?.slug ?? projectLists[0]?.slug ?? "";
     });
-  }, [initialListSlug, listStorageKey, lockedProjectId, projectStorageKey]);
+  }, [listStorageKey, lockedProjectId, projectStorageKey]);
 
   const loadRecords = useCallback(async (slug: string, nextPage: number, nextQuery: string, nextStatus: ResearchStatus | "all", nextStage: ResearchRecordStage | "all") => {
     const requestId = recordsRequestIdRef.current + 1;
