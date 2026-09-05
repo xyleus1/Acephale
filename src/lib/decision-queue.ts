@@ -628,6 +628,42 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       take: 20,
     }),
   ]);
+  const outreachCampaignIds = proposals.flatMap((proposal) => {
+    const payload = proposal.payload && typeof proposal.payload === "object" && !Array.isArray(proposal.payload)
+      ? proposal.payload as Record<string, unknown>
+      : {};
+    const actionInput = payload.actionInput && typeof payload.actionInput === "object" && !Array.isArray(payload.actionInput)
+      ? payload.actionInput as Record<string, unknown>
+      : {};
+    return payload.entity === "bulk" && payload.action === "START_OUTREACH_CAMPAIGN" && typeof actionInput.campaignId === "string"
+      ? [actionInput.campaignId]
+      : [];
+  });
+  const outreachCampaigns = outreachCampaignIds.length
+    ? await prisma.outreachCampaign.findMany({
+        where: { officeId, id: { in: outreachCampaignIds } },
+        select: { id: true, list: { select: { projectId: true, project: { select: { companyId: true } } } } },
+      })
+    : [];
+  const outreachProjectByCampaignId = new Map(
+    outreachCampaigns.map((campaign) => [campaign.id, campaign.list.projectId]),
+  );
+  const outreachCompanyByCampaignId = new Map(
+    outreachCampaigns.map((campaign) => [campaign.id, campaign.list.project?.companyId ?? null]),
+  );
+  const outreachCompanyIds = [...new Set(
+    outreachCampaigns.map((campaign) => campaign.list.project?.companyId).filter((id): id is string => Boolean(id)),
+  )];
+  const outreachWorkspaces = outreachCompanyIds.length
+    ? await prisma.supplyWorkspace.findMany({
+        where: { officeId, companyId: { in: outreachCompanyIds }, status: "ACTIVE" },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, companyId: true },
+      })
+    : [];
+  const outreachWorkspaceByCompanyId = new Map(
+    outreachWorkspaces.map((workspace) => [workspace.companyId, workspace.id]),
+  );
 
   const items: DecisionQueueItem[] = [];
 
@@ -695,6 +731,18 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       : {};
     const isBulkProposal = payload.entity === "bulk";
     const isOutreachProposal = isBulkProposal && payload.action === "START_OUTREACH_CAMPAIGN";
+    const campaignId = isOutreachProposal
+      && payload.actionInput
+      && typeof payload.actionInput === "object"
+      && !Array.isArray(payload.actionInput)
+      && typeof (payload.actionInput as Record<string, unknown>).campaignId === "string"
+      ? (payload.actionInput as Record<string, unknown>).campaignId as string
+      : null;
+    const outreachProjectId = campaignId ? outreachProjectByCampaignId.get(campaignId) : null;
+    const outreachCompanyId = campaignId ? outreachCompanyByCampaignId.get(campaignId) : null;
+    const outreachWorkspaceId = outreachCompanyId
+      ? outreachWorkspaceByCompanyId.get(outreachCompanyId)
+      : null;
     const titleTarget = proposal.job?.reference
       ?? proposal.inquiry?.subject
       ?? (isOutreachProposal ? "Outreach campaign" : isBulkProposal ? "Inbox bulk action" : proposal.id.slice(0, 8));
@@ -709,11 +757,13 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       reason: "The agent has proposed a mutation. Nothing should change until a human accepts or rejects the diff.",
       actionLabel: isOutreachProposal ? "Review spot check" : isBulkProposal ? "Review list" : "Review diff",
       href: proposal.job
-        ? `/dashboard/jobs/${proposal.job.id}`
-        : proposal.inquiry
-          ? `/dashboard/rfq/${proposal.inquiry.id}`
-          : isOutreachProposal
-            ? "/dashboard/supply-os?materialsView=outreach"
+          ? `/dashboard/jobs/${proposal.job.id}`
+          : proposal.inquiry
+            ? `/dashboard/rfq/${proposal.inquiry.id}`
+            : isOutreachProposal
+            ? outreachProjectId
+              ? `/dashboard/supply-os?materialsView=projects&project=prospecting:${outreachProjectId}${outreachWorkspaceId ? `&workspaceId=${encodeURIComponent(outreachWorkspaceId)}` : ""}`
+              : "/dashboard/supply-os?materialsView=projects"
             : "/dashboard/inbox",
       score: 88 + Math.min(age, 12),
       ageHours: age,

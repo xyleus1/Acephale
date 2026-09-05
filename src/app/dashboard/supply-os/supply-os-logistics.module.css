@@ -40,6 +40,66 @@
   font: inherit;
 }
 
+.projectStatusStrip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-subtle);
+}
+
+.projectStatusIdentity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.projectStatusIdentity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectStatusIdentity span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.projectStatusFacts {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.projectStatusFacts span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.projectStatusLoading {
+  flex: 1;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.projectStatusStrip select {
+  min-width: 170px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 7px 8px;
+  color: var(--ink);
+  background: var(--panel);
+}
+
 .workspace button:focus-visible,
 .workspace a:focus-visible,
 .workspace [tabindex]:focus-visible,
@@ -6636,4 +6696,141 @@
 
 .procurementSourceLogCompact > li:last-child {
   border-bottom: 0;
+}
+
+.projectViewHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.projectViewHeader button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.projectsWorkspace {
+  min-height: 100%;
+}
+
+.projectsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px 22px 16px;
+}
+
+.projectsHeader h2 {
+  margin: 0;
+}
+
+.projectsHeader span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.newProjectPanel {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.newProjectPanel > button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.projectsCreationControls {
+  border-top: 1px solid var(--line);
+}
+
+.projectsEmpty {
+  padding: 24px 22px;
+  color: var(--muted);
+}
+
+.projectTypeBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--surface-raised);
+  font-size: 12px;
+}
+
+.projectTypeBadge[data-type="prospecting"] {
+  color: var(--accent);
+}
+
+.inventoryTable tbody tr[data-project-active="true"] {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.approvals {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px;
+}
+
+.approvalsHeader,
+.approvalHeader,
+.approvalActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approval {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.approvalDetails,
+.approvalItems {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.approvalItem {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.approvalItemHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approvalItemHead span,
+.approvalsNotice {
+  color: var(--ink-muted);
+}
+
+.approvalSubject {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.approvalBody {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.5;
 }

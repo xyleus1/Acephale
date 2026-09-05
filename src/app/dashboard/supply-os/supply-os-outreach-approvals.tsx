@@ -7,7 +7,7 @@ import {
   discardOutreachProposalAction,
   listPendingOutreachProposalsAction,
 } from "./outreach-approval-actions";
-import styles from "./supply-os-outreach.module.css";
+import styles from "./supply-os-logistics.module.css";
 
 type ProposalCardProps = {
   proposal: OutreachProposalReview;

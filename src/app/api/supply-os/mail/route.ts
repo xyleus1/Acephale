@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const params = request.nextUrl.searchParams;
+  const researchProjectId = params.get("researchProjectId")?.trim() || undefined;
   const rawLimit = params.get("limit");
   let limit: number | undefined;
   if (rawLimit !== null) {
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
       cursor: params.get("cursor"),
       limit,
       search: params.get("search"),
+      researchProjectId,
     });
     return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
   } catch (error) {

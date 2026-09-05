@@ -5232,6 +5232,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
   with mocked transports and delete both keys from `process.env` so a
   credentialed machine or CI never spends credits.
 
+## Supply OS company workspace is organised by project (sourcing or prospecting), not by feature tab
+
+- Status: accepted
+- Owner: engineering
+- Decision: The company workspace exposes Projects and Messages. Sourcing and prospecting work are rows in Projects, and Messages is enabled only after selecting a project.
+- Safety boundary: Prospecting mail is restricted to sent campaign threads belonging to the selected research project, with existing operator access checks and office scoping preserved.
+- Scope boundary: Outreach approvals remain available inside prospecting projects, while the duplicate Outreach chat and top-level Mail surface are removed.
+
+## Active project status uses persisted facts and a deterministic reply heuristic
+
+- Status: accepted
+- Owner: engineering
+- Decision: The project status strip reads persisted supplier, reservation, campaign,
+  and office-mail facts without introducing a new relationship or sending a
+  message. Prospecting positive replies are recognized by a deterministic keyword
+  heuristic after quote stripping, with explicit negative phrases taking priority.
+- Scope boundary: Sourcing replies use RFQ subject-reference linkage, quote goals
+  come from the stored sourcing-wave campaign plan, and unavailable autopilot
+  escalation state remains zero rather than inventing a count.
+
+
 ## 2026-09-04: Paid prospecting spend is budgeted per run and never stops the run
 
 - Status: accepted

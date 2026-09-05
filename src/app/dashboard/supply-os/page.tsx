@@ -7,6 +7,16 @@ import { listSwitchableOffices } from "@/lib/office-switch";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import { switchOfficeAction } from "./actions";
 import styles from "./supply-os-logistics.module.css";
+import type { SupplyProjectSelection } from "./supply-os-inventory-sourcing";
+
+function parseProject(value: string | undefined): SupplyProjectSelection {
+  if (!value) return null;
+  const separator = value.indexOf(":");
+  if (separator <= 0 || separator === value.length - 1) return null;
+  const kind = value.slice(0, separator);
+  if (kind !== "sourcing" && kind !== "prospecting") return null;
+  return { kind, key: value.slice(separator + 1) };
+}
 
 export const metadata: Metadata = {
   title: { absolute: "Derya" },
@@ -21,6 +31,7 @@ export default async function SupplyOsPage({
     previewWorkspace?: string;
     workspace?: string;
     materialsView?: string;
+    project?: string;
     researchList?: string;
     q?: string;
     status?: string;
@@ -62,10 +73,6 @@ export default async function SupplyOsPage({
     ? session.restrictedWorkspaceIds
     : previewWorkspace ? [previewWorkspace.id] : undefined;
   const customerCanEdit = isCustomer && session.customerRole !== "VIEWER";
-  const canShowMail = !isCustomer
-    && !previewMode
-    && currentUser.role !== "EMPLOYEE"
-    && (currentUser.canViewWholeOffice || currentUser.role === "ADMIN" || currentUser.role === "MANAGER");
   const validResearchStatuses = ["new", "reviewed", "rejected"] as const;
   const initialResearchStatus = validResearchStatuses.includes(params.status as typeof validResearchStatuses[number])
     ? params.status as typeof validResearchStatuses[number]
@@ -98,14 +105,15 @@ export default async function SupplyOsPage({
         initialWorkspaceId={initialWorkspace?.id}
         initialMaterialsView={
           !isCustomer && !previewMode && (
-            params.materialsView === "prospects" ||
-            params.materialsView === "messages" ||
-            (params.materialsView === "outreach" && currentUser.role !== "EMPLOYEE")
-            || (params.materialsView === "mail" && canShowMail)
+            params.materialsView === "projects" ||
+            params.materialsView === "messages"
           )
-            ? params.materialsView
+            ? params.materialsView as "projects" | "messages"
+            : ["inventory", "prospects", "outreach", "mail"].includes(params.materialsView ?? "")
+              ? "projects"
             : undefined
         }
+        initialProject={!isCustomer && !previewMode ? parseProject(params.project) : null}
         initialResearchListSlug={!isCustomer && !previewMode ? params.researchList : undefined}
         initialResearchQuery={!isCustomer && !previewMode ? params.q : undefined}
         initialResearchStatus={!isCustomer && !previewMode ? initialResearchStatus : undefined}

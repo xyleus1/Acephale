@@ -10,7 +10,7 @@ export default async function ResearchListPage({
   const { slug } = await params;
   const filters = await searchParams;
   const search = new URLSearchParams({
-    materialsView: "prospects",
+    materialsView: "projects",
     researchList: slug,
   });
   if (filters.q) search.set("q", filters.q);

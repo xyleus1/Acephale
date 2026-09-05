@@ -9919,3 +9919,18 @@ Use this file for chronological implementation notes that future agents should s
 - Coverage: a database regression reserving against a paused pinned mailbox
   asserts the code and the reason text, pure assertions cover every reason
   branch, and source contracts assert each caller defers rather than refuses.
+
+## 2026-09-05: Supply OS project workspace
+
+- Projects tab replaces Inventory/Prospects/Outreach/Mail; Outreach chat removed as duplicate of the desk chat; office mail now only reachable as a prospecting project's Messages.
+- Projects combine sourcing queue work and prospecting projects, while Messages stays scoped to the selected project.
+- Sourcing requests, parts imports, and new prospecting projects remain available from the unselected Projects view.
+
+## 2026-09-05: Active project status
+
+- Added an operator-only status strip above the Projects and Messages views.
+- It loads office-scoped sourcing and prospecting facts, refreshes every minute,
+  and keeps prospecting success deterministic through the positive-reply
+  heuristic and its negative guard.
+- Campaign links carry the active company workspace when one exists, using one
+  batched office-scoped workspace lookup.

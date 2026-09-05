@@ -1183,7 +1183,7 @@ export function SupplyOsContext({
                 <div className={styles.procurementResult}>
                   <span>{action.exhausted ? "All planned queries processed" : "Batch complete"}</span>
                   <strong>
-                    <Link href={`/dashboard/supply-os?panel=materials&materialsView=prospects&researchList=${encodeURIComponent(action.draft.listSlug)}`}>
+                    <Link href={`/dashboard/supply-os?panel=materials&materialsView=projects&researchList=${encodeURIComponent(action.draft.listSlug)}`}>
                       Open results
                     </Link>
                   </strong>

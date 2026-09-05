@@ -301,11 +301,11 @@ assert.match(approvalsPanel, /if \(!loadError && \(!canView \|\| \(proposals\.le
 assert.match(approvalsPanel, /catch \{\s*setLoadError\("Pending approvals could not be loaded\."\);/, "a failed load is tracked separately from action notices and access");
 assert.match(approvalsPanel, /setProposals\(result\.proposals\);\s*setLoadError\(null\);/, "a later successful load clears the error");
 assert.match(approvalsPanel, /const message = loadError \?\? notice;/, "the load error is what the panel shows when present");
-const outreachDesk = readFileSync("src/app/dashboard/supply-os/supply-os-outreach.tsx", "utf8");
-assert.match(outreachDesk, /<SupplyOsOutreachApprovals refreshKey=\{approvalsRefresh\} \/>/, "the Outreach desk mounts the approvals panel");
-assert.ok(!outreachDesk.includes("Greenlight the pending campaign"), "the desk no longer suggests approving through chat");
+const inventorySourcing = readFileSync("src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx", "utf8");
+assert.match(inventorySourcing, /<SupplyOsOutreachApprovals refreshKey=\{0\} \/>/, "prospecting projects mount the approvals panel");
+assert.match(inventorySourcing, /SupplyOsMail researchProjectId=\{selectedProject\.key\}/, "prospecting Messages scope office mail to the selected project");
 const decisionQueue = readFileSync("src/lib/decision-queue.ts", "utf8");
-assert.match(decisionQueue, /isOutreachProposal\s*\?\s*"\/dashboard\/supply-os\?materialsView=outreach"/, "the decision queue links global outreach proposals to the desk that renders their spot check");
+assert.match(decisionQueue, /outreachProjectId[\s\S]*materialsView=projects&project=prospecting:/, "the decision queue links outreach proposals to their project when available");
 
 // Approval can only start a draft; a cancelled, active, paused, or completed campaign is refused.
 assert.equal(campaignStatusBlocker("DRAFT"), null);

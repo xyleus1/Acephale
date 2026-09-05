@@ -13,7 +13,7 @@ function cssBlocks(selector: string) {
 
 assert.match(dashboard, /const materialsInspectorVisible = activePanel === "materials"[\s\S]*Boolean\(selectedInventoryItem\)[\s\S]*!procurementRequest[\s\S]*!customerProcurementRequest/);
 assert.match(dashboard, /data-materials-inspector=\{activePanel === "materials" \? materialsInspectorVisible : undefined\}/);
-assert.match(dashboard, /activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem && materialsInspectorVisible \? \(/);
+assert.match(dashboard, /activePanel === "materials" && inventoryWorkspaceView === "projects" && selectedInventoryItem && materialsInspectorVisible \? \(/);
 
 const materialsBlocks = cssBlocks('.commandCenter[data-domain="materials"] .commandMapStage');
 assert.ok(materialsBlocks.length >= 3, "Materials layout needs desktop and responsive rules.");

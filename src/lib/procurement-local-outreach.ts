@@ -75,6 +75,8 @@ const LOCAL_RFQ_MESSAGE_SELECT = {
   subject: true,
   bodyText: true,
   sentAt: true,
+  deliveryKind: true,
+  classification: true,
   account: { select: { email: true } },
   thread: { select: { externalThreadId: true } },
 } as const;
@@ -154,6 +156,8 @@ export async function loadLocalRfqMessages(
     sentAt: message.sentAt.toISOString(),
     accountEmail: message.account?.email ?? null,
     externalThreadId: message.thread.externalThreadId,
+    deliveryKind: message.deliveryKind,
+    classification: message.classification,
   }));
 }
 

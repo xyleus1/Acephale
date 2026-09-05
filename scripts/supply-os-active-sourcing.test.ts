@@ -153,7 +153,7 @@ const replySendRoute = readFileSync(resolve(root, "src/app/api/procurement/reque
 const procurementRouteHandlers = readFileSync(resolve(root, "src/lib/procurement-route-handlers.ts"), "utf8");
 const historicalRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/conversation/route.ts"), "utf8");
 
-assert.match(inventory, /Tabs\.Trigger value="messages"[\s\S]*Messages/);
+assert.match(inventory, /<Tabs\.Trigger[\s\S]*value="messages"[\s\S]*Messages/);
 assert.match(inventory, /<ActiveSourcingWorkspace/);
 assert.match(dashboard, /messageResearchRuns=\{researchRuns\}/);
 assert.match(dashboard, /messageProcurementCases=\{procurementCases\}/);
@@ -176,9 +176,9 @@ assert.match(active, /externalVendorResponseCount\(vendor\)/);
 assert.match(active, /sourceMessageId: displayedInbound\.id/);
 assert.match(active, /error\.status === 409/);
 assert.match(active, /setConversationRevision/);
-assert.match(inventory, /value=\{activeView\}/);
+assert.match(inventory, /value=\{workspaceView\}/);
 assert.match(dashboard, /data-materials-view=\{activePanel === "materials" \? inventoryWorkspaceView : undefined\}/);
-assert.match(dashboard, /inventoryWorkspaceView === "inventory"/);
+assert.match(dashboard, /inventoryWorkspaceView === "projects"/);
 assert.match(logisticsStyles, /data-materials-view="messages"[\s\S]*grid-template-areas: "materials"/);
 assert.match(workflow, /AS "contactedCount"/);
 assert.match(workflow, /AS "responseCount"/);

@@ -101,16 +101,15 @@ export async function advanceProcurementOrderStatus(
   }
 }
 
-export async function reconcileProcurementOrderStatus(
-  args: { customerId: string; orderId: string; officeId: string },
+export async function loadProcurementOrderProgressFacts(
+  args: { orderId: string; officeId: string },
   dependencies?: {
     database?: {
       $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
     };
-    advance?: typeof advanceProcurementOrderStatus;
     countRecordedSends?: (officeId: string, orderId: string) => Promise<number>;
   },
-): Promise<string | null> {
+): Promise<ProcurementOrderProgressFacts | null> {
   try {
     const database = dependencies?.database ?? procurementWorkflowDatabase();
     const rows = await database.$queryRawUnsafe<Array<ProcurementOrderProgressFacts>>(`
@@ -141,17 +140,41 @@ export async function reconcileProcurementOrderStatus(
       },
     }));
     const recordedSends = await countRecordedSends(args.officeId, args.orderId);
-    const event = procurementOrderProgressEventForFacts({
+    return {
       ...facts,
       contacted: Math.max(facts.contacted, recordedSends),
+    };
+  } catch (error) {
+    console.warn("procurement order status progress facts failed", {
+      orderId: args.orderId,
+      event: "load_progress_facts",
+      message: error instanceof Error ? error.message : "unknown error",
     });
+    return null;
+  }
+}
+
+export async function reconcileProcurementOrderStatus(
+  args: { customerId: string; orderId: string; officeId: string },
+  dependencies?: {
+    database?: {
+      $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+    };
+    advance?: typeof advanceProcurementOrderStatus;
+    countRecordedSends?: (officeId: string, orderId: string) => Promise<number>;
+  },
+): Promise<string | null> {
+  try {
+    const facts = await loadProcurementOrderProgressFacts(args, dependencies);
+    if (!facts) return null;
+    const event = procurementOrderProgressEventForFacts(facts);
     if (!event) return null;
     const advance = dependencies?.advance ?? advanceProcurementOrderStatus;
     return await advance({
       customerId: args.customerId,
       orderId: args.orderId,
       event,
-    }, { database });
+    }, { database: dependencies?.database });
   } catch (error) {
     console.warn("procurement order status advance failed", {
       orderId: args.orderId,

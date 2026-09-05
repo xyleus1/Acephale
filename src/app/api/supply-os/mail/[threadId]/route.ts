@@ -6,14 +6,16 @@ import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 export const runtime = "nodejs";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   route: { params: Promise<{ threadId: string }> },
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const { threadId } = await route.params;
-    const thread = await getOfficeMailThread(supplyAccessContext(session), threadId);
+    const thread = await getOfficeMailThread(supplyAccessContext(session), threadId, {
+      researchProjectId: request.nextUrl.searchParams.get("researchProjectId")?.trim() || undefined,
+    });
     return NextResponse.json(thread, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return supplyErrorResponse(error);

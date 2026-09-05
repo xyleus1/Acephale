@@ -41,7 +41,7 @@ export default async function LeadsPage({
 
   const params = await searchParams;
   if (params.directory !== "1") {
-    redirect("/dashboard/supply-os?panel=materials&materialsView=prospects");
+    redirect("/dashboard/supply-os?panel=materials&materialsView=projects");
   }
   const q = params.q?.trim() ?? "";
   const source = params.source?.trim() ?? "";

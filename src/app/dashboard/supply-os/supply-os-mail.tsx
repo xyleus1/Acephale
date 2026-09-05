@@ -54,7 +54,7 @@ function timestamp(value: string) {
   }).format(new Date(value));
 }
 
-export function SupplyOsMail() {
+export function SupplyOsMail({ researchProjectId }: { researchProjectId: string }) {
   const [threads, setThreads] = useState<MailThread[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -96,6 +96,7 @@ export function SupplyOsMail() {
       const params = new URLSearchParams({ limit: "25" });
       if (cursor) params.set("cursor", cursor);
       if (query) params.set("search", query);
+      params.set("researchProjectId", researchProjectId);
       const response = await fetch(`/api/supply-os/mail?${params.toString()}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
@@ -127,7 +128,7 @@ export function SupplyOsMail() {
         setLoadingCursor(nextLoadingCursor);
       }
     }
-  }, []);
+  }, [researchProjectId]);
 
   useEffect(() => {
     void loadThreads("");
@@ -146,7 +147,7 @@ export function SupplyOsMail() {
     setDetailState("loading");
     setDetailError("");
     try {
-      const response = await fetch(`/api/supply-os/mail/${encodeURIComponent(thread.id)}`, {
+      const response = await fetch(`/api/supply-os/mail/${encodeURIComponent(thread.id)}?researchProjectId=${encodeURIComponent(researchProjectId)}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
       });

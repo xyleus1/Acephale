@@ -196,7 +196,7 @@ assert.deepEqual(missingSourcingFields(completeRequest), []);
 assert.match(dashboard, /activePanel === "materials"[\s\S]*SupplyInventoryWorkspace/);
 assert.match(
   dashboard,
-  /activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem[\s\S]*SupplySourcingInspector/,
+  /activePanel === "materials" && inventoryWorkspaceView === "projects" && selectedInventoryItem[\s\S]*SupplySourcingInspector/,
 );
 assert.match(dashboard, /procurementRequest[\s\S]*SupplyProcurementWorkspace/);
 assert.match(dashboard, /pendingSourcingRequests/);
@@ -390,7 +390,7 @@ assert.match(procurement, /Research complete\. No supplier lead passed independe
 assert.match(procurement, /onWorkflowSubmittedRef/);
 assert.match(procurement, /if \(!handedOff\) workflowSubmissionRef\.current = false/, "an aborted effect must permit an idempotent retry");
 assert.match(dashboard, /customerProcurementOrders=\{visibleCustomerProcurementOrders\}/);
-assert.match(dashboard, /researchRuns=\{\[\]\}/, "legacy research records must not appear in the active sourcing queue");
+assert.match(dashboard, /researchRuns=\{researchRuns\}/, "saved sourcing runs must feed project rows");
 assert.match(workbench, /\["QUEUED", "RUNNING"\]/, "queued and running jobs must reopen progress instead of enqueueing duplicates");
 assert.doesNotMatch(workbench, /disabled=\{run\?\.status === "RUNNING"\}/, "a running research row must remain reopenable");
 assert.match(procurement, /View source/);

@@ -76,6 +76,7 @@
     "leadgen": "tsx scripts/leadgen-run.ts",
     "test:supply-os-active-sourcing": "node --import tsx scripts/supply-os-active-sourcing.test.ts",
     "test:supply-os-materials-layout": "node --import tsx scripts/supply-os-materials-layout.test.ts",
+    "test:supply-os-project-status": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-project-status.test.ts",
     "test:procurement-conversation": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-conversation.test.ts",
     "test:procurement-reply-draft": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-reply-draft.test.ts",
     "test:procurement-reply-recovery": "node --import tsx scripts/procurement-reply-recovery.test.ts",

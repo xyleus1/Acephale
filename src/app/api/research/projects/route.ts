@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     const project = await createResearchProject(session.officeId, {
       name: typeof body.name === "string" ? body.name.slice(0, 160) : "",
       description: typeof body.description === "string" ? body.description.slice(0, 1000) : undefined,
+      companyId: typeof body.companyId === "string" ? body.companyId : undefined,
     });
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {

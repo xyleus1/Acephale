@@ -71,6 +71,7 @@ import {
   SupplyInventoryWorkspace,
   SupplySourcingInspector,
   type PendingSourcingQueueItem,
+  type SupplyProjectSelection,
   type SupplyInventoryWorkspaceView,
 } from "./supply-os-inventory-sourcing";
 import { SupplyProcurementWorkspace } from "./supply-os-procurement-workspace";
@@ -312,9 +313,10 @@ export function SupplyOsDashboardWorkspace({
   canAuthorizePurchase = false,
   previewMode = false,
   canShowProspects = false,
-  canShowOutreach = false,
+  canShowProjectStatus = false,
   canShowMail = false,
   initialMaterialsView,
+  initialProject,
   initialResearchListSlug,
   initialResearchQuery,
   initialResearchStatus,
@@ -331,9 +333,10 @@ export function SupplyOsDashboardWorkspace({
   canAuthorizePurchase?: boolean;
   previewMode?: boolean;
   canShowProspects?: boolean;
-  canShowOutreach?: boolean;
+  canShowProjectStatus?: boolean;
   canShowMail?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
+  initialProject?: SupplyProjectSelection;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
@@ -643,9 +646,10 @@ export function SupplyOsDashboardWorkspace({
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             canShowProspects={canShowProspects}
-            canShowOutreach={canShowOutreach}
+            canShowProjectStatus={canShowProjectStatus}
             canShowMail={canShowMail}
             initialMaterialsView={initialMaterialsView}
+            initialProject={initialProject}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}
             initialResearchStatus={initialResearchStatus}
@@ -777,9 +781,10 @@ function CaseCommandCenter({
   canApproveProcurement,
   canAuthorizePurchase,
   canShowProspects,
-  canShowOutreach,
+  canShowProjectStatus,
   canShowMail,
   initialMaterialsView,
+  initialProject,
   initialResearchListSlug,
   initialResearchQuery,
   initialResearchStatus,
@@ -796,9 +801,10 @@ function CaseCommandCenter({
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
   canShowProspects?: boolean;
-  canShowOutreach?: boolean;
+  canShowProjectStatus?: boolean;
   canShowMail?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
+  initialProject?: SupplyProjectSelection;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
@@ -822,8 +828,12 @@ function CaseCommandCenter({
   const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const [selectedInventorySku, setSelectedInventorySku] = useState("");
-  const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<SupplyInventoryWorkspaceView>("inventory");
+  const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<SupplyInventoryWorkspaceView>("projects");
   const materialsViewStorageKey = `derya:supply-os:materials-view:${storageScope}`;
+  const projectStorageKey = `derya:supply-os:project:${storageScope}:${workspaceId ?? "none"}`;
+  const [selectedProject, setSelectedProject] = useState<SupplyProjectSelection>(initialProject ?? null);
+  const [workspaceCompanyId, setWorkspaceCompanyId] = useState<string | null>(null);
+  const [workspaceCompanyState, setWorkspaceCompanyState] = useState<"loading" | "ready" | "error">("ready");
   const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<SupplyInventoryItem[]>([]);
   const [workspaceSnapshotRevision, setWorkspaceSnapshotRevision] = useState(0);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
@@ -858,6 +868,7 @@ function CaseCommandCenter({
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const deepLinkedProcurementOrder = useRef<string | null>(null);
+  const previousWorkspaceIdRef = useRef(workspaceId);
   const pendingSourcingStorageKey = useMemo(
     () => sourcingRequestStorageKey({ storageScope, dashboardId: modelDashboard.id, workspaceId }),
     [modelDashboard.id, storageScope, workspaceId],
@@ -866,30 +877,58 @@ function CaseCommandCenter({
     setInventoryWorkspaceView(view);
     try {
       window.localStorage.setItem(materialsViewStorageKey, view);
+      const params = new URLSearchParams(window.location.search);
+      params.set("materialsView", view);
+      window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
     } catch {
       // Local storage is optional.
     }
   }, [materialsViewStorageKey]);
+  const changeSelectedProject = useCallback((project: SupplyProjectSelection) => {
+    setSelectedProject(project);
+    try {
+      if (project) window.localStorage.setItem(projectStorageKey, `${project.kind}:${project.key}`);
+      else window.localStorage.removeItem(projectStorageKey);
+      const params = new URLSearchParams(window.location.search);
+      if (project) params.set("project", `${project.kind}:${project.key}`);
+      else params.delete("project");
+      window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
+    } catch {
+      // Local storage is optional.
+    }
+  }, [projectStorageKey]);
   useEffect(() => {
+    const workspaceChanged = previousWorkspaceIdRef.current !== workspaceId;
+    previousWorkspaceIdRef.current = workspaceId;
     if (initialMaterialsView) {
-      setInventoryWorkspaceView(initialMaterialsView);
+      setInventoryWorkspaceView(initialMaterialsView === "messages" && !initialProject ? "projects" : initialMaterialsView);
+    } else {
+      try {
+        const stored = window.localStorage.getItem(materialsViewStorageKey);
+        if (stored === "projects" || stored === "messages") setInventoryWorkspaceView(stored);
+      } catch {
+        // Local storage is optional.
+      }
+    }
+    if (initialProject && !workspaceChanged) {
+      setSelectedProject(initialProject);
       return;
     }
+    if (workspaceChanged) setSelectedProject(null);
     try {
-      const stored = window.localStorage.getItem(materialsViewStorageKey);
-      if (
-        stored === "inventory" ||
-        stored === "messages" ||
-        (stored === "prospects" && canShowProspects) ||
-        (stored === "outreach" && canShowOutreach) ||
-        (stored === "mail" && canShowMail)
-      ) {
-        setInventoryWorkspaceView(stored);
+      const stored = window.localStorage.getItem(projectStorageKey);
+      const separator = stored?.indexOf(":") ?? -1;
+      if (stored && separator > 0) {
+        const kind = stored.slice(0, separator);
+        const key = stored.slice(separator + 1);
+        if ((kind === "sourcing" || kind === "prospecting") && key) {
+          setSelectedProject({ kind, key });
+        }
       }
     } catch {
       // Local storage is optional.
     }
-  }, [canShowMail, canShowOutreach, canShowProspects, initialMaterialsView, materialsViewStorageKey]);
+  }, [initialMaterialsView, initialProject, materialsViewStorageKey, projectStorageKey, workspaceId]);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -908,7 +947,8 @@ function CaseCommandCenter({
   const selectedInventoryItem = inventoryItems.find((item) => item.sku === selectedInventorySku)
     ?? inventoryItems[0];
   const materialsInspectorVisible = activePanel === "materials"
-    && inventoryWorkspaceView === "inventory"
+    && inventoryWorkspaceView === "projects"
+    && selectedProject?.kind === "sourcing"
     && Boolean(selectedInventoryItem)
     && !procurementRequest
     && !customerProcurementRequest;
@@ -1031,19 +1071,31 @@ function CaseCommandCenter({
   useEffect(() => {
     if (!workspaceId) {
       setWorkspaceInventoryItems([]);
+      setWorkspaceCompanyId(null);
+      setWorkspaceCompanyState("ready");
       return;
     }
+    setWorkspaceCompanyState("loading");
     const controller = new AbortController();
     void fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}`, {
       cache: "no-store",
       signal: controller.signal,
       headers: { accept: "application/json" },
     }).then(async (response) => {
-      const body = await response.json().catch(() => ({})) as Partial<SupplyWorkspaceSnapshotResponse> & { error?: string };
+      const body = await response.json().catch(() => ({})) as Partial<SupplyWorkspaceSnapshotResponse> & {
+        error?: string;
+        workspace?: SupplyWorkspaceSnapshotResponse["workspace"] & {
+          company?: { id: string } | null;
+        };
+      };
       if (!response.ok || !body.workspace) throw new Error(body.error || "Published parts are unavailable.");
+      setWorkspaceCompanyId(body.workspace.company?.id ?? null);
+      setWorkspaceCompanyState("ready");
       setWorkspaceInventoryItems(snapshotResponseToSourcingItems(body as SupplyWorkspaceSnapshotResponse));
     }).catch((error: unknown) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      setWorkspaceCompanyState("error");
+      setWorkspaceCompanyId(null);
       setWorkspaceInventoryItems([]);
     });
     return () => controller.abort();
@@ -1452,8 +1504,12 @@ function CaseCommandCenter({
             activeView={inventoryWorkspaceView}
             onViewChange={changeInventoryWorkspaceView}
             canShowProspects={canShowProspects}
-            canShowOutreach={canShowOutreach}
+            canShowProjectStatus={canShowProjectStatus}
             canShowMail={canShowMail}
+            selectedProject={selectedProject}
+            onProjectChange={changeSelectedProject}
+            selectedCompanyId={workspaceCompanyId}
+            selectedCompanyState={workspaceCompanyState}
             storageScope={storageScope}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}
@@ -1479,8 +1535,8 @@ function CaseCommandCenter({
               setProcurementRequest(null);
               setCustomerProcurementRequest({ item, order });
             }}
-            researchRuns={[]}
-            procurementCases={[]}
+            researchRuns={researchRuns}
+            procurementCases={procurementCases}
             messageResearchRuns={researchRuns}
             messageProcurementCases={procurementCases}
             intelligenceProfile={intelligenceProfile}
@@ -1591,7 +1647,7 @@ function CaseCommandCenter({
         </AnimatePresence>
 
         <AnimatePresence initial={false}>
-        {activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem && materialsInspectorVisible ? (
+        {activePanel === "materials" && inventoryWorkspaceView === "projects" && selectedInventoryItem && materialsInspectorVisible ? (
           <SupplySourcingInspector
             key={`sourcing-inspector:${selectedInventoryItem.sku}`}
             item={selectedInventoryItem}

@@ -37,12 +37,14 @@ function safeHttpUrl(value: string) {
 
 export function SupplyOsProspects({
   storageScope,
+  lockedProjectId,
   initialListSlug,
   initialQuery = "",
   initialStatus = "all",
   initialPage = 1,
 }: {
   storageScope: string;
+  lockedProjectId?: string;
   initialListSlug?: string;
   initialQuery?: string;
   initialStatus?: ResearchStatus | "all";
@@ -104,7 +106,10 @@ export function SupplyOsProspects({
       ? nextLists.find((list) => list.slug === initialListSlug)
       : undefined;
     const otherListsExist = nextLists.some((list) => list.projectId === null);
-    const nextProjectId = preselectedList
+    const lockedProjectIsValid = Boolean(lockedProjectId && nextProjects.some((project) => project.id === lockedProjectId));
+    const nextProjectId = lockedProjectIsValid
+      ? lockedProjectId!
+      : preselectedList
       ? preselectedList.projectId ?? (otherListsExist ? OTHER_PROJECT : "")
       : storedProjectId && (
           storedProjectId === OTHER_PROJECT
@@ -116,12 +121,14 @@ export function SupplyOsProspects({
           ?? nextProjects[0]?.id
           ?? (otherListsExist ? OTHER_PROJECT : "");
     const currentProjectId = selectedProjectRef.current;
-    const currentProjectIsValid = currentProjectId && (
+    const currentProjectIsValid = !lockedProjectIsValid && currentProjectId && (
       currentProjectId === OTHER_PROJECT
         ? otherListsExist
         : nextProjects.some((project) => project.id === currentProjectId)
     );
-    const effectiveProjectId = currentProjectIsValid ? currentProjectId : nextProjectId;
+    const effectiveProjectId = lockedProjectIsValid
+      ? lockedProjectId!
+      : currentProjectIsValid ? currentProjectId : nextProjectId;
     setLists(nextLists);
     setProjects(nextProjects);
     setListsLoaded(true);
@@ -142,7 +149,7 @@ export function SupplyOsProspects({
       );
       return highestCountList?.slug ?? projectLists[0]?.slug ?? "";
     });
-  }, [initialListSlug, listStorageKey, projectStorageKey]);
+  }, [initialListSlug, listStorageKey, lockedProjectId, projectStorageKey]);
 
   const loadRecords = useCallback(async (slug: string, nextPage: number, nextQuery: string, nextStatus: ResearchStatus | "all") => {
     if (!slug) {
@@ -172,6 +179,14 @@ export function SupplyOsProspects({
   }, [loadLists]);
 
   useEffect(() => {
+    selectedProjectRef.current = "";
+    setSelectedProjectId("");
+    setSelectedSlug("");
+    setRecords(null);
+    setPage(1);
+  }, [lockedProjectId]);
+
+  useEffect(() => {
     selectedProjectRef.current = selectedProjectId;
   }, [selectedProjectId]);
 
@@ -195,7 +210,7 @@ export function SupplyOsProspects({
     }
     const params = new URLSearchParams(window.location.search);
     params.set("panel", "materials");
-    params.set("materialsView", "prospects");
+    params.set("materialsView", "projects");
     if (selectedSlug) params.set("researchList", selectedSlug);
     else params.delete("researchList");
     window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
@@ -332,7 +347,7 @@ export function SupplyOsProspects({
         </div>
         <a href="/dashboard/leads?directory=1">Leads</a>
       </header>
-      <div className={styles.newListPanel}>
+      {!lockedProjectId ? <div className={styles.newListPanel}>
         <button type="button" onClick={() => { setNewListOpen((open) => !open); setNewListError(""); }}>
           {newListOpen ? "Close new list" : "New list"}
         </button>
@@ -394,10 +409,10 @@ export function SupplyOsProspects({
             </button>
           </form>
         ) : null}
-      </div>
+      </div> : null}
       {lists.length || projects.length ? (
         <div className={styles.prospectsControls}>
-          <label>
+          {!lockedProjectId ? <label>
             <span>Project</span>
             <select value={selectedProjectId} onChange={(event) => selectProject(event.target.value)}>
               {projects.map((project) => <option key={project.id} value={project.id}>{project.name} ({project.listCount})</option>)}
@@ -405,7 +420,7 @@ export function SupplyOsProspects({
                 ? <option value={OTHER_PROJECT}>Other lists</option>
                 : null}
             </select>
-          </label>
+          </label> : null}
           <label>
             <span>List</span>
             <select value={selectedSlug} onChange={(event) => selectList(event.target.value)} disabled={!selectedProjectId}>

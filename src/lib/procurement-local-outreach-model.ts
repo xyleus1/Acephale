@@ -23,6 +23,8 @@ export type LocalRfqMessage = {
   sentAt: string;
   accountEmail: string | null;
   externalThreadId: string | null;
+  deliveryKind?: string | null;
+  classification?: string | null;
 };
 
 export type LocalRfqOutreach = {

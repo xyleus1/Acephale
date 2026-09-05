@@ -12532,6 +12532,22 @@ Verification caveat:
   offset zero while actions created with the current plan version resume safely.
 - Directory prospecting now drops hard-rejected rows before email verification or candidate accounting.
 
+## 2026-09-05: Supply OS project workspace
+
+- The company workspace now uses Projects and Messages instead of Inventory, Prospects, Outreach, and Mail.
+- Sourcing projects retain the inventory and sourcing conversation surfaces. Prospecting projects lock the prospects view to the selected project and keep outreach approvals below it.
+- Office mail is available only as Messages for a selected prospecting project and filters sent campaign threads by project while retaining operator authorization.
+- The Projects view keeps sourcing creation controls available without a selected project and can create a company-linked prospecting project.
+
+## 2026-09-05: Active project status
+
+- Supply OS now exposes an operator-only status strip with office-scoped lead,
+  send, reply, active-thread, success, goal, and escalation facts.
+- Prospecting success uses a deterministic positive-reply keyword heuristic
+  after quoted text is removed, with explicit negative opt-out phrases winning.
+- Sourcing status reuses RFQ subject-reference thread linkage and the stored
+  sourcing-wave campaign plan for its quote goal.
+
 ## 2026-08-31: Supplier file replies refuse stale sends server side
 
 - A saved supplier file bearing draft now carries a state fingerprint of the

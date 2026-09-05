@@ -150,14 +150,34 @@ export async function listOfficeMailThreads(
     cursor?: string | null;
     limit?: number;
     search?: string | null;
+    researchProjectId?: string;
   } = {},
 ): Promise<{ threads: OfficeMailThread[]; nextCursor: string | null }> {
   const accessContext = await assertMailAccess(context);
   const cursor = decodeCursor(options.cursor);
   const limit = pageSize(options.limit);
   const search = options.search?.trim().slice(0, 200) ?? "";
+  const projectThreadIds = options.researchProjectId
+    ? (await prisma.outreachCampaignSend.findMany({
+        where: {
+          officeId: accessContext.officeId,
+          status: "SENT",
+          localThreadId: { not: null },
+          campaign: {
+            officeId: accessContext.officeId,
+            list: { projectId: options.researchProjectId },
+          },
+        },
+        distinct: ["localThreadId"],
+        select: { localThreadId: true },
+      })).flatMap((row) => row.localThreadId ? [row.localThreadId] : [])
+    : null;
+  if (projectThreadIds && projectThreadIds.length === 0) {
+    return { threads: [], nextCursor: null };
+  }
   const where = {
     officeId: accessContext.officeId,
+    ...(projectThreadIds ? { id: { in: projectThreadIds } } : {}),
     AND: [
       officeMailEligible,
       ...(search
@@ -211,8 +231,26 @@ export async function listOfficeMailThreads(
 export async function getOfficeMailThread(
   context: SupplyAccessContext,
   threadId: string,
+  options: { researchProjectId?: string } = {},
 ): Promise<OfficeMailThreadDetail> {
   const accessContext = await assertMailAccess(context);
+  const projectThread = options.researchProjectId
+    ? await prisma.outreachCampaignSend.findFirst({
+        where: {
+          officeId: accessContext.officeId,
+          status: "SENT",
+          localThreadId: threadId,
+          campaign: {
+            officeId: accessContext.officeId,
+            list: { projectId: options.researchProjectId },
+          },
+        },
+        select: { localThreadId: true },
+      })
+    : null;
+  if (options.researchProjectId && !projectThread) {
+    throw new SupplyPersistenceError("Mail thread was not found.", "not_found");
+  }
   const row = await prisma.emailThread.findFirst({
     where: {
       id: threadId,

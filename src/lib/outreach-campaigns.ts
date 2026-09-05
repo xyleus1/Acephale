@@ -914,9 +914,10 @@ export async function cancelCampaign(input: { officeId: string; campaignId: stri
 
 export type CampaignSummary = {
   id: string;
+  listId: string;
   name: string;
   status: CampaignStatus;
-  list: { name: string; slug: string };
+  list: { name: string; slug: string; projectId: string | null; companyId: string | null };
   total: number;
   sent: number;
   sentToday: number;
@@ -944,6 +945,7 @@ export async function listCampaignSummaries(
       where: { officeId, status: { in: [...statuses] } },
       select: {
         id: true,
+        listId: true,
         name: true,
         status: true,
         audienceTotal: true,
@@ -953,7 +955,7 @@ export async function listCampaignSummaries(
         variants: true,
         lastRunAt: true,
         followUps: true,
-        list: { select: { name: true, slug: true } },
+        list: { select: { name: true, slug: true, projectId: true, project: { select: { companyId: true } } } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -1018,9 +1020,15 @@ export async function listCampaignSummaries(
       const followUps = new Map(followUpCounts.filter((row) => row.campaignId === campaign.id).map((row) => [row.status, row._count._all]));
       return {
         id: campaign.id,
+        listId: campaign.listId,
         name: campaign.name,
         status: campaign.status as CampaignStatus,
-        list: campaign.list,
+        list: {
+          name: campaign.list.name,
+          slug: campaign.list.slug,
+          projectId: campaign.list.projectId,
+          companyId: campaign.list.project?.companyId ?? null,
+        },
         total: campaign.audienceTotal,
         sent: counts.get("SENT") ?? 0,
         sentToday: sentToday.get(campaign.id) ?? 0,
@@ -1097,6 +1105,7 @@ export async function campaignReplyDigest(input: {
     replyThreads: number;
     answered: number;
     awaitingAnswer: number;
+    activeThreads: number;
     autoReplies: number;
     bounces: number;
     optOuts: number;
@@ -1107,6 +1116,7 @@ export async function campaignReplyDigest(input: {
       replyThreads: 0,
       answered: 0,
       awaitingAnswer: 0,
+      activeThreads: 0,
       autoReplies: 0,
       bounces: 0,
       optOuts: 0,
@@ -1198,6 +1208,9 @@ export async function campaignReplyDigest(input: {
     const answered = replyAnsweredAt !== null;
     if (answered) campaignCounts.answered += 1;
     else campaignCounts.awaitingAnswer += 1;
+    if (!answered || (replyAnsweredAt && replyAnsweredAt >= new Date(Date.now() - 14 * 24 * 60 * 60 * 1000))) {
+      campaignCounts.activeThreads += 1;
+    }
     replies.push({
       campaignId: campaign.campaignId,
       threadId,

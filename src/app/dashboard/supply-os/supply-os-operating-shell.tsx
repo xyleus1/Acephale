@@ -16,6 +16,7 @@ import { LogoMark } from "@/components/logo-mark";
 import type { SwitchableOffice } from "@/lib/office-switch";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
+import type { SupplyProjectSelection } from "./supply-os-inventory-sourcing";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import { normalizeSupplyOsPanel, supplyOsPanelHref, type SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import { useSupplyOsPanelAlerts } from "./use-supply-os-panel-alerts";
@@ -54,6 +55,7 @@ export function SupplyOsOperatingShell({
   allowedWorkspaceIds,
   initialWorkspaceId,
   initialMaterialsView,
+  initialProject,
   initialResearchListSlug,
   initialResearchQuery,
   initialResearchStatus,
@@ -74,7 +76,8 @@ export function SupplyOsOperatingShell({
   contextEnabled: boolean;
   allowedWorkspaceIds?: string[];
   initialWorkspaceId?: string;
-  initialMaterialsView?: "inventory" | "messages" | "prospects" | "outreach" | "mail";
+  initialMaterialsView?: "projects" | "messages";
+  initialProject?: SupplyProjectSelection;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
   initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
@@ -311,11 +314,7 @@ export function SupplyOsOperatingShell({
                 canAuthorizePurchase={canAuthorizePurchase}
                 previewMode={previewMode}
                 canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
-                canShowOutreach={
-                  !previewMode &&
-                  accountRole !== "CUSTOMER" &&
-                  accountRole !== "EMPLOYEE"
-                }
+                canShowProjectStatus={!previewMode && accountRole !== "CUSTOMER"}
                 canShowMail={
                   !previewMode &&
                   accountRole !== "CUSTOMER" &&
@@ -323,6 +322,7 @@ export function SupplyOsOperatingShell({
                   (canViewWholeOffice || accountRole === "ADMIN" || accountRole === "MANAGER")
                 }
                 initialMaterialsView={initialMaterialsView}
+                initialProject={initialProject}
                 initialResearchListSlug={initialResearchListSlug}
                 initialResearchQuery={initialResearchQuery}
                 initialResearchStatus={initialResearchStatus}

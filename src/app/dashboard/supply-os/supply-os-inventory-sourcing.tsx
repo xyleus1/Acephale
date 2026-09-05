@@ -14,14 +14,12 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { Fragment, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   customerProcurementProgress,
   customerProcurementStatusLabel,
   type CustomerProcurementOrderState,
 } from "@/lib/supply-os/customer-procurement-status";
-import {
-} from "@/lib/procurement-status";
 import {
   sourcingNeedByDate,
   sourcingRequestQuantity,
@@ -45,9 +43,11 @@ import type {
 } from "./supply-os-sourcing-research-types";
 import { ActiveSourcingWorkspace } from "./supply-os-active-sourcing";
 import { SupplyOsProspects } from "./supply-os-prospects";
-import { SupplyOsOutreach } from "./supply-os-outreach";
+import { SupplyOsOutreachApprovals } from "./supply-os-outreach-approvals";
 import { SupplyOsMail } from "./supply-os-mail";
 import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
+import { ProjectStatusStrip } from "./project-status-strip";
+import type { ResearchProjectSummary } from "@/lib/research-projects";
 
 export type PendingSourcingQueueItem = {
   id: string;
@@ -59,7 +59,35 @@ export type PendingSourcingQueueItem = {
   status: "Clarification needed" | "Researching" | "Research unavailable";
 };
 
-export type SupplyInventoryWorkspaceView = "inventory" | "messages" | "prospects" | "outreach" | "mail";
+export type SupplyInventoryWorkspaceView = "projects" | "messages";
+
+export type SupplyProjectSelection = {
+  kind: "sourcing" | "prospecting";
+  key: string;
+} | null;
+
+type ProjectRow = {
+  kind: "sourcing" | "prospecting";
+  key: string;
+  name: string;
+  typeLabel: "Sourcing" | "Prospecting";
+  status: string;
+  active: boolean;
+  officeWide?: boolean;
+};
+
+type CampaignSummary = {
+  id: string;
+  name: string;
+  status: "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED";
+  listId: string;
+};
+
+type ResearchListLink = {
+  id: string;
+  slug: string;
+  projectId: string | null;
+};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -113,8 +141,12 @@ export function SupplyInventoryWorkspace({
   sourceLocation,
   onHideSourceMap,
   companyName,
+  selectedProject,
+  onProjectChange,
+  selectedCompanyId,
+  selectedCompanyState = "ready",
   canShowProspects = false,
-  canShowOutreach = false,
+  canShowProjectStatus = false,
   canShowMail = false,
   storageScope,
   initialResearchListSlug,
@@ -155,8 +187,12 @@ export function SupplyInventoryWorkspace({
   sourceLocation?: string;
   onHideSourceMap?: () => void;
   companyName: string;
+  selectedProject: SupplyProjectSelection;
+  onProjectChange: (project: SupplyProjectSelection) => void;
+  selectedCompanyId?: string | null;
+  selectedCompanyState?: "loading" | "ready" | "error";
   canShowProspects?: boolean;
-  canShowOutreach?: boolean;
+  canShowProjectStatus?: boolean;
   canShowMail?: boolean;
   storageScope: string;
   initialResearchListSlug?: string;
@@ -180,6 +216,16 @@ export function SupplyInventoryWorkspace({
   });
   const [itemMutationState, setItemMutationState] = useState<"idle" | "saving" | "deleting" | "error">("idle");
   const [itemMutationError, setItemMutationError] = useState("");
+  const [researchProjects, setResearchProjects] = useState<ResearchProjectSummary[]>([]);
+  const [researchLists, setResearchLists] = useState<ResearchListLink[]>([]);
+  const [campaignSummaries, setCampaignSummaries] = useState<CampaignSummary[]>([]);
+  const [projectDataState, setProjectDataState] = useState<"loading" | "ready" | "error">("loading");
+  const initialResearchListResolvedRef = useRef(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
+  const [newProjectError, setNewProjectError] = useState("");
+  const [newProjectBusy, setNewProjectBusy] = useState(false);
   const reduceMotion = useReducedMotion();
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
@@ -210,6 +256,175 @@ export function SupplyInventoryWorkspace({
   const customRuns = [...latestRuns.values()].filter((run) => !knownSkus.has(run.input.componentItemKey));
   const currentRunIds = new Set([...latestRuns.values()].map((run) => run.id));
   const additionalRuns = visibleResearchRuns.filter((run) => !currentRunIds.has(run.id));
+
+  const loadProjectData = useCallback(async (signal?: AbortSignal) => {
+    if (!canShowProspects) {
+      setResearchProjects([]);
+      setResearchLists([]);
+      setCampaignSummaries([]);
+      setProjectDataState("ready");
+      return;
+    }
+    setProjectDataState("loading");
+    const [projectsResponse, campaignsResponse] = await Promise.all([
+      fetch("/api/research/lists", { cache: "no-store", signal, headers: { accept: "application/json" } }),
+      fetch("/api/supply-os/campaign-summaries", { cache: "no-store", signal, headers: { accept: "application/json" } }),
+    ]);
+    const projectsBody = await projectsResponse.json().catch(() => ({})) as {
+      projects?: ResearchProjectSummary[];
+      lists?: ResearchListLink[];
+    };
+    const campaignsBody = await campaignsResponse.json().catch(() => ({})) as { campaigns?: CampaignSummary[] };
+    if (!projectsResponse.ok || !campaignsResponse.ok) throw new Error("Projects are unavailable.");
+    setResearchProjects(projectsBody.projects ?? []);
+    setResearchLists(projectsBody.lists ?? []);
+    setCampaignSummaries(campaignsBody.campaigns ?? []);
+    setProjectDataState("ready");
+  }, [canShowProspects]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadProjectData(controller.signal).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setProjectDataState("error");
+    });
+    return () => controller.abort();
+  }, [loadProjectData]);
+
+  useEffect(() => {
+    if (
+      !initialResearchListSlug
+      || initialResearchListResolvedRef.current
+      || !canShowProspects
+      || projectDataState !== "ready"
+    ) return;
+    initialResearchListResolvedRef.current = true;
+    const projectId = researchLists.find((list) => list.slug === initialResearchListSlug)?.projectId;
+    if (projectId) onProjectChange({ kind: "prospecting", key: projectId });
+  }, [canShowProspects, initialResearchListSlug, onProjectChange, projectDataState, researchLists]);
+
+  async function createProspectingProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (selectedCompanyState !== "ready") return;
+    setNewProjectBusy(true);
+    setNewProjectError("");
+    try {
+      const response = await fetch("/api/research/projects", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({
+          name: newProjectName,
+          description: newProjectDescription || undefined,
+          companyId: selectedCompanyState === "ready" ? selectedCompanyId ?? undefined : undefined,
+        }),
+      });
+      const body = await response.json().catch(() => ({})) as { project?: ResearchProjectSummary; error?: string };
+      if (!response.ok || !body.project) throw new Error(body.error || "Project could not be created.");
+      await loadProjectData();
+      onProjectChange({ kind: "prospecting", key: body.project.id });
+      setNewProjectName("");
+      setNewProjectDescription("");
+      setNewProjectOpen(false);
+    } catch (error) {
+      setNewProjectError(error instanceof Error ? error.message : "Project could not be created.");
+    } finally {
+      setNewProjectBusy(false);
+    }
+  }
+
+  const projectRows = [
+    ...pendingRequests.map((request): ProjectRow => ({
+      kind: "sourcing",
+      key: request.id,
+      name: request.title,
+      typeLabel: "Sourcing",
+      status: request.status,
+      active: request.status === "Researching" || request.status === "Clarification needed",
+    })),
+    ...customerProcurementOrders.map((order): ProjectRow => ({
+      kind: "sourcing",
+      key: order.id,
+      name: order.material,
+      typeLabel: "Sourcing",
+      status: order.status === "awaiting_shortlist_approval"
+        ? "Shortlist under review"
+        : order.status === "awaiting_order_approval"
+          ? "Order under review"
+          : customerProcurementStatusLabel(order.status),
+      active: !["ordered", "cancelled"].includes(order.status),
+    })),
+    ...[...latestRuns.values(), ...additionalRuns].map((run): ProjectRow => ({
+      kind: "sourcing",
+      key: run.id,
+      name: run.input.componentName,
+      typeLabel: "Sourcing",
+      status: workstreamSummary(casesByRunId.get(run.id) ?? []) ?? resultState(run),
+      active: ["QUEUED", "RUNNING"].includes(run.status),
+    })),
+    ...(canShowProspects ? researchProjects
+      .filter((project) => project.companyId === null
+        || (selectedCompanyState === "ready" && project.companyId === selectedCompanyId))
+      .map((project): ProjectRow => {
+        const projectListIds = new Set(
+          researchLists.filter((list) => list.projectId === project.id).map((list) => list.id),
+        );
+        const projectCampaigns = campaignSummaries.filter((campaign) => projectListIds.has(campaign.listId));
+        const active = projectCampaigns.filter((campaign) => campaign.status === "ACTIVE").length;
+        const drafts = projectCampaigns.filter((campaign) => campaign.status === "DRAFT").length;
+        const status = projectCampaigns.length === 0
+          ? "No campaign yet"
+          : [
+              active ? `${active} active campaign${active === 1 ? "" : "s"}` : "",
+              drafts ? `${drafts} draft${drafts === 1 ? "" : "s"}` : "",
+            ].filter(Boolean).join(", ") || `${projectCampaigns.length} campaign${projectCampaigns.length === 1 ? "" : "s"}`;
+        return {
+          kind: "prospecting",
+          key: project.id,
+          name: project.name,
+          typeLabel: "Prospecting",
+          status,
+          active: projectCampaigns.some((campaign) => ["ACTIVE", "PAUSED"].includes(campaign.status)),
+          officeWide: project.companyId === null,
+        };
+      }) : []),
+  ].sort((left, right) => {
+    const activeOrder = Number(right.active) - Number(left.active);
+    if (activeOrder) return activeOrder;
+    const officeWideOrder = Number(Boolean(left.officeWide)) - Number(Boolean(right.officeWide));
+    return officeWideOrder || left.name.localeCompare(right.name);
+  });
+
+  useEffect(() => {
+    if (
+      projectDataState !== "ready"
+      || dataState !== "ready"
+      || selectedCompanyState !== "ready"
+      || !selectedProject
+    ) return;
+    const projectExists = projectRows.some(
+      (project) => project.kind === selectedProject.kind && project.key === selectedProject.key,
+    );
+    if (!projectExists) onProjectChange(null);
+  }, [dataState, onProjectChange, projectDataState, projectRows, selectedCompanyState, selectedProject]);
+
+  const selectedSourcingRun = selectedProject?.kind === "sourcing"
+    ? [...latestRuns.values(), ...additionalRuns].find((run) => run.id === selectedProject.key) ?? null
+    : null;
+  const selectedSourcingOrder = selectedProject?.kind === "sourcing"
+    ? customerProcurementOrders.find((order) => order.id === selectedProject.key) ?? null
+    : null;
+  const selectedProjectName = selectedProject
+    ? projectRows.find((project) => project.kind === selectedProject.kind && project.key === selectedProject.key)?.name ?? "Project"
+    : "";
+  const selectedProjectList = selectedProject?.kind === "prospecting"
+    ? researchProjects.find((project) => project.id === selectedProject.key) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!selectedProject || selectedProject.kind !== "sourcing") return;
+    const row = document.querySelector<HTMLElement>('[data-project-active="true"]');
+    row?.scrollIntoView({ block: "nearest" });
+  }, [selectedProject]);
 
   function editItem(item: SupplyInventoryItem) {
     if (!item.itemKey) return;
@@ -385,6 +600,8 @@ export function SupplyInventoryWorkspace({
     setQuery("");
   }
 
+  const workspaceView = activeView === "messages" && !selectedProject ? "projects" : activeView;
+
   return (
     <motion.section
       className={styles.inventoryWorkspace}
@@ -396,27 +613,137 @@ export function SupplyInventoryWorkspace({
     >
       <Tabs.Root
         className={styles.inventoryTabs}
-        value={activeView}
-        onValueChange={(value) => onViewChange(
-          value === "messages"
-            ? "messages"
-            : value === "prospects"
-              ? "prospects"
-              : value === "outreach"
-                ? "outreach"
-                : value === "mail"
-                  ? "mail"
-                : "inventory",
-        )}
+        value={workspaceView}
+        onValueChange={(value) => onViewChange(value === "messages" ? "messages" : "projects")}
       >
-        <Tabs.List className={styles.inventoryTabList} aria-label="Inventory, messages, prospects, outreach, and mail views">
-          <Tabs.Trigger value="inventory">Inventory</Tabs.Trigger>
-          <Tabs.Trigger value="messages"><MessageSquare size={14} /> Messages</Tabs.Trigger>
-          {canShowProspects ? <Tabs.Trigger value="prospects">Prospects</Tabs.Trigger> : null}
-          {canShowOutreach ? <Tabs.Trigger value="outreach">Outreach</Tabs.Trigger> : null}
-          {canShowMail ? <Tabs.Trigger value="mail">Mail</Tabs.Trigger> : null}
+        {canShowProjectStatus && (((!selectedProject && projectRows.some((project) => project.active)) || selectedProject)) ? (
+          <ProjectStatusStrip
+            projectRows={projectRows}
+            selectedProject={selectedProject}
+            onProjectChange={onProjectChange}
+          />
+        ) : null}
+        <Tabs.List className={styles.inventoryTabList} aria-label="Projects and messages views">
+          <Tabs.Trigger value="projects">Projects</Tabs.Trigger>
+          <Tabs.Trigger
+            value="messages"
+            disabled={!selectedProject}
+            title={selectedProject ? undefined : "Select a project first"}
+          >
+            <MessageSquare size={14} /> Messages
+          </Tabs.Trigger>
         </Tabs.List>
-        <Tabs.Content value="inventory" className={styles.inventoryTabPanel}>
+        <Tabs.Content value="projects" className={styles.inventoryTabPanel}>
+        {selectedProject ? (
+          <header className={styles.projectViewHeader}>
+            <button type="button" onClick={() => onProjectChange(null)}>All projects</button>
+            <strong>Project: {selectedProjectName}</strong>
+          </header>
+        ) : null}
+        {selectedProject?.kind === "prospecting" ? (
+          <>
+            <SupplyOsProspects
+              storageScope={storageScope}
+              lockedProjectId={selectedProjectList?.id}
+              initialListSlug={initialResearchListSlug}
+              initialQuery={initialResearchQuery}
+              initialStatus={initialResearchStatus}
+              initialPage={initialResearchPage}
+            />
+            <SupplyOsOutreachApprovals refreshKey={0} />
+          </>
+        ) : selectedProject?.kind !== "sourcing" ? (
+          <section className={styles.projectsWorkspace} aria-label="Projects">
+            <header className={styles.projectsHeader}>
+              <div>
+                <h2>Projects</h2>
+                <span>{projectDataState === "loading" ? "Loading projects" : `${projectRows.length} projects`}</span>
+              </div>
+              {canShowProspects ? (
+                <div className={styles.newProjectPanel}>
+                  <button type="button" onClick={() => { setNewProjectOpen((open) => !open); setNewProjectError(""); }}>
+                    {newProjectOpen ? "Close new project" : "New prospecting project"}
+                  </button>
+                  {newProjectOpen ? (
+                    <form className={styles.newProjectForm} onSubmit={createProspectingProject}>
+                      <label>
+                        <span>Name</span>
+                        <input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} required maxLength={160} />
+                      </label>
+                      <label>
+                        <span>Description</span>
+                        <input value={newProjectDescription} onChange={(event) => setNewProjectDescription(event.target.value)} maxLength={1000} />
+                      </label>
+                      {selectedCompanyState === "loading" ? <p>Loading company</p> : null}
+                      {selectedCompanyState === "error" ? <p>Company lookup failed, retry</p> : null}
+                      {newProjectError ? <p className={styles.prospectsError}>{newProjectError}</p> : null}
+                      <button type="submit" disabled={newProjectBusy || selectedCompanyState !== "ready"}>
+                        {newProjectBusy ? "Creating..." : "Create project"}
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              ) : null}
+            </header>
+            <div className={styles.projectsCreationControls}>
+              {workspaceId && canImportSupplyData ? (
+                <details className={styles.sourcingCsvImport}>
+                  <summary>Import parts CSV</summary>
+                  <SupplyOsSharedWorkspace
+                    workspaceId={workspaceId}
+                    onPublished={onSnapshotPublished}
+                  />
+                </details>
+              ) : null}
+              <form className={styles.sourcingComposer} onSubmit={submitRequest}>
+                <Sparkles size={17} aria-hidden="true" />
+                <label htmlFor="new-sourcing-request-projects">
+                  <span>New sourcing request</span>
+                  <input
+                    id="new-sourcing-request-projects"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    maxLength={240}
+                    placeholder="Describe the part, quantity, specification, and need-by date"
+                  />
+                </label>
+                <button type="submit" aria-label="Research sourcing request" disabled={!query.trim() || !researchWorkspaceReady}><span>{researchWorkspaceReady ? "Research" : "Select a company"}</span><ArrowRight size={15} /></button>
+              </form>
+            </div>
+            {projectRows.length ? (
+              <div className={styles.inventoryTableRegion}>
+                <table className={styles.inventoryTable}>
+                  <thead>
+                    <tr><th>Project</th><th>Type</th><th>Status</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>
+                    {projectRows.map((project) => (
+                      <tr key={`${project.kind}:${project.key}`}>
+                        <td>
+                          <button type="button" onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
+                            <strong>{project.name}</strong>
+                            {project.officeWide ? <small>Office-wide</small> : null}
+                          </button>
+                        </td>
+                        <td><span className={styles.projectTypeBadge} data-type={project.kind}>{project.typeLabel}</span></td>
+                        <td>{project.status}</td>
+                        <td>
+                          <button type="button" className={styles.sourcingQueueAction} onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
+                            Open <ArrowRight size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className={styles.projectsEmpty}>No projects are available for this company.</p>
+            )}
+          </section>
+        ) : null}
+        {selectedProject?.kind === "sourcing" ? (
+          <>
       {workspaceId && canImportSupplyData ? (
         <details className={styles.sourcingCsvImport}>
           <summary>Import parts CSV</summary>
@@ -517,7 +844,7 @@ export function SupplyInventoryWorkspace({
             {pendingRequests.map((request, index) => {
               const draft = request.draft;
               return (
-                <tr key={request.id} data-status="watch">
+                <tr key={request.id} data-status="watch" data-project-active={selectedProject?.kind === "sourcing" && selectedProject.key === request.id}>
                   <td>
                     <button
                       type="button"
@@ -570,7 +897,7 @@ export function SupplyInventoryWorkspace({
                   : customerProcurementStatusLabel(request.status);
               const sourceStateDetail = customerProcurementProgress(request.status, 0, request.progress);
               return (
-                <tr key={request.id} data-status="request">
+                <tr key={request.id} data-status="request" data-project-active={selectedProject?.kind === "sourcing" && selectedProject.key === request.id}>
                   <td>
                     <button type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
                       <span className={styles.inventoryStatusDot} />
@@ -602,7 +929,11 @@ export function SupplyInventoryWorkspace({
               const requestedQuantity = sourcingRequestQuantity(item);
               return (
               <Fragment key={item.itemKey ?? item.sku}>
-              <tr data-active={item.sku === selectedSku} data-status="shortage">
+              <tr
+                data-active={item.sku === selectedSku}
+                data-status="shortage"
+                data-project-active={selectedProject?.kind === "sourcing" && selectedProject.key === run?.id}
+              >
                 <td>
                   <button type="button" aria-pressed={item.sku === selectedSku} onClick={() => onSelect(item.sku)}>
                     <span className={styles.inventoryStatusDot} />
@@ -671,7 +1002,7 @@ export function SupplyInventoryWorkspace({
             {customRuns.map((run) => {
               const runCases = casesByRunId.get(run.id) ?? [];
               return (
-              <tr key={run.id} data-status="request">
+              <tr key={run.id} data-status="request" data-project-active={selectedProject?.kind === "sourcing" && selectedProject.key === run.id}>
                 <td>
                   <button type="button" onClick={() => onOpenSavedResearch(run)}>
                     <span className={styles.inventoryStatusDot} />
@@ -696,7 +1027,7 @@ export function SupplyInventoryWorkspace({
             {additionalRuns.map((run) => {
               const runCases = casesByRunId.get(run.id) ?? [];
               return (
-                <tr key={run.id} data-status="history">
+                <tr key={run.id} data-status="history" data-project-active={selectedProject?.kind === "sourcing" && selectedProject.key === run.id}>
                   <td>
                   <button type="button" onClick={() => run.status !== "FAILED" && onOpenSavedResearch(run)} disabled={run.status === "FAILED"}>
                       <span className={styles.inventoryStatusDot} />
@@ -729,43 +1060,36 @@ export function SupplyInventoryWorkspace({
           </div>
         ) : null}
       </div>
+          </>
+        ) : null}
         </Tabs.Content>
         <Tabs.Content value="messages" className={styles.inventoryTabPanel}>
-          <ActiveSourcingWorkspace
-            workflowRequests={customerProcurementOrders}
-            historicalRuns={messageResearchRuns}
-            historicalCases={messageProcurementCases}
-            onOpenWorkflowRequest={(request) => onOpenCustomerProcurement(
-              customerProcurementItem(request),
-              customerProcurementOrderState(request),
-            )}
-            onOpenHistoricalRun={onOpenSavedResearch}
-            hasMoreHistorical={hasMore}
-            historicalPageState={pageState}
-            onLoadOlderHistorical={onLoadMore}
-          />
-        </Tabs.Content>
-        {canShowProspects ? (
-          <Tabs.Content value="prospects" className={styles.inventoryTabPanel}>
-            <SupplyOsProspects
-              storageScope={storageScope}
-              initialListSlug={initialResearchListSlug}
-              initialQuery={initialResearchQuery}
-              initialStatus={initialResearchStatus}
-              initialPage={initialResearchPage}
+          {selectedProject?.kind === "sourcing" ? (
+            <ActiveSourcingWorkspace
+              workflowRequests={selectedSourcingOrder ? [selectedSourcingOrder] : []}
+              historicalRuns={selectedSourcingRun
+                ? messageResearchRuns.filter((run) => run.id === selectedSourcingRun.id)
+                : []}
+              historicalCases={selectedSourcingRun
+                ? messageProcurementCases.filter((procurementCase) => procurementCase.input.researchRunId === selectedSourcingRun.id)
+                : []}
+              onOpenWorkflowRequest={(request) => onOpenCustomerProcurement(
+                customerProcurementItem(request),
+                customerProcurementOrderState(request),
+              )}
+              onOpenHistoricalRun={onOpenSavedResearch}
+              hasMoreHistorical={hasMore}
+              historicalPageState={pageState}
+              onLoadOlderHistorical={onLoadMore}
             />
-          </Tabs.Content>
-        ) : null}
-        {canShowOutreach ? (
-          <Tabs.Content value="outreach" className={`${styles.inventoryTabPanel} ${styles.outreachTabPanel}`}>
-            <SupplyOsOutreach />
-          </Tabs.Content>
-        ) : null}
-        {canShowMail ? (
-          <Tabs.Content value="mail" className={styles.inventoryTabPanel}>
-            <SupplyOsMail />
-          </Tabs.Content>
-        ) : null}
+          ) : selectedProject?.kind === "prospecting" && canShowMail ? (
+            <SupplyOsMail researchProjectId={selectedProject.key} />
+          ) : selectedProject?.kind === "prospecting" ? (
+            <p>Office mail is restricted to operators</p>
+          ) : (
+            <p>Select a project first</p>
+          )}
+        </Tabs.Content>
       </Tabs.Root>
     </motion.section>
   );

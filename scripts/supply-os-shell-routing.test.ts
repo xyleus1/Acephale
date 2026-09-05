@@ -27,9 +27,9 @@ const shell = readFileSync(
 assert.match(shell, /window\.history\.pushState/);
 assert.match(shell, /window\.addEventListener\("popstate", syncPanelFromUrl\)/);
 assert.match(shell, /window\.removeEventListener\("popstate", syncPanelFromUrl\)/);
-assert.match(shell, /shortLabel: "Sourcing & prospecting"/);
+assert.match(shell, /shortLabel: "Sales Agent"/);
 assert.doesNotMatch(shell, /shortLabel: "Fulfillment"|shortLabel: "Tracking"/);
-assert.match(shell, /shortLabel: "Opportunities", inactive: true/);
+assert.match(shell, /shortLabel: "Chat"/);
 assert.doesNotMatch(shell, /liveMapDot|Network map available/);
 assert.doesNotMatch(shell, /shortLabel: "Supply"|shortLabel: "Suppliers"/);
 
