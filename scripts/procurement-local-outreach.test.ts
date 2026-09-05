@@ -442,6 +442,465 @@ assert.equal(
   "the RFC id is carried so an answer already on the thread is not recorded twice",
 );
 
+// A shop whose ticketing system answers from another domain keeps its thread
+// after we answer that address: our own answer puts the ticketing address on
+// the thread, and letting it claim the thread as a contact of its own dropped
+// every ticketing message out of the supplier's conversation from the second
+// message onwards, which is the same unanswerable transcript all over again.
+const ticketingThread: LocalRfqMessage[] = [
+  message({ id: "ticket-1", threadId: "thread-7", toEmails: ["sales@supplier.com"], externalThreadId: "thread-7" }),
+  message({
+    id: "ticket-2",
+    threadId: "thread-7",
+    externalThreadId: "thread-7",
+    direction: "INBOUND",
+    fromEmail: "tickets@helpdesk.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "Ticket 4821 opened. Which finish do you need?",
+    sentAt: "2026-08-24T09:00:00.000Z",
+  }),
+  message({
+    id: "ticket-3",
+    threadId: "thread-7",
+    externalThreadId: "thread-7",
+    toEmails: ["tickets@helpdesk.example"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "Matte finish, 100 units.",
+    sentAt: "2026-08-24T10:00:00.000Z",
+  }),
+  message({
+    id: "ticket-4",
+    threadId: "thread-7",
+    externalThreadId: "thread-7",
+    direction: "INBOUND",
+    fromEmail: "tickets@helpdesk.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "USD 6.20 per unit, 3 weeks.",
+    sentAt: "2026-08-25T09:00:00.000Z",
+  }),
+];
+const ticketingConversation = localRfqConversationFor(ticketingThread, "sales@supplier.com");
+assert.deepEqual(
+  ticketingConversation?.messages.map((entry) => entry.id),
+  ["ticket-1", "ticket-2", "ticket-3", "ticket-4"],
+  "answering a ticketing address does not take the thread away from the supplier we mailed",
+);
+assert.deepEqual(
+  ticketingConversation?.attributedSenders,
+  ["tickets@helpdesk.example"],
+  "the ticketing address stays vouched for after we have answered it",
+);
+assert.equal(
+  summarizeLocalRfqOutreach(ticketingThread).responded,
+  1,
+  "the shop still counts as having answered once",
+);
+
+// A thread we opened to two unrelated shops still attributes nothing, since the
+// reply could belong to either of them.
+const ambiguousThread: LocalRfqMessage[] = [
+  message({
+    id: "ambiguous-1",
+    threadId: "thread-8",
+    externalThreadId: "thread-8",
+    toEmails: ["sales@one.com", "quotes@two.com"],
+  }),
+  message({
+    id: "ambiguous-2",
+    threadId: "thread-8",
+    externalThreadId: "thread-8",
+    direction: "INBOUND",
+    fromEmail: "estimating@three.com",
+    toEmails: ["desk@derya.ai"],
+    body: "We can quote this.",
+    sentAt: "2026-08-26T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(ambiguousThread, "sales@one.com").inboundIds],
+  [],
+  "a stranger on a thread mailed to two unrelated shops is attributed to neither",
+);
+
+// An RFQ that bounced and was resent to a corrected address still anchors on
+// the corrected one: a delivery notice is not the supplier's reply, so it must
+// not close the anchoring window before the corrected send.
+const correctedThread: LocalRfqMessage[] = [
+  message({ id: "corrected-1", threadId: "thread-6", externalThreadId: "thread-6", toEmails: ["old@wrongdomain.com"] }),
+  message({
+    id: "corrected-2",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "mailer-daemon@googlemail.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery Status Notification (Failure)",
+    body: "Your message to old@wrongdomain.com could not be delivered. Address not found.",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  message({
+    id: "corrected-3",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    toEmails: ["sales@corrected.com"],
+    sentAt: "2026-08-27T10:00:00.000Z",
+  }),
+  message({
+    id: "corrected-4",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "quotes@corrected.com",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "What density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(correctedThread, "sales@corrected.com").inboundIds],
+  ["corrected-4"],
+  "a colleague reply after a bounce and a corrected send belongs to the corrected supplier",
+);
+
+// The bounced address stops anchoring the thread, so a forwarder answering for
+// the corrected supplier from an unrelated domain is not read as ambiguous
+// between one live address and one dead one.
+const forwardedAfterBounce: LocalRfqMessage[] = [
+  ...correctedThread.slice(0, 3),
+  message({
+    id: "corrected-5",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "desk@forwarder.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "We handle quotes for them. What density do you need?",
+    sentAt: "2026-08-28T11:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(forwardedAfterBounce, "sales@corrected.com").inboundIds],
+  ["corrected-5"],
+  "a forwarder reply is attributed to the address still live on the thread",
+);
+
+// A delay or a full mailbox is not proof an address is dead, so it keeps its
+// claim on the thread.
+const delayedThread: LocalRfqMessage[] = [
+  correctedThread[0],
+  message({
+    id: "delayed-2",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "mailer-daemon@googlemail.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery Status Notification (Delay)",
+    body: "Your message to old@wrongdomain.com has been delayed. Will try again later.",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  message({
+    id: "delayed-3",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "orders@wrongdomain.com",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "Got it late, what density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(delayedThread, "old@wrongdomain.com").inboundIds],
+  ["delayed-3"],
+  "a delayed delivery does not take the thread away from the address we mailed",
+);
+
+// A report naming several recipients only retires the ones it reports as
+// permanently failed, so the recipient whose mailbox was merely full still
+// claims the thread.
+const mixedReportThread: LocalRfqMessage[] = [
+  message({
+    id: "mixed-1",
+    threadId: "thread-8",
+    externalThreadId: "thread-8",
+    toEmails: ["dead@wrongdomain.com", "sales@supplier.com"],
+  }),
+  message({
+    id: "mixed-2",
+    threadId: "thread-8",
+    externalThreadId: "thread-8",
+    direction: "INBOUND",
+    fromEmail: "mailer-daemon@googlemail.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery Status Notification (Failure)",
+    body: [
+      "Final-Recipient: rfc822; dead@wrongdomain.com",
+      "Action: failed",
+      "Status: 5.1.1",
+      "",
+      "Final-Recipient: rfc822; sales@supplier.com",
+      "Action: failed",
+      "Status: 4.2.2",
+    ].join("\n"),
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  message({
+    id: "mixed-3",
+    threadId: "thread-8",
+    externalThreadId: "thread-8",
+    direction: "INBOUND",
+    fromEmail: "desk@forwarder.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "We handle their quotes. What density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(mixedReportThread, "sales@supplier.com").inboundIds],
+  ["mixed-3"],
+  "only the permanently failed recipient of a mixed report loses its claim on the thread",
+);
+
+// A provider that reports a dead address in its own wording, with no delivery
+// status fields, still retires that address and only that address.
+const nonStandardNoticeThread: LocalRfqMessage[] = [
+  correctedThread[0],
+  message({
+    id: "nonstandard-2",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "mail-router@wrongdomain.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Notice",
+    body: [
+      "Delivery failure",
+      "To: old@wrongdomain.com",
+      "old@wrongdomain.com: user unknown",
+      "Questions? Write to support@wrongdomain.com",
+    ].join("\n"),
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  correctedThread[2],
+  message({
+    id: "nonstandard-4",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "desk@forwarder.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "We handle their quotes. What density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(nonStandardNoticeThread, "sales@corrected.com").inboundIds],
+  ["nonstandard-4"],
+  "a notice in a provider's own wording still retires the address it gave up on",
+);
+
+const heldNoticeThread: LocalRfqMessage[] = [
+  correctedThread[0],
+  message({
+    id: "held-2",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "mail-router@wrongdomain.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Notice",
+    body: "Delivery failure\nold@wrongdomain.com: delivery failed, mailbox full, we will try again later.",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  message({
+    id: "held-3",
+    threadId: "thread-6",
+    externalThreadId: "thread-6",
+    direction: "INBOUND",
+    fromEmail: "orders@wrongdomain.com",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "Cleared the inbox, what density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(heldNoticeThread, "old@wrongdomain.com").inboundIds],
+  ["held-3"],
+  "a full mailbox in a provider's own wording keeps the address we mailed",
+);
+
+const mixedNonStandardThread: LocalRfqMessage[] = [
+  message({
+    id: "mixed-ns-1",
+    threadId: "thread-9",
+    externalThreadId: "thread-9",
+    toEmails: ["dead@wrongdomain.com", "sales@supplier.com"],
+  }),
+  message({
+    id: "mixed-ns-2",
+    threadId: "thread-9",
+    externalThreadId: "thread-9",
+    direction: "INBOUND",
+    fromEmail: "mail-router@wrongdomain.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Notice",
+    body: [
+      "Delivery failure",
+      "dead@wrongdomain.com: user unknown",
+      "sales@supplier.com: mailbox full, we will try again later",
+    ].join("\n"),
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  message({
+    id: "mixed-ns-3",
+    threadId: "thread-9",
+    externalThreadId: "thread-9",
+    direction: "INBOUND",
+    fromEmail: "desk@forwarder.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "We handle their quotes. What density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(mixedNonStandardThread, "sales@supplier.com").inboundIds],
+  ["mixed-ns-3"],
+  "a nonstandard report retires the address it gave up on and keeps the one it retries",
+);
+
+const delayedSubjectThread: LocalRfqMessage[] = [
+  message({
+    id: "delayed-subject-1",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    toEmails: ["sales@supplier.com", "orders@supplier.com"],
+  }),
+  message({
+    id: "delayed-subject-2",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    direction: "INBOUND",
+    fromEmail: "mail-router@supplier.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery delayed",
+    body: "sales@supplier.com: delivery failed",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  message({
+    id: "delayed-subject-3",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    direction: "INBOUND",
+    fromEmail: "desk@forwarder.example",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "We handle their quotes. What density do you need?",
+    sentAt: "2026-08-28T09:00:00.000Z",
+  }),
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(delayedSubjectThread, "orders@supplier.com").inboundIds],
+  [],
+  "a report calling itself delayed keeps both recipients, so a stranger stays ambiguous",
+);
+
+const delayedPermanentThread: LocalRfqMessage[] = [
+  delayedSubjectThread[0],
+  message({
+    id: "delayed-permanent-2",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    direction: "INBOUND",
+    fromEmail: "mail-router@supplier.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery delayed",
+    body: "sales@supplier.com: delivery failed, 550 5.1.1",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  delayedSubjectThread[2],
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(delayedPermanentThread, "orders@supplier.com").inboundIds],
+  ["delayed-subject-3"],
+  "a permanent status on a recipient's line retires it even under a delay report",
+);
+
+const quotedQuantityThread: LocalRfqMessage[] = [
+  delayedSubjectThread[0],
+  message({
+    id: "quoted-quantity-2",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    direction: "INBOUND",
+    fromEmail: "mail-router@supplier.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery delayed",
+    body: [
+      "sales@supplier.com: delivery failed, 421 service unavailable",
+      "> sales@supplier.com we need 550 units of the foam insert",
+    ].join("\n"),
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  delayedSubjectThread[2],
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(quotedQuantityThread, "orders@supplier.com").inboundIds],
+  [],
+  "a quoted quantity reading like a code retires nobody without failure wording",
+);
+
+const bareCodeThread: LocalRfqMessage[] = [
+  delayedSubjectThread[0],
+  message({
+    id: "bare-code-2",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    direction: "INBOUND",
+    fromEmail: "mail-router@supplier.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery delayed",
+    body: "sales@supplier.com: delivery failed, 550",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  delayedSubjectThread[2],
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(bareCodeThread, "orders@supplier.com").inboundIds],
+  ["delayed-subject-3"],
+  "a bare 550 beside failure wording retires that address under a delay report",
+);
+
+const authCodeThread: LocalRfqMessage[] = [
+  delayedSubjectThread[0],
+  message({
+    id: "auth-code-2",
+    threadId: "thread-10",
+    externalThreadId: "thread-10",
+    direction: "INBOUND",
+    fromEmail: "mail-router@supplier.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery delayed",
+    body: "sales@supplier.com: delivery failed, 535 authentication failed",
+    sentAt: "2026-08-27T09:00:00.000Z",
+  }),
+  delayedSubjectThread[2],
+];
+assert.deepEqual(
+  [...attributeLocalRfqThread(authCodeThread, "orders@supplier.com").inboundIds],
+  [],
+  "a code outside the rejected recipient range retires nobody",
+);
+
 const conversationSource = readFileSync(resolve(__dirname, "../src/lib/procurement-conversation.ts"), "utf8");
 assert.ok(
   /localRfqConversationFor\(rows, reference\.contactEmail\)/.test(conversationSource),

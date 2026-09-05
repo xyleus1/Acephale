@@ -3,6 +3,47 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-08: A thread belongs to the addresses we mailed before the first reply
+
+- Follow up: a bounced address kept anchoring its thread, so an RFQ resent to a
+  corrected address left two claimants and a later cross-domain reply was
+  ambiguous and dropped out of the supplier's conversation. `contactsByThread`
+  now retires the recipients a delivery report failed. Permanence and the
+  affected recipients come from `classifyDeliveryFeedback`, the parser sender
+  protection uses, so a delay, a full mailbox, greylisting or a 4.x.x status
+  retires nothing and a mixed report retires only its permanently failed
+  recipient. A notice that parser does not recognise falls back to the addresses
+  named on its own failure lines, never a quoted header or a support address.
+  Every claimant reported dead leaves the set as it was.
+- A report that calls itself delayed in its subject or in a heading of its own
+  narrows the fallback to lines naming why an address is dead, so "delivery
+  failed" under a delay notice retires nobody and a multi-recipient thread keeps
+  every claimant it had.
+- Verification: `npm run -s test:procurement-local-outreach` with new coverage
+  for a bounce then a corrected send then a forwarder reply, a delay, a mixed
+  two-recipient report, and a nonstandard notice in both permanent and
+  temporary wording, run against the previous implementations to confirm each
+  fails there; every other pure procurement suite and `npx tsc --noEmit`.
+
+- Trigger: review of the shared attribution rule found that answering a
+  supplier's helpdesk or ticketing address on another domain took the thread
+  away from the supplier we had mailed.
+- Cause: the thread's contact set was every address we had ever mailed on it,
+  so our own answer to `tickets@helpdesk.example` made that address a contact of
+  its own. Domain matching then preferred it over `sales@supplier.com`, and
+  every ticketing message dropped out of the supplier's conversation, leaving
+  the same unanswerable transcript the earlier fix removed.
+- `contactsByThread` now anchors a thread on the addresses we mailed before any
+  reply arrived on it. A thread the supplier opened has no such anchor, so every
+  address we mailed on it still counts.
+- `attributeLocalRfqThread` runs in two passes, so our own answer sent to a
+  vouched address is part of the same conversation instead of being read as no
+  answer and sent again.
+- Verification: `npm run -s test:procurement-local-outreach` with new coverage
+  for the ticketing reply, our answer to it and its follow up, plus a thread
+  mailed to two unrelated shops that still attributes a stranger to neither,
+  every other pure procurement suite, and `npx tsc --noEmit`.
+
 ## 2026-09-08: An anchored supplier thread is attributed like the RFQ ledger
 
 - Trigger: a production autopilot pass on both live requests left twelve saved

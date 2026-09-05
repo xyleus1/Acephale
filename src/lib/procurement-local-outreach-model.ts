@@ -5,6 +5,7 @@ import {
   type ProcurementConversation,
 } from "@/lib/procurement-conversation-model";
 import { supplierBounceText } from "@/lib/procurement-inbound-triage";
+import { classifyDeliveryFeedback } from "@/lib/email-delivery-feedback";
 
 export const LOCAL_RFQ_MESSAGE_LIMIT = 4_000;
 export const LOCAL_RFQ_BATCH_MESSAGES_PER_ORDER = 1_000;
@@ -76,15 +77,119 @@ function ourEmails(messages: LocalRfqMessage[]) {
   ]).filter(Boolean));
 }
 
+// A thread belongs to the addresses we mailed on it before any reply arrived.
+// Answering a shop's helpdesk or ticketing address puts that address on the
+// thread too, and counting it as a contact of its own would let it out match
+// the address we actually mailed, which would drop the whole exchange out of
+// that supplier's conversation from the second message onwards.
+// A thread the supplier opened has no such anchor, so every address we mailed
+// on it still counts. Only a real reply closes the window: a bounce or a synced
+// copy of our own mail must not, or an RFQ resent to a corrected address after
+// a bounce would never anchor the thread. An address a bounce reported as
+// undeliverable stops anchoring, so a resend to a corrected address is not left
+// competing with the dead one.
+// Which address a delivery report failed is read by the same deterministic
+// parser sender protection uses, so a report naming several recipients only
+// retires the ones it reports as permanently undeliverable, and a delay or a
+// full mailbox retires none.
+// A provider whose wording that parser does not recognise still reports the
+// dead address on its own failure line, so such a notice falls back to the
+// addresses named there, line by line: a report that gave up on one address
+// while it keeps retrying another retires only the first, and a line reading as
+// a temporary problem retires nobody.
+// A report that calls itself delayed in its subject or a heading of its own
+// retires an address only where the line names why that address is dead, since
+// "delivery failed" under a delay notice is the delay being reported, not a
+// recipient given up on.
+// An SMTP status on the recipient's own line outranks all of that wording, the
+// same way the shared parser treats it: a 5.x.x line retires that address
+// whatever the report calls itself, and a 4.x.x line keeps it. A bare code only
+// counts where it reads as a rejected recipient or a domain refusing mail, and
+// only where the same line also reports a failure, since a 535 is our own
+// authentication and a quoted RFQ line can carry a number like 550 units, and
+// retiring the address beside either would lose a live supplier.
+const EMAIL_IN_TEXT = /[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/g;
+const TRANSIENT_NOTICE = /quota|mailbox (is )?full|temporar(y|ily)|delay|greylist|rate limit|try(ing)? again/i;
+// Wording a provider puts on the line that names the address it gave up on, so
+// a quoted header or a support address elsewhere in the report is not read as
+// a failed recipient.
+const DEAD_RECIPIENT_LINE = /(user )?unknown|rejected|not found|no such (user|mailbox|address)|does ?n.t exist|does not exist|undeliverable|disabled/i;
+const FAILED_LINE = new RegExp(`${DEAD_RECIPIENT_LINE.source}|(delivery )?failed|(could ?n.t|could not|was ?n.t|was not) be delivered|not delivered`, "i");
+const PERMANENT_STATUS = /\b5\.\d\.\d\b/;
+const PERMANENT_CODE = /\b(55[0-4]|556)\b/;
+const TRANSIENT_STATUS = /\b4\.\d\.\d\b|\b4\d{2}\b/;
+
+function failureLineRecipients(message: LocalRfqMessage) {
+  const lines = message.body.split("\n");
+  const reportTransient = TRANSIENT_NOTICE.test(message.subject ?? "")
+    || lines.some((line) => TRANSIENT_NOTICE.test(line) && !line.match(EMAIL_IN_TEXT));
+  const failed = reportTransient ? DEAD_RECIPIENT_LINE : FAILED_LINE;
+  return lines
+    .filter((line) => {
+      if (PERMANENT_STATUS.test(line)) return true;
+      if (TRANSIENT_NOTICE.test(line) || TRANSIENT_STATUS.test(line)) return false;
+      return failed.test(line) || (FAILED_LINE.test(line) && PERMANENT_CODE.test(line));
+    })
+    .flatMap((line) => line.match(EMAIL_IN_TEXT) ?? []);
+}
+
+function permanentlyFailedRecipients(message: LocalRfqMessage, accountEmails: Set<string>) {
+  const feedback = classifyDeliveryFeedback({
+    fromEmail: message.fromEmail,
+    subject: message.subject ?? "",
+    bodyText: message.body,
+    headers: [],
+    ownAddresses: [...accountEmails],
+  });
+  const named = feedback?.kind === "BOUNCE"
+    ? (feedback.permanent ? feedback.recipients : [])
+    : failureLineRecipients(message);
+  return named.map((recipient) => normalize(recipient)).filter((recipient) => (
+    recipient && !accountEmails.has(recipient)
+  ));
+}
+
 function contactsByThread(messages: LocalRfqMessage[]) {
-  const byThread = new Map<string, Set<string>>();
-  for (const message of messages) {
-    if (message.direction !== "OUTBOUND") continue;
-    const bucket = byThread.get(message.threadId) ?? new Set<string>();
-    for (const recipient of recipientEmails(message)) bucket.add(recipient);
-    byThread.set(message.threadId, bucket);
+  const ordered = [...messages].sort((left, right) => (
+    left.sentAt.localeCompare(right.sentAt) || left.id.localeCompare(right.id)
+  ));
+  const accountEmails = ourEmails(ordered);
+  const anchored = new Map<string, Set<string>>();
+  const mailed = new Map<string, Set<string>>();
+  const replied = new Set<string>();
+  const failed = new Map<string, Set<string>>();
+  for (const message of ordered) {
+    if (message.direction !== "OUTBOUND") {
+      const sender = normalize(message.fromEmail);
+      if (!sender || accountEmails.has(sender)) continue;
+      if (!deliveryNotice(message)) {
+        replied.add(message.threadId);
+        continue;
+      }
+      const dead = failed.get(message.threadId) ?? new Set<string>();
+      for (const recipient of permanentlyFailedRecipients(message, accountEmails)) {
+        dead.add(recipient);
+      }
+      failed.set(message.threadId, dead);
+      continue;
+    }
+    const recipients = recipientEmails(message);
+    const everyone = mailed.get(message.threadId) ?? new Set<string>();
+    for (const recipient of recipients) everyone.add(recipient);
+    mailed.set(message.threadId, everyone);
+    if (replied.has(message.threadId)) continue;
+    const anchor = anchored.get(message.threadId) ?? new Set<string>();
+    for (const recipient of recipients) anchor.add(recipient);
+    anchored.set(message.threadId, anchor);
   }
-  return byThread;
+  return new Map([...mailed].map(([threadId, everyone]) => {
+    const anchor = anchored.get(threadId);
+    const claimants = anchor?.size ? anchor : everyone;
+    const dead = failed.get(threadId);
+    if (!dead?.size) return [threadId, claimants] as const;
+    const alive = new Set([...claimants].filter((email) => !dead.has(email)));
+    return [threadId, alive.size ? alive : claimants] as const;
+  }));
 }
 
 // A supplier answers from whatever address its shop uses: a colleague, a
@@ -220,11 +325,9 @@ export function attributeLocalRfqThread(
   const list = [...messages];
   const accountEmails = ourEmails(list);
   const contacts = contactsByThread(list);
+  const vouchedByThread = new Map<string, Set<string>>();
   for (const message of list) {
-    if (message.direction === "OUTBOUND") {
-      if (recipientEmails(message).includes(contact)) relatedIds.add(message.id);
-      continue;
-    }
+    if (message.direction === "OUTBOUND") continue;
     const sender = normalize(message.fromEmail);
     if (sender === contact) {
       relatedIds.add(message.id);
@@ -235,6 +338,20 @@ export function attributeLocalRfqThread(
     relatedIds.add(message.id);
     inboundIds.add(message.id);
     attributedSenders.add(sender);
+    const vouched = vouchedByThread.get(message.threadId) ?? new Set<string>();
+    vouched.add(sender);
+    vouchedByThread.set(message.threadId, vouched);
+  }
+  // Our own answer often goes to the address that wrote to us rather than to the
+  // address we first mailed, so it belongs to the same conversation. Without it
+  // the transcript reads as unanswered and the supplier is answered again.
+  for (const message of list) {
+    if (message.direction !== "OUTBOUND") continue;
+    const recipients = recipientEmails(message);
+    const vouched = vouchedByThread.get(message.threadId);
+    if (recipients.includes(contact) || recipients.some((recipient) => vouched?.has(recipient))) {
+      relatedIds.add(message.id);
+    }
   }
   return { relatedIds, inboundIds, attributedSenders: [...attributedSenders] };
 }

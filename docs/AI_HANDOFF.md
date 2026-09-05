@@ -9,6 +9,22 @@ cleanup actions without an LLM. Stage filters are carried in
 Context message before creating an approval-gated operation.
 # AI Handoff
 
+## 2026-09-08: A thread is owned by the addresses mailed before the first reply
+
+- An address a delivery report gave up on stops anchoring its thread, so an RFQ
+  resent to a corrected address is not left competing with the dead one and a
+  later reply from a colleague, helpdesk or forwarder is still attributable.
+  Which address failed comes from `classifyDeliveryFeedback`, so only a
+  permanent failure retires a recipient; a nonstandard notice falls back to the
+  addresses on its own failure lines.
+
+- `contactsByThread` in `src/lib/procurement-local-outreach-model.ts` anchors a
+  thread on the addresses mailed before any reply arrived, so answering a
+  helpdesk or ticketing address never takes the thread away from the supplier
+  the RFQ went to.
+- `attributeLocalRfqThread` also keeps our own answer to a vouched address in
+  the transcript, so an answered thread does not read as unanswered.
+
 ## 2026-09-08: One attribution rule for every local supplier thread
 
 - `attributeLocalRfqThread` in `src/lib/procurement-local-outreach-model.ts` is
