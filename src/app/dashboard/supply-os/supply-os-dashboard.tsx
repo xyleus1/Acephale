@@ -839,7 +839,7 @@ function CaseCommandCenter({
     () => (initialProjectKind && initialProjectKey ? { kind: initialProjectKind, key: initialProjectKey } : null),
     [initialProjectKind, initialProjectKey],
   );
-  const [selectedProject, setSelectedProject] = useState<SupplyProjectSelection>(urlProject);
+  const [selectedProject, setSelectedProject] = useState<SupplyProjectSelection>(null);
   const [workspaceCompanyId, setWorkspaceCompanyId] = useState<string | null>(null);
   const [workspaceCompanyState, setWorkspaceCompanyState] = useState<"loading" | "ready" | "error">("ready");
   const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<SupplyInventoryItem[]>([]);
@@ -898,12 +898,16 @@ function CaseCommandCenter({
     try {
       if (project) window.localStorage.setItem(projectStorageKey, `${project.kind}:${project.key}`);
       else window.localStorage.removeItem(projectStorageKey);
+    } catch {
+      // Local storage is optional.
+    }
+    try {
       const params = new URLSearchParams(window.location.search);
       if (project) params.set("project", `${project.kind}:${project.key}`);
       else params.delete("project");
       window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
     } catch {
-      // Local storage is optional.
+      // URL state is optional.
     }
   }, [projectStorageKey]);
   useEffect(() => {
