@@ -12,6 +12,7 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
     const list = await exportResearchRecords(session.officeId, slug.slice(0, 80), {
       query: params.get("q")?.slice(0, 120) || undefined,
       status: params.get("status")?.slice(0, 40) || undefined,
+      stage: params.get("stage")?.slice(0, 40) || undefined,
     });
     const lines = [
       list.fields.map((field) => csvCell(field.key)).join(","),

@@ -5,6 +5,8 @@ import { prisma as defaultPrisma } from "@/lib/prisma";
 import { safeHttpUrl } from "@/lib/leads-directory";
 import { normalizeDedupeValue } from "@/lib/research-dedupe";
 export { normalizeDedupeValue } from "@/lib/research-dedupe";
+export { RESEARCH_STAGES, researchRecordStageWhere, type ResearchRecordStage } from "@/lib/research-record-stages";
+import { researchRecordStageWhere } from "@/lib/research-record-stages";
 
 export const RESEARCH_PAGE_SIZE = 50;
 export const RESEARCH_MAX_FIELDS = 40;
@@ -282,7 +284,7 @@ export function validateResearchRowValues(data: ResearchRecordData): void {
 export async function loadResearchList(
   officeId: string,
   slug: string,
-  filters: { query?: string; status?: string; page?: number } = {},
+  filters: { query?: string; status?: string; stage?: string; page?: number } = {},
   options: { client?: PrismaClient } = {},
 ) {
   const client = options.client ?? defaultPrisma;
@@ -296,6 +298,7 @@ export async function loadResearchList(
     listId: list.id,
     ...(query ? { searchText: { contains: query } } : {}),
     ...(status && status !== "all" ? { status } : {}),
+    ...researchRecordStageWhere(filters.stage),
   };
   const [total, records] = await client.$transaction([
     client.researchRecord.count({ where }),
@@ -715,7 +718,7 @@ export function parseDelimitedRecords(text: string, fields: ResearchField[]) {
 export async function exportResearchRecords(
   officeId: string,
   slug: string,
-  filters: { query?: string; status?: string } = {},
+  filters: { query?: string; status?: string; stage?: string } = {},
 ) {
   const list = await loadList(officeId, slug);
   const result = await loadAllMatchingRecords(officeId, list.id, filters);
@@ -723,7 +726,7 @@ export async function exportResearchRecords(
   return { ...list, rows: records, truncated: result.total > RESEARCH_MAX_EXPORT_ROWS };
 }
 
-async function loadAllMatchingRecords(officeId: string, listId: string, filters: { query?: string; status?: string }) {
+export async function loadAllMatchingRecords(officeId: string, listId: string, filters: { query?: string; status?: string; stage?: string }) {
   const query = filters.query?.trim().toLowerCase();
   const status = filters.status?.trim();
   if (status && status !== "all") validateResearchStatus(status);
@@ -732,6 +735,7 @@ async function loadAllMatchingRecords(officeId: string, listId: string, filters:
     listId,
     ...(query ? { searchText: { contains: query } } : {}),
     ...(status && status !== "all" ? { status } : {}),
+    ...researchRecordStageWhere(filters.stage),
   };
   const [total, records] = await defaultPrisma.$transaction([
     defaultPrisma.researchRecord.count({ where }),

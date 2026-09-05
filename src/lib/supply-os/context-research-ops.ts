@@ -7,6 +7,7 @@ import { defaultFetcher, harvestSite } from "@/lib/leadgen/harvest";
 import type { ContextProspectingAction } from "@/lib/supply-os/context-prospecting";
 import type { CompanyContextAccess } from "@/lib/customer-context-access";
 import { PROSPECTING_MIN_FIT_SCORE } from "@/lib/supply-os/context-prospecting-constants";
+import { isUnscreenedVerdict } from "@/lib/research-record-stages";
 
 import type { ResearchRecordData } from "@/lib/research-lists";
 const serverModules = async () => ({
@@ -56,7 +57,7 @@ type ResearchRow = {
   status: string;
   createdAt: Date;
 };
-type ResearchListChoice = { id: string; slug: string; name: string; recordCount: number };
+export type ResearchListChoice = { id: string; slug: string; name: string; recordCount: number };
 
 const OPERATION_KINDS = new Set<ResearchOperationKind>(["status", "audit", "pause", "resume", "purge", "expand_regions", "requalify", "enrich"]);
 export const RESEARCH_OPERATION_STALE_MS = 10 * 60_000;
@@ -86,9 +87,12 @@ export async function projectLists(officeId: string, projectId: string): Promise
   return lists.map((list) => ({ id: list.id, slug: list.slug, name: list.name, recordCount: list._count.records }));
 }
 
+export function selectProjectList(lists: ResearchListChoice[]) {
+  return [...lists].sort((a, b) => b.recordCount - a.recordCount || a.id.localeCompare(b.id))[0] ?? null;
+}
+
 async function chooseProjectList(officeId: string, projectId: string) {
-  const lists = await projectLists(officeId, projectId);
-  return lists.sort((a, b) => b.recordCount - a.recordCount || a.id.localeCompare(b.id))[0] ?? null;
+  return selectProjectList(await projectLists(officeId, projectId));
 }
 
 export async function projectJobs(context: CompanyContextAccess, workspaceId: string, listSlug: string) {
@@ -251,7 +255,7 @@ export function renderResearchAudit(projectName: string, audit: ResearchAudit, p
     `Screening: ${audit.verdict.target + audit.verdict.notTarget + audit.verdict.unverified} screened, ${audit.verdict.unscreened} unscreened. Rule non-companies: ${audit.ruleNonCompanies.length}${audit.ruleNonCompanies.length ? ` (${listParts([...new Map(audit.ruleNonCompanies.map((row) => [row.entityType, (audit.ruleNonCompanies.filter((item) => item.entityType === row.entityType).length)]))])})` : ""}.`,
     `Duplicates: ${duplicateDrops} extra rows across ${audit.duplicates.length} domains.`,
     `Name artifacts: ${audit.nameArtifacts}.`,
-    `Purge would remove ${purgeCount} rows; requalify would screen ${audit.verdict.unscreened} rows.`,
+    `Purge would remove ${purgeCount} rows; requalify would screen ${audit.verdict.unscreened + audit.verdict.unverified} rows.`,
   ];
 }
 
@@ -283,14 +287,13 @@ export function intersectApprovedPurge(
   };
 }
 
-export function remainingRequalificationRows(rows: ResearchRow[], force: boolean, processed: number) {
-  const eligible = force ? rows.length : rows.filter((row) => !row.data.fit_verdict).length;
-  return Math.max(0, eligible - processed);
+export function remainingRequalificationRows(rows: ResearchRow[], force: boolean, resolved: number) {
+  const eligible = force ? rows.length : rows.filter((row) => isUnscreenedVerdict(row.data.fit_verdict)).length;
+  return Math.max(0, eligible - resolved);
 }
 
 export function orderRequalificationRows(rows: ResearchRow[], force: boolean) {
-  const eligible = force ? [...rows] : rows.filter((row) => !row.data.fit_verdict);
-  if (!force) return eligible;
+  const eligible = force ? [...rows] : rows.filter((row) => isUnscreenedVerdict(row.data.fit_verdict));
   return eligible.sort((a, b) => {
     const aTimestamp = typeof a.data.fit_screened_at === "string" ? Date.parse(a.data.fit_screened_at) : Number.NaN;
     const bTimestamp = typeof b.data.fit_screened_at === "string" ? Date.parse(b.data.fit_screened_at) : Number.NaN;
@@ -341,7 +344,7 @@ async function workspaceFor(context: CompanyContextAccess, workspaceId: string, 
   return { ...workspace, companyId: workspace.companyId };
 }
 
-function operationFromRow(row: { id: string; payload: unknown; createdAt: Date }): ContextResearchOperation | null {
+export function operationFromRow(row: { id: string; payload: unknown; createdAt: Date }): ContextResearchOperation | null {
   if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) return null;
   const value = row.payload as Record<string, unknown>;
   if (value.type !== "research_operation") return null;
@@ -350,7 +353,13 @@ function operationFromRow(row: { id: string; payload: unknown; createdAt: Date }
   const stale = value.status === "RUNNING"
     && runningStartedAt !== null
     && Date.now() - new Date(runningStartedAt).valueOf() >= RESEARCH_OPERATION_STALE_MS;
-  return { id: row.id, createdAt: row.createdAt, ...(value as unknown as StoredResearchOperation), stale };
+  return { ...(value as unknown as StoredResearchOperation), id: row.id, createdAt: row.createdAt, stale };
+}
+
+function storedOperation(operation: ContextResearchOperation): StoredResearchOperation {
+  return Object.fromEntries(
+    Object.entries(operation).filter(([key]) => key !== "id" && key !== "createdAt" && key !== "stale"),
+  ) as unknown as StoredResearchOperation;
 }
 
 export async function listCompanyContextResearchOperations(context: CompanyContextAccess, workspaceId: string) {
@@ -369,10 +378,21 @@ export async function listCompanyContextResearchOperations(context: CompanyConte
   });
 }
 
-async function projectContext(args: { context: CompanyContextAccess; workspaceId: string; projectId: string; companyId: string }) {
-  const list = await chooseProjectList(args.context.officeId, args.projectId);
-  if (!list) throw new Error("The project has no research list.");
-  return projectContextForList(args, list.id, list.slug);
+async function projectContext(args: { context: CompanyContextAccess; workspaceId: string; projectId: string; companyId: string; listSlug?: string }) {
+  const selectedList = args.listSlug
+    ? await prisma.researchList.findFirst({
+        where: { officeId: args.context.officeId, projectId: args.projectId, slug: args.listSlug },
+        select: { id: true, slug: true, name: true, _count: { select: { records: true } } },
+      })
+    : await chooseProjectList(args.context.officeId, args.projectId);
+  if (!selectedList) {
+    if (args.listSlug) {
+      const { persistence } = await serverModules();
+      throw new persistence.SupplyPersistenceError("The research list is not available for this project.", "not_found");
+    }
+    throw new Error("The project has no research list.");
+  }
+  return projectContextForList(args, selectedList.id, selectedList.slug);
 }
 
 async function projectContextForList(
@@ -413,6 +433,7 @@ export async function createCompanyContextResearchOperations(args: {
   requestBody: string;
   requestCreatedAt: Date;
   threadId?: string | null;
+  listSlug?: string;
 }) {
   if (!args.items.length) return [];
   const { access } = await serverModules();
@@ -424,6 +445,7 @@ export async function createCompanyContextResearchOperations(args: {
       workspaceId: args.workspaceId,
       projectId: item.projectId,
       companyId: workspace.companyId,
+      listSlug: args.listSlug,
     });
     const kind = item.request.kind;
     const forceRequalification = /\b(all|again|re-?screen everything)\b/i.test(item.request.note);
@@ -449,7 +471,7 @@ export async function createCompanyContextResearchOperations(args: {
           : kind === "resume"
             ? ["Continues paused, failed, or finished research jobs."]
             : kind === "requalify"
-              ? [`Screens ${current.rows.filter((row) => forceRequalification || !row.data.fit_verdict).length} rows without deleting them.`]
+              ? [`Screens ${orderRequalificationRows(current.rows, forceRequalification).length} rows without deleting them.`]
               : [`Checks up to 25 sites for missing email and phone without paid enrichment.`];
     storedItems.push({
       schemaVersion: 1,
@@ -623,7 +645,7 @@ async function executeResearchOperation(args: { operation: ContextResearchOperat
       if (result.isTarget) target += 1; else counts.set(result.entityType, (counts.get(result.entityType) ?? 0) + 1);
       if (result.source === "fallback") fallback += 1;
     }
-    const remaining = remainingRequalificationRows(rows, Boolean(args.operation.force), inputs.length);
+    const remaining = remainingRequalificationRows(rows, Boolean(args.operation.force), args.operation.force ? inputs.length : inputs.length - fallback);
     return [
       `Screened ${inputs.length} of ${rows.length}: ${target} targets, ${inputs.length - target - fallback} not targets${counts.size ? ` (${[...counts.entries()].map(([key, value]) => `${key} ${value}`).join(", ")})` : ""}, ${fallback} unverified.`,
       `${remaining} left; ask to requalify again to continue.`,
@@ -680,18 +702,18 @@ export async function runCompanyContextResearchOperation(args: { context: Compan
       ...(staleRunning && initial.runningStartedAt ? { payload: { path: ["runningStartedAt"], equals: initial.runningStartedAt } } : {}),
       ...access.companyContextVisibilityWhere(args.context),
     },
-    data: { payload: running, processingState: running.status },
+    data: { payload: storedOperation(running), processingState: running.status },
   });
   if (claimed.count !== 1) throw new Error("This research operation is already running. Retry shortly.");
   try {
     const result = await executeResearchOperation({ operation: running, context: args.context, workspaceId: args.workspaceId });
     const completed = { ...running, status: "COMPLETED" as const, runningStartedAt: null, result };
-    const updated = await prisma.companyContext.updateMany({ where: { id: initial.id, officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", processingState: "RUNNING", payload: { path: ["runningStartedAt"], equals: running.runningStartedAt }, ...access.companyContextVisibilityWhere(args.context) }, data: { payload: completed, processingState: completed.status } });
+    const updated = await prisma.companyContext.updateMany({ where: { id: initial.id, officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", processingState: "RUNNING", payload: { path: ["runningStartedAt"], equals: running.runningStartedAt }, ...access.companyContextVisibilityWhere(args.context) }, data: { payload: storedOperation(completed), processingState: completed.status } });
     if (updated.count !== 1) throw new Error("The research operation changed before completion.");
     return completed;
   } catch (error) {
     const failed = { ...running, status: "FAILED" as const, runningStartedAt: null, lastError: error instanceof Error ? error.message.replace(/\u2014/g, "-").slice(0, 500) : "Research operation failed." };
-    await prisma.companyContext.updateMany({ where: { id: initial.id, officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", processingState: "RUNNING", payload: { path: ["runningStartedAt"], equals: running.runningStartedAt }, ...access.companyContextVisibilityWhere(args.context) }, data: { payload: failed, processingState: failed.status } });
+    await prisma.companyContext.updateMany({ where: { id: initial.id, officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", processingState: "RUNNING", payload: { path: ["runningStartedAt"], equals: running.runningStartedAt }, ...access.companyContextVisibilityWhere(args.context) }, data: { payload: storedOperation(failed), processingState: failed.status } });
     return failed;
   }
 }
@@ -705,7 +727,7 @@ export async function dismissCompanyContextResearchOperation(args: { context: Co
   if (operation.status === "DISMISSED") return operation;
   if (operation.status !== "PENDING" && operation.status !== "FAILED" && !(operation.status === "RUNNING" && operation.stale)) throw new Error("Only pending, failed, or timed-out research operations can be dismissed.");
   const dismissed = { ...operation, status: "DISMISSED" as const, runningStartedAt: null };
-  const updated = await prisma.companyContext.updateMany({ where: { id: operation.id, officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", processingState: operation.status, ...(operation.status === "RUNNING" && operation.runningStartedAt ? { payload: { path: ["runningStartedAt"], equals: operation.runningStartedAt } } : {}), ...access.companyContextVisibilityWhere(args.context) }, data: { payload: dismissed, processingState: dismissed.status } });
+  const updated = await prisma.companyContext.updateMany({ where: { id: operation.id, officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", processingState: operation.status, ...(operation.status === "RUNNING" && operation.runningStartedAt ? { payload: { path: ["runningStartedAt"], equals: operation.runningStartedAt } } : {}), ...access.companyContextVisibilityWhere(args.context) }, data: { payload: storedOperation(dismissed), processingState: dismissed.status } });
   if (updated.count !== 1) throw new Error("This research operation changed before it could be dismissed.");
   return dismissed;
 }

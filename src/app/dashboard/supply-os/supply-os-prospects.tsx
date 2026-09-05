@@ -7,9 +7,11 @@ import type {
   ResearchRecordRow,
   ResearchStatus,
 } from "@/lib/research-lists";
+import { RESEARCH_STAGES, type ResearchRecordStage } from "@/lib/research-record-stages";
 import type { ResearchProjectSummary } from "@/lib/research-projects";
 import { ResearchStatusControl } from "../research/research-status-control";
 import styles from "./supply-os-logistics.module.css";
+import { AppSelect } from "@/components/app-select";
 
 import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
 export { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
@@ -42,14 +44,28 @@ export function SupplyOsProspects({
   initialListSlug,
   initialQuery = "",
   initialStatus = "all",
+  initialStage,
   initialPage = 1,
+  workspaceId,
+  onLeadStatusOpen,
+  onListChange,
+  externalStage,
+  externalQuery,
+  externalFilterNonce = 0,
 }: {
   storageScope: string;
   lockedProjectId?: string;
   initialListSlug?: string;
   initialQuery?: string;
   initialStatus?: ResearchStatus | "all";
+  initialStage?: ResearchRecordStage;
   initialPage?: number;
+  workspaceId?: string;
+  onLeadStatusOpen?: () => void;
+  onListChange?: (slug: string | null) => void;
+  externalStage?: ResearchRecordStage | "all";
+  externalQuery?: string;
+  externalFilterNonce?: number;
 }) {
   const listStorageKey = `derya:supply-os:prospects-list:${storageScope}`;
   const projectStorageKey = `derya:supply-os:prospects-project:${storageScope}`;
@@ -58,11 +74,20 @@ export function SupplyOsProspects({
   const [listsLoaded, setListsLoaded] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const selectedProjectRef = useRef("");
+  const recordsRequestIdRef = useRef(0);
   const [selectedSlug, setSelectedSlug] = useState(initialListSlug ?? "");
   const [records, setRecords] = useState<ResearchRecordsResponse | null>(null);
   const [query, setQuery] = useState(initialQuery);
   const [appliedQuery, setAppliedQuery] = useState(initialQuery);
   const [status, setStatus] = useState<ResearchStatus | "all">(initialStatus);
+  const [stage, setStage] = useState<ResearchRecordStage | "all">(() => {
+    if (initialStage) return initialStage;
+    if (typeof window === "undefined") return "all";
+    const value = new URLSearchParams(window.location.search).get("researchStage");
+    return RESEARCH_STAGES.includes(value as ResearchRecordStage)
+      ? value as ResearchRecordStage
+      : "all";
+  });
   const [page, setPage] = useState(initialPage);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -157,24 +182,36 @@ export function SupplyOsProspects({
     });
   }, [initialListSlug, listStorageKey, lockedProjectId, projectStorageKey]);
 
-  const loadRecords = useCallback(async (slug: string, nextPage: number, nextQuery: string, nextStatus: ResearchStatus | "all") => {
+  const loadRecords = useCallback(async (slug: string, nextPage: number, nextQuery: string, nextStatus: ResearchStatus | "all", nextStage: ResearchRecordStage | "all") => {
+    const requestId = recordsRequestIdRef.current + 1;
+    recordsRequestIdRef.current = requestId;
     if (!slug) {
-      setRecords(null);
-      setState("ready");
+      if (requestId === recordsRequestIdRef.current) {
+        setRecords(null);
+        setState("ready");
+      }
       return;
     }
-    setState("loading");
-    const params = new URLSearchParams({ page: String(nextPage) });
-    if (nextQuery.trim()) params.set("q", nextQuery.trim());
-    if (nextStatus !== "all") params.set("status", nextStatus);
-    const response = await fetch(`/api/research/${encodeURIComponent(slug)}/records?${params}`, {
-      cache: "no-store",
-      headers: { accept: "application/json" },
-    });
-    const body = await response.json().catch(() => ({})) as ResearchRecordsResponse & { error?: string };
-    if (!response.ok) throw new Error(body.error || "Prospects are unavailable.");
-    setRecords(body);
-    setState("ready");
+    if (requestId === recordsRequestIdRef.current) setState("loading");
+    try {
+      const params = new URLSearchParams({ page: String(nextPage) });
+      if (nextQuery.trim()) params.set("q", nextQuery.trim());
+      if (nextStatus !== "all") params.set("status", nextStatus);
+      if (nextStage !== "all") params.set("stage", nextStage);
+      const response = await fetch(`/api/research/${encodeURIComponent(slug)}/records?${params}`, {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      const body = await response.json().catch(() => ({})) as ResearchRecordsResponse & { error?: string };
+      if (!response.ok) throw new Error(body.error || "Prospects are unavailable.");
+      if (requestId !== recordsRequestIdRef.current) return;
+      setRecords(body);
+      setState("ready");
+    } catch (loadError) {
+      if (requestId !== recordsRequestIdRef.current) return;
+      setError(loadError instanceof Error ? loadError.message : "Prospects are unavailable.");
+      setState("error");
+    }
   }, []);
 
   useEffect(() => {
@@ -202,8 +239,8 @@ export function SupplyOsProspects({
 
   const refreshData = useCallback(async () => {
     await loadLists();
-    await loadRecords(selectedSlug, page, appliedQuery, status);
-  }, [appliedQuery, loadLists, loadRecords, page, selectedSlug, status]);
+    await loadRecords(selectedSlug, page, appliedQuery, status, stage);
+  }, [appliedQuery, loadLists, loadRecords, page, selectedSlug, stage, status]);
 
   useEffect(() => {
     if (!selectedSlug && !listsLoaded) return;
@@ -219,17 +256,50 @@ export function SupplyOsProspects({
     params.set("materialsView", "projects");
     if (selectedSlug) params.set("researchList", selectedSlug);
     else params.delete("researchList");
+    if (stage !== "all") params.set("researchStage", stage);
+    else params.delete("researchStage");
     window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
     if (!selectedSlug) {
       setRecords(null);
       setState("ready");
       return;
     }
-    void loadRecords(selectedSlug, page, appliedQuery, status).catch((loadError) => {
+    void loadRecords(selectedSlug, page, appliedQuery, status, stage).catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : "Prospects are unavailable.");
       setState("error");
     });
-  }, [appliedQuery, listStorageKey, listsLoaded, loadRecords, page, projectStorageKey, selectedProjectId, selectedSlug, status]);
+  }, [appliedQuery, listStorageKey, listsLoaded, loadRecords, page, projectStorageKey, selectedProjectId, selectedSlug, stage, status]);
+
+  const autoOpenedSlugRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedSlug || !records || records.total !== 0 || appliedQuery || status !== "all" || stage !== "all" || !onLeadStatusOpen) return;
+    if (autoOpenedSlugRef.current === selectedSlug) return;
+    const params = new URLSearchParams({ projectId: selectedProjectId || OTHER_PROJECT });
+    if (workspaceId) params.set("workspaceId", workspaceId);
+    let cancelled = false;
+    void fetch(`/api/research/pipeline?${params}`, { cache: "no-store", headers: { accept: "application/json" } })
+      .then((response) => response.ok ? response.json() : null)
+      .then((body: { live?: { activeJobs?: number } } | null) => {
+        if (!cancelled && body?.live?.activeJobs && body.live.activeJobs > 0) {
+          autoOpenedSlugRef.current = selectedSlug;
+          onLeadStatusOpen();
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [appliedQuery, onLeadStatusOpen, records, selectedProjectId, selectedSlug, stage, status, workspaceId]);
+  useEffect(() => {
+    if (!externalFilterNonce) return;
+    const nextStage = externalStage ?? "all";
+    const nextQuery = externalQuery ?? "";
+    setStage(nextStage);
+    setQuery(nextQuery);
+    setAppliedQuery(nextQuery);
+    setPage(1);
+  }, [externalFilterNonce, externalQuery, externalStage]);
+  useEffect(() => {
+    onListChange?.(selectedSlug || null);
+  }, [onListChange, selectedSlug]);
 
   const selectedList = useMemo(
     () => records ?? lists.find((list) => list.slug === selectedSlug) ?? null,
@@ -252,6 +322,8 @@ export function SupplyOsProspects({
     setQuery("");
     setAppliedQuery("");
     setStatus("all");
+    setStage("all");
+    setStage("all");
   }
 
   function selectProject(value: string) {
@@ -301,6 +373,7 @@ export function SupplyOsProspects({
       setQuery("");
       setAppliedQuery("");
       setStatus("all");
+      setStage("all");
       setNewListName("");
       setNewListSlug("");
       setNewListDescription("");
@@ -420,20 +493,29 @@ export function SupplyOsProspects({
         <div className={styles.prospectsControls}>
           {!lockedProjectId ? <label>
             <span>Project</span>
-            <select value={selectedProjectId} onChange={(event) => selectProject(event.target.value)}>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name} ({project.listCount})</option>)}
-              {lists.some((list) => list.projectId === null)
-                ? <option value={OTHER_PROJECT}>Other lists</option>
-                : null}
-            </select>
+            <AppSelect
+              value={selectedProjectId}
+              ariaLabel="Project"
+              options={[
+                ...projects.map((project) => ({ value: project.id, label: project.name, hint: `${project.listCount} lists` })),
+                ...(lists.some((list) => list.projectId === null)
+                  ? [{ value: OTHER_PROJECT, label: "Other lists" }]
+                  : []),
+              ]}
+              onChange={selectProject}
+            />
           </label> : null}
           <label>
             <span>List</span>
-            <select value={selectedSlug} onChange={(event) => selectList(event.target.value)} disabled={!selectedProjectId}>
-              {lists
+            <AppSelect
+              value={selectedSlug}
+              ariaLabel="List"
+              options={lists
                 .filter((list) => (list.projectId ?? OTHER_PROJECT) === selectedProjectId)
-                .map((list) => <option key={list.id} value={list.slug}>{list.name} ({list.recordCount})</option>)}
-            </select>
+                .map((list) => ({ value: list.slug, label: list.name, hint: `${list.recordCount} records` }))}
+              onChange={selectList}
+              className={!selectedProjectId ? styles.disabledSelect : undefined}
+            />
           </label>
           <form onSubmit={applyFilters}>
             <label>
@@ -442,9 +524,12 @@ export function SupplyOsProspects({
             </label>
             <label>
               <span>Status</span>
-              <select value={status} onChange={(event) => { setStatus(event.target.value as ResearchStatus | "all"); setPage(1); }}>
-                {statuses.map((value) => <option key={value} value={value}>{value[0]!.toUpperCase() + value.slice(1)}</option>)}
-              </select>
+              <AppSelect
+                value={status}
+                ariaLabel="Status"
+                options={statuses.map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }))}
+                onChange={(nextStatus) => { setStatus(nextStatus); setPage(1); }}
+              />
             </label>
             <button type="submit">Apply</button>
           </form>
@@ -454,6 +539,7 @@ export function SupplyOsProspects({
               href={`/api/research/${encodeURIComponent(selectedList.slug)}/export?${new URLSearchParams({
                 ...(appliedQuery ? { q: appliedQuery } : {}),
                 ...(status !== "all" ? { status } : {}),
+                ...(stage !== "all" ? { stage } : {}),
               })}`}
             >
               Export CSV
@@ -467,6 +553,12 @@ export function SupplyOsProspects({
       {state === "ready" && lists.length > 0 && !selectedSlug ? <p className={styles.prospectsState}>No lists in this project yet.</p> : null}
       {state === "ready" && selectedSlug && selectedList && records ? (
         <>
+          {stage !== "all" ? (
+            <div className={styles.prospectsFilterPill}>
+              <span>{stage === "not_target" ? "Not a target" : stage === "has_email" ? "Has email" : stage === "no_email" ? "No email" : stage[0]!.toUpperCase() + stage.slice(1)} {records.total}</span>
+              <button type="button" aria-label="Remove stage filter" onClick={() => { setStage("all"); setPage(1); }}>×</button>
+            </div>
+          ) : null}
           <div className={styles.prospectsTableRegion}>
             <table className={styles.prospectsTable}>
               <thead>

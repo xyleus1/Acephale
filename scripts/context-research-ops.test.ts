@@ -3,12 +3,14 @@ import {
   auditResearchRows,
   intersectApprovedPurge,
   normalizeResearchOperation,
+  operationFromRow,
   orderRequalificationRows,
   remainingRequalificationRows,
   rowsCreatedAfterPurge,
   renderResearchAudit,
   renderResearchStatus,
   rowEvidenceUrls,
+  selectProjectList,
   selectPurgeRows,
 } from "@/lib/supply-os/context-research-ops";
 
@@ -32,6 +34,39 @@ assert.equal(normalized.projectName, "Scrap suppliers");
 assert.equal(normalized.regions.length, 20);
 assert.equal(normalized.regions[0]?.length, 100);
 assert.equal(normalized.note.length, 300);
+const operationCreatedAt = new Date("2025-01-01T00:00:00.000Z");
+const operation = operationFromRow({
+  id: "a",
+  createdAt: operationCreatedAt,
+  payload: {
+    schemaVersion: 1,
+    type: "research_operation",
+    status: "FAILED",
+    kind: "requalify",
+    projectId: "project",
+    projectName: "Project",
+    listId: "list",
+    listSlug: "list",
+    regions: [],
+    note: "",
+    preview: [],
+    result: [],
+    requestMessageId: "message",
+    requestBody: "",
+    requestCreatedAt: operationCreatedAt.toISOString(),
+    threadId: null,
+    runningStartedAt: null,
+    lastError: "failed",
+    workspaceId: "workspace",
+    id: "zzz",
+    createdAt: "2024-01-01T00:00:00.000Z",
+    stale: true,
+  },
+});
+assert.equal(operation?.id, "a");
+assert.ok(operation?.createdAt instanceof Date);
+assert.equal(operation?.createdAt.valueOf(), operationCreatedAt.valueOf());
+assert.equal(operation?.stale, false);
 
 const rows = [
   row("1", { company_name: "TradeIndia", website: "https://tradeindia.com", country: "India", fit_score: 85, fit_verdict: "not_target", evidence_urls: ["https://tradeindia.com/about"] }),
@@ -75,16 +110,19 @@ const changedReasonPurge = intersectApprovedPurge(
 assert.deepEqual(changedReasonPurge.rows, []);
 assert.equal(changedReasonPurge.skipped, 1);
 assert.match(renderResearchAudit("Scrap suppliers", audit, selectedPurgeRows.length).join("\n"), new RegExp(`Purge would remove ${selectedPurgeRows.length} rows`));
-assert.equal(remainingRequalificationRows(rows, false, 2), rows.filter((entry) => !entry.data.fit_verdict).length - 2);
+assert.equal(remainingRequalificationRows(rows, false, 2), 5);
 assert.equal(remainingRequalificationRows(rows, true, 2), rows.length - 2);
 const requalificationRows = [
   row("30", { fit_verdict: "target", fit_screened_at: "2025-01-03T00:00:00.000Z" }),
   row("31", { fit_verdict: "target", fit_screened_at: "2025-01-02T00:00:00.000Z" }),
   row("32", { fit_verdict: "target" }),
-  row("33", {}),
+  row("33", {}, new Date("2025-01-04T00:00:00.000Z")),
+  row("34", { fit_verdict: "unverified", fit_screened_at: "2025-01-01T00:00:00.000Z" }, new Date("2025-01-01T00:00:00.000Z")),
+  row("35", { fit_verdict: "not_target" }, new Date("2025-01-06T00:00:00.000Z")),
 ];
-assert.deepEqual(orderRequalificationRows(requalificationRows, true).map((entry) => entry.id), ["32", "33", "31", "30"]);
-assert.deepEqual(orderRequalificationRows(requalificationRows, false).map((entry) => entry.id), ["33"]);
+assert.deepEqual(orderRequalificationRows(requalificationRows, true).map((entry) => entry.id), ["32", "33", "35", "34", "31", "30"]);
+assert.deepEqual(orderRequalificationRows(requalificationRows, false).map((entry) => entry.id), ["33", "34"]);
+assert.equal(remainingRequalificationRows(requalificationRows, false, 1), 1);
 assert.equal(rowsCreatedAfterPurge(100, 12), 12);
 assert.equal(rowsCreatedAfterPurge(8, 12), 8);
 
@@ -94,6 +132,20 @@ const purge = selectPurgeRows([
 ]);
 assert.equal(purge.find((item) => item.id === "21")?.reason, "non_company");
 assert.equal(selectPurgeRows(rows).length, selectedPurgeRows.length);
+assert.equal(
+  selectProjectList([
+    { id: "larger", slug: "larger", name: "Larger", recordCount: 3 },
+    { id: "smaller", slug: "smaller", name: "Smaller", recordCount: 1 },
+  ])?.slug,
+  "larger",
+);
+assert.equal(
+  selectProjectList([
+    { id: "z", slug: "z", name: "Z", recordCount: 2 },
+    { id: "a", slug: "a", name: "A", recordCount: 2 },
+  ])?.slug,
+  "a",
+);
 
 const job = {
   id: "job",

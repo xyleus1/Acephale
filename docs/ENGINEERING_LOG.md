@@ -3,6 +3,22 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-06: Lead status pipeline region
+
+- Lead status now reports deterministic row stages, outreach replies, cleanup
+  counts, resumable research jobs, and approval-gated Context operations.
+- Prospects supports URL-preserved stage filters for screening and contact
+  readiness. Inline operation creation stores the operator message before the
+  pending operation, so the same approval card appears in Context.
+- The panel uses a quiet segmented stage bar, compact flow chart, source
+  summary, and reply rows instead of boxed dashboard tiles.
+- Enriched is now a first-class record stage, requiring target plus an email
+  containing `@`. AnyNull branches keep missing and null JSON paths in
+  Unscreened and No email filters, matching the report's row derivation.
+- Unverified fallback verdicts are included in normal requalification, and
+  Enriched uses the same marker-based email predicate as the pipeline.
+- Stored research operation payloads now exclude read-only row metadata, and AppSelect highlights keyboard choices before commit.
+
 ## 2026-09-06: Delivered-but-unrecorded sends settle as UNKNOWN per row; approvals list scrolls
 
 - Trigger: in the pruning-gate runtime test the mock provider returned one
@@ -10194,6 +10210,15 @@ Use this file for chronological implementation notes that future agents should s
   project. Its null-project filtering is preserved for legacy links, status,
   and project-scoped office mail.
 - Active project status facts now render inside the company headline header slot.
+
+## 2026-09-06: Lead status command center
+
+- Added an office-scoped research pipeline report and API, with deterministic funnel, source, Sankey, outreach, and prospecting-job facts.
+- Added the Projects tab Lead status panel and shared AppSelect control, with local verification coverage in `scripts/research-pipeline.test.ts`.
+- Scoped the report to the active ResearchList so project panel counts cannot
+  disagree with the list table when a project owns multiple custom tables.
+- Kept operation Run and Dismiss controls visible, compacted live-state copy,
+  normalized stage label treatment, and improved Sankey label contrast.
 
 ## 2026-09-04: Entity-qualified Context prospecting
 

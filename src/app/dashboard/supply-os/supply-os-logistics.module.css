@@ -6675,6 +6675,351 @@
   font: inherit;
 }
 
+.leadStatusButton,
+.leadStatusRowAction {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 10px 4px;
+}
+
+.leadStatusButton:hover,
+.leadStatusRowAction:hover {
+  border-color: var(--line-strong);
+}
+
+.leadStatusPanel {
+  display: grid;
+  gap: 32px;
+  margin: 0;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+
+.leadStatusHeader,
+.leadStatusActions,
+.leadStatusTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.leadStatusHeader h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.leadStatusTitle span,
+.leadStageLabels b,
+.leadStatusLive b,
+.leadReplies time {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.leadStatusActions button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.leadStatusLiveBlock {
+  display: grid;
+  gap: 4px;
+  line-height: 1.5;
+}
+
+.leadStatusLive,
+.leadStatusEmpty {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+
+.leadStageBar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.leadStageSegment {
+  min-width: 2px;
+  flex: 0 0 auto;
+  transition: opacity 150ms ease;
+}
+
+.leadStageLabels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.leadStageLabels > * {
+  min-height: 32px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink-secondary);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.leadStageLabels button {
+  cursor: pointer;
+}
+
+.leadStageLabels b {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.leadStageLabels button:hover,
+.leadStageLabels button:focus-visible {
+  text-decoration: underline;
+}
+
+.leadStageLabels button[data-selected="true"] {
+  background: var(--surface-selected);
+}
+
+.leadStageShimmer .leadStageSegment {
+  animation: leadStatusPulse 1.4s ease-in-out infinite alternate;
+}
+
+.leadSankey {
+  height: 220px;
+  max-height: 220px;
+}
+
+.leadSourceSummary {
+  margin: -22px 0 0;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+.leadActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.leadActionRow button,
+.leadOperation button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.leadOperations {
+  display: grid;
+  gap: 8px;
+}
+
+.leadOperation {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.leadOperation summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.leadOperation summary > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.leadOperation summary small,
+.leadOperation li,
+.leadOperation p {
+  overflow: hidden;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leadOperation summary i {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-style: normal;
+  text-transform: lowercase;
+}
+
+.leadOperation > p {
+  margin: 10px 0 4px;
+}
+
+.leadOperation ul {
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+
+.leadOperationMain {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.leadOperationMain > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.leadOperationMain > div:first-child > b,
+.leadOperationMain > div:first-child > small {
+  display: block;
+}
+
+.leadOperationActions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
+
+.leadOperation details {
+  margin-top: 8px;
+}
+
+.leadOperation details summary {
+  display: inline;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.leadOperation details ul {
+  margin-top: 6px;
+}
+
+.leadOperation button:last-child {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+.leadReplies {
+  display: grid;
+  gap: 4px;
+}
+
+.leadReplies h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.leadReplies > button {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.leadReplies > button > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.leadReplies small {
+  overflow: hidden;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leadReplies em {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--success);
+  background: var(--success-soft);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.prospectsFilterPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--ink-secondary);
+  background: var(--surface-selected);
+  font-size: 11px;
+}
+
+.prospectsFilterPill button {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.disabledSelect {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+@keyframes leadStatusPulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
 .projectsWorkspace {
   min-height: 100%;
 }

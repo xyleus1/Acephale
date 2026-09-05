@@ -13,6 +13,7 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
     const list = await loadResearchList(session.officeId, slug.slice(0, 80), {
       query: params.get("q")?.slice(0, 120) || undefined,
       status: params.get("status")?.slice(0, 40) || undefined,
+      stage: params.get("stage")?.slice(0, 40) || undefined,
       page: Number.parseInt(params.get("page") || "1", 10) || 1,
     });
     return NextResponse.json(list, { headers: { "cache-control": "no-store" } });

@@ -47,7 +47,9 @@ import { SupplyOsOutreachApprovals } from "./supply-os-outreach-approvals";
 import { SupplyOsMail } from "./supply-os-mail";
 import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 import { ProjectStatusStrip } from "./project-status-strip";
+import { LeadStatusPanel } from "./lead-status-panel";
 import type { ResearchProjectSummary } from "@/lib/research-projects";
+import type { ResearchRecordStage } from "@/lib/research-record-stages";
 import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
 
 export type PendingSourcingQueueItem = {
@@ -228,6 +230,11 @@ export function SupplyInventoryWorkspace({
   const [newProjectDescription, setNewProjectDescription] = useState("");
   const [newProjectError, setNewProjectError] = useState("");
   const [newProjectBusy, setNewProjectBusy] = useState(false);
+  const [leadStatusProjectId, setLeadStatusProjectId] = useState<string | null>(null);
+  const [leadStatusListSlug, setLeadStatusListSlug] = useState<string | null>(null);
+  const [leadStatusStage, setLeadStatusStage] = useState<ResearchRecordStage | "all">("all");
+  const [leadStatusQuery, setLeadStatusQuery] = useState("");
+  const [leadStatusFilterNonce, setLeadStatusFilterNonce] = useState(0);
   const reduceMotion = useReducedMotion();
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
@@ -445,6 +452,33 @@ export function SupplyInventoryWorkspace({
   const selectedProjectName = selectedProject
     ? projectRows.find((project) => project.kind === selectedProject.kind && project.key === selectedProject.key)?.name ?? "Project"
     : "";
+  const leadStatusOpen = selectedProject?.kind === "prospecting"
+    && leadStatusProjectId === selectedProject.key;
+  const currentProspectingProjectId = selectedProject?.kind === "prospecting"
+    ? selectedProject.key
+    : null;
+  const openLeadStatus = useCallback((projectId: string | null) => {
+    setLeadStatusProjectId(projectId);
+    setLeadStatusStage("all");
+    setLeadStatusQuery("");
+    setLeadStatusFilterNonce((nonce) => nonce + 1);
+  }, []);
+  const selectLeadStatusStage = useCallback((stage: ResearchRecordStage | null) => {
+    setLeadStatusProjectId((current) => current ?? currentProspectingProjectId);
+    setLeadStatusStage(stage ?? "all");
+    setLeadStatusQuery("");
+    setLeadStatusFilterNonce((nonce) => nonce + 1);
+  }, [currentProspectingProjectId]);
+  const selectLeadStatusQuery = useCallback((query: string) => {
+    setLeadStatusProjectId((current) => current ?? currentProspectingProjectId);
+    setLeadStatusQuery(query);
+    setLeadStatusStage("all");
+    setLeadStatusFilterNonce((nonce) => nonce + 1);
+  }, [currentProspectingProjectId]);
+  const handleProspectsLeadStatusOpen = useCallback(() => {
+    if (currentProspectingProjectId) openLeadStatus(currentProspectingProjectId);
+  }, [currentProspectingProjectId, openLeadStatus]);
+  const closeLeadStatus = () => setLeadStatusProjectId(null);
   useEffect(() => {
     if (!selectedProject || selectedProject.kind !== "sourcing") return;
     const row = document.querySelector<HTMLElement>('[data-project-active="true"]');
@@ -668,13 +702,35 @@ export function SupplyInventoryWorkspace({
           <header className={styles.projectViewHeader}>
             <button type="button" onClick={() => onProjectChange(null)}>All projects</button>
             <strong>Project: {selectedProjectName}</strong>
+            {selectedProject.kind === "prospecting" ? (
+              <button type="button" className={styles.leadStatusButton} onClick={() => openLeadStatus(selectedProject.key)}>
+                Lead status
+              </button>
+            ) : null}
           </header>
         ) : null}
         {selectedProject?.kind === "prospecting" ? (
           <>
+            {leadStatusOpen ? (
+              <LeadStatusPanel
+                projectId={selectedProject.key === OTHER_PROJECT ? null : selectedProject.key}
+                listSlug={leadStatusListSlug}
+                workspaceId={workspaceId ?? undefined}
+                open
+                onClose={closeLeadStatus}
+                onStageSelect={selectLeadStatusStage}
+                onQuerySelect={selectLeadStatusQuery}
+              />
+            ) : null}
             <SupplyOsProspects
               storageScope={storageScope}
               lockedProjectId={selectedProject.key}
+              workspaceId={workspaceId ?? undefined}
+              onLeadStatusOpen={handleProspectsLeadStatusOpen}
+              onListChange={setLeadStatusListSlug}
+              externalStage={leadStatusStage}
+              externalQuery={leadStatusQuery}
+              externalFilterNonce={leadStatusFilterNonce}
               initialListSlug={initialResearchListSlug}
               initialQuery={initialResearchQuery}
               initialStatus={initialResearchStatus}
@@ -761,6 +817,14 @@ export function SupplyInventoryWorkspace({
                           <button type="button" className={styles.sourcingQueueAction} onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
                             Open <ArrowRight size={13} />
                           </button>
+                          {project.kind === "prospecting" ? (
+                            <button type="button" className={styles.leadStatusRowAction} onClick={() => {
+                              onProjectChange({ kind: "prospecting", key: project.key });
+                              openLeadStatus(project.key);
+                            }}>
+                              Lead status
+                            </button>
+                          ) : null}
                         </td>
                       </tr>
                     ))}

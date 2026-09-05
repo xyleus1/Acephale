@@ -180,6 +180,14 @@ Known endpoints do not prove that a movement occurred. Public evidence does not 
 - Do not add descriptive subtitles beneath obvious panel headings.
 - Prefer a single divider between header, body, and action region.
 
+### Pipeline status region
+
+- Use one thin segmented bar with quiet count labels for ordered pipeline
+  stages. Keep actions and approval items below the bar in the same region.
+- Use a single divider and generous spacing rather than nested bordered cards.
+- Make stage labels and replies useful navigation targets, and keep operation
+  consequences visible before approval.
+
 ### Lists and tables
 
 - Lists use full-row hit targets and quiet selected backgrounds.

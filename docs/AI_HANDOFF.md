@@ -1,4 +1,12 @@
 Context research operations are stored as typed CompanyContext action payloads. Status and audit run inline; pause, resume, purge, region expansion, requalification, and contact enrichment require operator approval and never touch outreach.
+
+## Lead status pipeline region
+
+The Supply OS Projects view has an office-scoped Lead status report and an
+airy pipeline region. It derives stages, sources, replies, job state, and
+cleanup actions without an LLM. Stage filters are carried in
+`researchStage`, and inline research operations first append an operator
+Context message before creating an approval-gated operation.
 # AI Handoff
 
 ## 2026-09-06: A delivered send whose receipt cannot be recorded fails one row, not the batch
@@ -12776,6 +12784,28 @@ Verification caveat:
   window alongside active pool members.
 - Manual resume is conditional on the pause timestamp shown to the admin, so
   newer delivery feedback cannot be cleared by an older page.
+
+## 2026-09-06: Lead status command center
+
+- Supply OS Projects now has an office-scoped Lead status report at
+  `/api/research/pipeline`, covering research jobs, list rows, outreach sends,
+  replies, positive replies, sources, and a Sankey funnel.
+- The Projects view includes a polling Lead status panel and reusable AppSelect
+  controls for project, list, status, and active-project selectors.
+- Pure derivation coverage lives in `scripts/research-pipeline.test.ts`.
+- Lead status now scopes its report to the active custom record list so stage
+  counts and table filters describe the same rows. Exact fit verdict values are
+  shared with the database stage predicate.
+- Pipeline operation controls stay visible on each card, while extra preview
+  lines remain behind Details. Sankey labels use outlined text for readability
+  over flow links.
+- Research stage filtering also exposes Enriched, defined as an exact target
+  verdict with an email containing `@`. Unscreened and No email include both
+  missing JSON paths and explicit JSON null values through Prisma AnyNull
+  predicates, keeping database filters aligned with deterministic report
+  derivation.
+- Unverified model-fallback verdicts remain unscreened and retryable, while
+  stage email counts accept any string containing `@`.
 
 ## 2026-09-05: Ops imports extend existing list fields
 

@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useSupplyOsHeaderSlot } from "./supply-os-header-slot";
 import styles from "./supply-os-operating-shell.module.css";
+import { AppSelect } from "@/components/app-select";
 
 type ProjectStatusRow = {
   kind: "sourcing" | "prospecting";
@@ -42,10 +43,18 @@ export function ProjectStatusStrip({
   const project = selectedProject
     ? projectRows.find((row) => row.kind === selectedProject.kind && row.key === selectedProject.key)
     : activeRows[0];
+  const selectedProjectRow = selectedProject
+    ? projectRows.find((row) => row.kind === selectedProject.kind && row.key === selectedProject.key)
+    : null;
+  const availableRows = selectedProjectRow && !activeRows.some((row) => (
+    row.kind === selectedProjectRow.kind && row.key === selectedProjectRow.key
+  ))
+    ? [selectedProjectRow, ...activeRows]
+    : activeRows;
   const selectedProjectValue = selectedProject
     ? `${selectedProject.kind}:${selectedProject.key}`
     : "";
-  const selectedProjectIsActive = activeRows.some((row) => (
+  const selectedProjectIsAvailable = availableRows.some((row) => (
     `${row.kind}:${row.key}` === selectedProjectValue
   ));
   const projectKind = project?.kind;
@@ -103,24 +112,22 @@ export function ProjectStatusStrip({
   const content = (
     <section className={styles.headerProjectStatus} aria-label="Project status">
       <div className={styles.headerProjectSwitcher}>
-        {!selectedProjectIsActive ? <span className={styles.headerProjectName}>{project.name}</span> : null}
-        <select
+        {!selectedProjectIsAvailable ? <span className={styles.headerProjectName}>{project.name}</span> : null}
+        <AppSelect
           className={styles.headerProjectSelect}
-          aria-label="Active project"
-          value={selectedProjectIsActive ? selectedProjectValue : ""}
-          onChange={(event) => {
-            const [kind, ...rest] = event.target.value.split(":");
+          ariaLabel="Active project"
+          value={selectedProjectIsAvailable ? selectedProjectValue : ""}
+          options={[
+            ...(!selectedProjectIsAvailable ? [{ value: "", label: "Select active project" }] : []),
+            ...availableRows.map((row) => ({ value: `${row.kind}:${row.key}`, label: row.name })),
+          ]}
+          onChange={(nextValue) => {
+            const [kind, ...rest] = nextValue.split(":");
             const key = rest.join(":");
             if ((kind === "sourcing" || kind === "prospecting") && key) onProjectChange({ kind, key });
           }}
-        >
-          {!selectedProjectIsActive ? <option value="">Select active project</option> : null}
-          {activeRows.map((row) => (
-            <option key={`${row.kind}:${row.key}`} value={`${row.kind}:${row.key}`}>
-              {row.name}
-            </option>
-          ))}
-        </select>
+          size="sm"
+        />
         <span className={styles.headerProjectKind}>{project.typeLabel}</span>
       </div>
       {facts ? (
