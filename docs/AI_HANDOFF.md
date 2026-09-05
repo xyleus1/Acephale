@@ -12913,3 +12913,7 @@ Verification caveat:
   files), and the procurement conversation, file draft batch, autopilot plan,
   conversation stage, conversation task, reply draft, reply recovery, reply
   route, inbound triage and supplier nudge suites.
+
+## 2026-09-05: Sourcing needs-you escalation indicators
+
+- Sourcing project status now triages the latest inbound supplier message against stored request facts, exposing escalated thread IDs to the status strip and selected project row without adding per-row status fetches.

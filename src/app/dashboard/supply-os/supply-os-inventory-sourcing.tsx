@@ -45,7 +45,7 @@ import { ActiveSourcingWorkspace } from "./supply-os-active-sourcing";
 import { SupplyOsProspects } from "./supply-os-prospects";
 import { SupplyOsOutreachApprovals } from "./supply-os-outreach-approvals";
 import { SupplyOsMail } from "./supply-os-mail";
-import { ProjectStatusStrip } from "./project-status-strip";
+import { ProjectStatusStrip, type ProjectStatusFacts } from "./project-status-strip";
 import { LeadStatusPanel } from "./lead-status-panel";
 import type { ResearchProjectSummary } from "@/lib/research-projects";
 import type { ResearchRecordStage } from "@/lib/research-record-stages";
@@ -245,6 +245,7 @@ export function SupplyInventoryWorkspace({
     activeView === "messages" ? "messages" : "leads",
   );
   const [leadReport, setLeadReport] = useState<LeadPipelineReport | null>(null);
+  const [projectStatusFacts, setProjectStatusFacts] = useState<ProjectStatusFacts | null>(null);
   const reduceMotion = useReducedMotion();
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
@@ -472,6 +473,7 @@ export function SupplyInventoryWorkspace({
     setLeadStatusStage("all");
     setLeadStatusFilterNonce((nonce) => nonce + 1);
   }, []);
+  const showProjectMessages = useCallback(() => onViewChange("messages"), [onViewChange]);
   useEffect(() => {
     setLeadReport(null);
     setLeadStatusStage("all");
@@ -673,6 +675,8 @@ export function SupplyInventoryWorkspace({
             projectRows={projectRows}
             selectedProject={selectedProject}
             onProjectChange={onProjectChange}
+            onFactsChange={setProjectStatusFacts}
+            onEscalationsClick={showProjectMessages}
           />
         ) : null}
         {selectedProject?.kind === "sourcing" ? (
@@ -815,7 +819,14 @@ export function SupplyInventoryWorkspace({
                       <tr key={`${project.kind}:${project.key}`}>
                         <td>
                           <button type="button" className={styles.projectNameButton} onClick={() => onProjectChange({ kind: project.kind, key: project.key })}>
-                            <strong>{project.name}</strong>
+                            <strong>
+                              {project.name}
+                              {selectedProject?.kind === project.kind
+                                && selectedProject.key === project.key
+                                && projectStatusFacts?.escalations
+                                ? <span className={styles.projectEscalationDot} aria-label="Needs your reply" />
+                                : null}
+                            </strong>
                             {project.officeWide ? <small>Office-wide</small> : null}
                           </button>
                         </td>

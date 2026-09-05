@@ -18,10 +18,17 @@ import {
   loadProcurementOrderProgressFacts,
   type ProcurementOrderProgressFacts,
 } from "@/lib/procurement-order-status";
+import {
+  procurementReplyFacts,
+  supplierInboundKind,
+  triageSupplierInbound,
+  type ProcurementReplyFacts,
+} from "@/lib/procurement-inbound-triage";
 import { readCampaignPlan } from "@/lib/procurement-campaign-class";
 import { isPositiveReply } from "@/lib/supply-os/positive-reply";
 import { prisma } from "@/lib/prisma";
 import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
+import { getProcurementRequest } from "@/lib/procurement-workflow";
 
 export type ProjectStatusFacts = {
   kind: "sourcing" | "prospecting";
@@ -34,15 +41,21 @@ export type ProjectStatusFacts = {
   successLabel: string;
   goal: number | null;
   escalations: number;
+  escalatedThreadIds: string[];
 };
 
 export { isPositiveReply };
 
 export type ProjectStatusThreadFact = {
+  threadId: string;
   latestMessageDirection: "INBOUND" | "OUTBOUND" | null;
   latestHumanInboundAt: Date | string | null;
+  latestHumanInboundSubject: string | null;
   latestHumanInboundBody: string | null;
   latestOutboundAt: Date | string | null;
+  latestInboundAt?: Date | string | null;
+  latestInboundSubject?: string | null;
+  latestInboundBody?: string | null;
 };
 
 function dateValue(value: Date | string | null) {
@@ -68,8 +81,25 @@ export function reduceSourcingProjectStatus(input: {
   key: string;
   progress: ProcurementOrderProgressFacts;
   threads: readonly ProjectStatusThreadFact[];
+  facts: ProcurementReplyFacts;
   goal?: number | null;
 }): ProjectStatusFacts {
+  const escalatedThreadIds = input.threads
+    .filter((thread) => {
+      const inboundAt = dateValue(thread.latestInboundAt ?? thread.latestHumanInboundAt);
+      const outboundAt = dateValue(thread.latestOutboundAt);
+      if (!inboundAt || (outboundAt && outboundAt > inboundAt)) return false;
+      const triage = triageSupplierInbound({
+        subject: thread.latestInboundSubject ?? thread.latestHumanInboundSubject,
+        body: thread.latestInboundBody ?? thread.latestHumanInboundBody ?? "",
+        facts: input.facts,
+        bestEffort: true,
+      });
+      return triage.kind === "BOUNCE"
+        || triage.kind === "WRONG_RECIPIENT"
+        || triage.decision === "NEEDS_HUMAN";
+    })
+    .map((thread) => thread.threadId);
   return {
     kind: "sourcing",
     key: input.key,
@@ -80,7 +110,8 @@ export function reduceSourcingProjectStatus(input: {
     succeeded: input.progress.quoted,
     successLabel: "quotes in",
     goal: input.goal ?? null,
-    escalations: 0,
+    escalations: escalatedThreadIds.length,
+    escalatedThreadIds,
   };
 }
 
@@ -100,6 +131,7 @@ export function reduceProspectingProjectStatus(input: {
     successLabel: "positive replies",
     goal: null,
     escalations: 0,
+    escalatedThreadIds: [],
   };
 }
 
@@ -135,17 +167,26 @@ function sourcingThreadFacts(messages: readonly LocalRfqMessage[]): ProjectStatu
     const latest = ordered.at(-1);
     const latestInbound = [...ordered].reverse().find(humanInbound);
     const latestOutbound = [...ordered].reverse().find((message) => message.direction === "OUTBOUND");
+    const latestTriageInbound = [...ordered].reverse().find((message) => (
+      message.direction === "INBOUND"
+      && supplierInboundKind(message.subject ?? "", message.body) !== "AUTO_REPLY"
+    ));
     const latestMessageDirection: ProjectStatusThreadFact["latestMessageDirection"] =
       latest?.direction === "INBOUND" || latest?.direction === "OUTBOUND"
         ? latest.direction
         : null;
     return {
+      threadId: thread[0]?.threadId ?? "",
       latestMessageDirection,
       latestHumanInboundAt: latestInbound?.sentAt ?? null,
+      latestHumanInboundSubject: latestInbound?.subject ?? null,
       latestHumanInboundBody: latestInbound?.body ?? null,
       latestOutboundAt: latestOutbound?.sentAt ?? null,
+      latestInboundAt: latestTriageInbound?.sentAt ?? null,
+      latestInboundSubject: latestTriageInbound?.subject ?? null,
+      latestInboundBody: latestTriageInbound?.body ?? null,
     };
-  }).filter((thread) => thread.latestHumanInboundAt);
+  }).filter((thread) => thread.latestHumanInboundAt || thread.latestInboundAt);
 }
 
 export function storedQuoteGoalFromJobs(
@@ -189,6 +230,7 @@ function emptyProjectStatus(kind: "sourcing" | "prospecting", key: string): Proj
     successLabel: kind === "sourcing" ? "quotes in" : "positive replies",
     goal: null,
     escalations: 0,
+    escalatedThreadIds: [],
   };
 }
 
@@ -200,19 +242,28 @@ async function loadSourcingStatus(officeId: string, key: string) {
     return null;
   }
   if (!order || order.officeId !== officeId) return null;
-  const [progress, messages, goal] = await Promise.all([
+  const [progress, messages, goal, request] = await Promise.all([
     loadProcurementOrderProgressFacts({
       orderId: order.orderId,
       officeId,
     }),
     loadLocalRfqMessages(officeId, order.orderId),
     storedQuoteGoal(officeId, order.sourceWorkspaceId),
+    getProcurementRequest(order.customerId, order.orderId),
   ]);
   if (!progress) return emptyProjectStatus("sourcing", key);
   return reduceSourcingProjectStatus({
     key,
     progress,
     threads: sourcingThreadFacts(messages),
+    facts: procurementReplyFacts(request ?? {
+      material: order.material,
+      quantity: Number(order.quantity),
+      unit: order.unit,
+      neededBy: order.neededBy,
+      specification: order.specification,
+      requestContext: {},
+    }),
     goal,
   });
 }

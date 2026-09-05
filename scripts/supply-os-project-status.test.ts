@@ -54,17 +54,30 @@ test("sourcing reducer reports persisted progress and replies", () => {
   const facts = reduceSourcingProjectStatus({
     key: "order-id",
     progress: { vendors: 4, contacted: 3, quoted: 2 },
+    facts: {
+      material: "steel parts",
+      quantity: 100,
+      unit: "pcs",
+      neededBy: null,
+      specification: null,
+      destination: null,
+      documentNames: [],
+    },
     goal: 3,
     threads: [
       {
+        threadId: "thread-1",
         latestMessageDirection: "INBOUND",
         latestHumanInboundAt: new Date(),
+        latestHumanInboundSubject: "Re: RFQ",
         latestHumanInboundBody: "Happy to quote",
         latestOutboundAt: null,
       },
       {
+        threadId: "thread-2",
         latestMessageDirection: "OUTBOUND",
         latestHumanInboundAt: new Date(),
+        latestHumanInboundSubject: "Re: RFQ",
         latestHumanInboundBody: "Thanks",
         latestOutboundAt: new Date(),
       },
@@ -81,7 +94,77 @@ test("sourcing reducer reports persisted progress and replies", () => {
     successLabel: "quotes in",
     goal: 3,
     escalations: 0,
+    escalatedThreadIds: [],
   });
+});
+
+test("sourcing reducer marks bounce, wrong recipient, and unanswered commercial questions", () => {
+  const replyFacts = {
+    material: "steel parts",
+    quantity: 100,
+    unit: "pcs",
+    neededBy: null,
+    specification: null,
+    destination: null,
+    documentNames: [],
+  };
+  const thread = (threadId: string, subject: string, body: string) => ({
+    threadId,
+    latestMessageDirection: "INBOUND" as const,
+    latestHumanInboundAt: "2026-09-08T10:00:00.000Z",
+    latestHumanInboundSubject: subject,
+    latestHumanInboundBody: body,
+    latestOutboundAt: null,
+  });
+  const facts = reduceSourcingProjectStatus({
+    key: "order-id",
+    progress: { vendors: 1, contacted: 1, quoted: 0 },
+    facts: replyFacts,
+    threads: [
+      thread("bounce", "Delivery failure", "Delivery to the following recipient failed."),
+      thread("wrong", "Wrong contact", "Please contact the right department."),
+      thread("commercial", "Re: RFQ", "What is your target price?"),
+      thread("answerable", "Re: RFQ", "What quantity do you need?"),
+    ],
+  });
+  assert.equal(facts.escalations, 3);
+  assert.deepEqual(facts.escalatedThreadIds, ["bounce", "wrong", "commercial"]);
+});
+
+test("sourcing reducer does not escalate answered or answerable questions", () => {
+  const facts = reduceSourcingProjectStatus({
+    key: "order-id",
+    progress: { vendors: 1, contacted: 1, quoted: 0 },
+    facts: {
+      material: "steel parts",
+      quantity: 100,
+      unit: "pcs",
+      neededBy: null,
+      specification: null,
+      destination: null,
+      documentNames: [],
+    },
+    threads: [
+      {
+        threadId: "answered",
+        latestMessageDirection: "OUTBOUND",
+        latestHumanInboundAt: "2026-09-08T10:00:00.000Z",
+        latestHumanInboundSubject: "Re: RFQ",
+        latestHumanInboundBody: "What quantity do you need?",
+        latestOutboundAt: "2026-09-08T11:00:00.000Z",
+      },
+      {
+        threadId: "answerable",
+        latestMessageDirection: "INBOUND",
+        latestHumanInboundAt: "2026-09-08T10:00:00.000Z",
+        latestHumanInboundSubject: "Re: RFQ",
+        latestHumanInboundBody: "What quantity do you need?",
+        latestOutboundAt: null,
+      },
+    ],
+  });
+  assert.equal(facts.escalations, 0);
+  assert.deepEqual(facts.escalatedThreadIds, []);
 });
 
 test("prospecting reducer aggregates campaigns and positive replies", () => {
@@ -107,5 +190,6 @@ test("prospecting reducer aggregates campaigns and positive replies", () => {
     successLabel: "positive replies",
     goal: null,
     escalations: 0,
+    escalatedThreadIds: [],
   });
 });

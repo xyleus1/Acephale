@@ -10391,3 +10391,7 @@ Use this file for chronological implementation notes that future agents should s
 - Coverage: pure assertions over the delivery records and the merge, plus the
   procurement conversation, file draft batch, autopilot plan, stage, task, reply
   draft, reply recovery, reply route, triage and nudge suites.
+
+## 2026-09-05: Sourcing needs-you escalation indicators
+
+- Added pure triage-based sourcing escalation counts and thread IDs, then reused the loaded project facts for red-dot indicators in the status strip and selected project row.

@@ -2914,6 +2914,16 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.projectEscalationDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #d0342c;
+  vertical-align: middle;
+}
+
 .inventoryStatusDot {
   width: 8px;
   height: 8px;

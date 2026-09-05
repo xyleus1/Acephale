@@ -16,7 +16,7 @@ type ProjectStatusRow = {
 
 type ProjectSelection = { kind: "sourcing" | "prospecting"; key: string } | null;
 
-type ProjectStatusFacts = {
+export type ProjectStatusFacts = {
   kind: "sourcing" | "prospecting";
   key: string;
   leads: number;
@@ -27,16 +27,21 @@ type ProjectStatusFacts = {
   successLabel: string;
   goal: number | null;
   escalations: number;
+  escalatedThreadIds: string[];
 };
 
 export function ProjectStatusStrip({
   projectRows,
   selectedProject,
   onProjectChange,
+  onFactsChange,
+  onEscalationsClick,
 }: {
   projectRows: ProjectStatusRow[];
   selectedProject: ProjectSelection;
   onProjectChange: (project: ProjectSelection) => void;
+  onFactsChange?: (facts: ProjectStatusFacts | null) => void;
+  onEscalationsClick?: () => void;
 }) {
   const headerSlot = useSupplyOsHeaderSlot();
   const activeRows = useMemo(() => projectRows.filter((project) => project.active), [projectRows]);
@@ -66,11 +71,13 @@ export function ProjectStatusStrip({
     if (!projectKind || !projectKey) {
       setFacts(null);
       setFactsState("loading");
+      onFactsChange?.(null);
       return;
     }
     const controller = new AbortController();
     setFacts(null);
     setFactsState("loading");
+    onFactsChange?.(null);
     const load = async () => {
       const params = new URLSearchParams({ kind: projectKind, key: projectKey });
       const response = await fetch(`/api/supply-os/project-status?${params}`, {
@@ -89,12 +96,14 @@ export function ProjectStatusStrip({
           if (current !== generation) return;
           setFacts(nextFacts);
           setFactsState("ready");
+          onFactsChange?.(nextFacts);
         })
         .catch((error: unknown) => {
           if (current !== generation) return;
           if (error instanceof DOMException && error.name === "AbortError") return;
           setFacts(null);
           setFactsState("unavailable");
+          onFactsChange?.(null);
         });
     };
     run();
@@ -106,7 +115,7 @@ export function ProjectStatusStrip({
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [projectKey, projectKind]);
+  }, [onFactsChange, projectKey, projectKind]);
 
   if (!project || (!activeRows.length && !selectedProject)) return null;
   const content = (
@@ -155,8 +164,20 @@ export function ProjectStatusStrip({
             </dd>
           </div>
           {facts.escalations > 0 ? (
-            <div>
-              <dt>Needs you</dt>
+            <div
+              className={styles.headerProjectEscalationFact}
+              role={onEscalationsClick ? "button" : undefined}
+              tabIndex={onEscalationsClick ? 0 : undefined}
+              aria-label={onEscalationsClick ? "Needs your reply" : undefined}
+              onClick={onEscalationsClick}
+              onKeyDown={(event) => {
+                if (onEscalationsClick && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  onEscalationsClick();
+                }
+              }}
+            >
+              <dt><span className={styles.headerProjectEscalationDot} aria-hidden="true" />Needs you</dt>
               <dd className={styles.headerProjectEscalation}>{facts.escalations}</dd>
             </div>
           ) : null}
