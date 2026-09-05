@@ -138,6 +138,20 @@ type ContextProspectingAction = {
   createdAt: string;
 };
 
+type ContextResearchOperation = {
+  id: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
+  kind: "pause" | "resume" | "purge" | "expand_regions" | "requalify" | "enrich";
+  projectName: string;
+  regions: string[];
+  note: string;
+  preview: string[];
+  result: string[];
+  lastError: string | null;
+  stale: boolean;
+  createdAt: string;
+};
+
 type ContextPayload = {
   workspace: { id: string; name: string };
   threads?: ContextThread[];
@@ -146,6 +160,7 @@ type ContextPayload = {
   documents: ContextDocument[];
   procurementActions: ContextProcurementAction[];
   prospectingActions: ContextProspectingAction[];
+  researchOperations: ContextResearchOperation[];
 };
 
 type OptimisticMessage = ContextMessage & { pending: true };
@@ -164,6 +179,17 @@ const PROCESSING_PHASES = [
 function fileExtension(name: string) {
   const extension = name.split(".").pop()?.toLowerCase();
   return extension && extension !== name.toLowerCase() ? extension : "file";
+}
+
+function researchOperationLabel(kind: ContextResearchOperation["kind"]) {
+  return ({
+    pause: "Pause research",
+    resume: "Resume research",
+    purge: "Purge rows",
+    expand_regions: "Expand regions",
+    requalify: "Requalify rows",
+    enrich: "Enrich contacts",
+  } as const)[kind];
 }
 
 function fileKind(document: ContextDocument) {
@@ -241,7 +267,8 @@ function qualificationSummary(qualification: ContextProspectingAction["stats"]["
   const topTypes = rejected.length
     ? rejected.map(([type, count]) => `${type} ${count}`).join(", ")
     : "none";
-  return `Screened ${qualification.evaluated}: ${qualification.accepted} kept, ${rejectedTotal} not a target (${topTypes})`;
+  const fallbackNote = qualification.fallback > 0 ? `, ${qualification.fallback} unscreened (model unavailable)` : "";
+  return `Screened ${qualification.evaluated}: ${qualification.accepted} kept, ${rejectedTotal} not a target (${topTypes})${fallbackNote}`;
 }
 
 function prospectingRunIsStale(action: ContextProspectingAction, now: number) {
@@ -416,8 +443,9 @@ export function SupplyOsContext({
   const openRequestCount = useMemo(() => {
     const procurement = (data?.procurementActions ?? []).filter((action) => action.status !== "DISMISSED" && !action.hiddenAt).length;
     const prospecting = (data?.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED" && !action.hiddenAt).length;
-    return procurement + prospecting;
-  }, [data?.procurementActions, data?.prospectingActions]);
+    const research = (data?.researchOperations ?? []).filter((action) => action.status !== "DISMISSED").length;
+    return procurement + prospecting + research;
+  }, [data?.procurementActions, data?.prospectingActions, data?.researchOperations]);
 
   const starterPrompts = useMemo(() => {
     const company = data?.workspace.name ?? "this company";
@@ -612,6 +640,26 @@ export function SupplyOsContext({
       }
     } finally {
       if (mountedRef.current && generation === prospectingGenerationRef.current) setActionBusyId(null);
+    }
+  }
+
+  async function decideResearchOperation(actionId: string, decision: "run" | "dismiss") {
+    if (!workspaceId || readOnly || actionBusyId) return;
+    setActionBusyId(actionId);
+    setError(null);
+    try {
+      const response = await fetch(`${contextApiBasePath}/research-ops/${encodeURIComponent(actionId)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "The research operation did not finish.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The research operation did not finish.");
+    } finally {
+      setActionBusyId(null);
     }
   }
 
@@ -1292,6 +1340,48 @@ export function SupplyOsContext({
                   ) : null}
                 </div>
               )}
+            </article>
+          ))}
+          {(data.researchOperations ?? []).filter((operation) => operation.status !== "DISMISSED").map((operation) => (
+            <article className={styles.procurementAction} data-status={operation.status} key={operation.id}>
+              <header>
+                <span className={styles.procurementActionIcon}><Search size={18} aria-hidden="true" /></span>
+                <span>
+                  <strong>{researchOperationLabel(operation.kind)}: {operation.projectName}</strong>
+                  <small>{operation.note}</small>
+                </span>
+              </header>
+              {operation.preview.length ? (
+                <ul className={styles.procurementResult}>
+                  {operation.preview.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              ) : null}
+              {operation.status === "COMPLETED" && operation.result.length ? (
+                <ul className={styles.procurementResult}>
+                  {operation.result.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              ) : null}
+              {operation.status === "FAILED" && operation.lastError ? (
+                <p className={styles.approvalBoundary}>{operation.lastError}</p>
+              ) : null}
+              {operation.status === "RUNNING" && operation.stale ? (
+                <p className={styles.approvalBoundary}>Timed out, run again.</p>
+              ) : null}
+              <p className={styles.approvalBoundary}>Changes only happen after an operator confirms. Research operations do not contact anyone.</p>
+              {!readOnly && (operation.status === "PENDING" || (operation.status === "RUNNING" && operation.stale)) ? (
+                <div className={styles.procurementButtons}>
+                  <button type="button" className={styles.confirmProcurement} disabled={Boolean(actionBusyId)} onClick={() => void decideResearchOperation(operation.id, "run")}>
+                    {actionBusyId === operation.id ? <LoaderCircle className={styles.spinner} size={17} /> : null}{operation.status === "RUNNING" ? "Run again" : "Run"}
+                  </button>
+                  <button type="button" className={styles.dismissProcurement} disabled={Boolean(actionBusyId)} onClick={() => void decideResearchOperation(operation.id, "dismiss")}>Dismiss</button>
+                </div>
+              ) : operation.status === "RUNNING" ? (
+                <div className={styles.procurementResult}><strong>{operation.stale ? "Timed out, run again" : "Running"}</strong></div>
+              ) : operation.status === "FAILED" ? (
+                <div className={styles.procurementButtons}>
+                  <button type="button" className={styles.confirmProcurement} disabled={Boolean(actionBusyId)} onClick={() => void decideResearchOperation(operation.id, "run")}>Run again</button>
+                </div>
+              ) : null}
             </article>
           ))}
         </div>

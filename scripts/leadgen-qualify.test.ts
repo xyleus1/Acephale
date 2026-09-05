@@ -66,6 +66,7 @@ assert.equal(
   "Scholz Recycling",
 );
 assert.equal(cleanCompanyName("Welcome | ASCOTEC Steel Trading", "ascotec.de"), "ASCOTEC Steel Trading");
+assert.equal(cleanCompanyName("Acme &#x110000; Steel", "acme.example"), "Acme &#x110000; Steel");
 
 async function main() {
   const candidates = [

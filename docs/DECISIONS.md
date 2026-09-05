@@ -1,3 +1,4 @@
+Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
 ## A sender protection pause is a cooldown, not a removal

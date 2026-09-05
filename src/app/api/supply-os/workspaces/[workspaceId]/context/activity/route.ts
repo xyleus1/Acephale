@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { loadCompanyContextActivity } from "@/lib/company-context";
 import { listCompanyContextProcurementActions } from "@/lib/supply-os/context-procurement";
 import { listCompanyContextProspectingActions } from "@/lib/supply-os/context-prospecting";
+import { listCompanyContextResearchOperations } from "@/lib/supply-os/context-research-ops";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 
 export const runtime = "nodejs";
@@ -13,13 +14,15 @@ export async function GET(_request: Request, route: { params: Promise<{ workspac
   const { workspaceId } = await route.params;
   try {
     const access = supplyAccessContext(session);
-    const [activity, procurementActions, prospectingActions] = await Promise.all([
+    const [activity, procurementActions, prospectingActions, researchOperations] = await Promise.all([
       loadCompanyContextActivity(access, workspaceId),
       listCompanyContextProcurementActions(access, workspaceId),
       listCompanyContextProspectingActions(access, workspaceId),
+      listCompanyContextResearchOperations(access, workspaceId),
     ]);
     const pendingActions = procurementActions.filter((action) => action.status === "PENDING").length
-      + prospectingActions.filter((action) => action.status === "PENDING").length;
+      + prospectingActions.filter((action) => action.status === "PENDING").length
+      + researchOperations.filter((action) => action.status === "PENDING").length;
     return NextResponse.json({
       activity: {
         lastAgentMessageAt: activity.lastAgentMessageAt,

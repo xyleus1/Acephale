@@ -31,6 +31,11 @@ import {
   normalizeProspectingDraft,
 } from "@/lib/supply-os/context-prospecting";
 import { listResearchProjects } from "@/lib/research-projects";
+import {
+  createCompanyContextResearchOperations,
+  normalizeResearchOperation,
+  researchProjectReport,
+} from "@/lib/supply-os/context-research-ops";
 
 const MAX_QUESTION_ROUNDS = 2;
 
@@ -43,7 +48,7 @@ export function clampAgentRowTarget(value: unknown) {
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["answer", "citationIds", "clarifyingQuestions", "memoryNotes", "threadTitle", "procurementDrafts", "prospectingDrafts"],
+  required: ["answer", "citationIds", "clarifyingQuestions", "memoryNotes", "threadTitle", "procurementDrafts", "prospectingDrafts", "researchOperations"],
   properties: {
     answer: { type: "string" },
     threadTitle: { type: "string" },
@@ -115,6 +120,21 @@ const CONTEXT_REPLY_SCHEMA = {
           listSlug: { type: "string" },
           notes: { type: "string" },
           rowTarget: { type: "number" },
+        },
+      },
+    },
+    researchOperations: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "projectName", "regions", "note"],
+        properties: {
+          kind: { type: "string", enum: ["status", "audit", "pause", "resume", "purge", "expand_regions", "requalify", "enrich"] },
+          projectName: { type: ["string", "null"] },
+          regions: { type: "array", items: { type: "string" }, maxItems: 20 },
+          note: { type: "string" },
         },
       },
     },
@@ -251,7 +271,7 @@ export async function chatWithCompanyContext(args: {
         citations: [],
         threadId,
       });
-      return { message, citations: [], questions: [], savedMemory: [], procurementActions: [], prospectingActions: [] };
+      return { message, citations: [], questions: [], savedMemory: [], procurementActions: [], prospectingActions: [], researchOperations: [] };
     }
   }
 
@@ -281,7 +301,9 @@ export async function chatWithCompanyContext(args: {
     });
   const existingResearchProjects = isCustomerContextAccess(args.context) || args.context.accessKind === "customer"
     ? []
-    : await listResearchProjects(args.context.officeId).catch(() => []);
+    : await listResearchProjects(args.context.officeId)
+      .then((projects) => projects.filter((project) => project.companyId === null || project.companyId === packet.company.id))
+      .catch(() => []);
   const priorQuestionRounds = packet.messages.filter((message) => message.role === "AGENT" && message.questionCount > 0).length;
   const questionRoundsLeft = Math.max(0, MAX_QUESTION_ROUNDS - priorQuestionRounds);
   const allowedCitations = new Map<string, CompanyContextCitation>();
@@ -332,6 +354,11 @@ export async function chatWithCompanyContext(args: {
         "Set rowTarget to the volume the job deserves: 500 for a normal single-country segment ask, up to 2000 for a broad multi-country corridor sweep, and never a token number like 20 or 50.",
         "Public prospect research writes reviewable research-list rows only. It does not imply outreach or contact.",
         "Customer-access sessions must never create prospectingDrafts or prospecting actions.",
+        "researchOperations: when the operator asks about, or asks to manage, prospect research that already exists (progress, yield, status, quality, audit, pause, stop, resume, continue, clean up, purge, remove non-companies or duplicates, widen or add regions or countries, re-check or re-screen rows, enrich or find missing contacts), return one operation per ask. Kinds: status (progress and yield of the project's research jobs), audit (quality report of the project's list: non-companies, duplicates, fit, contact and evidence coverage), pause (stop background continuation), resume (continue a paused, failed, or finished job), purge (delete rows flagged as non-targets, duplicates, or below the fit floor), expand_regions (continue the project's research in the listed new regions), requalify (screen existing rows for entity type and fit against the project brief, marking non-targets without deleting), enrich (find missing email and phone for rows that have none).",
+        "Set projectName to an existing project's exact name. Use null only for status and audit when the operator means every project. Put new countries or regions in regions for expand_regions and leave it empty otherwise. note is one short sentence saying what the operator asked.",
+        "Never return researchOperations when the operator is asking to start new research; use prospectingDrafts for that. Customer-access sessions must never receive researchOperations.",
+        "Read-only operations (status, audit) run immediately and their results are appended to your answer, so do not guess numbers about research progress in the answer; say the report follows.",
+        "Mutating operations (pause, resume, purge, expand_regions, requalify, enrich) are prepared for human confirmation and change nothing until the operator runs them. Say so.",
         "threadTitle: return a short specific title of at most 6 words naming this chat's task, like PC-ABS enclosure sourcing or Germany packaging prospects. Base it on the task being worked on, not on greetings. Return an empty string only when the conversation has no clear task yet.",
         "Keep the answer direct and operational. When you ask clarifyingQuestions, keep the answer to a short summary of what you understood and why the questions matter.",
         "Do not use the em dash character.",
@@ -344,7 +371,7 @@ export async function chatWithCompanyContext(args: {
     throw new ContextAgentError("The context reply did not finish. Try again.", "unavailable", true);
   }
 
-  let parsed: { answer?: unknown; citationIds?: unknown; clarifyingQuestions?: unknown; memoryNotes?: unknown; threadTitle?: unknown; procurementDrafts?: unknown; prospectingDrafts?: unknown } = {};
+  let parsed: { answer?: unknown; citationIds?: unknown; clarifyingQuestions?: unknown; memoryNotes?: unknown; threadTitle?: unknown; procurementDrafts?: unknown; prospectingDrafts?: unknown; researchOperations?: unknown } = {};
   try {
     parsed = JSON.parse(response.output_text) as typeof parsed;
   } catch {}
@@ -493,6 +520,53 @@ export async function chatWithCompanyContext(args: {
     requestCreatedAt: operatorMessage.createdAt,
     threadId,
   });
+  const researchOperations: Awaited<ReturnType<typeof createCompanyContextResearchOperations>> = [];
+  const operationReports: string[] = [];
+  if (!isCustomerContextAccess(args.context) && args.context.accessKind !== "customer") {
+    const projects = existingResearchProjects;
+    const rawOperations = Array.isArray(parsed.researchOperations) ? parsed.researchOperations.slice(0, 8) : [];
+    const operationItems: Array<{ request: ReturnType<typeof normalizeResearchOperation>; projectId: string; projectName: string }> = [];
+    for (const value of rawOperations) {
+      const request = normalizeResearchOperation(value);
+      if (!request) continue;
+      const project = request.projectName
+        ? projects.find((entry) => entry.name.toLocaleLowerCase() === request.projectName!.toLocaleLowerCase())
+        : null;
+      if (request.projectName && !project) {
+        operationReports.push(`No project named "${request.projectName}". Projects: ${projects.map((entry) => entry.name).join(", ") || "none"}.`);
+        continue;
+      }
+      if (request.kind === "status" || request.kind === "audit") {
+        const targets = project ? [project] : projects;
+        for (const target of targets) {
+          operationReports.push(...await researchProjectReport({
+            context: args.context,
+            workspaceId: args.workspaceId,
+            projectId: target.id,
+            projectName: target.name,
+            kind: request.kind,
+          }).catch(() => [`${target.name}: report unavailable.`]));
+        }
+      } else if (project) {
+        operationItems.push({ request, projectId: project.id, projectName: project.name });
+      }
+    }
+    if (operationItems.some((item) => item.request?.kind === "expand_regions" && !item.request.regions.length)) {
+      operationReports.push("Which regions?");
+    }
+    const validItems = operationItems.filter((item) => item.request && !(item.request.kind === "expand_regions" && !item.request.regions.length)) as Array<{ request: NonNullable<ReturnType<typeof normalizeResearchOperation>>; projectId: string; projectName: string }>;
+    if (validItems.length) {
+      researchOperations.push(...await createCompanyContextResearchOperations({
+        context: args.context,
+        workspaceId: args.workspaceId,
+        items: validItems,
+        requestMessageId: operatorMessage.id,
+        requestBody: instruction,
+        requestCreatedAt: operatorMessage.createdAt,
+        threadId,
+      }));
+    }
+  }
   let savedMemory: Array<{ id: string; note: string; createdAt: Date }> = [];
   let memoryCaveat: string | null = null;
   if (memoryNotes.length) {
@@ -529,10 +603,10 @@ export async function chatWithCompanyContext(args: {
     context: args.context,
     workspaceId: args.workspaceId,
     role: "AGENT",
-    body: memoryCaveat ? `${answer}\n\n${memoryCaveat}` : answer,
+    body: [answer, ...operationReports, researchOperations.length ? "The requested research changes are ready for confirmation." : "", memoryCaveat ?? ""].filter(Boolean).join("\n\n"),
     citations,
     threadId,
     questions,
   });
-  return { message, citations, questions, savedMemory, procurementActions, prospectingActions };
+  return { message, citations, questions, savedMemory, procurementActions, prospectingActions, researchOperations };
 }

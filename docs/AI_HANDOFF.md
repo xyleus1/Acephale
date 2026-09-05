@@ -1,3 +1,4 @@
+Context research operations are stored as typed CompanyContext action payloads. Status and audit run inline; pause, resume, purge, region expansion, requalification, and contact enrichment require operator approval and never touch outreach.
 # AI Handoff
 
 ## 2026-09-05: Product-wide recipient quality gate before planning and before every send

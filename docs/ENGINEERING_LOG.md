@@ -1,3 +1,6 @@
+Context chat now reports and manages existing prospect research through office-scoped approval operations, with deterministic audit and purge rules before any model screening.
+- Review fixes now bind purge execution to its approved row set, load full research lists, rebuild search text after edits, and guard malformed HTML entities.
+- Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
 ## 2026-09-05: One recipient quality gate for every campaign, at planning and right before each send

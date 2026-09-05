@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
+import { PROSPECTING_MIN_FIT_SCORE } from "@/lib/supply-os/context-prospecting-constants";
 import { prisma } from "@/lib/prisma";
 import {
   companyContextActorData,
@@ -68,7 +69,7 @@ const MAX_BACKGROUND_ATTEMPTS = 3;
 const BACKGROUND_SCAN_CAP = 500;
 const LOST_CLAIM_MESSAGE = "This prospecting run is already in progress. Retry shortly.";
 /** Matches the leadgen persist default: only tier A/B candidates reach the list. */
-export const PROSPECTING_MIN_FIT_SCORE = 50;
+export { PROSPECTING_MIN_FIT_SCORE } from "@/lib/supply-os/context-prospecting-constants";
 /**
  * Company identity fields in precedence order: a row keyed by an earlier field
  * is the company's row, and a later field never re-keys or duplicates it.
@@ -92,6 +93,7 @@ const LIST_FIELDS = [
   { key: "source_query", label: "Source query", type: "text" },
   { key: "entity_type", label: "Entity", type: "text" },
   { key: "fit_reason", label: "Why it fits", type: "text" },
+  { key: "fit_verdict", label: "Verdict", type: "text" },
 ] as const;
 
 type ProspectingStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
@@ -533,6 +535,7 @@ export function candidateRows(
       source_query: candidate.discoveredVia,
       entity_type: qualified?.entityType ?? null,
       fit_reason: qualified?.reason ?? null,
+      fit_verdict: qualified?.source === "fallback" ? "unverified" : qualified ? (qualified.isTarget ? "target" : "not_target") : null,
     };
     // Company rows dedupe on the domain: the shown email moves as enrichment or
     // verification changes the best contact, and must update the same row.
@@ -579,6 +582,7 @@ function directoryInputRows(
       source_query: candidate.discoveredVia,
       entity_type: qualified?.entityType ?? null,
       fit_reason: qualified?.reason ?? null,
+      fit_verdict: qualified?.source === "fallback" ? "unverified" : qualified ? (qualified.isTarget ? "target" : "not_target") : null,
     };
     return [{
       row: { row, sourceRow: index + 1 },
@@ -833,6 +837,22 @@ async function executeProspectingAction(args: {
       { deadlineAt: startedAt + batchBudgetMs },
     );
     const persisted = await persistCandidates(args.context.officeId, draft.listSlug, result.candidates, qualification);
+    const currentRow = await prisma.companyContext.findFirst({
+      where: {
+        id: args.action.id,
+        officeId: args.context.officeId,
+        companyId: args.workspace.companyId,
+        kind: "ACTION",
+        payload: { path: ["claimToken"], equals: claimToken },
+      },
+      select: { payload: true },
+    });
+    const currentAutoContinue = currentRow?.payload
+      && typeof currentRow.payload === "object"
+      && !Array.isArray(currentRow.payload)
+      && typeof (currentRow.payload as Record<string, unknown>).autoContinue === "boolean"
+      ? (currentRow.payload as Record<string, unknown>).autoContinue as boolean
+      : args.action.autoContinue;
     const completed: StoredProspectingAction = {
       ...args.action,
       draft,
@@ -858,7 +878,7 @@ async function executeProspectingAction(args: {
       autoContinue: result.exhausted ||
         args.action.stats.rowsCreated + persisted.created >= draft.rowTarget
         ? false
-        : args.action.autoContinue,
+        : currentAutoContinue,
     };
     const updated = await prisma.companyContext.updateMany({
       where: {

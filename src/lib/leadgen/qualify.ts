@@ -262,7 +262,12 @@ function decodeEntities(value: string) {
     .replace(/&([a-z]+);/gi, (match, name: string) => named[name.toLowerCase()] ?? match)
     .replace(/&#(?:x([0-9a-f]+)|(\d+));?/gi, (match, hex: string | undefined, decimal: string | undefined) => {
       const code = Number.parseInt(hex ?? decimal ?? "", hex ? 16 : 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      return Number.isFinite(code)
+        && code >= 0
+        && code <= 0x10ffff
+        && !(code >= 0xd800 && code <= 0xdfff)
+        ? String.fromCodePoint(code)
+        : match;
     });
 }
 
