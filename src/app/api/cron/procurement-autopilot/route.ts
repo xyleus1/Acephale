@@ -8,6 +8,7 @@ import {
   runProcurementAutopilot,
 } from "@/lib/procurement-autopilot";
 import { listDueConversationTaskOrderIds } from "@/lib/procurement-conversation-task-store";
+import { recoverPausedSenderAccounts } from "@/lib/email-delivery-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +54,15 @@ export async function GET(request: Request) {
     // A sourcing wave asked for from the context chat runs in slices, so this
     // pass carries it forward instead of leaving it for the hourly job sweep.
     const waves = await runDueBackgroundJobs({ limit: 2, onlyTypes: ["PROCUREMENT_SOURCING_WAVE"] })
+      .catch(() => null);
+    // Sender protection pauses a mailbox that bounced and nothing lifted the
+    // pause, so the pool shrank with every bad day until no answer could be
+    // sent at all. A paused mailbox whose cooldown has passed is judged on its
+    // current window here, before senders are chosen, and resumed when it reads
+    // clean. A recovery that cannot run leaves the pauses in place rather than
+    // stopping the pass, since answering from the mailboxes that can still send
+    // is better than answering from none.
+    const senders = await recoverPausedSenderAccounts({ now: new Date(startedAt) })
       .catch(() => null);
     // Rotation covers the whole eligible queue, not the requests one pass can
     // work: taking the first requests of an oldest first list every time is how
@@ -165,6 +175,13 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ranAt: new Date().toISOString(),
       sourcingWaves: waves?.scanned ?? 0,
+      senders: senders
+        ? {
+          paused: senders.scanned,
+          resumed: senders.resumed.map((account) => account.email),
+          held: senders.held.map((account) => ({ email: account.email, reason: account.reason, eligibleAt: account.eligibleAt })),
+        }
+        : null,
       requests: runs.length,
       deferred,
       failed,

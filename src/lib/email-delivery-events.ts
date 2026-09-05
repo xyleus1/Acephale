@@ -7,6 +7,8 @@ import {
   decodeStoredDeliveryFeedback,
   DELIVERY_FEEDBACK_CLASSIFICATION,
   senderProtectionDecision,
+  senderProtectionRecoveryDecision,
+  SENDER_PROTECTION_COOLDOWN_HOURS,
   SENDER_PROTECTION_WINDOW_HOURS,
   EMAIL_SUPPRESSION_REASONS,
   type DeliveryFeedback,
@@ -105,10 +107,10 @@ export async function resolveUnroutedFeedbackOffices(
   return [...offices].sort();
 }
 
-export async function applySenderProtection(
+async function senderProtectionWindow(
   db: DeliveryDb,
   input: { accountId: string; now: Date },
-): Promise<{ paused: boolean; reason: string | null }> {
+): Promise<{ sent: number; permanentBounces: number; complaints: number }> {
   const since = new Date(input.now.getTime() - SENDER_PROTECTION_WINDOW_HOURS * 3_600_000);
   const [sent, permanentBounces, complaints] = await Promise.all([
     db.emailMessage.count({
@@ -121,13 +123,43 @@ export async function applySenderProtection(
       where: { accountId: input.accountId, kind: "COMPLAINT", occurredAt: { gte: since } },
     }),
   ]);
-  const decision = senderProtectionDecision({ sent, permanentBounces, complaints });
+  return { sent, permanentBounces, complaints };
+}
+
+export async function applySenderProtection(
+  db: DeliveryDb,
+  // `newEvidence` false means this call carries no bounce or complaint the
+  // mailbox has not already been judged on, so an existing pause keeps its own
+  // time and a retry cannot postpone recovery.
+  input: { accountId: string; now: Date; newEvidence?: boolean },
+): Promise<{ paused: boolean; reason: string | null }> {
+  const window = await senderProtectionWindow(db, input);
+  const decision = senderProtectionDecision(window);
   if (!decision.pause) return { paused: false, reason: null };
-  const updated = await db.emailAccount.updateMany({
+  // New evidence restates an existing pause with the current reason and time.
+  // That is what tells recovery its measurement is stale: recovery resumes
+  // against the pause it judged, so a mailbox that crossed the threshold again
+  // while recovery was measuring a clean window would otherwise be resumed on
+  // that stale judgement.
+  //
+  // The restate is attempted first, so a recovery landing between the two
+  // writes leaves the mailbox paused either way: either the restate wins and
+  // recovery's guard is stale, or the restate finds the mailbox already
+  // resumed and the pause below applies to it afresh.
+  if (input.newEvidence ?? true) {
+    const restated = await db.emailAccount.updateMany({
+      where: { id: input.accountId, sendPausedAt: { not: null } },
+      data: { sendPausedAt: input.now, sendPausedReason: decision.reason },
+    });
+    // The return value says whether this report is what took the mailbox out
+    // of the pool, so a restated pause is not reported as a new one.
+    if (restated.count > 0) return { paused: false, reason: decision.reason };
+  }
+  const paused = await db.emailAccount.updateMany({
     where: { id: input.accountId, sendPausedAt: null },
     data: { sendPausedAt: input.now, sendPausedReason: decision.reason },
   });
-  return { paused: updated.count > 0, reason: decision.reason };
+  return { paused: paused.count > 0, reason: decision.reason };
 }
 
 export async function upsertEmailSuppression(
@@ -200,20 +232,27 @@ export async function recordDeliveryFeedback(
   const officeId = suppressionOfficeIds[0]
     ?? (input.routing.routed ? input.routing.officeId : input.routing.fallbackOfficeId);
 
-  await db.emailDeliveryEvent.upsert({
-    where: { messageId: input.messageId },
-    create: {
-      officeId,
-      accountId: input.accountId,
-      messageId: input.messageId,
-      kind: input.feedback.kind,
-      permanent: input.feedback.permanent,
-      recipients: JSON.stringify(recipients),
-      detail,
-      occurredAt: input.occurredAt,
-    },
-    update: {},
-  });
+  // Only the call that writes the event carries evidence the mailbox has not
+  // been judged on. Insertion decides that, so two concurrent copies of one
+  // report cannot both claim it and postpone recovery between them.
+  const storedHere = await db.emailDeliveryEvent
+    .create({
+      data: {
+        officeId,
+        accountId: input.accountId,
+        messageId: input.messageId,
+        kind: input.feedback.kind,
+        permanent: input.feedback.permanent,
+        recipients: JSON.stringify(recipients),
+        detail,
+        occurredAt: input.occurredAt,
+      },
+    })
+    .then(() => true)
+    .catch((error: unknown) => {
+      if (error && typeof error === "object" && "code" in error && error.code === "P2002") return false;
+      throw error;
+    });
 
   const reason = suppressionReasonFor(input.feedback);
   const suppressed: string[] = [];
@@ -238,7 +277,11 @@ export async function recordDeliveryFeedback(
   const affectsSender = input.accountId
     && ((input.feedback.kind === "BOUNCE" && input.feedback.permanent) || input.feedback.kind === "COMPLAINT");
   if (affectsSender && input.accountId) {
-    const protection = await applySenderProtection(db, { accountId: input.accountId, now });
+    const protection = await applySenderProtection(db, {
+      accountId: input.accountId,
+      now,
+      newEvidence: storedHere,
+    });
     senderPaused = protection.paused;
   }
 
@@ -403,4 +446,91 @@ export async function resumeSenderAccount(accountId: string, db: DeliveryDb = pr
     data: { sendPausedAt: null, sendPausedReason: null },
   });
   return updated.count > 0;
+}
+
+export type SenderRecoveryResult = {
+  scanned: number;
+  resumed: { id: string; email: string; pausedReason: string | null }[];
+  held: { id: string; email: string; reason: string; eligibleAt: string }[];
+};
+
+export const SENDER_RECOVERY_SCAN_LIMIT = 50;
+// One page of paused mailboxes per 15 minutes, so a scheduled pass and the next
+// one do not read the same page.
+export const SENDER_RECOVERY_ROTATION_MS = 15 * 60_000;
+
+// Sender protection pauses a mailbox but nothing ever lifted the pause, so one
+// bad day of bounces removed a mailbox from the pool for good and the shared
+// pool shrank until no supplier conversation could be answered at all. Every
+// paused mailbox whose cooldown has passed is judged again on the current
+// window and resumed when it reads clean.
+export async function recoverPausedSenderAccounts(
+  input: { now: Date; limit?: number },
+  db: DeliveryDb = prisma,
+): Promise<SenderRecoveryResult> {
+  const limit = input.limit ?? SENDER_RECOVERY_SCAN_LIMIT;
+  // Only mailboxes past the cooldown are read, so a fleet paused all at once
+  // does not spend the scan on mailboxes that cannot be resumed yet.
+  const where = {
+    isActive: true,
+    sendEnabled: true,
+    sendPausedAt: {
+      not: null,
+      lte: new Date(input.now.getTime() - SENDER_PROTECTION_COOLDOWN_HOURS * 3_600_000),
+    },
+  };
+  // Held mailboxes keep their pause time, so reading the oldest page every
+  // pass would let the same unhealthy mailboxes starve every mailbox behind
+  // them. The page rotates with the clock instead, so a fleet larger than one
+  // scan is covered across passes.
+  const eligible = await db.emailAccount.count({ where });
+  const pages = Math.max(1, Math.ceil(eligible / limit));
+  const page = Math.floor(input.now.getTime() / SENDER_RECOVERY_ROTATION_MS) % pages;
+  const paused = await db.emailAccount.findMany({
+    where,
+    orderBy: [{ sendPausedAt: "asc" }, { id: "asc" }],
+    skip: page * limit,
+    take: limit,
+    select: { id: true, email: true, sendPausedAt: true, sendPausedReason: true },
+  });
+  const result: SenderRecoveryResult = { scanned: paused.length, resumed: [], held: [] };
+  for (const account of paused) {
+    if (!account.sendPausedAt) continue;
+    const window = await senderProtectionWindow(db, { accountId: account.id, now: input.now });
+    const decision = senderProtectionRecoveryDecision({
+      pausedAt: account.sendPausedAt,
+      now: input.now,
+      ...window,
+    });
+    if (!decision.resume) {
+      result.held.push({
+        id: account.id,
+        email: account.email,
+        reason: decision.reason,
+        eligibleAt: decision.eligibleAt.toISOString(),
+      });
+      continue;
+    }
+    // The pause timestamp is part of the guard, so a mailbox paused again
+    // between the read and this write keeps its newer pause instead of being
+    // resumed on a judgement made about the older one. Disabling the mailbox
+    // mid scan is an operator decision, and it holds too: resuming would clear
+    // the pause and put the mailbox back in the pool the moment the operator
+    // re-enabled it, without protection having judged it.
+    const updated = await db.emailAccount.updateMany({
+      where: { id: account.id, isActive: true, sendEnabled: true, sendPausedAt: account.sendPausedAt },
+      data: { sendPausedAt: null, sendPausedReason: null },
+    });
+    if (updated.count > 0) {
+      result.resumed.push({ id: account.id, email: account.email, pausedReason: account.sendPausedReason });
+      continue;
+    }
+    result.held.push({
+      id: account.id,
+      email: account.email,
+      reason: "Paused again, or taken out of the pool, while this pass was resuming it.",
+      eligibleAt: new Date(input.now.getTime() + SENDER_PROTECTION_COOLDOWN_HOURS * 3_600_000).toISOString(),
+    });
+  }
+  return result;
 }

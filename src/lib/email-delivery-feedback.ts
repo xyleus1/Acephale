@@ -505,6 +505,13 @@ export const SENDER_PROTECTION_MIN_SENDS = 10;
 export const SENDER_PROTECTION_BOUNCE_RATE = 0.05;
 export const SENDER_PROTECTION_COMPLAINT_COUNT = 2;
 
+// A pause is held for at least the window it was measured over, so the sends
+// that caused it have aged out before the mailbox is judged again. Without a
+// recovery rule a paused mailbox never sends again until a person resumes it,
+// which is how sender protection turned a bad day into a permanently smaller
+// pool and left supplier conversations owed with nothing able to answer them.
+export const SENDER_PROTECTION_COOLDOWN_HOURS = SENDER_PROTECTION_WINDOW_HOURS;
+
 export function senderProtectionDecision(input: {
   sent: number;
   permanentBounces: number;
@@ -524,4 +531,44 @@ export function senderProtectionDecision(input: {
     };
   }
   return { pause: false };
+}
+
+export type SenderProtectionRecovery =
+  | { resume: true }
+  | { resume: false; reason: string; eligibleAt: Date };
+
+// A paused mailbox is resumed once the cooldown has passed and the same
+// measurement that paused it no longer holds. The mailbox is judged on the
+// current window, so a mailbox that starts bouncing again is paused again by
+// the next delivery report rather than being trusted for good.
+export function senderProtectionRecoveryDecision(input: {
+  pausedAt: Date;
+  now: Date;
+  sent: number;
+  permanentBounces: number;
+  complaints: number;
+}): SenderProtectionRecovery {
+  const eligibleAt = new Date(input.pausedAt.getTime() + SENDER_PROTECTION_COOLDOWN_HOURS * 3_600_000);
+  if (input.now.getTime() < eligibleAt.getTime()) {
+    return {
+      resume: false,
+      reason: `Paused less than ${SENDER_PROTECTION_COOLDOWN_HOURS} hours ago.`,
+      eligibleAt,
+    };
+  }
+  const decision = senderProtectionDecision({
+    sent: input.sent,
+    permanentBounces: input.permanentBounces,
+    complaints: input.complaints,
+  });
+  if (decision.pause) {
+    return {
+      resume: false,
+      reason: decision.reason,
+      // The window is rolling, so the soonest a still failing mailbox can be
+      // judged clean is once the current window has passed.
+      eligibleAt: new Date(input.now.getTime() + SENDER_PROTECTION_WINDOW_HOURS * 3_600_000),
+    };
+  }
+  return { resume: true };
 }

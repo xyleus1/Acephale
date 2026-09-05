@@ -1,6 +1,7 @@
 import "server-only";
 
 import { SHARED_MAILBOX_POOL_FILTER, SHARED_SENDER_POOL_FILTER } from "@/lib/email-account-pool";
+import { SENDER_PROTECTION_COOLDOWN_HOURS } from "@/lib/email-delivery-feedback";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { prisma } from "@/lib/prisma";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
@@ -53,7 +54,9 @@ export type SenderReach = {
   // almost nothing and leaves every reply unanswerable until an operator
   // resumes them, so it is reported rather than left to be inferred.
   paused: number;
-  pausedMailboxes: Array<{ email: string; reason: string | null; pausedAt: string }>;
+  // `resumesAt` is when the scheduled pass may judge the mailbox again, so a
+  // paused fleet reads as a wait rather than as work for an operator.
+  pausedMailboxes: Array<{ email: string; reason: string | null; pausedAt: string; resumesAt: string }>;
   // Mailboxes this request mailed from that a reply cannot be answered from,
   // so their threads depend on the pool having a mailbox left.
   blocked: Array<{
@@ -273,6 +276,9 @@ async function senderReach(tallies: Map<string, MailboxTally>): Promise<SenderRe
       email: account.email.trim().toLowerCase(),
       reason: account.sendPausedReason,
       pausedAt: account.sendPausedAt.toISOString(),
+      resumesAt: new Date(
+        account.sendPausedAt.getTime() + SENDER_PROTECTION_COOLDOWN_HOURS * 3_600_000,
+      ).toISOString(),
     }]
     : []));
   const byEmail = new Map(rows.map((row) => [row.email.trim().toLowerCase(), row]));

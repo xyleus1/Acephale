@@ -1,5 +1,47 @@
 # Engineering Log
 
+## 2026-09-04: A sender protection pause expires instead of lasting forever
+
+- Production had four mailboxes left in the shared sender pool and several
+  paused by sender protection, so owed supplier answers could not be sent. The
+  pause logic had no counterpart: nothing ever re-judged a paused mailbox, so a
+  single bad day removed a mailbox until an operator resumed it by hand.
+- `senderProtectionRecoveryDecision` holds a paused mailbox for the protection
+  window, then re-measures its rolling sends, permanent bounces and complaints
+  and resumes it only if those current numbers would not pause it again, so a
+  mailbox that is still bouncing stays out of the pool.
+- `recoverPausedSenderAccounts` runs that decision over at most 50 paused
+  mailboxes, and writes the resume with `sendPausedAt` as an optimistic guard,
+  so a pause landing between the read and the write survives and is reported as
+  held rather than reported as resumed. The scheduled procurement pass calls it
+  before choosing senders and reports what it resumed and what it held.
+- Review found the guard was not enough on its own. A report that crossed the
+  threshold again while recovery measured a clean window could not refresh an
+  existing pause, so the guard timestamp stayed valid and the resume landed on
+  an unhealthy mailbox. `applySenderProtection` now restates an existing pause
+  with the current time and reason, which invalidates that resume, while its
+  `paused` result still reports only a mailbox this report took out of the pool.
+  The restate is attempted before the write that pauses an unpaused mailbox, so
+  a recovery landing between the two writes cannot leave the mailbox unpaused:
+  either the restate wins and recovery's guard is stale, or the restate finds
+  the mailbox already resumed and the second write pauses it afresh. Only the call
+  that inserted the delivery event restates the pause, and the insert itself
+  decides that (a unique conflict means another copy stored it), so neither a
+  retry of an already persisted report nor two concurrent copies of one report
+  can keep pushing the cooldown out and postpone recovery forever.
+- Recovery reads only cooled mailboxes and rotates the page every 15 minutes,
+  since held mailboxes keep their pause time and a chronically unhealthy first
+  page would otherwise starve every mailbox behind it. The resume also requires
+  `isActive` and `sendEnabled` at write time, so a mailbox an operator disables
+  mid scan keeps its pause instead of returning to service unjudged when it is
+  re-enabled.
+- Verified with `npm run -s test:email-delivery-feedback` (cooldown, clean
+  resume, still-bouncing hold, concurrent re-pause, and the cron contract),
+  `npm run -s test:email-sender-pool-db` (resume against a real migrated
+  database, held mailbox untouched, no second resume), `test:email-sender-pool`,
+  `test:procurement-autopilot-plan`, `test:procurement-conversation-stage`,
+  `test:procurement-conversation-task`, lint and `npx tsc --noEmit`.
+
 ## 2026-09-04: Paid provider spend is capped per prospecting run, not per batch
 
 - `runProspectingBatch` accepts `maxVerifications`; `verifyCandidateEmails`

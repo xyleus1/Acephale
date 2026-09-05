@@ -218,6 +218,7 @@ async function main() {
     decodeStoredDeliveryFeedback,
     encodeStoredDeliveryFeedback,
     senderProtectionDecision,
+    senderProtectionRecoveryDecision,
     suppressionSkipMessage,
     EMAIL_SUPPRESSION_REASONS,
     SENDER_PROTECTION_MIN_SENDS,
@@ -225,7 +226,10 @@ async function main() {
   const {
     deliveryFeedbackNeedsRecovery,
     listSuppressedEmails,
+    applySenderProtection,
     recordDeliveryFeedback,
+    recoverPausedSenderAccounts,
+    SENDER_RECOVERY_ROTATION_MS,
     recoverUnfinishedDeliveryFeedback,
     DELIVERY_FEEDBACK_RECOVERY_BATCH,
   } = await import("../src/lib/email-delivery-events");
@@ -409,10 +413,16 @@ async function main() {
       sweepBatches,
       failNextAt: (point: FailurePoint) => failures.add(point),
       emailDeliveryEvent: {
-        upsert: async (args: { where: { messageId: string }; create: Record<string, unknown> }) => {
+        create: async (args: { data: Record<string, unknown> }) => {
           failOnce("event");
-          if (!events.has(args.where.messageId)) events.set(args.where.messageId, args.create);
-          return events.get(args.where.messageId);
+          const messageId = String(args.data.messageId);
+          if (events.has(messageId)) {
+            // Prisma reports a unique conflict, which is how a duplicate report
+            // learns it did not store the evidence itself.
+            throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+          }
+          events.set(messageId, args.data);
+          return args.data;
         },
         count: async (args: { where: { kind: string; permanent?: boolean } }) => [...events.values()]
           .filter((event) => event.kind === args.where.kind && (args.where.permanent === undefined || event.permanent === args.where.permanent))
@@ -491,8 +501,10 @@ async function main() {
       emailAccount: {
         updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
           failOnce("protection");
-          accountUpdates.push({ ...args.where, ...args.data });
-          return { count: 1 };
+          accountUpdates.push({ ...args.where, ...args.data, matchedPaused: args.where.sendPausedAt !== null });
+          // The mailbox starts unpaused here, so the restating write that only
+          // matches a paused mailbox finds nothing.
+          return { count: args.where.sendPausedAt === null ? 1 : 0 };
         },
       },
     };
@@ -519,14 +531,33 @@ async function main() {
   assert.equal(bounceDb.suppressions.get("office-1:buyer@acme-machining.example")?.evidenceMessageId, "message-dsn-1");
   assert.equal(recorded.officeId, "office-1");
   assert.deepEqual(bounceDb.messageUpdates, [{ id: "message-dsn-1", deliveryKind: "BOUNCE" }]);
-  assert.equal(bounceDb.accountUpdates.length, 1);
-  assert.equal(bounceDb.accountUpdates[0].sendPausedReason, "1 of 20 sends bounced (5%) in 24 hours.");
+  assert.equal(bounceDb.accountUpdates.length, 2, "the restating write runs first, then the write that pauses an unpaused mailbox");
+  assert.equal(bounceDb.accountUpdates[1].sendPausedReason, "1 of 20 sends bounced (5%) in 24 hours.");
 
   // A re-synced copy of the same message changes nothing.
   const again = await recordDeliveryFeedback(bounceDb as never, bounceInput);
   assert.deepEqual(again.suppressed, ["buyer@acme-machining.example"]);
   assert.equal(bounceDb.events.size, 1, "one delivery event per message");
   assert.equal(bounceDb.suppressions.size, 1, "one suppression per office and address");
+  // A re-synced report carries no evidence the mailbox has not been judged on,
+  // so it must not restate the pause and postpone recovery.
+  assert.equal(bounceDb.accountUpdates.length, 3, "the re-sync attempts only the write that pauses an unpaused mailbox");
+  assert.equal(bounceDb.accountUpdates[2].matchedPaused, false, "the re-sync never restates an existing pause");
+
+  // Two copies of one report processed at once: the insert decides which call
+  // carries the evidence, so only that call may restate the pause.
+  const concurrentDb = fakeDeliveryDb({ outboundSent: 20 });
+  const concurrentInput = { ...bounceInput, messageId: "message-dsn-concurrent" };
+  await Promise.all([
+    recordDeliveryFeedback(concurrentDb as never, concurrentInput),
+    recordDeliveryFeedback(concurrentDb as never, concurrentInput),
+  ]);
+  assert.equal(concurrentDb.events.size, 1, "one delivery event survives the race");
+  assert.equal(
+    concurrentDb.accountUpdates.filter((row) => row.matchedPaused === true).length,
+    1,
+    "only the call that stored the event restates the pause",
+  );
 
   // Transient bounces are recorded but suppress nobody and never pause a sender.
   const transientDb = fakeDeliveryDb({ outboundSent: 5 });
@@ -640,7 +671,13 @@ async function main() {
     assert.equal(retried.senderPaused, true, `${point}: the retry pauses the sender`);
     assert.equal(retryDb.events.size, 1, `${point}: one event after the retry`);
     assert.equal(retryDb.suppressions.size, 1, `${point}: one suppression after the retry`);
-    assert.equal(retryDb.accountUpdates.length, 1, `${point}: one pause after the retry`);
+    // A retry whose event was already stored carries no new evidence, so it
+    // does not restate an existing pause and cannot postpone recovery.
+    assert.equal(
+      retryDb.accountUpdates.length,
+      point === "event" ? 2 : 1,
+      `${point}: the retry restates a pause only when it stores the evidence itself`,
+    );
     assert.deepEqual(retryDb.messageUpdates, [{ id: retryInput.messageId, deliveryKind: "BOUNCE" }]);
     assert.equal(deliveryFeedbackNeedsRecovery({ classification: "DELIVERY_FEEDBACK", deliveryKind: "BOUNCE" }), false);
   }
@@ -859,6 +896,188 @@ async function main() {
   const schema = readFileSync(path.join(root, "prisma/schema.prisma"), "utf8");
   assert.match(schema, /reason\s+String \/\/ BOUNCED \| COMPLAINED \| OPTED_OUT \| MANUAL/, "schema comment matches the persisted reasons");
   assert.match(schema, /@@unique\(\[officeId, email\]\)/, "suppressions are unique per office and address");
+
+  // Sender protection recovery: a pause that nothing lifts empties the pool.
+  const pausedAt = new Date("2026-08-30T12:00:00Z");
+  const clean = { sent: 0, permanentBounces: 0, complaints: 0 };
+  assert.equal(
+    senderProtectionRecoveryDecision({ pausedAt, now: new Date("2026-08-31T11:59:00Z"), ...clean }).resume,
+    false,
+    "a mailbox is held for the cooldown so the sends that paused it age out",
+  );
+  assert.deepEqual(
+    senderProtectionRecoveryDecision({ pausedAt, now: new Date("2026-08-31T12:00:00Z"), ...clean }),
+    { resume: true },
+    "a cooled mailbox whose window reads clean is resumed without an operator",
+  );
+  const stillBouncing = senderProtectionRecoveryDecision({
+    pausedAt,
+    now: new Date("2026-09-01T12:00:00Z"),
+    sent: 20,
+    permanentBounces: 2,
+    complaints: 0,
+  });
+  assert.equal(stillBouncing.resume, false, "a mailbox that would be paused again stays paused");
+  assert.match(
+    "reason" in stillBouncing ? stillBouncing.reason : "",
+    /bounced/,
+    "the hold names the current measurement, not the original pause",
+  );
+
+  function fakeSenderRecoveryDb(accounts: Array<{
+    id: string;
+    email: string;
+    sendPausedAt: Date;
+    sendPausedReason: string | null;
+    sent: number;
+    permanentBounces: number;
+    complaints: number;
+    // Set to simulate the mailbox being paused again between the read and the
+    // resume, which must leave the newer pause in place.
+    repausedAt?: Date;
+  }>) {
+    const resumed: string[] = [];
+    const attempted: string[] = [];
+    const pagesRead: number[] = [];
+    const db = {
+      resumed,
+      attempted,
+      pagesRead,
+      emailAccount: {
+        count: async () => accounts.length,
+        findMany: async (args: { where: Record<string, unknown>; take: number; skip: number }) => {
+          assert.equal(args.where.sendEnabled, true, "a mailbox an operator disabled is not resumed by protection");
+          assert.ok(args.take > 0, "recovery is bounded per pass");
+          pagesRead.push(args.skip);
+          return accounts.slice(args.skip, args.skip + args.take).map((account) => ({
+            id: account.id,
+            email: account.email,
+            sendPausedAt: account.sendPausedAt,
+            sendPausedReason: account.sendPausedReason,
+          }));
+        },
+        updateMany: async (args: { where: { id: string; sendPausedAt: Date; isActive?: boolean; sendEnabled?: boolean } }) => {
+          const account = accounts.find((row) => row.id === args.where.id)!;
+          attempted.push(account.id);
+          assert.equal(args.where.isActive, true, "a resume only lands while the mailbox is still in the pool");
+          assert.equal(args.where.sendEnabled, true, "a mailbox disabled mid scan keeps its pause");
+          const current = account.repausedAt ?? account.sendPausedAt;
+          if (current.getTime() !== args.where.sendPausedAt.getTime()) return { count: 0 };
+          resumed.push(account.id);
+          return { count: 1 };
+        },
+      },
+      emailMessage: {
+        count: async (args: { where: { accountId: string } }) => (
+          accounts.find((row) => row.id === args.where.accountId)?.sent ?? 0
+        ),
+      },
+      emailDeliveryEvent: {
+        count: async (args: { where: { accountId: string; kind: string } }) => {
+          const account = accounts.find((row) => row.id === args.where.accountId)!;
+          return args.where.kind === "BOUNCE" ? account.permanentBounces : account.complaints;
+        },
+      },
+    };
+    return db;
+  }
+
+  const recoveryNow = new Date("2026-09-02T12:00:00Z");
+  const recoveryDb = fakeSenderRecoveryDb([
+    { id: "clean", email: "clean@pool.test", sendPausedAt: pausedAt, sendPausedReason: "1 of 18 sends bounced (6%) in 24 hours.", sent: 0, permanentBounces: 0, complaints: 0 },
+    { id: "dirty", email: "dirty@pool.test", sendPausedAt: pausedAt, sendPausedReason: null, sent: 20, permanentBounces: 3, complaints: 0 },
+    { id: "fresh", email: "fresh@pool.test", sendPausedAt: new Date("2026-09-02T11:00:00Z"), sendPausedReason: null, sent: 0, permanentBounces: 0, complaints: 0 },
+    { id: "repaused", email: "repaused@pool.test", sendPausedAt: pausedAt, sendPausedReason: null, sent: 0, permanentBounces: 0, complaints: 0, repausedAt: recoveryNow },
+  ]);
+  const recovery = await recoverPausedSenderAccounts({ now: recoveryNow }, recoveryDb as never);
+  assert.equal(recovery.scanned, 4);
+  assert.deepEqual(recovery.resumed.map((account) => account.email), ["clean@pool.test"], "only a cooled, clean mailbox returns to the pool");
+  assert.deepEqual(recoveryDb.attempted, ["clean", "repaused"], "a mailbox judged clean is written, and the guard decides whether the write lands");
+  assert.deepEqual(recoveryDb.resumed, ["clean"], "the guard rejects a resume based on a pause that is no longer the current one");
+  assert.ok(!recovery.resumed.some((account) => account.id === "repaused"), "a mailbox paused again between the read and the write is not reported as resumed");
+  assert.deepEqual(
+    recovery.held.map((account) => account.email).sort(),
+    ["dirty@pool.test", "fresh@pool.test", "repaused@pool.test"],
+    "every mailbox still paused is named with why",
+  );
+  for (const held of recovery.held) {
+    assert.ok(Date.parse(held.eligibleAt) > 0, "a held mailbox says when it may be judged again");
+  }
+  assert.deepEqual(recoveryDb.pagesRead, [0], "a fleet inside one scan is read from the first page");
+
+  // Held mailboxes keep their pause time, so a page that stays unhealthy must
+  // not starve the mailboxes behind it: the page rotates with the clock.
+  const crowded = Array.from({ length: 6 }, (_value, index) => ({
+    id: `paused-${index}`,
+    email: `paused-${index}@pool.test`,
+    sendPausedAt: pausedAt,
+    sendPausedReason: null,
+    sent: 20,
+    permanentBounces: 3,
+    complaints: 0,
+  }));
+  const pagesSeen = new Set<string>();
+  for (let step = 0; step < 3; step += 1) {
+    const rotatingDb = fakeSenderRecoveryDb(crowded);
+    const pass = await recoverPausedSenderAccounts(
+      { now: new Date(recoveryNow.getTime() + step * SENDER_RECOVERY_ROTATION_MS), limit: 2 },
+      rotatingDb as never,
+    );
+    for (const held of pass.held) pagesSeen.add(held.email);
+  }
+  assert.equal(pagesSeen.size, 6, "every paused mailbox is judged within one rotation of the pages");
+
+  // A report that crosses the threshold again while recovery is measuring a
+  // clean window has to restate the pause, since that is what invalidates the
+  // resume recovery is about to attempt.
+  const protectionDb = (state: { pausedAt: Date | null }) => {
+    const writes: Array<{ pausedOnly: boolean; sendPausedAt: unknown }> = [];
+    return {
+      writes,
+      emailMessage: { count: async () => 20 },
+      emailDeliveryEvent: { count: async (args: { where: { kind: string } }) => (args.where.kind === "BOUNCE" ? 3 : 0) },
+      emailAccount: {
+        updateMany: async (args: { where: { sendPausedAt: unknown }; data: { sendPausedAt: Date } }) => {
+          const pausedOnly = args.where.sendPausedAt !== null;
+          writes.push({ pausedOnly, sendPausedAt: args.data.sendPausedAt });
+          const matches = pausedOnly ? state.pausedAt !== null : state.pausedAt === null;
+          if (!matches) return { count: 0 };
+          state.pausedAt = args.data.sendPausedAt;
+          return { count: 1 };
+        },
+      },
+    };
+  };
+
+  const alreadyPaused = { pausedAt: new Date("2026-08-30T12:00:00Z") };
+  const restateDb = protectionDb(alreadyPaused);
+  const restate = await applySenderProtection(restateDb as never, { accountId: "account-1", now: recoveryNow });
+  assert.equal(restate.paused, false, "an already paused mailbox is not reported as newly paused");
+  assert.deepEqual(alreadyPaused.pausedAt, recoveryNow, "the pause is restated with the current time, so a stale resume cannot land");
+
+  // A recovery pass clearing the pause between the two writes must still leave
+  // the mailbox paused: the restate misses, and the write below applies afresh.
+  const resumedMidWrite = { pausedAt: new Date("2026-08-30T12:00:00Z") };
+  const raceDb = protectionDb(resumedMidWrite);
+  const racedUpdate = raceDb.emailAccount.updateMany;
+  let firstWrite = true;
+  raceDb.emailAccount.updateMany = async (args) => {
+    if (firstWrite) {
+      firstWrite = false;
+      resumedMidWrite.pausedAt = null;
+    }
+    return racedUpdate(args);
+  };
+  const raced = await applySenderProtection(raceDb as never, { accountId: "account-1", now: recoveryNow });
+  assert.equal(raced.paused, true, "a mailbox resumed mid write is paused again by this report");
+  assert.deepEqual(resumedMidWrite.pausedAt, recoveryNow, "an unhealthy mailbox never ends the race unpaused");
+
+  const autopilotCron = readFileSync(path.join(root, "src/app/api/cron/procurement-autopilot/route.ts"), "utf8");
+  assert.match(
+    autopilotCron,
+    /recoverPausedSenderAccounts\(/,
+    "the scheduled pass lifts expired sender pauses itself, so a bounce spike cannot empty the pool for good",
+  );
 
   console.log("Email delivery feedback checks passed.");
 }

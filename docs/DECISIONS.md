@@ -1,5 +1,24 @@
 # Decisions
 
+## A sender protection pause is a cooldown, not a removal
+Date: 2026-09-06
+- Status: accepted
+- Owner: engineering
+- Decision: A mailbox paused by sender protection is re-judged automatically.
+  It is held for `SENDER_PROTECTION_COOLDOWN_HOURS` (the protection window, so
+  the sends that paused it leave the measurement), then measured again on its
+  current rolling sends, permanent bounces and complaints, and resumed only if
+  those numbers would not pause it. No operator action is required, and none
+  can be assumed.
+- Why: the pause had no counterpart, so every bounce spike permanently shrank
+  the shared pool and owed supplier answers ended with no mailbox to leave
+  from. Deliverability protection has to be reversible to be safe to apply.
+- Safety: the resume is conditioned on the `sendPausedAt` it judged, so a newer
+  pause is never cleared. A mailbox with `sendEnabled` false is an operator
+  decision and is never resumed. Recovery is bounded per pass.
+- Boundary: the sender pool is shared across offices, so recovery is fleet
+  wide, judged per mailbox on that mailbox's own delivery events.
+
 ## Prospecting research rows are keyed by company, and legacy keys migrate in place
 
 Date: 2026-09-04

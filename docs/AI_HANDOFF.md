@@ -1,5 +1,36 @@
 # AI Handoff
 
+## 2026-09-04: An expired sender protection pause lifts itself
+
+- Sender protection paused a mailbox on a bounce or complaint spike and nothing
+  ever lifted the pause, so the shared pool shrank with every bad day until
+  owed supplier answers had no mailbox to leave from. Resuming was operator
+  work nobody was told to do.
+- `senderProtectionRecoveryDecision` (pure, in `src/lib/email-delivery-feedback.ts`)
+  holds a mailbox for `SENDER_PROTECTION_COOLDOWN_HOURS` (the protection window,
+  so the sends that paused it age out), then judges the mailbox on its current
+  rolling window and resumes it only when that window would not pause it again.
+- `recoverPausedSenderAccounts` (`src/lib/email-delivery-events.ts`) applies it
+  to at most 50 cooled paused mailboxes per call, and resumes with
+  `sendPausedAt`, `isActive` and `sendEnabled` as the guard, so neither a newer
+  pause nor an operator disabling the mailbox mid scan is cleared by a stale
+  judgement. A mailbox an operator disabled is never resumed.
+- The scanned page rotates every 15 minutes, since held mailboxes keep their
+  pause time and an unhealthy first page would otherwise starve every mailbox
+  behind it.
+- `applySenderProtection` restates an existing pause with the current time and
+  reason. That is what makes a concurrent resume fail: without it, a report that
+  crossed the threshold again while recovery was measuring a clean window would
+  leave the guard timestamp untouched and the mailbox would resume unhealthy.
+  Its `paused` result still means only a mailbox this report took out of the
+  pool, and only the call whose insert stored the delivery event
+  restates the pause, so neither a retry of an already persisted report nor a
+  concurrent duplicate of it can postpone recovery.
+- The scheduled procurement pass runs it before it chooses senders and reports
+  `senders.resumed` and `senders.held`. The inbox diagnostic now reports
+  `resumesAt` per paused mailbox, so a paused fleet reads as a wait rather than
+  as operator work.
+
 ## 2026-09-04: Leadgen: run-level paid budget for Hunter and Bouncer, usage on the Sales Agent card
 
 - A Sales Agent prospecting action auto-continues toward its row target, and
@@ -86,7 +117,8 @@
 - `reserveEmailSender` now returns `SENDER_UNAVAILABLE` with the mailbox's real
   condition, and every caller defers the recipient (retryable) instead of
   refusing it, since sender protection pauses are temporary.
-- Operator next step, not a code change: sender-pool capacity. The diagnostic
+- Superseded in part by the recovery pass above: resuming a paused mailbox is
+  no longer operator work. Daily send capacity still is. The diagnostic
   at `/api/admin/procurement-inbox-diagnostics?orderId=` now lists the paused
   mailboxes and their reasons, so resuming or adding mailboxes is the lever that
   lets the owed conversations drain.

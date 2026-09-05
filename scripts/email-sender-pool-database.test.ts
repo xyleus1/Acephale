@@ -3,6 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { releaseEmailSenderReservation, reserveEmailSender } from "../src/lib/email-sender-pool";
 import { updateSharedEmailSenderPoolAccounts } from "../src/lib/email-sender-pool-settings";
+import { recoverPausedSenderAccounts } from "../src/lib/email-delivery-events";
+import { SENDER_PROTECTION_COOLDOWN_HOURS } from "../src/lib/email-delivery-feedback";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -414,6 +416,64 @@ async function main() {
       data: { sendPausedAt: null, sendPausedReason: null },
     });
   }
+
+  // Sender protection removes a mailbox from the pool and nothing put it back,
+  // so a bounce spike shrank the pool for good and left supplier answers
+  // unsendable. A mailbox whose cooldown has passed is judged on its current
+  // window and resumed, while a fresh pause is left alone.
+  const now = new Date();
+  const cooled = await prisma.emailAccount.create({
+    data: {
+      officeId,
+      email: `cooled-${suffix}@example.test`,
+      displayName: "Cooled sender",
+      provider: "GMAIL_APP_PASSWORD",
+      credentialSecret: "encrypted-test-secret",
+      isActive: true,
+      sendEnabled: true,
+      dailySendLimit: 2,
+      sendPausedAt: new Date(now.getTime() - (SENDER_PROTECTION_COOLDOWN_HOURS + 1) * 3_600_000),
+      sendPausedReason: "1 of 18 sends bounced (6%) in 24 hours.",
+    },
+  });
+  const freshlyPaused = await prisma.emailAccount.create({
+    data: {
+      officeId,
+      email: `fresh-${suffix}@example.test`,
+      displayName: "Freshly paused sender",
+      provider: "GMAIL_APP_PASSWORD",
+      credentialSecret: "encrypted-test-secret",
+      isActive: true,
+      sendEnabled: true,
+      dailySendLimit: 2,
+      sendPausedAt: now,
+      sendPausedReason: "2 spam complaints in 24 hours.",
+    },
+  });
+  const recovery = await recoverPausedSenderAccounts({ now });
+  assert.ok(
+    recovery.resumed.some((account) => account.id === cooled.id),
+    "a cooled mailbox with a clean window returns to the pool without an operator",
+  );
+  assert.equal(
+    (await prisma.emailAccount.findUniqueOrThrow({ where: { id: cooled.id }, select: { sendPausedAt: true, sendPausedReason: true } })).sendPausedReason,
+    null,
+    "resuming clears the pause reason as well as the pause",
+  );
+  assert.ok(
+    !recovery.resumed.some((account) => account.id === freshlyPaused.id)
+      && !recovery.held.some((account) => account.id === freshlyPaused.id),
+    "a mailbox paused inside the cooldown is not read at all, so it cannot spend the scan",
+  );
+  assert.ok(
+    (await prisma.emailAccount.findUniqueOrThrow({ where: { id: freshlyPaused.id }, select: { sendPausedAt: true } })).sendPausedAt !== null,
+    "a held mailbox stays out of the pool",
+  );
+  const resumedTwice = await recoverPausedSenderAccounts({ now });
+  assert.ok(
+    !resumedTwice.resumed.some((account) => account.id === cooled.id),
+    "a mailbox already resumed is not scanned again",
+  );
 
   console.log("Email sender pool database behavior passed.");
 }
