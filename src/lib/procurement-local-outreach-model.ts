@@ -25,6 +25,7 @@ export type LocalRfqMessage = {
   externalThreadId: string | null;
   deliveryKind?: string | null;
   classification?: string | null;
+  rfcMessageId?: string | null;
 };
 
 export type LocalRfqOutreach = {
@@ -197,27 +198,63 @@ export function overlayVendorOutreach<T extends {
   };
 }
 
+// The one rule that decides which messages on our own threads belong to a
+// supplier, so every reader of a local thread, the office RFQ ledger and a
+// single anchored thread alike, attributes a colleague or helpdesk reply the
+// same way instead of each keeping its own narrower rule.
+export type LocalRfqThreadAttribution = {
+  relatedIds: Set<string>;
+  inboundIds: Set<string>;
+  attributedSenders: string[];
+};
+
+export function attributeLocalRfqThread(
+  messages: readonly LocalRfqMessage[],
+  contactEmail: string,
+): LocalRfqThreadAttribution {
+  const contact = normalize(contactEmail);
+  const relatedIds = new Set<string>();
+  const inboundIds = new Set<string>();
+  const attributedSenders = new Set<string>();
+  if (!contact) return { relatedIds, inboundIds, attributedSenders: [] };
+  const list = [...messages];
+  const accountEmails = ourEmails(list);
+  const contacts = contactsByThread(list);
+  for (const message of list) {
+    if (message.direction === "OUTBOUND") {
+      if (recipientEmails(message).includes(contact)) relatedIds.add(message.id);
+      continue;
+    }
+    const sender = normalize(message.fromEmail);
+    if (sender === contact) {
+      relatedIds.add(message.id);
+      inboundIds.add(message.id);
+      continue;
+    }
+    if (!attributedContacts(message, contacts, accountEmails).includes(contact)) continue;
+    relatedIds.add(message.id);
+    inboundIds.add(message.id);
+    attributedSenders.add(sender);
+  }
+  return { relatedIds, inboundIds, attributedSenders: [...attributedSenders] };
+}
+
 export function localRfqConversationFor(
   messages: LocalRfqMessage[],
   contactEmail: string,
 ): ProcurementConversation | null {
   const contact = normalize(contactEmail);
   if (!contact) return null;
-  const accountEmails = ourEmails(messages);
-  const contacts = contactsByThread(messages);
-  const related = messages.filter((message) => {
-    if (message.direction === "OUTBOUND") return recipientEmails(message).includes(contact);
-    if (normalize(message.fromEmail) === contact) return true;
-    return attributedContacts(message, contacts, accountEmails).includes(contact);
-  }).slice(-MAX_PROCUREMENT_CONVERSATION_MESSAGES);
+  const attribution = attributeLocalRfqThread(messages, contact);
+  const related = messages
+    .filter((message) => attribution.relatedIds.has(message.id))
+    .slice(-MAX_PROCUREMENT_CONVERSATION_MESSAGES);
   if (!related.length) return null;
   // Answering such a reply means answering the address that wrote it, so the
   // conversation states which senders its own threads attribute to this
   // supplier rather than leaving the send path to guess.
-  const attributedSenders = [...new Set(related
-    .filter((message) => normalize(message.fromEmail) !== contact
-      && attributedContacts(message, contacts, accountEmails).includes(contact))
-    .map((message) => normalize(message.fromEmail)))];
+  const attributedSenders = attribution.attributedSenders
+    .filter((sender) => related.some((message) => normalize(message.fromEmail) === sender));
   const accountEmail = related.find((message) => message.accountEmail)?.accountEmail ?? null;
   const externalThreadId = related.find((message) => message.externalThreadId)?.externalThreadId ?? null;
   return {
@@ -229,9 +266,7 @@ export function localRfqConversationFor(
     accountEmail,
     messages: boundProcurementConversationMessages(related.map((message) => ({
       id: message.id,
-      direction: message.direction === "INBOUND" || normalize(message.fromEmail) === contact
-        ? "INBOUND"
-        : "OUTBOUND",
+      direction: attribution.inboundIds.has(message.id) ? "INBOUND" : "OUTBOUND",
       fromEmail: message.fromEmail,
       fromName: message.fromName,
       toEmails: message.toEmails,
@@ -240,6 +275,9 @@ export function localRfqConversationFor(
       body: message.body,
       sentAt: message.sentAt,
       truncated: false,
+      // Only a real RFC id, never an account scoped external id, since a wrong
+      // id would read as a different message when deliveries are matched.
+      rfcMessageId: message.rfcMessageId ?? null,
     }))),
     unavailableReason: null,
     attributedSenders,

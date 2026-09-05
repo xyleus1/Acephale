@@ -3,6 +3,35 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-08: An anchored supplier thread is attributed like the RFQ ledger
+
+- Trigger: a production autopilot pass on both live requests left twelve saved
+  drafts failing with "The supplier conversation could not be read, so the saved
+  draft waits for the next pass", pass after pass, on suppliers that had
+  visibly replied.
+- Cause: two local readers of our own threads kept two different attribution
+  rules. The office RFQ ledger reader vouches for a colleague, helpdesk or
+  ticketing address on a thread we mailed, but the stored email record reader,
+  which runs first whenever the workflow holds a send receipt, kept only
+  messages from the exact address we mailed. A shop answering from another of
+  its addresses left that thread holding our sends alone, so the transcript had
+  no supplier message, the draft's source message was not in it, and no pass
+  could ever deliver the answer.
+- `src/lib/procurement-local-outreach-model.ts` now exports
+  `attributeLocalRfqThread`, the single rule for which messages on our threads
+  belong to a supplier, and `localRfqConversationFor` reads it.
+- `src/lib/procurement-conversation.ts` maps an anchored thread onto that same
+  rule instead of filtering by the mailed address, and carries the RFC id
+  through so a delivered answer is still matched to its copy on the thread.
+- An anchored thread with no supplier message no longer short circuits the
+  ledger read, so a reply that arrived on another thread of the same request is
+  answered rather than hidden behind an unanswerable transcript.
+- Verification: `npm run -s test:procurement-local-outreach`,
+  `test:procurement-conversation`, `test:procurement-conversation-stage`,
+  `test:procurement-reply-route`, `test:procurement-reply-draft`,
+  `test:procurement-autopilot-plan`, every other pure procurement suite, and
+  `npx tsc --noEmit`.
+
 ## 2026-09-08: OpenAI-backed leadgen discovery and qualification
 
 - Added a structured GPT-5.6 web-search stage with bounded company discovery, public URL validation, domain deduplication, and Serper or HTML supplementation.

@@ -3,6 +3,7 @@ import "server-only";
 import { getValidAccessToken } from "@/lib/gmail-oauth";
 import { prisma } from "@/lib/prisma";
 import { localRfqVendorConversation } from "@/lib/procurement-local-outreach";
+import { localRfqConversationFor } from "@/lib/procurement-local-outreach-model";
 import { deliveredSupplierReplyMessages } from "@/lib/procurement-reply-record";
 import {
   getProcurementCommunicationMessages,
@@ -16,7 +17,6 @@ import {
   boundProcurementConversationMessages,
   mergeDeliveredSupplierReplies,
   mergeProcurementConversationMessages,
-  procurementConversationEmailAddresses,
   procurementConversationFromGmailThread,
   procurementConversationParticipantEmails,
   resolveProcurementVendorConversation,
@@ -129,23 +129,16 @@ async function localConversation(
     },
   });
   if (!thread) return null;
-  const normalizedContact = reference.contactEmail.toLowerCase();
-  const related = thread.messages.filter((message) => {
-    const fromEmail = message.fromEmail.toLowerCase();
-    const recipients = [
-      ...jsonEmails(message.toEmails).flatMap((entry) => procurementConversationEmailAddresses(entry)),
-      ...jsonEmails(message.ccEmails).flatMap((entry) => procurementConversationEmailAddresses(entry)),
-    ];
-    return fromEmail === normalizedContact
-      || (message.direction === "OUTBOUND" && recipients.includes(normalizedContact));
-  });
-  if (!related.length) return null;
-  const accountEmail = related.find((message) => message.account?.email)?.account?.email ?? null;
-  const messages = boundProcurementConversationMessages(related
+  // The thread is read with the same attribution rule the office RFQ ledger
+  // uses, so a shop answering from a colleague, a helpdesk or a ticketing
+  // address is part of its own conversation here too. Reading it any narrower
+  // left such a thread with our sends only, which no pass can answer.
+  const rows = [...thread.messages]
     .sort((left, right) => left.sentAt.valueOf() - right.sentAt.valueOf() || left.id.localeCompare(right.id))
     .map((message) => ({
       id: message.id,
-      direction: message.fromEmail.toLowerCase() === normalizedContact ? "INBOUND" : "OUTBOUND",
+      threadId: anchor.threadId,
+      direction: message.direction,
       fromEmail: message.fromEmail,
       fromName: message.fromName,
       toEmails: jsonEmails(message.toEmails),
@@ -153,21 +146,13 @@ async function localConversation(
       subject: message.subject,
       body: message.bodyText ?? "",
       sentAt: message.sentAt.toISOString(),
-      truncated: false,
+      accountEmail: message.account?.email ?? null,
+      externalThreadId: thread.externalThreadId,
       // Only a real RFC id, never the account scoped external id a sync may put
       // there, since a wrong id would read as a different message.
       rfcMessageId: message.rfcMessageId,
-    })));
-  return {
-    available: true,
-    source: "DERYA_EMAIL_RECORD" as const,
-    sourceUrl: accountEmail && thread.externalThreadId
-      ? `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#all/${encodeURIComponent(thread.externalThreadId)}`
-      : null,
-    accountEmail,
-    messages,
-    unavailableReason: null,
-  } satisfies ProcurementConversation;
+    }));
+  return localRfqConversationFor(rows, reference.contactEmail);
 }
 
 async function localProviderThreadMessages(officeId: string, externalThreadId: string) {
@@ -238,9 +223,15 @@ async function compatibilityConversation(
   const contactEmail = reference.contactEmail;
 
   const stored = await localConversation(args.officeId, reference);
-  if (stored) return stored;
+  // An anchored thread holding only our own sends cannot be answered, and the
+  // supplier's reply may well sit on another thread of the same request, so the
+  // office ledger is still read before settling for a transcript with no
+  // supplier message in it.
+  if (stored?.messages.some((message) => message.direction === "INBOUND")) return stored;
 
   const sentByReference = await localRfqVendorConversation(args.officeId, args.orderId, contactEmail);
+  if (sentByReference?.messages.some((message) => message.direction === "INBOUND")) return sentByReference;
+  if (stored) return stored;
   if (sentByReference) return sentByReference;
 
   const accounts = await prisma.emailAccount.findMany({

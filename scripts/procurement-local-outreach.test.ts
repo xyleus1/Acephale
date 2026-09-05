@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  attributeLocalRfqThread,
   localRfqConversationFor,
   overlayRequestOutreach,
   overlayVendorOutreach,
@@ -386,5 +387,70 @@ for (const moduleName of ["procurement-autopilot", "procurement-file-draft-batch
     `${moduleName} does not read a conversation for every supplier row`,
   );
 }
+
+// One anchored thread, read the way the stored email record path reads it: the
+// shop answered from a colleague address, so that reply is the supplier's own
+// message. Reading such a thread by the mailed address alone left it with our
+// sends only, which every pass then reported as a conversation it could not
+// read while the supplier waited for an answer forever.
+const anchoredThread: LocalRfqMessage[] = [
+  message({ id: "anchor-1", threadId: "thread-9", toEmails: ["sales@mfg-one.com"], externalThreadId: "thread-9" }),
+  message({
+    id: "anchor-2",
+    threadId: "thread-9",
+    externalThreadId: "thread-9",
+    direction: "INBOUND",
+    fromEmail: "helpdesk@mfg-one.com",
+    toEmails: ["desk@derya.ai"],
+    subject: `Re: ${reference} Custom memory foam parts, 100 units`,
+    body: "Which finish do you need?",
+    sentAt: "2026-08-23T09:00:00.000Z",
+    rfcMessageId: "<reply-9@mfg-one.com>",
+  }),
+  message({
+    id: "anchor-3",
+    threadId: "thread-9",
+    externalThreadId: "thread-9",
+    direction: "INBOUND",
+    fromEmail: "mailer-daemon@googlemail.com",
+    toEmails: ["desk@derya.ai"],
+    subject: "Delivery Status Notification (Failure)",
+    body: "Address not found.",
+    sentAt: "2026-08-23T09:05:00.000Z",
+  }),
+];
+const anchoredAttribution = attributeLocalRfqThread(anchoredThread, "sales@mfg-one.com");
+assert.deepEqual(
+  [...anchoredAttribution.inboundIds],
+  ["anchor-2"],
+  "a colleague reply on the thread we mailed is the supplier's own inbound message",
+);
+assert.deepEqual(
+  anchoredAttribution.attributedSenders,
+  ["helpdesk@mfg-one.com"],
+  "the address that wrote the reply is vouched for so the answer can be sent to it",
+);
+const anchoredConversation = localRfqConversationFor(anchoredThread, "sales@mfg-one.com");
+assert.deepEqual(
+  anchoredConversation?.messages.map((entry) => [entry.direction, entry.id]),
+  [["OUTBOUND", "anchor-1"], ["INBOUND", "anchor-2"]],
+  "the anchored thread yields an answerable supplier conversation and drops the bounce",
+);
+assert.equal(
+  anchoredConversation?.messages.find((entry) => entry.id === "anchor-2")?.rfcMessageId,
+  "<reply-9@mfg-one.com>",
+  "the RFC id is carried so an answer already on the thread is not recorded twice",
+);
+
+const conversationSource = readFileSync(resolve(__dirname, "../src/lib/procurement-conversation.ts"), "utf8");
+assert.ok(
+  /localRfqConversationFor\(rows, reference\.contactEmail\)/.test(conversationSource),
+  "the stored email record path reads a thread with the shared attribution rule",
+);
+assert.ok(
+  /if \(stored\?\.messages\.some\(\(message\) => message\.direction === "INBOUND"\)\) return stored;/
+    .test(conversationSource),
+  "an anchored thread with no supplier message does not hide a reply on another thread",
+);
 
 console.log("procurement-local-outreach: all assertions passed");

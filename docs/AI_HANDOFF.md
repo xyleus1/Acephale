@@ -9,6 +9,20 @@ cleanup actions without an LLM. Stage filters are carried in
 Context message before creating an approval-gated operation.
 # AI Handoff
 
+## 2026-09-08: One attribution rule for every local supplier thread
+
+- `attributeLocalRfqThread` in `src/lib/procurement-local-outreach-model.ts` is
+  the only rule for which messages on a thread we mailed belong to a supplier.
+  Both local readers, the office RFQ ledger and the stored email record path in
+  `src/lib/procurement-conversation.ts`, now use it, so a reply from a
+  colleague, helpdesk or ticketing address is answerable on either path.
+- A thread with no supplier message never settles the conversation while the
+  ledger may still hold the reply, which is what kept saved drafts reporting
+  "The supplier conversation could not be read" on every production pass.
+- Still open after this: pooled sender daily caps are a capacity limit, not a
+  code defect, and two PCBA threads need an operator (a wrong contact, and a
+  question the stored request facts cannot answer).
+
 ## 2026-09-08: OpenAI is the leadgen discovery and qualification backbone
 
 - OpenAI GPT-5.6 web search discovers candidate companies, while Serper and free HTML search supplement sparse results.
