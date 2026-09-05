@@ -6,7 +6,10 @@ import {
   type ProcurementConversation,
   type ProcurementConversationMessage,
 } from "@/lib/procurement-conversation-model";
-import { supplierAwaitingMessage } from "@/lib/procurement-inbound-triage";
+import {
+  supplierAwaitingMessage,
+  supplierWrittenMessages,
+} from "@/lib/procurement-inbound-triage";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "@/lib/procurement-workflow";
 
 const MAX_DRAFT_CONTEXT_CHARACTERS = 14_000;
@@ -67,13 +70,33 @@ function latestInbound(args: {
     : null;
 }
 
-function draftTranscript(messages: ProcurementConversationMessage[]) {
-  return messages.slice(-8).map((message) => [
+// The model is told to answer the newest message in the thread it is shown, so
+// the thread it is shown is the one the people on it wrote: an out of office
+// note left in place would otherwise be the message it answers, even though the
+// reply is anchored to the supplier's question underneath it.
+function draftTranscript(messages: readonly ProcurementConversationMessage[]) {
+  const blocks = supplierWrittenMessages(messages).slice(-8).map((message) => [
     `[${message.direction}] ${message.sentAt}`,
     `From: ${clean(message.fromName, 120) || clean(message.fromEmail, 240)}`,
     `Subject: ${clean(message.subject, 240) || "(none)"}`,
     clean(message.body, 4_000) || "(body unavailable)",
-  ].join("\n")).join("\n\n").slice(0, MAX_DRAFT_CONTEXT_CHARACTERS);
+  ].join("\n"));
+  // The budget is spent on the newest messages first. Eight long messages
+  // exceed it together, and cutting the joined thread from the front dropped
+  // the message the reply answers while keeping months of older mail, which is
+  // how an uninformed draft got written.
+  const kept: string[] = [];
+  let budget = MAX_DRAFT_CONTEXT_CHARACTERS;
+  for (const block of [...blocks].reverse()) {
+    const cost = kept.length ? block.length + 2 : block.length;
+    if (cost > budget) {
+      if (!kept.length) kept.push(block.slice(0, budget));
+      break;
+    }
+    budget -= cost;
+    kept.push(block);
+  }
+  return kept.reverse().join("\n\n");
 }
 
 function sanitizeDraftBody(value: string) {
@@ -148,7 +171,8 @@ export async function draftProcurementSupplierReply(input: {
     draftTranscript(input.conversation.messages),
     "",
     "TASK",
-    "Reply to the latest inbound message. Address its concrete request and state the safest truthful next step.",
+    `Reply to the supplier message sent at ${inbound.sentAt} by ${clean(inbound.fromName, 120) || clean(inbound.fromEmail, 240)}.`,
+    "Address its concrete request and state the safest truthful next step.",
   ].join("\n");
   let generated: string;
   try {

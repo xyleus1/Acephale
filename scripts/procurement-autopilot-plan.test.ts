@@ -409,17 +409,12 @@ assert.ok(
   "The eligible queue is read past the requests one pass can work.",
 );
 
-// A failed attempt delivered nothing, and its sender can since have been
-// paused or disconnected, so the replacement sender must not be refused as a
-// changed message.
+// A failed attempt delivered nothing and a fresh draft is written every pass,
+// so what an earlier attempt said can never decide whether this one may go out.
 const replySendSource = readFileSync(resolve(__dirname, "../src/lib/procurement-reply-send.ts"), "utf8");
 assert.ok(
-  /existingInput\.messageHash !== messageHash && !sameReplyFromAnotherMailbox/.test(replySendSource),
-  "An attempt may be retried or reconciled from another mailbox.",
-);
-assert.ok(
-  /replyContentHash\(record\(existingInput\.message\)\) === replyContentHash\(message\)/.test(replySendSource),
-  "The retry has to carry the reply the earlier attempt was made with, only from another sender.",
+  !/messageHash !== messageHash|different reply attempt/.test(replySendSource),
+  "A retry is judged by the outcome of the earlier attempt, not by its wording.",
 );
 assert.ok(
   /accountId: claimed\.reconcileSender\?\.accountId \?\? sender\.id/.test(replySendSource),

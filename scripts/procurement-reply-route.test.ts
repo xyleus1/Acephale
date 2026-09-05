@@ -235,6 +235,19 @@ async function main() {
   assert.equal(noticeDraftInput?.recipient, "sfielding@bacircuits.com");
   assert.equal(noticeDraftInput?.conversationSubject, "Re: RFQ");
 
+  // A file draft names the message it answers, so one naming a message the
+  // thread has moved past is refused instead of replacing a valid saved draft
+  // with one no send would accept.
+  const staleSource = await handleProcurementReplyDraft(
+    request({ sourceMessageId: "inbound-message-0", withRequestFiles: true }),
+    orderId,
+    vendorId,
+    dependencies({
+      saveFileDraft: async () => { throw new Error("A stale source message must not save a draft."); },
+    }),
+  );
+  assert.equal(staleSource.status, 409);
+
   const draftScopeFailure = await handleProcurementReplyDraft(
     request({ sourceMessageId, withRequestFiles: true }),
     orderId,

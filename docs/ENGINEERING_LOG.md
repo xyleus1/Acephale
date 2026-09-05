@@ -3,6 +3,28 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-08: A supplier answer is retried on its outcome, not on its text
+
+- Trigger: a production autopilot pass reported durable conversation tasks stuck
+  at five attempts with "A different reply attempt already exists for this
+  supplier message. Refresh before retrying." on both live requests.
+- Cause: the claim compared the stored attempt's message against the one being
+  sent before it looked at what happened to that attempt. Every pass drafts the
+  answer again, so the text differs, and a thread whose first attempt failed
+  could never be answered by any later pass.
+- `src/lib/procurement-reply-send.ts` claims on status: succeeded is reported as
+  already sent, running is reconciled through the mailbox that was handed the
+  message, anything else in flight is a transient conflict, and a failed attempt
+  is retried with the wording of this pass. Nothing is sent twice, because the
+  answered and unresolved cases are both settled before a send.
+- Also fixed from review: the reply prompt names the supplier message to answer
+  and no longer shows the model a thread ending in an automatic notice, and a
+  file bearing draft whose named source is not the message the thread waits on is
+  refused rather than saved against another message's address.
+- Verified: the procurement suites, `test:procurement-reply-send-db` against a
+  migrated disposable database, `tsc --noEmit`, and `npm run lint` (only the
+  pre-existing unrelated errors).
+
 ## 2026-09-06: Lead status pipeline region
 
 - Lead status now reports deterministic row stages, outreach replies, cleanup

@@ -469,11 +469,19 @@ export async function handleProcurementReplyDraft(
       return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });
     }
     if (parsedInput.data.withRequestFiles) {
-      // The draft answers the message the operator was shown, so its recipient
-      // and subject come from that message rather than from whatever sits on top
-      // of the thread, which can be an automatic notice nobody answers.
-      const source = conversation.messages.find((message) => message.id === parsedInput.data.sourceMessageId)
-        ?? supplierAwaitingMessage(conversation.messages);
+      // The draft answers the message the operator was shown, and saving one
+      // replaces whatever draft the supplier row holds. A request naming a
+      // message the thread has moved past is refused rather than saved against
+      // an address it did not come from, which no send would accept anyway. An
+      // automatic notice on top of the thread is not such a move.
+      const source = conversation.messages.find((message) => message.id === parsedInput.data.sourceMessageId);
+      const awaiting = supplierAwaitingMessage(conversation.messages);
+      if (!source || !awaiting || source.id !== awaiting.id) {
+        return Response.json(
+          { error: "A newer supplier message arrived. Review the refreshed conversation before drafting." },
+          { status: 409, headers: responseHeaders },
+        );
+      }
       const saved = await dependencies.saveFileDraft({
         context: {
           officeId: session.officeId,
@@ -485,8 +493,8 @@ export async function handleProcurementReplyDraft(
         order,
         vendor,
         sourceMessageId: parsedInput.data.sourceMessageId,
-        recipient: source?.fromEmail ?? vendor.contact?.email ?? "",
-        conversationSubject: source?.subject ?? null,
+        recipient: source.fromEmail || vendor.contact?.email || "",
+        conversationSubject: source.subject,
       });
       return Response.json({ draft: saved }, { headers: responseHeaders });
     }

@@ -340,18 +340,6 @@ async function pooledReplySender(args: { workspaceId: string; taskScopeKey: stri
   return { id: candidate.id, email: candidate.email };
 }
 
-// What the supplier reads, without the mailbox it leaves from. The stored
-// attempt keeps its whole message, so this can be computed for an attempt made
-// before this hash existed.
-function replyContentHash(message: Record<string, unknown>) {
-  return digest({
-    recipient: message.recipient,
-    subject: message.subject,
-    body: message.body,
-    ...(message.attachments ? { attachments: message.attachments } : {}),
-  });
-}
-
 function deliveryFromTask(task: { input: unknown; result: unknown }, alreadySent: boolean): ProcurementReplyDelivery {
   const input = record(task.input);
   const message = record(input.message);
@@ -702,17 +690,15 @@ export async function sendProcurementSupplierReply(args: {
     }
     const existingInput = record(existing?.input);
     const existingResult = record(existing?.result);
-    // The sender is part of the message hash, and the mailbox an attempt used
-    // can since have been disconnected or paused. Comparing the whole hash
-    // would then read the same reply from its replacement mailbox as a
-    // different reply: a failed attempt could never be retried, and an
-    // unresolved one could never be reconciled. What the supplier reads is
-    // compared instead, so only genuinely different text is refused.
-    const sameReplyFromAnotherMailbox = Boolean(existing)
-      && replyContentHash(record(existingInput.message)) === replyContentHash(message);
-    if (existing && existingInput.messageHash !== messageHash && !sameReplyFromAnotherMailbox) {
-      throw new SupplyPersistenceError("A different reply attempt already exists for this supplier message. Refresh before retrying.", "conflict");
-    }
+    // What happened to an earlier attempt is what decides whether this one may
+    // go out, never how its text compares. A drafted answer is written afresh
+    // each pass, so refusing a retry whose wording differs stalled a thread for
+    // good: the answer had already been generated again, and no later pass could
+    // ever send it. Divergent wording is not a safety question here either. A
+    // reply an operator wrote is already held to the message the thread is
+    // waiting on, an answered message is reported as answered rather than
+    // answered twice, and an attempt whose outcome is unknown is settled from the
+    // mailbox that carried it before anything else is sent.
     if (existing?.status === "SUCCEEDED") {
       return { sent: deliveryFromTask(existing, true), taskId: null, rfcMessageId: null, reconcile: false, reconcileSender: null };
     }

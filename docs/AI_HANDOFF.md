@@ -9,6 +9,31 @@ cleanup actions without an LLM. Stage filters are carried in
 Context message before creating an approval-gated operation.
 # AI Handoff
 
+## 2026-09-08: A retry is judged by what happened to the earlier attempt, not by its wording
+
+- Context: production durable tasks were stuck after five attempts on "A
+  different reply attempt already exists for this supplier message". A drafted
+  answer is generated afresh on every pass, so a retry almost never repeats the
+  wording of the attempt that failed, and the hash comparison made those threads
+  permanently unanswerable.
+- `src/lib/procurement-reply-send.ts` now claims on the outcome of the earlier
+  attempt only: a succeeded attempt is reported as already sent, an unresolved
+  one is reconciled through the mailbox that carried it before anything else is
+  sent, an attempt still in flight is a transient conflict, and a definitively
+  failed one is retried with whatever this pass wrote. Divergent wording from an
+  operator is still held back earlier, by the guard that requires the draft's
+  source to be the message the thread waits on.
+- Also from review: the reply prompt names the supplier message to answer and the
+  transcript it is given is the thread as the people on it wrote it, so a trailing
+  automatic notice cannot become the message the model answers; and a file bearing
+  draft naming a message the thread has moved past is refused with a conflict
+  instead of being saved against an address it did not come from, which would have
+  replaced a valid draft with one no send accepts.
+- Tests: `npm run test:procurement-reply-draft`,
+  `npm run test:procurement-reply-route`,
+  `npm run test:procurement-autopilot-plan`,
+  `npm run test:procurement-reply-send-db` (migrated disposable database).
+
 ## 2026-09-06: A delivered send whose receipt cannot be recorded fails one row, not the batch
 
 - Context: the end-to-end pruning-gate run used a mock provider that handed out

@@ -121,11 +121,54 @@ async function main() {
         },
       ],
     },
-    generateText: async () => "Thank you.\n\nBest,\nMert\nDerya Supply Chain",
+    generateText: async ({ prompt }) => {
+      capturedPrompt = prompt;
+      return "Thank you.\n\nBest,\nMert\nDerya Supply Chain";
+    },
   });
   assert.equal(behindNotice.sourceMessageId, "inbound-1");
   assert.equal(behindNotice.recipient, "sfielding@bacircuits.com");
   assert.equal(behindNotice.subject, "Re: [RFQ 24cb31bd] Turnkey 4-layer PCBA");
+  // The reply is anchored to the question, so the thread the model is asked to
+  // answer must not end with the notice either.
+  assert.doesNotMatch(capturedPrompt, /out of the office until Monday/);
+  assert.match(
+    capturedPrompt,
+    /Reply to the supplier message sent at 2026-08-19T17:15:20\.000Z by Spencer Fielding\./,
+  );
+
+  // A long thread spends the context budget on its newest messages, or the
+  // question being answered would be cut out of the prompt while older mail
+  // stayed in it.
+  const longThread = await draftProcurementSupplierReply({
+    order,
+    vendor,
+    conversation: {
+      ...conversation,
+      messages: [
+        ...Array.from({ length: 7 }, (_unused, index) => ({
+          id: `outbound-long-${index}`,
+          direction: "OUTBOUND" as const,
+          fromEmail: "mert@example.com",
+          fromName: "Mert",
+          toEmails: ["sfielding@bacircuits.com"],
+          ccEmails: [],
+          subject: "[RFQ 24cb31bd] Turnkey 4-layer PCBA",
+          body: `Specification appendix ${index}. ${"Stackup and impedance detail. ".repeat(200)}`,
+          sentAt: `2026-08-1${index}T09:00:00.000Z`,
+          truncated: false,
+        })),
+        ...conversation.messages,
+      ],
+    },
+    generateText: async ({ prompt }) => {
+      capturedPrompt = prompt;
+      return "Thank you.\n\nBest,\nMert\nDerya Supply Chain";
+    },
+  });
+  assert.equal(longThread.sourceMessageId, "inbound-1");
+  assert.match(capturedPrompt, /Please send me the data/);
+  assert.doesNotMatch(capturedPrompt, /Specification appendix 0\./);
 
   const prefixed = await draftProcurementSupplierReply({
     order,

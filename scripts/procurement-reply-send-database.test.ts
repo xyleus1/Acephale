@@ -305,11 +305,15 @@ async function main() {
     const replayed = await deliver({ context, fixture: success, provider: successProvider });
     assert.equal(replayed.alreadySent, true);
     assert.equal(successfulSends.length, 1, "A successful replay must not call Gmail again.");
-    await assert.rejects(deliver({
+    // A drafted answer is written afresh every pass, so a reply whose wording
+    // differs is not a second answer the supplier is owed: the message has been
+    // answered, and it is reported as answered instead of answered twice.
+    const rewritten = await deliver({
       context,
       fixture: { ...success, input: { ...success.input, body: `${success.input.body} Changed.` } },
       provider: successProvider,
-    }), /different reply attempt/);
+    });
+    assert.equal(rewritten.alreadySent, true);
     assert.equal(successfulSends.length, 1);
     const successTasks = await prisma.supplyExecutionTask.findMany({
       where: { officeId: office.id, taskType: "PROCUREMENT_SUPPLIER_REPLY_EMAIL", input: { path: ["sourceMessageId"], equals: success.input.sourceMessageId } },
@@ -352,13 +356,15 @@ async function main() {
       },
     };
     await assert.rejects(deliver({ context, fixture: unknown, provider: unknownProvider }), /timed out/);
-    await assert.rejects(deliver({
+    // An attempt whose outcome is unknown is settled from the mailbox that
+    // carried it before anything else is sent, whatever the wording of the pass
+    // asking now, or a rewritten answer would be sent on top of one the supplier
+    // may already have read.
+    const reconciled = await deliver({
       context,
       fixture: { ...unknown, input: { ...unknown.input, body: `${unknown.input.body} Changed.` } },
       provider: unknownProvider,
-    }), /different reply attempt/);
-    assert.equal(unknownReconcileCount, 0, "Changed content must not reconcile an uncertain different message.");
-    const reconciled = await deliver({ context, fixture: unknown, provider: unknownProvider });
+    });
     assert.equal(reconciled.alreadySent, false);
     assert.equal(unknownSendCount, 1, "An unknown delivery must reconcile before another send.");
     assert.equal(unknownReconcileCount, 1);
@@ -594,10 +600,12 @@ async function main() {
       reconcile: async () => ({ state: "NOT_FOUND" }),
     };
     await assert.rejects(deliver({ context, fixture: rejected, provider: rejectionProvider }), /rejected/);
+    // A definitively failed attempt is retried with whatever the pass wrote this
+    // time. Holding a retry to the wording of the attempt that failed left the
+    // thread unanswerable for good, since a fresh draft is generated each pass.
     const changed = { ...rejected, input: { ...rejected.input, body: `${rejected.input.body} Changed.` } };
-    await assert.rejects(deliver({ context, fixture: changed, provider: rejectionProvider }), /different reply attempt/);
-    assert.equal(rejectedIds.length, 1);
-    await deliver({ context, fixture: rejected, provider: rejectionProvider });
+    const changedRetry = await deliver({ context, fixture: changed, provider: rejectionProvider });
+    assert.equal(changedRetry.alreadySent, false);
     assert.equal(rejectedIds.length, 2);
     assert.notEqual(rejectedIds[0], rejectedIds[1], "A definitive failed retry must use a new RFC Message-ID.");
 
@@ -647,10 +655,16 @@ async function main() {
       ...pausedRetry,
       input: { ...pausedRetry.input, body: `${pausedRetry.input.body} Changed.` },
     };
-    await assert.rejects(
-      deliver({ context, fixture: pausedChanged, provider: pausedProvider, allowPooledSender: true }),
-      /already/,
-      "A different reply text must not ride on a delivered attempt.",
+    const pausedRewritten = await deliver({
+      context,
+      fixture: pausedChanged,
+      provider: pausedProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(
+      pausedRewritten.alreadySent,
+      true,
+      "A rewritten answer to a delivered message is reported as answered, not sent again.",
     );
     assert.equal(pausedSends.length, 2, "A delivered reply must not be sent twice.");
     await prisma.emailAccount.updateMany({
