@@ -12698,3 +12698,16 @@ Verification caveat:
   window alongside active pool members.
 - Manual resume is conditional on the pause timestamp shown to the admin, so
   newer delivery feedback cannot be cleared by an older page.
+
+## Pooled supplier answers close their thread (this pass)
+
+- Fixed the loop where a supplier reply answered from a pooled mailbox stayed
+  `ANSWER_READY` forever: the answer was filed on the pooled mailbox's thread,
+  so the supplier conversation never showed it. The conversation reader now
+  merges the request's recorded deliveries for that supplier regardless of
+  thread, matching an answer already on the thread by its text so it is not
+  double counted as a chase.
+- Verified with `npx tsc --noEmit`, `npm run lint` (no new findings in touched
+  files), and the procurement conversation, file draft batch, autopilot plan,
+  conversation stage, conversation task, reply draft, reply recovery, reply
+  route, inbound triage and supplier nudge suites.

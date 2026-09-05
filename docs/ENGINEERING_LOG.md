@@ -10030,6 +10030,7 @@ Use this file for chronological implementation notes that future agents should s
   asserts the code and the reason text, pure assertions cover every reason
   branch, and source contracts assert each caller defers rather than refuses.
 
+
 ## 2026-09-05: Supply OS project workspace
 
 - Projects tab replaces Inventory/Prospects/Outreach/Mail; Outreach chat removed as duplicate of the desk chat; office mail now only reachable as a prospecting project's Messages.
@@ -10064,3 +10065,30 @@ Use this file for chronological implementation notes that future agents should s
   mailboxes response.
 - Manual resume now uses a compare-and-clear pause timestamp guard and reports
   stale feedback to the connected-email UI.
+
+## Supplier answers delivered from a pooled mailbox now close the thread
+
+- A reply whose own thread mailbox cannot send leaves from a pooled mailbox, and
+  the provider files that message on the pooled mailbox's thread rather than the
+  supplier's, so the supplier conversation still read as an unanswered reply.
+  Every later pass drafted and delivered the same answer again, reported it as
+  already sent, and the thread could never leave `ANSWER_READY`.
+- `procurementVendorConversation` now merges the deliveries recorded for the
+  request and supplier into the conversation, whatever thread holds them, so an
+  answer counts once it left, and the stage moves to awaiting a quote.
+- A delivery already visible on the supplier's own thread is recognized by the
+  RFC message id both the delivery record and the thread keep, which is now
+  carried on a conversation message. Time cannot do it: a send reconciled hours
+  after the provider accepted it records the reconciliation clock while the
+  thread copy keeps the real send time. Two messages that both name an id and do
+  not share one are different answers whatever they say, so only a copy or a
+  delivery whose id was never kept falls back on identical text within an hour.
+  Each copy stands for one delivery, as many deliveries as possible keep one, and
+  a delivery is listed only when no copy is left for it, so a supplier answered
+  the same way twice shows exactly the answers whose copies never reached the
+  thread and no answer is listed twice or counted as an extra chase.
+- Deliveries are read newest first, since an older answer cannot decide whether
+  the supplier's latest reply is still owed one.
+- Coverage: pure assertions over the delivery records and the merge, plus the
+  procurement conversation, file draft batch, autopilot plan, stage, task, reply
+  draft, reply recovery, reply route, triage and nudge suites.

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
   boundProcurementConversationMessages,
+  mergeDeliveredSupplierReplies,
   mergeProcurementConversationMessages,
+  procurementDeliveredReplyCandidates,
   procurementConversationFromLedger,
   procurementConversationFromGmailThread,
   procurementSupplierSenderVouched,
@@ -286,6 +288,338 @@ async function main() {
       }),
       false,
       "a source that establishes nothing vouches for nobody",
+    );
+  }
+
+  {
+    const supplierReply: ProcurementConversationMessage = {
+      id: "inbound-1",
+      direction: "INBOUND",
+      fromEmail: "sales@supplier.test",
+      fromName: "Supplier",
+      toEmails: ["purchasing@example.com"],
+      ccEmails: [],
+      subject: "Re: RFQ",
+      body: "Which finish do you need?",
+      sentAt: "2026-08-30T09:00:00.000Z",
+      truncated: false,
+    };
+    const conversation: ProcurementConversation = {
+      available: true,
+      source: "DERYA_EMAIL_RECORD",
+      sourceUrl: null,
+      accountEmail: "monica@outreachsavanna.co",
+      messages: [supplierReply],
+      unavailableReason: null,
+    };
+    const delivered = procurementDeliveredReplyCandidates([
+      {
+        id: "task-1",
+        input: {
+          message: {
+            senderEmail: "pooled@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: {
+          sentAt: "2026-08-30T10:00:00.000Z",
+          rfcMessageId: "<answer-1@derya>",
+          providerMessageId: "gmail-1",
+        },
+      },
+      {
+        id: "task-incomplete",
+        input: { message: { senderEmail: "pooled@outreachsavanna.co", recipient: "sales@supplier.test" } },
+        result: { sentAt: "2026-08-30T10:05:00.000Z" },
+      },
+    ]);
+    assert.equal(delivered.length, 1, "a delivery record without the text it carried cannot join a transcript");
+    const answered = mergeDeliveredSupplierReplies(conversation, delivered);
+    assert.deepEqual(
+      answered.messages.map((message) => message.direction),
+      ["INBOUND", "OUTBOUND"],
+      "an answer delivered from a pooled mailbox must read as answering the supplier thread",
+    );
+    assert.equal(answered.messages.at(-1)?.fromEmail, "pooled@outreachsavanna.co");
+
+    const onOwnThread: ProcurementConversation = {
+      ...conversation,
+      messages: [
+        supplierReply,
+        {
+          ...supplierReply,
+          id: "outbound-1",
+          direction: "OUTBOUND",
+          fromEmail: "monica@outreachsavanna.co",
+          toEmails: ["sales@supplier.test"],
+          body: "Anodized, 5,000 pieces, files attached.",
+          sentAt: "2026-08-30T10:00:03.000Z",
+        },
+      ],
+    };
+    assert.equal(
+      mergeDeliveredSupplierReplies(onOwnThread, delivered).messages.length,
+      2,
+      "an answer already on the supplier thread must not be listed twice or counted as another chase",
+    );
+    assert.equal(
+      mergeDeliveredSupplierReplies(
+        { ...conversation, available: false, messages: [] },
+        delivered,
+      ).messages.length,
+      0,
+      "a conversation we cannot read stays unavailable",
+    );
+
+    // Every recorded delivery for the supplier is read, so the answer the thread
+    // already shows arrives beside the one it does not.
+    const repeated = procurementDeliveredReplyCandidates([
+      {
+        id: "task-1",
+        input: {
+          message: {
+            senderEmail: "pooled@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: {
+          sentAt: "2026-08-30T10:00:00.000Z",
+          rfcMessageId: "<answer-1@derya>",
+          providerMessageId: "gmail-1",
+        },
+      },
+      {
+        id: "task-2",
+        input: {
+          message: {
+            senderEmail: "pooled@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: {
+          sentAt: "2026-08-31T11:00:00.000Z",
+          rfcMessageId: "<answer-2@derya>",
+          providerMessageId: "gmail-2",
+        },
+      },
+    ]);
+    const askedTwice: ProcurementConversation = {
+      ...onOwnThread,
+      messages: [
+        ...onOwnThread.messages,
+        { ...supplierReply, id: "inbound-2", sentAt: "2026-08-31T09:00:00.000Z" },
+      ],
+    };
+    assert.equal(
+      mergeDeliveredSupplierReplies(askedTwice, repeated).messages.at(-1)?.direction,
+      "OUTBOUND",
+      "a supplier who repeats a question and gets the same answer again must read as answered",
+    );
+
+    // The same answer twice, twenty minutes apart, with the supplier's repeated
+    // question between them: whichever of the two the thread filed, the other
+    // one is the addition and neither is listed twice.
+    const twiceInAnHour = procurementDeliveredReplyCandidates([
+      {
+        id: "task-early",
+        input: {
+          message: {
+            senderEmail: "monica@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: {
+          sentAt: "2026-08-31T10:00:00.000Z",
+          rfcMessageId: "<answer-early@derya>",
+          providerMessageId: "gmail-early",
+        },
+      },
+      {
+        id: "task-late",
+        input: {
+          message: {
+            senderEmail: "pooled@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: {
+          sentAt: "2026-08-31T10:20:00.000Z",
+          rfcMessageId: "<answer-late@derya>",
+          providerMessageId: "gmail-late",
+        },
+      },
+    ]);
+    const askedAgainSoon = (filedAt: string): ProcurementConversation => ({
+      ...conversation,
+      messages: [
+        { ...supplierReply, id: "inbound-early", sentAt: "2026-08-31T09:50:00.000Z" },
+        {
+          ...supplierReply,
+          id: "outbound-filed",
+          direction: "OUTBOUND",
+          fromEmail: "monica@outreachsavanna.co",
+          toEmails: ["sales@supplier.test"],
+          body: "Anodized, 5,000 pieces, files attached.",
+          sentAt: filedAt,
+        },
+        { ...supplierReply, id: "inbound-late", sentAt: "2026-08-31T10:10:00.000Z" },
+      ],
+    });
+    const earlyFiled = mergeDeliveredSupplierReplies(
+      askedAgainSoon("2026-08-31T10:00:03.000Z"),
+      twiceInAnHour,
+    );
+    assert.deepEqual(
+      earlyFiled.messages.map((message) => message.direction),
+      ["INBOUND", "OUTBOUND", "INBOUND", "OUTBOUND"],
+      "the pooled answer sent after the second question must be the one merged in",
+    );
+    const lateFiled = mergeDeliveredSupplierReplies(
+      askedAgainSoon("2026-08-31T10:20:03.000Z"),
+      twiceInAnHour,
+    );
+    assert.deepEqual(
+      lateFiled.messages.map((message) => message.direction),
+      ["INBOUND", "OUTBOUND", "INBOUND", "OUTBOUND"],
+      "the answer the thread already shows must not be added a second time",
+    );
+    assert.equal(
+      lateFiled.messages.at(1)?.sentAt,
+      "2026-08-31T10:00:00.000Z",
+      "the missing earlier answer keeps its own place in the transcript",
+    );
+
+    // Both answers reached the thread, but the copy nearest the 10:00:10
+    // delivery is the only copy the 10:30 delivery could ever stand for, so the
+    // nearer pairing has to give it up rather than leave that delivery listed
+    // again.
+    const overlapping = procurementDeliveredReplyCandidates([
+      {
+        id: "task-near",
+        input: {
+          message: {
+            senderEmail: "monica@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: { sentAt: "2026-08-31T10:00:10.000Z", rfcMessageId: "<answer-near@derya>" },
+      },
+      {
+        id: "task-far",
+        input: {
+          message: {
+            senderEmail: "monica@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: { sentAt: "2026-08-31T10:30:00.000Z", rfcMessageId: "<answer-far@derya>" },
+      },
+    ]);
+    const bothFiled: ProcurementConversation = {
+      ...conversation,
+      messages: [
+        { ...supplierReply, id: "inbound-first", sentAt: "2026-08-31T09:10:00.000Z" },
+        {
+          ...supplierReply,
+          id: "outbound-early-copy",
+          direction: "OUTBOUND",
+          fromEmail: "monica@outreachsavanna.co",
+          toEmails: ["sales@supplier.test"],
+          body: "Anodized, 5,000 pieces, files attached.",
+          sentAt: "2026-08-31T09:20:00.000Z",
+        },
+        {
+          ...supplierReply,
+          id: "outbound-late-copy",
+          direction: "OUTBOUND",
+          fromEmail: "monica@outreachsavanna.co",
+          toEmails: ["sales@supplier.test"],
+          body: "Anodized, 5,000 pieces, files attached.",
+          sentAt: "2026-08-31T10:00:00.000Z",
+        },
+      ],
+    };
+    assert.equal(
+      mergeDeliveredSupplierReplies(bothFiled, overlapping).messages.length,
+      bothFiled.messages.length,
+      "a delivery that can only stand for one copy must not be listed again for it",
+    );
+
+    // A send whose outcome was unknown records the time reconciliation settled
+    // it, hours after the provider accepted it, while the copy on the thread
+    // keeps the time it was really sent, so only the id they share can pair them.
+    const reconciled = procurementDeliveredReplyCandidates([
+      {
+        id: "task-reconciled",
+        input: {
+          message: {
+            senderEmail: "monica@outreachsavanna.co",
+            recipient: "sales@supplier.test",
+            subject: "Re: RFQ",
+            body: "Anodized, 5,000 pieces, files attached.",
+          },
+        },
+        result: { sentAt: "2026-08-31T16:00:00.000Z", rfcMessageId: "<answer-reconciled@derya>" },
+      },
+    ]);
+    const filedLongBefore: ProcurementConversation = {
+      ...conversation,
+      messages: [
+        { ...supplierReply, id: "inbound-first", sentAt: "2026-08-31T09:10:00.000Z" },
+        {
+          ...supplierReply,
+          id: "outbound-copy",
+          direction: "OUTBOUND",
+          fromEmail: "monica@outreachsavanna.co",
+          toEmails: ["sales@supplier.test"],
+          body: "Anodized, 5,000 pieces, files attached.",
+          sentAt: "2026-08-31T09:20:00.000Z",
+          rfcMessageId: "<answer-reconciled@derya>",
+        },
+      ],
+    };
+    assert.equal(
+      mergeDeliveredSupplierReplies(filedLongBefore, reconciled).messages.length,
+      filedLongBefore.messages.length,
+      "a delivery reconciled hours later must not duplicate the answer on the thread",
+    );
+
+    // An older answer that happens to read the same way is a different message,
+    // so it cannot stand for a delivery the supplier's thread never filed.
+    const olderSameText: ProcurementConversation = {
+      ...conversation,
+      messages: [
+        {
+          ...supplierReply,
+          id: "outbound-old",
+          direction: "OUTBOUND",
+          fromEmail: "monica@outreachsavanna.co",
+          toEmails: ["sales@supplier.test"],
+          body: "Anodized, 5,000 pieces, files attached.",
+          sentAt: "2026-08-20T08:00:00.000Z",
+          rfcMessageId: "<answer-old@derya>",
+        },
+        { ...supplierReply, id: "inbound-again", sentAt: "2026-08-31T15:00:00.000Z" },
+      ],
+    };
+    assert.equal(
+      mergeDeliveredSupplierReplies(olderSameText, reconciled).messages.at(-1)?.direction,
+      "OUTBOUND",
+      "an older message repeating the text must not hide the answer that was delivered",
     );
   }
 

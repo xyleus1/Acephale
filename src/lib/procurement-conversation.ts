@@ -3,6 +3,7 @@ import "server-only";
 import { getValidAccessToken } from "@/lib/gmail-oauth";
 import { prisma } from "@/lib/prisma";
 import { localRfqVendorConversation } from "@/lib/procurement-local-outreach";
+import { deliveredSupplierReplyMessages } from "@/lib/procurement-reply-record";
 import {
   getProcurementCommunicationMessages,
   getProcurementVendorConversationRef,
@@ -13,6 +14,7 @@ import { SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-o
 import {
   MAX_PROCUREMENT_CONVERSATION_MESSAGES,
   boundProcurementConversationMessages,
+  mergeDeliveredSupplierReplies,
   mergeProcurementConversationMessages,
   procurementConversationEmailAddresses,
   procurementConversationFromGmailThread,
@@ -120,6 +122,7 @@ async function localConversation(
           subject: true,
           bodyText: true,
           sentAt: true,
+          rfcMessageId: true,
           account: { select: { email: true } },
         },
       },
@@ -151,6 +154,9 @@ async function localConversation(
       body: message.bodyText ?? "",
       sentAt: message.sentAt.toISOString(),
       truncated: false,
+      // Only a real RFC id, never the account scoped external id a sync may put
+      // there, since a wrong id would read as a different message.
+      rfcMessageId: message.rfcMessageId,
     })));
   return {
     available: true,
@@ -203,6 +209,7 @@ async function localProviderThreadMessages(officeId: string, externalThreadId: s
       body: message.bodyText ?? "",
       sentAt: message.sentAt.toISOString(),
       truncated: false,
+      rfcMessageId: message.rfcMessageId,
     },
   }));
 }
@@ -300,6 +307,15 @@ export async function procurementVendorConversation(
     compatibilityConversation:
       dependencies.compatibilityConversation ?? compatibilityConversation,
   });
+  const threaded = await withLedgerThread(args, resolved, ledgerMessages);
+  return withDeliveredReplies(args, threaded);
+}
+
+async function withLedgerThread(
+  args: ProcurementVendorConversationArgs,
+  resolved: ProcurementConversation,
+  ledgerMessages: Awaited<ReturnType<typeof getProcurementCommunicationMessages>>,
+) {
   if (resolved.source !== "BOURNE_LEDGER" || !ledgerMessages?.length) return resolved;
   const providerThreadId = [...ledgerMessages].reverse().find((message) => message.providerThreadId)?.providerThreadId ?? null;
   if (!providerThreadId) return resolved;
@@ -318,6 +334,14 @@ export async function procurementVendorConversation(
     ...resolved,
     messages: merged,
   };
+}
+
+async function withDeliveredReplies(
+  args: ProcurementVendorConversationArgs,
+  conversation: ProcurementConversation,
+): Promise<ProcurementConversation> {
+  if (!conversation.available) return conversation;
+  return mergeDeliveredSupplierReplies(conversation, await deliveredSupplierReplyMessages(args));
 }
 
 function taskThreadId(task: unknown) {
@@ -381,6 +405,7 @@ export async function historicalProcurementConversation(
           subject: true,
           bodyText: true,
           sentAt: true,
+          rfcMessageId: true,
           account: { select: { email: true } },
         },
       },
@@ -409,6 +434,7 @@ export async function historicalProcurementConversation(
       body: message.bodyText ?? "",
       sentAt: message.sentAt.toISOString(),
       truncated: false,
+      rfcMessageId: message.rfcMessageId,
     }))),
     unavailableReason: flattened.length ? null : "The connected thread has no stored messages.",
   } satisfies ProcurementConversation;

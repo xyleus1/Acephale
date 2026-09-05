@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 export const MAX_PROCUREMENT_CONVERSATION_MESSAGES = 100;
 export const MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY = 50_000;
 export const MAX_PROCUREMENT_CONVERSATION_BODY = 400_000;
+// How far a filed copy of an answer may sit from the delivery record that sent
+// it when neither side names the message id they share.
+const DELIVERED_REPLY_FILING_WINDOW_MS = 60 * 60 * 1_000;
 
 type GmailPayload = {
   headers?: Array<{ name: string; value: string }>;
@@ -34,6 +37,10 @@ export type ProcurementConversationMessage = {
   body: string;
   sentAt: string;
   truncated: boolean;
+  // The RFC id the message was sent under, kept so an answer already on the
+  // thread can be told from one only a delivery record holds. Provider ids stay
+  // out of a transcript, which is why this is the only id carried here.
+  rfcMessageId?: string | null;
 };
 
 export type ProcurementLedgerConversationMessage = {
@@ -264,6 +271,7 @@ export function procurementConversationFromGmailThread(
         body: plainBody(message.payload),
         sentAt: gmailMessageTime(message),
         truncated: false,
+        rfcMessageId: header(message.payload, "Message-ID"),
       };
     });
   return boundProcurementConversationMessages(messages);
@@ -286,6 +294,7 @@ export function procurementConversationFromLedger(
       body: message.bodyText ?? "",
       sentAt: message.sentAt,
       truncated: message.bodyTruncated,
+      rfcMessageId: message.rfcMessageId,
     })));
 }
 
@@ -304,6 +313,155 @@ export function procurementConversationFromLedgerMessages(
     accountEmail: linked?.accountEmail ?? messages.find((message) => message.accountEmail)?.accountEmail ?? null,
     messages: procurementConversationFromLedger(messages),
     unavailableReason: null,
+  };
+}
+
+export type DeliveredSupplierReplyRecord = {
+  id: string;
+  input: unknown;
+  result: unknown;
+};
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function trimmed(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+// The answers this request already delivered to one supplier, read from the
+// delivery records rather than from a mailbox thread. A record missing the
+// sender, the recipient, the delivery time or the text it carried cannot be
+// placed in a transcript, so it is left out.
+export function procurementDeliveredReplyCandidates(
+  records: readonly DeliveredSupplierReplyRecord[],
+): ProcurementConversationMergeCandidate[] {
+  const candidates: ProcurementConversationMergeCandidate[] = [];
+  for (const entry of records) {
+    const message = recordOf(recordOf(entry.input).message);
+    const result = recordOf(entry.result);
+    const fromEmail = trimmed(message.senderEmail);
+    const recipient = trimmed(message.recipient);
+    const sentAt = trimmed(result.sentAt);
+    const body = typeof message.body === "string" ? message.body : "";
+    if (!fromEmail || !recipient || !sentAt || !body) continue;
+    const rfcMessageId = trimmed(result.rfcMessageId) || null;
+    const providerMessageId = trimmed(result.providerMessageId) || null;
+    candidates.push({
+      message: {
+        id: rfcMessageId ?? entry.id,
+        direction: "OUTBOUND",
+        fromEmail,
+        fromName: null,
+        toEmails: [recipient],
+        ccEmails: [],
+        subject: trimmed(message.subject) || null,
+        body,
+        sentAt,
+        truncated: false,
+        rfcMessageId,
+      },
+      providerMessageId,
+      rfcMessageId,
+    });
+  }
+  return candidates;
+}
+
+// An answer the thread's own mailbox could not send leaves from a pooled
+// mailbox, and the provider files it on that mailbox's thread instead of the
+// supplier's, so reading the supplier thread alone shows the reply as
+// unanswered and every later pass answers it again. Deliveries recorded for the
+// supplier are merged back in whatever thread holds them.
+export function mergeDeliveredSupplierReplies(
+  conversation: ProcurementConversation,
+  delivered: readonly ProcurementConversationMergeCandidate[],
+): ProcurementConversation {
+  if (!conversation.available || !delivered.length) return conversation;
+  // A copy is recognized by the message id it was sent under, which the delivery
+  // record and the thread both keep, because the two disagree about everything
+  // else: a send reconciled hours after the provider accepted it records the
+  // reconciliation time while the thread copy keeps the real one, so no window
+  // around either time can tell a filed answer from a missing one.
+  const sent = conversation.messages
+    .filter((message) => message.direction === "OUTBOUND")
+    .map((message) => ({
+      body: message.body.trim(),
+      at: Date.parse(message.sentAt),
+      identities: new Set(mergeExternalIdentities({ message, rfcMessageId: message.rfcMessageId })),
+    }));
+  const nearest = delivered.map((candidate) => {
+    const body = candidate.message.body.trim();
+    const at = Date.parse(candidate.message.sentAt);
+    const identities = mergeExternalIdentities({
+      message: candidate.message,
+      rfcMessageId: candidate.rfcMessageId,
+    });
+    return sent
+      .map((message, copy) => ({
+        copy,
+        known: identities.some((identity) => message.identities.has(identity)),
+        // Two messages that both carry an id and do not share one are different
+        // answers, whatever they say, so only a copy or a delivery whose id the
+        // thread never kept falls back on its text.
+        guessed: (!identities.length || !message.identities.size)
+          && message.body === body
+          && Math.abs(message.at - at) <= DELIVERED_REPLY_FILING_WINDOW_MS,
+        // A time neither side can be placed by leaves the copy last in line, so
+        // it is taken only once the copies we can order have been paired.
+        apart: Number.isNaN(at) || Number.isNaN(message.at)
+          ? Number.POSITIVE_INFINITY
+          : Math.abs(message.at - at),
+      }))
+      .filter((option) => option.known || option.guessed)
+      .sort((left, right) => (
+        Number(right.known) - Number(left.known)
+        || left.apart - right.apart
+        || left.copy - right.copy
+      ));
+  });
+  const filedBy = new Array<number | null>(sent.length).fill(null);
+  // Taking a copy from a delivery that has another one free pairs both, so a
+  // delivery is refused only when every copy it could stand for is needed by a
+  // delivery with nowhere else to go.
+  const claim = (delivery: number, tried: Set<number>): boolean => {
+    for (const option of nearest[delivery]) {
+      if (tried.has(option.copy)) continue;
+      tried.add(option.copy);
+      const held = filedBy[option.copy];
+      if (held === null || claim(held, tried)) {
+        filedBy[option.copy] = delivery;
+        return true;
+      }
+    }
+    return false;
+  };
+  const filed = new Set<number>();
+  // A delivery whose copy the thread names, then one with a copy beside it, are
+  // settled before one whose nearest copy is far off, so when only one of two
+  // identical answers can keep a copy it is the answer that copy was filed from.
+  const rank = (delivery: number) => (
+    nearest[delivery][0]?.known
+      ? Number.NEGATIVE_INFINITY
+      : nearest[delivery][0]?.apart ?? Number.POSITIVE_INFINITY
+  );
+  delivered
+    .map((_, delivery) => delivery)
+    .sort((left, right) => rank(left) - rank(right) || left - right)
+    .forEach((delivery) => {
+      if (claim(delivery, new Set())) filed.add(delivery);
+    });
+  const additions = delivered.filter((_, delivery) => !filed.has(delivery));
+  if (!additions.length) return conversation;
+  return {
+    ...conversation,
+    messages: mergeProcurementConversationMessages(
+      conversation.messages.map((message) => ({ message, rfcMessageId: message.rfcMessageId })),
+      [...additions],
+    ),
   };
 }
 

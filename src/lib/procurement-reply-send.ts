@@ -12,6 +12,7 @@ import {
 } from "@/lib/procurement-conversation-model";
 import { supplierInboundKind } from "@/lib/procurement-inbound-triage";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
+import { PROCUREMENT_REPLY_EMAIL_TASK_TYPE } from "@/lib/procurement-reply-record";
 import { chasesSentAfterLastReply, supplierChaseDecision } from "@/lib/procurement-supplier-chase";
 import {
   getProcurementCommunicationMessages,
@@ -46,7 +47,7 @@ import {
   type SupplierEmailSent,
 } from "@/lib/supply-os/supplier-email-provider";
 
-export const PROCUREMENT_REPLY_EMAIL_TASK_TYPE = "PROCUREMENT_SUPPLIER_REPLY_EMAIL";
+export { PROCUREMENT_REPLY_EMAIL_TASK_TYPE };
 
 export type ProcurementReplySendInput = {
   sourceMessageId: string;
