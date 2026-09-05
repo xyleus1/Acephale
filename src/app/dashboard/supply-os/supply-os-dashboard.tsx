@@ -913,9 +913,16 @@ function CaseCommandCenter({
       }
     }
     if (initialProject && !initialProjectAppliedRef.current && !workspaceChanged) {
-      initialProjectAppliedRef.current = true;
-      setSelectedProject(initialProject);
-      return;
+      try {
+        const requestedProject = new URLSearchParams(window.location.search).get("project");
+        if (requestedProject === `${initialProject.kind}:${initialProject.key}`) {
+          initialProjectAppliedRef.current = true;
+          setSelectedProject(initialProject);
+          return;
+        }
+      } catch {
+        // URL state is optional.
+      }
     }
     if (workspaceChanged) setSelectedProject(null);
     try {
