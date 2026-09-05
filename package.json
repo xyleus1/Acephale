@@ -56,6 +56,7 @@
     "test:procurement-order-status": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-order-status.test.ts",
     "test:procurement-sourcing-command": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-sourcing-command.test.ts",
     "test:procurement-sourcing-wave": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-sourcing-wave.test.ts",
+    "test:supplier-sourcing-profile": "node --import tsx scripts/supplier-sourcing-profile.test.ts",
     "test:procurement-request-document-merge": "tsx scripts/procurement-request-document-merge.test.ts",
     "test:supply-os-context-db": "NODE_OPTIONS='--conditions=react-server' tsx scripts/company-context-database.test.ts",
     "test:supply-os-supplier-email-provider": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-email-provider.test.ts",

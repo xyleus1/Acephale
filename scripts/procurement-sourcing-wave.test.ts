@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/test?sslmode=require";
 
@@ -36,7 +37,24 @@ const CONVERTER_HOME = `
   </body></html>
 `;
 
+const MULTI_CONTACT_HOME = [
+  "Hydraulic Fittings Factory manufactures stainless steel hydraulic fittings and tube adapters.",
+  "Our OEM production facility is an ISO 9001 certified contract manufacturer.",
+  "Request a quote for prototypes, production runs, capacity planning, and lead time.",
+  "We support export documentation and worldwide shipping for industrial customers.",
+  "Contact sales@hydraulic.example, rfq@hydraulic.example, info@hydraulic.example, and ops@hydraulic.example.",
+].join(" ").padEnd(600, " ");
+
 async function main() {
+  const sourcingSource = readFileSync(
+    new URL("../src/lib/procurement-supplier-sourcing.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(sourcingSource, /lower\(coalesce\(existing\.contact_email, existing\.email, ''\)\) = lower\(\$6\)/);
+  assert.match(sourcingSource, /pg_advisory_xact_lock\(hashtext\(\$1\)\)/);
+  assert.match(sourcingSource, /SELECT count\(\*\)[\s\S]*e2\.website ~\* \('\(\^\|\[\.\/@\]\)' \|\| \$8 \|\| '\(\[\/:\?#\]\|\$\)'\)[\s\S]*< \$9::int/);
+  assert.match(sourcingSource, /registrableDomain\(args\.site\.domain\)/);
+
   const { runProcurementSupplierSourcingWave, crawlSupplierSite, SupplierSourcingError } = await import(
     "../src/lib/procurement-supplier-sourcing"
   );
@@ -46,6 +64,7 @@ async function main() {
     ["https://polymerlabs.example/capabilities", page("https://polymerlabs.example/capabilities", MOLDER_CAPABILITIES)],
     ["https://polymerlabs.example/contact", page("https://polymerlabs.example/contact", MOLDER_CONTACT)],
     ["https://dallasfoam.example/", page("https://dallasfoam.example/", CONVERTER_HOME)],
+    ["https://hydraulic.example/", page("https://hydraulic.example/", MULTI_CONTACT_HOME)],
   ]);
   const fetched: string[] = [];
   const fetchPage = async (url: string) => {
@@ -408,16 +427,69 @@ async function main() {
   assert.equal(undeliverable.added, 0);
   assert.ok(undeliverable.rejected.some((entry) => /deliverability/.test(entry.reason)));
 
-  await assert.rejects(
-    runProcurementSupplierSourcingWave({
-      orderId: order.orderId,
-      target: 5,
-      proposers: proposers as never,
-      loadOrder: (async () => ({ ...order, material: "Anodized aluminum bracket", specification: null })) as never,
-    }),
-    (error: unknown) => error instanceof SupplierSourcingError && error.code === "unsupported_category",
-    "a request with no capability gate must not start a wave",
-  );
+  const derivedOrder = { ...order, material: "stainless steel hydraulic fittings", specification: null };
+  const derivedWave = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 5,
+    proposers: [{ name: "empty", propose: async () => [] }] as never,
+    loadOrder: (async () => derivedOrder) as never,
+    loadExistingKeys: (async () => ({ domains: new Map<string, number>(), emails: new Set<string>() })) as never,
+  });
+  assert.equal(derivedWave.categorySource, "derived", "unknown materials use a deterministic derived profile");
+
+  const multiProposer = [{
+    name: "multi-contact",
+    propose: async () => [{ domain: "hydraulic.example", url: "https://hydraulic.example/", via: "test" }],
+  }];
+  const multiInserted: string[] = [];
+  const multiInsert = async (args: { contactEmail: string }) => {
+    multiInserted.push(args.contactEmail);
+    return `hydraulic-vendor-${multiInserted.length}`;
+  };
+  const multiWave = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 5,
+    contactsPerCompany: 3,
+    proposers: multiProposer as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => derivedOrder) as never,
+    loadExistingKeys: (async () => ({ domains: new Map<string, number>(), emails: new Set<string>() })) as never,
+    insertVendor: multiInsert as never,
+  });
+  assert.equal(multiWave.added, 1);
+  assert.equal(multiWave.contactsAdded, 3);
+  assert.equal(multiInserted.length, 3);
+  const fourthPass = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 5,
+    contactsPerCompany: 3,
+    proposers: multiProposer as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => derivedOrder) as never,
+    loadExistingKeys: (async () => ({
+      domains: new Map([["hydraulic.example", 3]]),
+      emails: new Set(multiInserted),
+    })) as never,
+    insertVendor: multiInsert as never,
+  });
+  assert.equal(fourthPass.added, 0);
+  assert.equal(fourthPass.contactsAdded, 0);
+  assert.equal(multiInserted.length, 3);
+  const singleContact = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 5,
+    contactsPerCompany: 1,
+    proposers: multiProposer as never,
+    fetchPage: fetchPage as never,
+    verify: verify as never,
+    loadOrder: (async () => derivedOrder) as never,
+    loadExistingKeys: (async () => ({ domains: new Map<string, number>(), emails: new Set<string>() })) as never,
+    insertVendor: multiInsert as never,
+  });
+  assert.equal(singleContact.added, 1);
+  assert.equal(singleContact.contactsAdded, 1);
   await assert.rejects(
     runProcurementSupplierSourcingWave({
       orderId: order.orderId,

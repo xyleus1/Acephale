@@ -9,7 +9,7 @@ import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { getProcurementRequest } from "@/lib/procurement-workflow";
 import { requireSupplyWorkspace } from "@/lib/supply-os/persistence";
 import { loadRequestDocumentAttachments } from "@/lib/supply-os/request-document-attachments";
-import { classifySupplierSourcingCategory } from "@/lib/supply-os/supplier-sourcing-category";
+import { resolveSupplierSourcingCategory } from "@/lib/supply-os/supplier-sourcing-profile";
 import { record } from "@/lib/supply-os/supplier-communication-shared";
 
 // A first-contact RFQ carries the same technical package a reply does, so the
@@ -83,7 +83,7 @@ export async function loadProcurementRfqAttachmentPackage(args: {
     companyId: workspace.companyId,
     documentIds: documents.map((document) => document.documentId),
   });
-  const category = classifySupplierSourcingCategory({
+  const category = resolveSupplierSourcingCategory({
     material: order.material,
     specification: order.specification,
   });

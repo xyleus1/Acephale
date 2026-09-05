@@ -11,12 +11,14 @@
 export type SupplierCapabilityRule = {
   label: string;
   pattern: RegExp;
+  test?: (text: string) => boolean;
 };
 
-export type SupplierSourcingCategoryKey = "pcba" | "molded-foam";
+export type SupplierSourcingCategoryKey = string;
 
 export type SupplierSourcingCategory = {
   key: SupplierSourcingCategoryKey;
+  source: "curated" | "derived";
   label: string;
   /** Matched against the request material, specification, and notes. */
   request: RegExp;
@@ -32,16 +34,22 @@ export type SupplierSourcingCategory = {
   disqualifiers: readonly SupplierCapabilityRule[];
 };
 
-const RETAIL_DISQUALIFIERS: readonly SupplierCapabilityRule[] = [
+export const RETAIL_DISQUALIFIERS: readonly SupplierCapabilityRule[] = [
   { label: "shopping cart", pattern: /\badd to (?:cart|basket)\b|\bshop now\b|\bmy cart\b|\bcheckout securely\b/i },
   { label: "consumer storefront", pattern: /\bfree shipping on (?:all )?orders\b|\b(?:sale|clearance) ends\b|\bcustomer reviews?\b\s*\(/i },
   { label: "directory listing", pattern: /\bsupplier directory\b|\bfind suppliers?\b|\bbusiness listings?\b|\brequest quotes? from multiple\b/i },
   { label: "job board", pattern: /\bjob (?:board|alerts?)\b|\bapply now for\b/i },
 ];
 
+export const SUPPLIER_QUOTING_RULE: SupplierCapabilityRule = {
+  label: "quoting process",
+  pattern: /\b(request a quote|rfq|get a quote|quote request|upload (?:your )?(?:gerber|files)|send (?:us )?your (?:drawing|cad|stl))\b/i,
+};
+
 export const SUPPLIER_SOURCING_CATEGORIES: readonly SupplierSourcingCategory[] = [
   {
     key: "pcba",
+    source: "curated",
     label: "Printed circuit board assembly",
     request: /\b(pcb|pcba|printed circuit|circuit board|board assembly|smt|electronics? (?:assembly|manufactur))/i,
     queries: [
@@ -77,7 +85,7 @@ export const SUPPLIER_SOURCING_CATEGORIES: readonly SupplierSourcingCategory[] =
       },
     ],
     requiredAny: [
-      { label: "quoting process", pattern: /\b(request a quote|rfq|get a quote|quote request|upload (?:your )?(?:gerber|files))\b/i },
+      SUPPLIER_QUOTING_RULE,
       { label: "process detail", pattern: /\b(reflow|pick and place|stencil|solder paste|aoi|x-ray inspection|wave solder|selective solder)\b/i },
       { label: "capability detail", pattern: /\b(layer count|multilayer|impedance|bga|qfn|fine pitch|0402|0201|hasl|enig|solder mask)\b/i },
       { label: "quality system", pattern: /\b(iso ?9001|as9100|itar|ipc[- ]a[- ]610|ipc class 3|j-std-001)\b/i },
@@ -92,6 +100,7 @@ export const SUPPLIER_SOURCING_CATEGORIES: readonly SupplierSourcingCategory[] =
   },
   {
     key: "molded-foam",
+    source: "curated",
     label: "Molded polyurethane and viscoelastic foam",
     request: /\b(foam|viscoelastic|memory foam|polyurethane|pu foam|mold(?:ed|ing)? (?:foam|cushion)|cast(?:ing)? (?:foam|urethane))/i,
     queries: [
@@ -127,7 +136,7 @@ export const SUPPLIER_SOURCING_CATEGORIES: readonly SupplierSourcingCategory[] =
       { label: "molded foam language", pattern: /\bmolded (?:foam|polyurethane|urethane|cushion|part)/i },
       { label: "tooling ownership", pattern: /\b(in[- ]house tooling|tool (?:design|build|shop)|aluminum molds?|mold (?:design|making|build))\b/i },
       { label: "foam chemistry", pattern: /\b(polyol|isocyanate|two part|2k|density (?:of )?\d|ild|viscoelastic|memory foam|hr foam|integral skin)\b/i },
-      { label: "quoting process", pattern: /\b(request a quote|rfq|get a quote|quote request|send (?:us )?your (?:drawing|cad|stl))\b/i },
+      SUPPLIER_QUOTING_RULE,
       { label: "manufacturing identity", pattern: /\b(oem|contract manufactur|manufacturing (?:facility|plant)|production (?:line|capacity))\b/i },
     ],
     requiredAnyHits: 2,
@@ -204,15 +213,17 @@ export function qualifySupplierSite(
   if (!site.emails.length) {
     return { state: "REJECTED", reason: "no published business email address was found" };
   }
-  const blocked = category.disqualifiers.find((rule) => rule.pattern.test(text));
+  const blocked = category.disqualifiers.find((rule) => rule.test ? rule.test(text) : rule.pattern.test(text));
   if (blocked) {
     return { state: "REJECTED", reason: `the site reads as ${blocked.label}` };
   }
-  const missing = category.requiredAll.find((rule) => !rule.pattern.test(text));
+  const missing = category.requiredAll.find((rule) => !(rule.test ? rule.test(text) : rule.pattern.test(text)));
   if (missing) {
     return { state: "REJECTED", reason: `no published evidence of ${missing.label}` };
   }
-  const matched = category.requiredAny.filter((rule) => rule.pattern.test(text)).map((rule) => rule.label);
+  const matched = category.requiredAny
+    .filter((rule) => rule.test ? rule.test(text) : rule.pattern.test(text))
+    .map((rule) => rule.label);
   if (matched.length < category.requiredAnyHits) {
     return {
       state: "REJECTED",

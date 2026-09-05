@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { registrableDomain } from "@/lib/leadgen/extract";
 import { prisma } from "@/lib/prisma";
 import {
   BULK_RFQ_MAX_PER_RUN,
@@ -33,10 +34,18 @@ import {
   procurementOfficeIdFromServerMetadata,
   procurementWorkflowDatabase,
 } from "@/lib/procurement-workflow";
+import type { SupplierSourcingCategoryKey } from "@/lib/supply-os/supplier-sourcing-category";
 import {
-  classifySupplierSourcingCategory,
-  type SupplierSourcingCategoryKey,
-} from "@/lib/supply-os/supplier-sourcing-category";
+  isSourcingCategoryKey,
+  resolveSupplierSourcingCategory,
+} from "@/lib/supply-os/supplier-sourcing-profile";
+
+function readSourcingCategoryKey(value: unknown): SupplierSourcingCategoryKey | null {
+  const category = typeof value === "string" ? value.trim() : "";
+  return isSourcingCategoryKey(category)
+    ? category
+    : null;
+}
 
 // "find 100 more in each category and send" has to mean exactly one thing, so
 // the phrase is parsed deterministically into a bounded plan: one supplier wave
@@ -127,25 +136,44 @@ export async function loadCampaignProgress(
   orderId: string,
 ): Promise<Omit<CampaignProgress, "discoveryExhausted">> {
   const rows = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{
-    goodLeads: number;
-    quotesRecorded: number;
+    website: string | null;
+    contactEmail: string | null;
+    email: string | null;
+    hasCapabilityEvidence: boolean;
+    hasQuote: boolean;
   }>>(`
     SELECT
-      count(*) FILTER (
-        WHERE jsonb_typeof(research->'capabilityEvidence') = 'array'
-          AND jsonb_array_length(research->'capabilityEvidence') > 0
-      )::int AS "goodLeads",
-      count(*) FILTER (
-        WHERE jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
-          AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
-      )::int AS "quotesRecorded"
+      order_vendors.website AS "website",
+      order_vendors.contact_email AS "contactEmail",
+      order_vendors.email AS "email",
+      (
+        jsonb_typeof(research->'capabilityEvidence') = 'array'
+        AND jsonb_array_length(research->'capabilityEvidence') > 0
+      ) AS "hasCapabilityEvidence",
+      (
+        jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+        AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
+      ) AS "hasQuote"
     FROM order_vendors
     WHERE order_id = $1::uuid
   `, orderId);
-  const row = rows.at(0);
+  const goodDomains = new Set<string>();
+  let quotesRecorded = 0;
+  for (const row of rows) {
+    if (row.hasCapabilityEvidence) {
+      const websiteDomain = row.website ? registrableDomain(row.website) : "";
+      const emailDomain = row.contactEmail?.includes("@")
+        ? registrableDomain(row.contactEmail.split("@").at(1) ?? "")
+        : row.email?.includes("@")
+          ? registrableDomain(row.email.split("@").at(1) ?? "")
+          : "";
+      if (websiteDomain || emailDomain) goodDomains.add(websiteDomain || emailDomain);
+    }
+    if (row.hasQuote) quotesRecorded += 1;
+  }
   return {
-    goodLeads: typeof row?.goodLeads === "number" ? row.goodLeads : 0,
-    quotesRecorded: typeof row?.quotesRecorded === "number" ? row.quotesRecorded : 0,
+    goodLeads: goodDomains.size,
+    quotesRecorded,
   };
 }
 
@@ -165,7 +193,7 @@ export async function planSourcingCommand(args: {
   });
   const plan = new Map<SupplierSourcingCategoryKey, SourcingCommandPlanEntry>();
   for (const request of requests) {
-    const category = classifySupplierSourcingCategory({
+    const category = resolveSupplierSourcingCategory({
       material: request.material,
       specification: request.specification,
       notes: request.notes,
@@ -256,8 +284,10 @@ function readStartRounds(value: unknown): Partial<Record<SupplierSourcingCategor
   const rounds: Partial<Record<SupplierSourcingCategoryKey, number>> = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return rounds;
   const record = value as Record<string, unknown>;
-  for (const key of ["pcba", "molded-foam"] as const) {
-    const round = record[key];
+  for (const [rawKey, value] of Object.entries(record)) {
+    const key = readSourcingCategoryKey(rawKey);
+    if (!key) continue;
+    const round = value;
     if (typeof round === "number" && Number.isFinite(round) && round > 0) {
       rounds[key] = Math.trunc(round);
     }
@@ -269,8 +299,10 @@ function readCategoryCounts(value: unknown): Partial<Record<SupplierSourcingCate
   const counts: Partial<Record<SupplierSourcingCategoryKey, number>> = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return counts;
   const record = value as Record<string, unknown>;
-  for (const key of ["pcba", "molded-foam"] as const) {
-    const count = record[key];
+  for (const [rawKey, value] of Object.entries(record)) {
+    const key = readSourcingCategoryKey(rawKey);
+    if (!key) continue;
+    const count = value;
     if (typeof count === "number" && Number.isFinite(count) && count >= 0) {
       counts[key] = Math.trunc(count);
     }
@@ -284,8 +316,9 @@ function readCampaignStops(
   const stops: Partial<Record<SupplierSourcingCategoryKey, CampaignStopReason>> = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return stops;
   const record = value as Record<string, unknown>;
-  for (const key of ["pcba", "molded-foam"] as const) {
-    const reason = record[key];
+  for (const [rawKey, reason] of Object.entries(record)) {
+    const key = readSourcingCategoryKey(rawKey);
+    if (!key) continue;
     if (
       reason === "quote_goal_reached"
       || reason === "good_lead_target_reached"
@@ -311,9 +344,7 @@ function queuedRemainingByCategory(
     ? Math.trunc(payload.perCategory)
     : null;
   if (target === null) return counts;
-  const onlyCategory = payload.category === "pcba" || payload.category === "molded-foam"
-    ? payload.category
-    : null;
+  const onlyCategory = readSourcingCategoryKey(payload.category);
   for (const category of planned) {
     if (onlyCategory && category !== onlyCategory) continue;
     if (counts[category] === undefined) counts[category] = target;
@@ -388,13 +419,9 @@ export async function runQueuedSourcingWaveJob(args: {
   const workspaceId = typeof payload.workspaceId === "string" ? payload.workspaceId : null;
   const remaining = Math.min(SOURCING_COMMAND_MAX_PER_CATEGORY, perCategoryValue);
   const slice = Math.min(SOURCING_COMMAND_SLICE, remaining);
-  const onlyCategory = payload.category === "pcba" || payload.category === "molded-foam"
-    ? payload.category
-    : null;
+  const onlyCategory = readSourcingCategoryKey(payload.category);
   const startRounds = readStartRounds(payload.startRounds);
-  const firstCategory = payload.firstCategory === "pcba" || payload.firstCategory === "molded-foam"
-    ? payload.firstCategory
-    : null;
+  const firstCategory = readSourcingCategoryKey(payload.firstCategory);
   // Each category owns its own count. A slice usually runs one category, so a
   // single shared remainder would let the category that ran spend the other
   // category's suppliers and both would stop around half the target.
@@ -460,6 +487,7 @@ export async function runQueuedSourcingWaveJob(args: {
     startRounds,
     firstCategory,
     categoryTargets: owedByCategory,
+    campaign,
     intent: {
       perCategory: slice,
       send: payload.send === true,
@@ -480,7 +508,6 @@ export async function runQueuedSourcingWaveJob(args: {
   const nextStartRounds = { ...startRounds };
   for (const entry of result.categories) {
     if (!entry.wave) continue;
-    if (entry.category !== "pcba" && entry.category !== "molded-foam") continue;
     nextStartRounds[entry.category] = Math.max(
       nextStartRounds[entry.category] ?? 0,
       entry.wave.nextRound,
@@ -492,7 +519,6 @@ export async function runQueuedSourcingWaveJob(args: {
   // category whose curated phrases are spent is owed nothing more.
   const nextOwed: Partial<Record<SupplierSourcingCategoryKey, number>> = { ...owedByCategory };
   for (const entry of result.categories) {
-    if (entry.category !== "pcba" && entry.category !== "molded-foam") continue;
     const owed = nextOwed[entry.category] ?? remaining;
     // A category whose sourcing threw never searched, so it is charged nothing.
     // A slice stopped by a failing database is charged exactly what it stored,
@@ -547,7 +573,7 @@ export async function runQueuedSourcingWaveJob(args: {
         ?? "discovery_exhausted";
     }
   }
-  const left = Math.max(0, ...Object.values(nextOwed));
+  const left = Math.max(0, ...Object.values(nextOwed).map((value) => value ?? 0));
   // A slice where every discovery provider threw, or where a category threw
   // before it could search at all, made no progress and did not run out of
   // time, so treat it as a transient outage: retry the same count a few times on
@@ -660,6 +686,7 @@ export async function runSourcingCommand(args: {
   // skipped entirely, and a category owed less than the slice is capped, so
   // alternating slices cannot spend one category's count on the other.
   categoryTargets?: Readonly<Partial<Record<SupplierSourcingCategoryKey, number>>> | null;
+  campaign?: CampaignPlan | null;
   // Sending supplier mail needs the same explicit confirmation the operator
   // send commands require, whatever asked for the run.
   confirmed: boolean;
@@ -728,6 +755,7 @@ export async function runSourcingCommand(args: {
         target: categoryTarget(entry.category),
         deadlineAt: categoryDeadline,
         startRound: args.startRounds?.[entry.category] ?? 0,
+        contactsPerCompany: args.campaign?.contactsPerCompany,
       });
       result.added += outcome.wave.added;
     } catch (error) {
@@ -750,9 +778,10 @@ export async function runSourcingCommand(args: {
     }
     if (result.send && outcome.wave.added > 0) {
       try {
+        const contactsAdded = outcome.wave.contactsAdded ?? outcome.wave.added;
         outcome.send = await rfq({
           orderId: entry.orderId,
-          limit: Math.min(BULK_RFQ_MAX_PER_RUN, outcome.wave.added),
+          limit: Math.min(BULK_RFQ_MAX_PER_RUN, contactsAdded),
           // Contact the suppliers this wave found, not whichever uncontacted
           // rows happen to be oldest on the request.
           vendorIds: outcome.wave.additions.map((addition) => addition.vendorId),
@@ -945,9 +974,7 @@ export async function sourcingCommandStatus(args: {
         // the categories it will actually source from that target, otherwise the
         // status reads as no work owed while the whole wave is still ahead.
         remainingByCategory: queuedRemainingByCategory(payload, categories.map((entry) => entry.category)),
-        firstCategory: payload.firstCategory === "pcba" || payload.firstCategory === "molded-foam"
-          ? payload.firstCategory
-          : null,
+        firstCategory: readSourcingCategoryKey(payload.firstCategory),
         providerRetries: typeof payload.providerRetries === "number" ? payload.providerRetries : 0,
         runAfter: job.runAfter.toISOString(),
         lastError: job.lastError,

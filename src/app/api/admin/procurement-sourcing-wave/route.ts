@@ -12,15 +12,15 @@ import {
   sourcingCommandStatus,
 } from "@/lib/procurement-sourcing-command";
 import { type SupplierSourcingCategoryKey } from "@/lib/supply-os/supplier-sourcing-category";
+import { isSourcingCategoryKey } from "@/lib/supply-os/supplier-sourcing-profile";
 
 export const maxDuration = 300;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CATEGORY_KEYS: readonly SupplierSourcingCategoryKey[] = ["pcba", "molded-foam"];
-
 function categoryScope(value: unknown): SupplierSourcingCategoryKey | null {
-  return typeof value === "string" && CATEGORY_KEYS.includes(value as SupplierSourcingCategoryKey)
-    ? value as SupplierSourcingCategoryKey
+  const category = typeof value === "string" ? value.trim() : "";
+  return isSourcingCategoryKey(category)
+    ? category
     : null;
 }
 

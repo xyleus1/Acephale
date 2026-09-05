@@ -15,6 +15,10 @@ rows persist a `source` column, while `leadOriginFor` supplies deterministic
 fallbacks for older rows.
 # AI Handoff
 
+## Request-derived supplier sourcing profiles
+
+Supplier waves now derive deterministic capability profiles from each request, keep curated categories as overrides, and optionally persist one model enrichment proposal with provenance in `request_context.sourcingProfile`.
+
 ## 2026-09-08: A thread is owned by the addresses mailed before the first reply
 
 - An address a delivery report gave up on stops anchoring its thread, so an RFQ

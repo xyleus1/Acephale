@@ -141,7 +141,7 @@ async function main() {
   assert.equal(
     classifySupplierSourcingCategory({ material: "Anodized aluminum bracket", specification: null, notes: null }),
     null,
-    "an unsupported material must not fall into a category, because it would have no capability gate",
+    "the curated classifier still reports no curated match",
   );
 
   assert.equal(qualifySupplierSite(pcba!, { text: PCBA_SITE_TEXT, emails: ["sales@arcticcircuits.example"] }).state, "QUALIFIED");
@@ -183,16 +183,23 @@ async function main() {
     );
   }
 
-  // The command runs one wave per category and only sends what the wave added.
+  // The command runs one wave per category and sends every contact row it added.
   const requests = [
     { id: "order-pcba", material: "Turnkey 4-layer PCBA", specification: null, notes: null },
     { id: "order-foam", material: "Molded viscoelastic foam insert", specification: null, notes: null },
-    { id: "order-bracket", material: "Anodized aluminum bracket", specification: null, notes: null },
     { id: "order-pcba-old", material: "PCBA rework", specification: null, notes: null },
   ];
   const list = async () => requests as never;
   const plan = await planSourcingCommand({ customerId: "customer-1", list });
   assert.deepEqual(plan.map((entry) => entry.orderId), ["order-pcba", "order-foam"]);
+  const derivedPlan = await planSourcingCommand({
+    customerId: "customer-1",
+    list: async () => [
+      ...requests,
+      { id: "order-bracket", material: "Anodized aluminum bracket", specification: null, notes: null },
+    ] as never,
+  });
+  assert.deepEqual(derivedPlan.map((entry) => entry.orderId), ["order-pcba", "order-foam", "order-bracket"]);
 
   const sourcingCalls: Array<{ orderId: string; target: number }> = [];
   const rfqCalls: Array<{ orderId: string; limit: number }> = [];
@@ -204,6 +211,7 @@ async function main() {
       category: "pcba" as const,
       target: input.target,
       added: input.orderId === "order-foam" ? 0 : 7,
+      contactsAdded: input.orderId === "order-foam" ? 0 : 11,
       additions: [],
       examined: 30,
       rejected: [],
@@ -246,8 +254,8 @@ async function main() {
     confirmed: true,
     dependencies: { plan: async () => plan, sourcing, rfq },
   });
-  assert.equal(confirmed.sent, 7, "only the suppliers the wave added are mailed");
-  assert.deepEqual(rfqCalls, [{ orderId: "order-pcba", limit: 7 }], "a category that added nothing sends nothing");
+  assert.equal(confirmed.sent, 11, "every contact row the wave added is mailed");
+  assert.deepEqual(rfqCalls, [{ orderId: "order-pcba", limit: 11 }], "a category that added nothing sends nothing");
   assert.ok(
     confirmed.categories.every((entry) => entry.send === null || entry.send.attachments.length > 0),
     "a send outcome records the files it carried",

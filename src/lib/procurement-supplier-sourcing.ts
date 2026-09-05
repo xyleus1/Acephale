@@ -22,12 +22,16 @@ import {
   type SupplierDomainProposer,
 } from "@/lib/supply-os/supplier-domain-discovery";
 import {
-  classifySupplierSourcingCategory,
   qualifySupplierSite,
+  type SupplierSourcingCategory,
   supplierSourcingQueries,
   supplierSourcingQueryRounds,
-  type SupplierSourcingCategory,
 } from "@/lib/supply-os/supplier-sourcing-category";
+import {
+  resolveSupplierSourcingCategory,
+  type SourcingProfileEnrichment,
+} from "@/lib/supply-os/supplier-sourcing-profile";
+import { loadOrProposeSourcingProfileEnrichment } from "@/lib/procurement-sourcing-profile-enrichment";
 
 // A sourcing wave adds qualified suppliers to an existing request. Discovery
 // proposes domains, this module fetches each site itself, keeps only sites that
@@ -96,8 +100,12 @@ export type SourcingWaveResult = {
   orderId: string;
   material: string;
   category: string;
+  categorySource: "curated" | "derived";
   target: number;
+  /** Distinct supplier domains that received at least one new contact row. */
   added: number;
+  /** Contact rows inserted during this wave. */
+  contactsAdded: number;
   additions: SourcingWaveAddition[];
   examined: number;
   rejected: SourcingWaveRejection[];
@@ -300,16 +308,18 @@ async function existingVendorKeys(orderId: string) {
     FROM order_vendors
     WHERE order_vendors.order_id = $1::uuid
   `, orderId);
-  const domains = new Set<string>();
+  const domains = new Map<string, number>();
   const emails = new Set<string>();
   for (const row of rows) {
     const domain = row.website ? registrableDomain(row.website) : "";
-    if (domain) domains.add(domain);
+    if (domain) domains.set(domain, (domains.get(domain) ?? 0) + 1);
     const email = row.contactEmail?.trim().toLowerCase() ?? "";
     if (email.includes("@")) {
       emails.add(email);
       const emailDomainValue = registrableDomain(email.split("@").at(1) ?? "");
-      if (emailDomainValue) domains.add(emailDomainValue);
+      if (emailDomainValue && !domain) {
+        domains.set(emailDomainValue, (domains.get(emailDomainValue) ?? 0) + 1);
+      }
     }
   }
   return { domains, emails };
@@ -323,12 +333,14 @@ async function insertSourcedVendor(args: {
   verification: EmailVerification;
   matched: string[];
   discoveredVia: string;
+  contactsPerCompany: number;
 }) {
   const vendorId = randomUUID();
   const research = {
     source: "derya sourcing wave",
     category: args.category.key,
     categoryLabel: args.category.label,
+    categorySource: args.category.source,
     discoveredVia: args.discoveredVia,
     sourceUrls: args.site.sourceUrls,
     capabilityEvidence: args.matched,
@@ -345,30 +357,43 @@ async function insertSourcedVendor(args: {
   };
   // Re-checking the domain inside the insert keeps two concurrent waves, or a
   // retried run, from loading the same supplier twice.
-  const inserted = await procurementWorkflowDatabase().$executeRawUnsafe(
-    `
-      INSERT INTO order_vendors (
-        id, customer_id, order_id, name, website, contact_email, status, research, created_at, updated_at
-      )
-      SELECT $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'researched', $7::jsonb, now(), now()
-      WHERE NOT EXISTS (
-        SELECT 1 FROM order_vendors existing
-        WHERE existing.order_id = $3::uuid
-          AND (
-            lower(coalesce(existing.contact_email, existing.email, '')) = lower($6)
-            OR existing.website ILIKE $8
-          )
-      )
-    `,
-    vendorId,
-    args.order.customerId,
-    args.order.orderId,
-    cleanName(args.site.companyName),
-    args.site.website,
-    args.contactEmail,
-    JSON.stringify(research),
-    `%${args.site.domain}%`,
-  );
+  const domain = registrableDomain(args.site.domain);
+  // $8 is an already regex-escaped registrable domain.
+  const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const inserted = await procurementWorkflowDatabase().$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      "SELECT pg_advisory_xact_lock(hashtext($1))",
+      `${args.order.orderId}:${domain}`,
+    );
+    return tx.$executeRawUnsafe(
+      `
+        INSERT INTO order_vendors (
+          id, customer_id, order_id, name, website, contact_email, status, research, created_at, updated_at
+        )
+        SELECT $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'researched', $7::jsonb, now(), now()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM order_vendors existing
+          WHERE existing.order_id = $3::uuid
+            AND lower(coalesce(existing.contact_email, existing.email, '')) = lower($6)
+        )
+        AND (
+          SELECT count(*)
+          FROM order_vendors e2
+          WHERE e2.order_id = $3::uuid
+            AND e2.website ~* ('(^|[./@])' || $8 || '([/:?#]|$)')
+        ) < $9::int
+      `,
+      vendorId,
+      args.order.customerId,
+      args.order.orderId,
+      cleanName(args.site.companyName),
+      args.site.website,
+      args.contactEmail,
+      JSON.stringify(research),
+      escapedDomain,
+      args.contactsPerCompany,
+    );
+  });
   return inserted > 0 ? vendorId : null;
 }
 
@@ -385,6 +410,8 @@ export async function runProcurementSupplierSourcingWave(input: {
   loadOrder?: typeof loadBulkRfqOrder;
   loadExistingKeys?: typeof existingVendorKeys;
   insertVendor?: typeof insertSourcedVendor;
+  enrichment?: SourcingProfileEnrichment | null;
+  contactsPerCompany?: number;
   advanceStatus?: typeof advanceProcurementOrderStatus;
   reconcileStatus?: typeof reconcileProcurementOrderStatus;
 }): Promise<SourcingWaveResult> {
@@ -397,14 +424,37 @@ export async function runProcurementSupplierSourcingWave(input: {
     orderId: order.orderId,
     officeId: order.officeId,
   });
-  const category = classifySupplierSourcingCategory({
+  const initialCategory = resolveSupplierSourcingCategory({
     material: order.material,
     specification: order.specification,
     notes: order.notes,
+    deliveryLocation: order.deliveryLocation,
+    targetCountry: order.targetCountry,
   });
+  if (!initialCategory) {
+    throw new SupplierSourcingError(
+      "This request has no usable material description, so a supplier wave cannot be phrased.",
+      "unsupported_category",
+    );
+  }
+  const enrichment = initialCategory.source === "curated"
+    ? null
+    : input.enrichment !== undefined
+      ? input.enrichment
+      : await loadOrProposeSourcingProfileEnrichment({ order, officeId: order.officeId });
+  const category = enrichment
+    ? resolveSupplierSourcingCategory({
+      material: order.material,
+      specification: order.specification,
+      notes: order.notes,
+      deliveryLocation: order.deliveryLocation,
+      targetCountry: order.targetCountry,
+      enrichment,
+    })
+    : initialCategory;
   if (!category) {
     throw new SupplierSourcingError(
-      "This request does not match a supported sourcing category, so a supplier wave would have no capability gate.",
+      "This request has no usable material description, so a supplier wave cannot be phrased.",
       "unsupported_category",
     );
   }
@@ -413,11 +463,15 @@ export async function runProcurementSupplierSourcingWave(input: {
     throw new SupplierSourcingError("Supplier discovery is not configured for this environment.", "discovery_unavailable");
   }
   const target = Math.min(SOURCING_WAVE_MAX_TARGET, Math.max(1, Math.trunc(input.target)));
+  const contactsPerCompany = Math.max(1, Math.trunc(input.contactsPerCompany ?? 1));
   const fetchPage = input.fetchPage ?? defaultFetcher;
   const verify = input.verify ?? verifyEmail;
   const insertVendor = input.insertVendor ?? insertSourcedVendor;
   const existing = await (input.loadExistingKeys ?? existingVendorKeys)(order.orderId);
-  const seenDomains = new Set(existing.domains);
+  const domainSource = existing.domains as Map<string, number> | Set<string>;
+  const seenDomains = domainSource instanceof Map
+    ? new Map(domainSource)
+    : new Map([...domainSource].map((domain) => [domain, 1] as const));
   const usedEmails = new Set(existing.emails);
   let statusAdvanceRequested = reconciledStatus !== null
     || existing.domains.size > 0
@@ -426,8 +480,10 @@ export async function runProcurementSupplierSourcingWave(input: {
     orderId: order.orderId,
     material: order.material,
     category: category.key,
+    categorySource: category.source,
     target,
     added: 0,
+    contactsAdded: 0,
     additions: [],
     examined: 0,
     rejected: [],
@@ -451,6 +507,8 @@ export async function runProcurementSupplierSourcingWave(input: {
   result.startRound = startRound;
   result.nextRound = startRound;
   let emptyRounds = 0;
+  const proposedDomains = new Set<string>();
+  const addedDomains = new Set<string>();
 
   for (let step = 0; step < MAX_PROPOSAL_ROUNDS && result.added < target; step += 1) {
     const round = startRound + step;
@@ -485,7 +543,10 @@ export async function runProcurementSupplierSourcingWave(input: {
           found = await boundedCall(() => proposer.propose({
             query,
             limit: Math.min(25, Math.max(8, (target - result.added) * 2)),
-            excludeDomains: [...seenDomains].slice(-400),
+            excludeDomains: [...seenDomains.entries()]
+              .filter(([, count]) => count >= contactsPerCompany)
+              .map(([domain]) => domain)
+              .slice(-400),
           }), callBudget(MAX_DISCOVERY_CALL_MS));
         } catch (error) {
           if (error instanceof CallExpired) result.timedOut = true;
@@ -496,8 +557,9 @@ export async function runProcurementSupplierSourcingWave(input: {
         if (!found.length) continue;
         result.queriesUsed.push(`${proposer.name}: ${query}`);
         for (const proposal of found) {
-          if (seenDomains.has(proposal.domain)) continue;
-          seenDomains.add(proposal.domain);
+          if ((seenDomains.get(proposal.domain) ?? 0) >= contactsPerCompany) continue;
+          if (proposedDomains.has(proposal.domain)) continue;
+          proposedDomains.add(proposal.domain);
           proposals.push(proposal);
         }
         break;
@@ -558,8 +620,11 @@ export async function runProcurementSupplierSourcingWave(input: {
         result.rejected.push({ domain: site.domain, reason: qualification.reason });
         continue;
       }
-      let accepted: { email: string; verification: EmailVerification } | null = null;
-      for (const email of site.emails.slice(0, 4)) {
+      const accepted: Array<{ email: string; verification: EmailVerification }> = [];
+      const domainCount = seenDomains.get(site.domain) ?? 0;
+      const remainingContacts = Math.max(0, contactsPerCompany - domainCount);
+      for (const email of site.emails.slice(0, Math.max(4, remainingContacts))) {
+        if (accepted.length >= remainingContacts) break;
         if (usedEmails.has(email)) continue;
         let verification: EmailVerification;
         try {
@@ -572,11 +637,10 @@ export async function runProcurementSupplierSourcingWave(input: {
           continue;
         }
         if (verification.verdict === "deliverable_likely") {
-          accepted = { email, verification };
-          break;
+          accepted.push({ email, verification });
         }
       }
-      if (!accepted) {
+      if (!accepted.length) {
         result.rejected.push({ domain: site.domain, reason: "no published address passed deliverability screening" });
         continue;
       }
@@ -584,59 +648,60 @@ export async function runProcurementSupplierSourcingWave(input: {
       // pool that has no connection left, used to throw away the whole wave
       // including the suppliers it had already qualified, so the failure is
       // recorded against that supplier and the wave keeps going.
-      let vendorId: string | null;
-      try {
-        vendorId = await insertVendor({
-          order,
-          category,
-          site,
-          contactEmail: accepted.email,
-          verification: accepted.verification,
-          matched: qualification.matched,
-          discoveredVia: via,
-        });
-      } catch (error) {
-        const reason = failureReason(error);
-        result.rejected.push({
-          domain: site.domain,
-          reason: `the supplier could not be saved: ${reason}`,
-        });
-        // A row the database will never accept belongs to that supplier alone.
-        // A database that is down belongs to every supplier in the slice, so
-        // the wave stops, keeps its cursor where the slice started, and says so,
-        // otherwise the continuation would spend fresh search phrases on
-        // suppliers this slice had already qualified and never saved.
-        if (failureIsTransient(error)) {
-          result.persistenceFailures.push(site.domain);
-          result.nextRound = startRound;
-          return result;
+      for (const contact of accepted) {
+        let vendorId: string | null;
+        try {
+          vendorId = await insertVendor({
+            order,
+            category,
+            site,
+            contactEmail: contact.email,
+            verification: contact.verification,
+            matched: qualification.matched,
+            discoveredVia: via,
+            contactsPerCompany,
+          });
+        } catch (error) {
+          const reason = failureReason(error);
+          result.rejected.push({
+            domain: site.domain,
+            reason: `the supplier could not be saved: ${reason}`,
+          });
+          if (failureIsTransient(error)) {
+            result.persistenceFailures.push(site.domain);
+            result.nextRound = startRound;
+            return result;
+          }
+          continue;
         }
-        continue;
-      }
-      if (!vendorId) {
-        result.rejected.push({ domain: site.domain, reason: "the supplier is already on this request" });
-        continue;
-      }
-      usedEmails.add(accepted.email);
-      result.added += 1;
-      // The first supplier saved is the moment the request is visibly being
-      // researched; the status write is idempotent, so a later wave is a no-op.
-      if (result.added === 1 && !statusAdvanceRequested) {
-        statusAdvanceRequested = true;
-        await advanceStatus({
-          customerId: order.customerId,
-          orderId: order.orderId,
-          event: "supplier_discovered",
+        if (!vendorId) {
+          result.rejected.push({ domain: site.domain, reason: "the supplier is already on this request" });
+          continue;
+        }
+        usedEmails.add(contact.email);
+        seenDomains.set(site.domain, (seenDomains.get(site.domain) ?? 0) + 1);
+        result.contactsAdded += 1;
+        if (!addedDomains.has(site.domain)) {
+          addedDomains.add(site.domain);
+          result.added += 1;
+        }
+        if (result.contactsAdded === 1 && !statusAdvanceRequested) {
+          statusAdvanceRequested = true;
+          await advanceStatus({
+            customerId: order.customerId,
+            orderId: order.orderId,
+            event: "supplier_discovered",
+          });
+        }
+        result.additions.push({
+          vendorId,
+          name: cleanName(site.companyName),
+          domain: site.domain,
+          website: site.website,
+          contactEmail: contact.email,
+          matched: qualification.matched,
         });
       }
-      result.additions.push({
-        vendorId,
-        name: cleanName(site.companyName),
-        domain: site.domain,
-        website: site.website,
-        contactEmail: accepted.email,
-        matched: qualification.matched,
-      });
     }
   }
 

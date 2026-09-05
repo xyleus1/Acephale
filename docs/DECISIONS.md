@@ -1,3 +1,7 @@
+## Request-derived sourcing categories
+
+Sourcing categories are derived from the request; curated categories are overrides; the model only enriches phrases and its output is persisted with provenance in request_context.sourcingProfile.
+
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 

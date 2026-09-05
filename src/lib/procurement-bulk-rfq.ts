@@ -58,6 +58,8 @@ export type BulkRfqOrder = {
   customerId: string;
   officeId: string;
   sourceWorkspaceId: string | null;
+  deliveryLocation?: string | null;
+  targetCountry?: string | null;
   companyName: string;
   material: string;
   specification: string | null;
@@ -131,6 +133,8 @@ type OrderRow = {
   orderId: string;
   customerId: string;
   sourceWorkspaceId: string | null;
+  deliveryLocation: string | null;
+  targetCountry: string | null;
   companyName: string | null;
   material: string;
   specification: string | null;
@@ -216,6 +220,22 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
       orders.id AS "orderId",
       orders.customer_id AS "customerId",
       orders.request_context->'source'->>'workspace_id' AS "sourceWorkspaceId",
+      COALESCE(
+        orders.request_context #>> '{procurement_context,request,delivery_location}',
+        orders.request_context #>> '{procurement_context,request,deliveryLocation}',
+        orders.request_context #>> '{logistics,delivery_location}',
+        orders.request_context #>> '{logistics,deliveryLocation}',
+        orders.request_context #>> '{source,delivery_location}',
+        orders.request_context #>> '{source,deliveryLocation}'
+      ) AS "deliveryLocation",
+      COALESCE(
+        orders.request_context #>> '{procurement_context,request,target_country}',
+        orders.request_context #>> '{procurement_context,request,targetCountry}',
+        orders.request_context #>> '{logistics,target_country}',
+        orders.request_context #>> '{logistics,targetCountry}',
+        orders.request_context #>> '{source,target_country}',
+        orders.request_context #>> '{source,targetCountry}'
+      ) AS "targetCountry",
       orders.request_context->'source'->>'company_name' AS "companyName",
       bill_of_materials.material AS "material",
       bill_of_materials.specification AS "specification",
@@ -236,6 +256,8 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
     customerId: row.customerId,
     officeId: procurementOfficeIdFromServerMetadata(row.customerId),
     sourceWorkspaceId: row.sourceWorkspaceId,
+    deliveryLocation: row.deliveryLocation,
+    targetCountry: row.targetCountry,
     companyName: clean(row.companyName ?? "our customer"),
     material: row.material,
     specification: row.specification,
