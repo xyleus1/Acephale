@@ -10123,6 +10123,13 @@ Use this file for chronological implementation notes that future agents should s
 - Manual resume now uses a compare-and-clear pause timestamp guard and reports
   stale feedback to the connected-email UI.
 
+## 2026-09-05: Ops imports extend existing list fields
+
+- Research imports can add new list columns without changing existing
+  definitions, so re-imported rows retain newly supplied values.
+- Validation precedes mutation, while a row lock prevents concurrent imports
+  from losing appended fields.
+
 ## 2026-09-05: Mailbox verifier credit visibility
 
 - Added Bouncer credit checks to the settings and ops surfaces, plus

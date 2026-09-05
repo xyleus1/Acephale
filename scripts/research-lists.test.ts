@@ -5,6 +5,7 @@ import {
   coerceResearchValue,
   buildResearchSearchText,
   hasResearchValues,
+  mergeResearchFields,
   normalizeDedupeValue,
   parseDelimitedRecords,
   rekeyResearchRecords,
@@ -125,6 +126,49 @@ const saveFailureResult = await upsertResearchRecords(
 );
 assert.equal(saveFailureResult.errors[0]?.row, 3);
 assert.match(saveFailureResult.errors[0]?.error ?? "", /single-row write failed/);
+
+const mergedResearchFields = mergeResearchFields(
+  [{ key: "company_name", label: "Company", type: "text" }],
+  [
+    { key: "company_name", label: "Stored company", type: "text" },
+    { key: "email_verdict", label: "Email verdict", type: "text" },
+  ],
+);
+assert.deepEqual(mergedResearchFields.addedFields, ["email_verdict"]);
+assert.deepEqual(mergedResearchFields.fields, [
+  { key: "company_name", label: "Company", type: "text" },
+  { key: "email_verdict", label: "Email verdict", type: "text" },
+]);
+let importedExtendedData: Record<string, unknown> | null = null;
+const extendedListPrisma = {
+  researchList: {
+    findUnique: async () => ({
+      id: "extended-list-id",
+      officeId: "office-id",
+      slug: "test",
+      name: "Test",
+      description: null,
+      fields: mergedResearchFields.fields,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
+  },
+  researchRecord: {
+    findMany: async () => [],
+    upsert: async (args: { create: { data: Record<string, unknown> } }) => {
+      importedExtendedData = args.create.data;
+      return {};
+    },
+  },
+};
+const extendedImportResult = await upsertResearchRecords(
+  "office-id",
+  "test",
+  [{ company_name: "Acme", email_verdict: "deliverable_likely" }],
+  { dedupeField: "company_name", client: extendedListPrisma as unknown as PrismaClient },
+);
+assert.equal(extendedImportResult.created, 1);
+assert.equal(importedExtendedData?.email_verdict, "deliverable_likely");
 
 assert.equal(normalizeDedupeValue(" HTTPS://WWW.Example.com/ "), "example.com");
 assert.equal(normalizeDedupeValue("  Contact@Example.com "), "contact@example.com");

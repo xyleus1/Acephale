@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import {
   createResearchList,
+  extendResearchListFields,
+  mergeResearchFields,
   RESEARCH_MAX_ROWS,
   slugify,
   upsertResearchRecords,
@@ -141,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     let existingList = await prisma.researchList.findUnique({
       where: { officeId_slug: { officeId: office.id, slug } },
-      select: { slug: true, fields: true },
+      select: { id: true, slug: true, fields: true },
     });
     if (!existingList) {
       resolveDedupeField(fields, dedupeField);
@@ -162,22 +164,37 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const racedList = await prisma.researchList.findUnique({
           where: { officeId_slug: { officeId: office.id, slug } },
-          select: { slug: true, fields: true },
+          select: { id: true, slug: true, fields: true },
         });
         if (!racedList) throw error;
         existingList = racedList;
       }
     }
-    const storedFields = existingList
-      ? validateResearchFields(existingList.fields)
-      : fields;
-    resolveDedupeField(storedFields, dedupeField);
-    const missingRows = missingDedupeRows(body.rows, dedupeField);
-    if (missingRows.length > 0) {
-      return NextResponse.json({
-        error: "Every row needs a value for the dedupe field so imports can be retried safely.",
-        rows: missingRows,
-      }, { status: 400 });
+    let storedFields: ResearchField[];
+    let addedFields: string[] = [];
+    if (existingList) {
+      const merged = mergeResearchFields(existingList.fields, fields);
+      resolveDedupeField(merged.fields, dedupeField);
+      const missingRows = missingDedupeRows(body.rows, dedupeField);
+      if (missingRows.length > 0) {
+        return NextResponse.json({
+          error: "Every row needs a value for the dedupe field so imports can be retried safely.",
+          rows: missingRows,
+        }, { status: 400 });
+      }
+      const extended = await extendResearchListFields(office.id, existingList.id, fields);
+      storedFields = extended.fields;
+      addedFields = extended.addedFields;
+    } else {
+      storedFields = fields;
+      resolveDedupeField(storedFields, dedupeField);
+      const missingRows = missingDedupeRows(body.rows, dedupeField);
+      if (missingRows.length > 0) {
+        return NextResponse.json({
+          error: "Every row needs a value for the dedupe field so imports can be retried safely.",
+          rows: missingRows,
+        }, { status: 400 });
+      }
     }
 
     const result = await upsertResearchRecords(
@@ -193,6 +210,7 @@ export async function POST(request: NextRequest) {
       updated: result.updated,
       skipped: result.skipped,
       errors: result.errors.slice(0, 50),
+      addedFields,
     });
   } catch (error) {
     if (isPrismaError(error)) {

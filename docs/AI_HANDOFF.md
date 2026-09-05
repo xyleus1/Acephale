@@ -12736,6 +12736,13 @@ Verification caveat:
 - Manual resume is conditional on the pause timestamp shown to the admin, so
   newer delivery feedback cannot be cleared by an older page.
 
+## 2026-09-05: Ops imports extend existing list fields
+
+- Existing ops research lists now retain their stored field definitions and
+  append new request fields, reporting the added keys in the import response.
+- Dedupe validation now runs before mutation, and field extension locks the
+  list row to serialize concurrent imports.
+
 ## 2026-09-05: Mailbox verifier credit visibility
 
 - Bouncer credits are shown in connected-email settings and the outreach

@@ -111,6 +111,42 @@ export function validateResearchFields(fields: unknown): ResearchField[] {
   });
 }
 
+export function mergeResearchFields(
+  storedFields: unknown,
+  requestedFields: unknown,
+): { fields: ResearchField[]; addedFields: string[] } {
+  const stored = validateResearchFields(storedFields);
+  const requested = validateResearchFields(requestedFields);
+  const storedKeys = new Set(stored.map((field) => field.key));
+  const added = requested.filter((field) => !storedKeys.has(field.key));
+  return {
+    fields: validateResearchFields([...stored, ...added]),
+    addedFields: added.map((field) => field.key),
+  };
+}
+
+export async function extendResearchListFields(
+  officeId: string,
+  listId: string,
+  requestedFields: unknown,
+): Promise<{ fields: ResearchField[]; addedFields: string[] }> {
+  return defaultPrisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ fields: Prisma.JsonValue }>>(
+      Prisma.sql`SELECT "fields" FROM "ResearchList" WHERE "id" = ${listId} AND "officeId" = ${officeId} FOR UPDATE`,
+    );
+    const list = locked[0];
+    if (!list) throw new Error("Research list not found.");
+    const merged = mergeResearchFields(list.fields, requestedFields);
+    if (merged.addedFields.length > 0) {
+      await tx.researchList.update({
+        where: { id: listId },
+        data: { fields: merged.fields as unknown as Prisma.InputJsonValue },
+      });
+    }
+    return merged;
+  });
+}
+
 function fieldsFromJson(value: Prisma.JsonValue): ResearchField[] {
   return validateResearchFields(value);
 }
