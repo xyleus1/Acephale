@@ -33,6 +33,9 @@
 .usageTrack span { height: 100%; display: block; border-radius: inherit; background: var(--success); }
 .toggleCell { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .toggleCell > span { min-width: 20px; color: var(--muted); font-size: 11px; font-weight: 650; text-align: right; }
+.pauseDetail { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; }
+.pauseDetail > span { max-width: 230px; color: var(--muted); font-size: 11px; line-height: 1.35; text-align: right; }
+.pauseDetail button { min-height: 30px; }
 .poolSwitch { width: 42px; height: 24px; position: relative; flex: 0 0 auto; padding: 0; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--subtle); cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
 .poolSwitch > span { width: 18px; height: 18px; position: absolute; top: 2px; left: 2px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 3px rgb(20 25 23 / 24%); transition: transform 140ms ease; }
 .poolSwitch[data-on="true"] { border-color: var(--success); background: var(--success); }
@@ -82,6 +85,7 @@
   .poolRow { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 12px; padding-right: 20px; padding-left: 20px; }
   .usageFact { grid-column: 2 / -1; }
   .toggleCell { grid-column: 3; grid-row: 1; }
+  .pauseDetail > span { max-width: 180px; }
   .testForm { grid-template-columns: 1fr; }
   .testActions { flex-wrap: wrap; }
   .bulkResults li { grid-template-columns: 1fr; gap: 4px; }

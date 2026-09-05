@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateEmailSenderPoolAccounts } from "@/app/dashboard/settings/email/actions";
+import {
+  resumeSenderPoolAccount,
+  updateEmailSenderPoolAccounts,
+} from "@/app/dashboard/settings/email/actions";
 import { MAX_EMAIL_DAILY_SEND_LIMIT } from "@/lib/email-sender-pool-policy";
 import styles from "@/app/dashboard/settings/connected-emails/connected-emails.module.css";
 
@@ -12,6 +15,8 @@ export type EmailSenderPoolRow = {
   email: string;
   provider: string;
   sendEnabled: boolean;
+  sendPausedAt: string | null;
+  sendPausedReason: string | null;
   dailySendLimit: number;
   sentToday: number;
 };
@@ -79,6 +84,25 @@ export function EmailSenderPool({ accounts }: { accounts: EmailSenderPoolRow[] }
     });
   }
 
+  function resumeAccount(accountId: string) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await resumeSenderPoolAccount({ accountId });
+        if (!result.resumed) {
+          setError("The sender account was already resumed.");
+          return;
+        }
+        setRows((current) => current.map((row) => row.id === accountId
+          ? { ...row, sendPausedAt: null, sendPausedReason: null }
+          : row));
+        router.refresh();
+      } catch {
+        setError("The sender account could not be resumed. Try again.");
+      }
+    });
+  }
+
   return (
     <div>
       <div className={styles.poolToolbar}>
@@ -114,6 +138,7 @@ export function EmailSenderPool({ accounts }: { accounts: EmailSenderPoolRow[] }
       <div className={styles.accountList}>
         {rows.map((account) => {
           const utilization = Math.min(100, Math.round((account.sentToday / account.dailySendLimit) * 100));
+          const paused = account.sendEnabled && Boolean(account.sendPausedAt);
           return (
             <article className={styles.poolRow} key={account.id}>
               <input
@@ -136,19 +161,33 @@ export function EmailSenderPool({ accounts }: { accounts: EmailSenderPoolRow[] }
                 <div className={styles.usageTrack} aria-hidden="true"><span style={{ width: `${utilization}%` }} /></div>
               </div>
               <div className={styles.toggleCell}>
-                <span>{account.sendEnabled ? "On" : "Off"}</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={account.sendEnabled}
-                  aria-label={`${account.sendEnabled ? "Turn off" : "Turn on"} pooled sending for ${account.email}`}
-                  className={styles.poolSwitch}
-                  data-on={account.sendEnabled}
-                  disabled={busy}
-                  onClick={() => toggleAccount(account.id, !account.sendEnabled)}
-                >
-                  <span />
-                </button>
+                <span>{paused ? "Paused" : account.sendEnabled ? "On" : "Off"}</span>
+                {paused ? (
+                  <div className={styles.pauseDetail}>
+                    <span>{account.sendPausedReason ?? "Sender protection pause."}</span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={busy}
+                      onClick={() => resumeAccount(account.id)}
+                    >
+                      Resume sending
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={account.sendEnabled}
+                    aria-label={`${account.sendEnabled ? "Turn off" : "Turn on"} pooled sending for ${account.email}`}
+                    className={styles.poolSwitch}
+                    data-on={account.sendEnabled}
+                    disabled={busy}
+                    onClick={() => toggleAccount(account.id, !account.sendEnabled)}
+                  >
+                    <span />
+                  </button>
+                )}
               </div>
             </article>
           );

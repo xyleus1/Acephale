@@ -23,3 +23,31 @@ export const SHARED_SENDER_POOL_FILTER = {
   sendEnabled: true,
   sendPausedAt: null,
 } satisfies Prisma.EmailAccountWhereInput;
+
+export type SenderPoolMembershipAccount = {
+  id: string;
+  dailySendLimit: number;
+  isActive: boolean;
+  provider: string;
+  refreshToken: string | null;
+  credentialSecret: string | null;
+  sendEnabled: boolean;
+  sendPausedAt: Date | null;
+};
+
+export function senderPoolMembership<T extends SenderPoolMembershipAccount>(
+  accounts: readonly T[],
+) {
+  const monitored = accounts.filter((account) => (
+    account.isActive
+    && (
+      (account.provider === "GMAIL" && Boolean(account.refreshToken))
+      || (account.provider === "GMAIL_APP_PASSWORD" && Boolean(account.credentialSecret))
+    )
+  ));
+  return {
+    monitored,
+    enabledSenders: monitored.filter((account) => account.sendEnabled && !account.sendPausedAt),
+    pausedBySenderProtection: monitored.filter((account) => account.sendEnabled && Boolean(account.sendPausedAt)),
+  };
+}

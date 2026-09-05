@@ -13,6 +13,7 @@ import {
 import { encryptSecret } from "@/lib/security/crypto";
 import { MAX_BULK_GMAIL_ACCOUNTS, parseGmailAppPasswordBulkInput } from "@/lib/gmail-app-password-bulk";
 import { updateSharedEmailSenderPoolAccounts } from "@/lib/email-sender-pool-settings";
+import { resumeSenderAccount } from "@/lib/email-delivery-events";
 
 const BULK_CONNECT_CONCURRENCY = 6;
 
@@ -79,6 +80,15 @@ export async function updateEmailSenderPoolAccounts(input: {
   if (!result.ok) return result;
   revalidateEmailAccountPages();
   return result;
+}
+
+export async function resumeSenderPoolAccount(input: { accountId: string }) {
+  await requireEmailAccountAdminSession();
+  const accountId = typeof input?.accountId === "string" ? input.accountId.trim() : "";
+  if (!accountId || accountId.length > 220) return { resumed: false };
+  const resumed = await resumeSenderAccount(accountId);
+  if (resumed) revalidateEmailAccountPages();
+  return { resumed };
 }
 
 export async function makeDefaultEmailSender(accountId: string) {

@@ -25,6 +25,8 @@ import {
   runOutreachCampaignBatch,
 } from "@/lib/outreach-campaign-send";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
+import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
+import { senderProtectionWindow } from "@/lib/email-delivery-events";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -169,6 +171,31 @@ export async function POST(request: NextRequest) {
   try {
     if (action === "mailboxes") {
       const mailboxes = await listEmailSenderPoolAccounts();
+      const pausedAccounts = await prisma.emailAccount.findMany({
+        where: {
+          ...SHARED_MAILBOX_POOL_FILTER,
+          sendEnabled: true,
+          sendPausedAt: { not: null },
+        },
+        select: {
+          id: true,
+          email: true,
+          provider: true,
+          dailySendLimit: true,
+          sendPausedAt: true,
+          sendPausedReason: true,
+        },
+      });
+      const now = new Date();
+      const paused = await Promise.all(pausedAccounts.map(async (account) => ({
+        id: account.id,
+        email: account.email,
+        provider: account.provider,
+        dailySendLimit: account.dailySendLimit,
+        pausedAt: account.sendPausedAt!.toISOString(),
+        pausedReason: account.sendPausedReason,
+        window: await senderProtectionWindow(prisma, { accountId: account.id, now }),
+      })));
       return NextResponse.json({
         mailboxes: mailboxes.map((mailbox) => ({
           id: mailbox.id,
@@ -177,6 +204,7 @@ export async function POST(request: NextRequest) {
           dailySendLimit: mailbox.dailySendLimit,
           sentToday: mailbox.sentToday,
         })),
+        paused,
       });
     }
 

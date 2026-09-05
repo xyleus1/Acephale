@@ -4,6 +4,7 @@ import { GmailAppPasswordBulkForm } from "@/components/gmail-app-password-bulk-f
 import { GmailAppPasswordForm } from "@/components/gmail-app-password-form";
 import { ResumeAccountButton } from "@/components/resume-account-button";
 import { requireEmailAccountAdminSession } from "@/lib/email-account-access";
+import { senderPoolMembership } from "@/lib/email-account-pool";
 import { GMAIL_APP_PASSWORD_PROVIDER } from "@/lib/gmail-app-password";
 import { prisma } from "@/lib/prisma";
 import { isSecretEncryptionConfigured } from "@/lib/security/crypto";
@@ -52,11 +53,7 @@ export default async function ConnectedEmailsPage() {
   const connected = accounts.filter((account) => account.isActive);
   const pooledAccounts = connected.filter((account) => isManagedGmail(account.provider));
   const paused = accounts.filter((account) => !account.isActive);
-  const monitored = connected.filter((account) => (
-    (account.provider === "GMAIL" && Boolean(account.refreshToken))
-    || (account.provider === GMAIL_APP_PASSWORD_PROVIDER && Boolean(account.credentialSecret))
-  ));
-  const enabledSenders = monitored.filter((account) => account.sendEnabled);
+  const { monitored, enabledSenders, pausedBySenderProtection } = senderPoolMembership(accounts);
   const sentTodayTotal = monitored.reduce((total, account) => total + (sentToday.get(account.id) ?? 0), 0);
   const dailyCapacity = enabledSenders.reduce((total, account) => total + account.dailySendLimit, 0);
   const oauthConfigured = Boolean(process.env.GOOGLE_CLIENT_ID);
@@ -74,6 +71,9 @@ export default async function ConnectedEmailsPage() {
           <div><span>Monitoring</span><strong>{monitored.length}</strong></div>
           <div><span>Sending pool</span><strong>{enabledSenders.length}</strong></div>
           <div><span>Sent today</span><strong>{sentTodayTotal} / {dailyCapacity}</strong></div>
+          {pausedBySenderProtection.length > 0 ? (
+            <div><span>Paused by sender protection</span><strong>{pausedBySenderProtection.length}</strong></div>
+          ) : null}
           <a className="btn" href="#add-email">Add account</a>
         </section>
 
@@ -91,6 +91,8 @@ export default async function ConnectedEmailsPage() {
               email: account.email,
               provider: providerLabel(account.provider),
               sendEnabled: account.sendEnabled,
+              sendPausedAt: account.sendPausedAt?.toISOString() ?? null,
+              sendPausedReason: account.sendPausedReason,
               dailySendLimit: account.dailySendLimit,
               sentToday: sentToday.get(account.id) ?? 0,
             }))} />

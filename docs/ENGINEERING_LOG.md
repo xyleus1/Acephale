@@ -10051,3 +10051,10 @@ Use this file for chronological implementation notes that future agents should s
 ## 2026-09-04: Entity-qualified Context prospecting
 
 - Context prospecting now screens fit-qualified candidates with deterministic domain rules followed by brief-aware entity classification, stores entity and fit-reason fields, and records fallback and rejection stats.
+
+## 2026-09-05: Sender protection pause visibility
+
+- Centralized connected-email sender pool membership so paused accounts are
+  excluded from displayed capacity while remaining visible with their reason.
+- Added an admin resume action and paused mailbox details to the outreach ops
+  mailboxes response.

@@ -108,7 +108,7 @@ export async function resolveUnroutedFeedbackOffices(
   return [...offices].sort();
 }
 
-async function senderProtectionWindow(
+export async function senderProtectionWindow(
   db: DeliveryDb,
   input: { accountId: string; now: Date },
 ): Promise<{ sent: number; permanentBounces: number; complaints: number }> {

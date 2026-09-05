@@ -12687,3 +12687,10 @@ Verification caveat:
 
 - Context prospecting now applies deterministic non-company domain rules before model classification, then persists only target entities for the draft brief.
 - Model failures persist candidates with a fallback qualification flag instead of silently dropping them. Screening counts and rejection types are stored on the action.
+
+## 2026-09-05: Sender protection pause visibility
+
+- Connected email settings now exclude sender-protection-paused accounts from
+  sending capacity, show the pause reason, and let an admin resume sending.
+- The outreach mailbox ops action reports paused accounts with their protection
+  window alongside active pool members.
