@@ -122,6 +122,10 @@ export type AutopilotRunResult = {
   // Deliveries the send time state recheck refused because the sourcing request
   // moved after the draft was saved. They need a redraft, not a retry.
   refused: number;
+  // Saved drafts the thread moved past, retired by this pass. They are not
+  // failures: the supplier already has the answer they carried, or a newer
+  // message replaces the one they answered.
+  superseded: number;
   failed: number;
   failures: Array<{ vendorId: string; vendorName: string; error: string }>;
   autoSend: boolean;
@@ -542,7 +546,11 @@ export async function runProcurementAutopilot(args: {
           .filter((outcome) => outcome.state === "DRAFTED")
           .map((outcome) => outcome.vendorId),
         ...(sendRun?.outcomes ?? [])
-          .filter((outcome) => outcome.state === "SENT")
+          // Retiring a draft the thread moved past is progress on that
+          // conversation: the answer it carried is already with the supplier, or
+          // a newer message replaces it, so the thread is not waiting on a retry
+          // of this draft and its attempt count starts clean.
+          .filter((outcome) => outcome.state === "SENT" || outcome.state === "SUPERSEDED")
           .map((outcome) => outcome.vendorId),
         ...(nudgeRun?.outcomes ?? [])
           .filter((outcome) => outcome.state === "SENT")
@@ -589,6 +597,7 @@ export async function runProcurementAutopilot(args: {
     sent: sendRun?.sent ?? 0,
     alreadySent: sendRun?.alreadySent ?? 0,
     refused: sendRun?.stale ?? 0,
+    superseded: sendRun?.superseded ?? 0,
     // Every path that can fail counts toward one total, including the drafts
     // and chase drafts a reply needs before it can be delivered at all, so a
     // pass cannot report zero failures while naming failures.

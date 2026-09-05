@@ -680,6 +680,62 @@ export async function markProcurementFileDeliveryDraftSent(args: {
   return true;
 }
 
+// A draft whose thread moved past it can never be delivered, since the send
+// path refuses it, so it is cancelled here with the reason on its own event
+// trail. Without this the same draft is offered, refused and reported as a
+// failure on every pass, which holds its conversation in retry forever while
+// the supplier waits for the answer or the question it is actually owed.
+export async function retireProcurementFileDeliveryDraft(args: {
+  context: SupplyAccessContext;
+  order: ProcurementOrderDetail;
+  vendorId: string;
+  sourceMessageId: string;
+  reason: string;
+}): Promise<boolean> {
+  const access = await currentAccessContext(args.context);
+  const workspaceId = requestWorkspaceId(args.order);
+  const task = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      officeId: access.officeId,
+      workspaceId,
+      taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
+      taskKey: { startsWith: `${draftTaskScopeKey({ orderId: args.order.id, vendorId: args.vendorId })}:` },
+      status: "PLANNED",
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true, input: true },
+  });
+  if (!task) return false;
+  // A draft saved for a different supplier message between the read and this
+  // write is a fresh draft, so it is left alone rather than cancelled on a
+  // judgement that was made about the draft it replaced.
+  if (String(record(task.input).sourceMessageId ?? "") !== args.sourceMessageId) return false;
+  await prisma.$transaction(async (tx) => {
+    const now = new Date();
+    const cancelled = await tx.supplyExecutionTask.updateMany({
+      where: { id: task.id, status: "PLANNED" },
+      data: { status: "CANCELLED", cancelledAt: now },
+    });
+    if (!cancelled.count) return;
+    await appendSupplierCommunicationEvent({
+      tx,
+      taskId: task.id,
+      officeId: access.officeId,
+      workspaceId,
+      actorUserId: access.userId,
+      eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_SUPERSEDED",
+      status: "CANCELLED",
+      message: args.reason,
+      payload: inputJson({
+        orderId: args.order.id,
+        vendorId: args.vendorId,
+        sourceMessageId: args.sourceMessageId,
+      }),
+    });
+  });
+  return true;
+}
+
 export async function getProcurementFileDeliveryDraft(args: {
   officeId: string;
   order: ProcurementOrderDetail;

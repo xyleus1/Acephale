@@ -6,6 +6,7 @@ import {
   PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
   getProcurementFileDeliveryDraft,
   markProcurementFileDeliveryDraftSent,
+  retireProcurementFileDeliveryDraft,
   saveProcurementFileDeliveryDraft,
 } from "../src/lib/procurement-file-delivery-draft";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
@@ -244,6 +245,69 @@ async function main() {
       }),
       false,
       "Marking a sent draft again must not create a second delivery record.",
+    );
+
+    // A draft the thread moved past is retired, since the send path refuses it
+    // for good: left PLANNED it would be offered and refused on every pass and
+    // its supplier would never be answered.
+    const stale = await saveProcurementFileDeliveryDraft({
+      context,
+      customerId: company.id,
+      order,
+      vendor,
+      sourceMessageId: `inbound-stale-${suffix}`,
+      recipient: vendor.contact!.email!,
+      conversationSubject: `Re: RFQ ${suffix} again`,
+    });
+    assert.equal(stale.sourceMessageId, `inbound-stale-${suffix}`);
+    assert.equal(
+      await retireProcurementFileDeliveryDraft({
+        context,
+        order,
+        vendorId: vendor.id,
+        sourceMessageId: `inbound-other-${suffix}`,
+        reason: "Judged against a draft that is no longer the saved one.",
+      }),
+      false,
+      "A draft saved for another supplier message must survive a stale judgement.",
+    );
+    assert.ok(await getProcurementFileDeliveryDraft({ officeId: office.id, order, vendorId: vendor.id }));
+    assert.equal(
+      await retireProcurementFileDeliveryDraft({
+        context,
+        order,
+        vendorId: vendor.id,
+        sourceMessageId: `inbound-stale-${suffix}`,
+        reason: "This supplier reply was already answered on the thread.",
+      }),
+      true,
+    );
+    assert.equal(
+      await getProcurementFileDeliveryDraft({ officeId: office.id, order, vendorId: vendor.id }),
+      null,
+      "A retired draft must not be offered for sending again.",
+    );
+    const afterRetire = await prisma.supplyExecutionTask.findMany({
+      where: { officeId: office.id, taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE },
+      include: { events: true },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(afterRetire.length, 3);
+    assert.equal(afterRetire[2]?.status, "CANCELLED");
+    assert.ok(afterRetire[2]?.cancelledAt, "A retired draft records when it was cancelled.");
+    assert.deepEqual(afterRetire[2]?.events.map((event) => event.eventType), [
+      "PROCUREMENT_SUPPLIER_FILE_REPLY_DRAFTED",
+      "PROCUREMENT_SUPPLIER_FILE_REPLY_SUPERSEDED",
+    ]);
+    assert.equal(
+      await retireProcurementFileDeliveryDraft({
+        context,
+        order,
+        vendorId: vendor.id,
+        sourceMessageId: `inbound-stale-${suffix}`,
+        reason: "Retiring a draft twice must not write a second record.",
+      }),
+      false,
     );
 
     console.log("Procurement file bearing draft database contract passed.");

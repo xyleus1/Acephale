@@ -2,10 +2,12 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
+import { procurementDraftCurrency } from "@/lib/procurement-draft-currency";
 import {
   getProcurementFileDeliveryDraft,
   markProcurementFileDeliveryDraftSent,
   procurementFileDraftSendDecision,
+  retireProcurementFileDeliveryDraft,
 } from "@/lib/procurement-file-delivery-draft";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
@@ -27,7 +29,9 @@ export type FileSendOutcome = {
   vendorId: string;
   vendorName: string;
   recipient: string;
-  state: "SENT" | "ALREADY_SENT" | "STALE" | "FAILED";
+  // SUPERSEDED is a draft the thread moved past, which is retired here rather
+  // than refused by the send path on every pass for good.
+  state: "SENT" | "ALREADY_SENT" | "STALE" | "SUPERSEDED" | "FAILED";
   sender: string | null;
   attachments: string[];
   providerMessageId: string | null;
@@ -41,6 +45,7 @@ export type FileSendRunResult = {
   sent: number;
   alreadySent: number;
   stale: number;
+  superseded: number;
   failed: number;
   remaining: number;
   outcomes: FileSendOutcome[];
@@ -128,6 +133,37 @@ export async function runProcurementFileDraftSendBatch(args: {
         orderId: live.id,
         vendorId: vendor.id,
       });
+      // The thread is judged against the draft before the provider is touched:
+      // an answer that already went out, from this mailbox or a pooled one, or a
+      // newer supplier message, makes this draft undeliverable for good, so it
+      // is retired and the conversation moves on instead of failing every pass.
+      const currency = procurementDraftCurrency({
+        conversation,
+        sourceMessageId: draft.sourceMessageId,
+        variant: draft.variant,
+      });
+      if (!currency.deliverable) {
+        if (currency.retire) {
+          await retireProcurementFileDeliveryDraft({
+            context: access,
+            order: live,
+            vendorId: vendor.id,
+            sourceMessageId: draft.sourceMessageId,
+            reason: currency.reason,
+          });
+        }
+        outcomes.push({
+          vendorId: vendor.id,
+          vendorName: vendor.name,
+          recipient: draft.recipient,
+          state: currency.retire ? "SUPERSEDED" : "FAILED",
+          sender: null,
+          attachments,
+          providerMessageId: null,
+          error: currency.reason,
+        });
+        continue;
+      }
       const delivery = await sendProcurementSupplierReply({
         context: access,
         customerId: summary.customerId,
@@ -179,6 +215,7 @@ export async function runProcurementFileDraftSendBatch(args: {
   const sent = outcomes.filter((outcome) => outcome.state === "SENT").length;
   const alreadySent = outcomes.filter((outcome) => outcome.state === "ALREADY_SENT").length;
   const stale = outcomes.filter((outcome) => outcome.state === "STALE").length;
+  const superseded = outcomes.filter((outcome) => outcome.state === "SUPERSEDED").length;
   const failed = outcomes.filter((outcome) => outcome.state === "FAILED").length;
   return {
     orderId: summary.orderId,
@@ -187,8 +224,9 @@ export async function runProcurementFileDraftSendBatch(args: {
     sent,
     alreadySent,
     stale,
+    superseded,
     failed,
-    remaining: Math.max(0, drafts - sent - alreadySent),
+    remaining: Math.max(0, drafts - sent - alreadySent - superseded),
     outcomes,
   };
 }

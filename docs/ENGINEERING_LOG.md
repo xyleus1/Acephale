@@ -3,6 +3,38 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-06: A supplier draft the thread moved past is retired, not retried forever
+
+- Trigger: after pooled delivery reconciliation shipped, production passes on
+  the PCBA request still reported `The latest supplier message is not awaiting a
+  reply. Refresh the conversation before sending.` on saved drafts. The send
+  guard was right to refuse them: the answer had already gone out, or the
+  supplier had written again. The draft stayed PLANNED, so it was selected,
+  refused and counted as a failed send on every pass, and its conversation never
+  left retry.
+- `src/lib/procurement-draft-currency.ts` is the one rule both the draft scan
+  and the send batch judge a draft by. Deliverable: a reply draft whose source
+  message is still the newest inbound message, a follow up on a thread whose
+  newest message is ours. Retired: a reply draft with an outbound message after
+  its source (the answer left, from any mailbox), a reply draft the supplier
+  overtook with a newer message, a follow up the supplier answered. Left
+  retryable: a conversation that is unavailable, empty, or does not contain the
+  source message, since none of those prove anything about the draft.
+- `retireProcurementFileDeliveryDraft` cancels the draft task and appends
+  `PROCUREMENT_SUPPLIER_FILE_REPLY_SUPERSEDED` with the reason, scoped by office
+  and workspace, and only when the stored source message is the one that was
+  judged. `runProcurementFileDraftSendBatch` reports it as `SUPERSEDED` and
+  keeps it out of `remaining`; the autopilot counts it as progress on that
+  conversation, so the durable task stops treating a retired draft as a failed
+  send, and the draft scan retires an overtaken draft on the pass that reads the
+  thread anyway.
+- Verified: `npm run test:procurement-draft-currency` (new pure contract),
+  `npm run test:procurement-file-draft-db` against a migrated disposable
+  database (retirement cancels the task, writes the event, is refused for
+  another source message, and is not written twice), plus the procurement
+  conversation, stage, task, plan, draft batch, reply draft, reply route,
+  triage, sender pool and delivery feedback suites, typecheck and lint.
+
 ## 2026-09-05: One recipient quality gate for every campaign, at planning and right before each send
 
 - Trigger: the first 472-send campaign bounced 33 times (7 percent), one of

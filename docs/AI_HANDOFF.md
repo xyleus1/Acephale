@@ -1,6 +1,24 @@
 Context research operations are stored as typed CompanyContext action payloads. Status and audit run inline; pause, resume, purge, region expansion, requalification, and contact enrichment require operator approval and never touch outreach.
 # AI Handoff
 
+## 2026-09-06: A saved supplier draft is judged against its live thread before it is sent
+
+- Context: the send path refuses a draft whose thread moved on, which is right,
+  but the draft stayed PLANNED, so production passes offered the same drafts,
+  were refused, and recorded a failed send on every pass while the supplier
+  waited.
+- `src/lib/procurement-draft-currency.ts` (`procurementDraftCurrency`) is the
+  one pure rule: deliverable, retire, or leave alone. Both
+  `procurement-file-draft-batch.ts` (which retires an overtaken draft on the
+  pass that reads the thread) and `procurement-file-draft-send.ts` (which
+  judges before touching the provider) go through it.
+  `retireProcurementFileDeliveryDraft` cancels the task and appends
+  `PROCUREMENT_SUPPLIER_FILE_REPLY_SUPERSEDED`. A `SUPERSEDED` send outcome is
+  progress on the conversation, so the durable task stops retrying it, and an
+  unreadable conversation retires nothing and stays retryable.
+- Tests: `npm run test:procurement-draft-currency`,
+  `npm run test:procurement-file-draft-db` (migrated disposable database).
+
 ## 2026-09-05: Product-wide recipient quality gate before planning and before every send
 
 - Context: a 472-send campaign produced 33 hard bounces, one of them to

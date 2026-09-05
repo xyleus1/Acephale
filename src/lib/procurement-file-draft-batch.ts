@@ -2,9 +2,11 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
+import { procurementDraftCurrency } from "@/lib/procurement-draft-currency";
 import {
   getProcurementFileDeliveryDraft,
   procurementFileDraftCurrentStateKey,
+  retireProcurementFileDeliveryDraft,
   saveProcurementFileDeliveryDraft,
 } from "@/lib/procurement-file-delivery-draft";
 import {
@@ -22,6 +24,7 @@ import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { rotateAutopilotQueue } from "@/lib/procurement-autopilot-plan";
 import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import { getProcurementRequest, type ProcurementOrderDetail } from "@/lib/procurement-workflow";
+import type { SupplyAccessContext } from "@/lib/supply-os/persistence";
 
 // Suppliers that replied to the RFQ campaign asked for the technical package.
 // This module walks those conversations from an operator command instead of the
@@ -69,6 +72,9 @@ async function vendorTarget(args: {
   // it cannot be computed, in which case draft staleness is left to the other
   // signals and the send path still refuses what it cannot recheck.
   currentStateKey: string | null;
+  // Present on a run, absent on a preview: retiring a draft the thread moved
+  // past is a write, so a read only listing never performs it.
+  retireWith?: SupplyAccessContext;
 }): Promise<(FileDraftTarget & { answers: string[] }) | null> {
   const conversation = await procurementVendorConversation({
     officeId: args.officeId,
@@ -77,7 +83,14 @@ async function vendorTarget(args: {
     vendorId: args.vendorId,
   });
   const latest = conversation.messages.at(-1);
-  if (!latest || latest.direction !== "INBOUND") return null;
+  if (!latest || latest.direction !== "INBOUND") {
+    // The thread is not waiting on us, so it holds no reply to draft. A draft
+    // saved before the answer went out is retired here, in the pass that reads
+    // the thread anyway: left in place it would be offered to the send path and
+    // refused on every pass, and its conversation would never leave retry.
+    if (args.retireWith) await retireOvertakenDraft({ ...args, context: args.retireWith, conversation });
+    return null;
+  }
   const inboundKind = supplierInboundKind(latest.subject ?? "", latest.body);
   // Under best effort a question the request answers only partly still gets an
   // answer, so the reply carries it. The caller chooses that mode; a plain run
@@ -121,6 +134,34 @@ async function vendorTarget(args: {
   };
 }
 
+async function retireOvertakenDraft(args: {
+  officeId: string;
+  order: ProcurementOrderDetail;
+  vendorId: string;
+  context: SupplyAccessContext;
+  conversation: Awaited<ReturnType<typeof procurementVendorConversation>>;
+}) {
+  const existing = await getProcurementFileDeliveryDraft({
+    officeId: args.officeId,
+    order: args.order,
+    vendorId: args.vendorId,
+  });
+  if (!existing) return;
+  const currency = procurementDraftCurrency({
+    conversation: args.conversation,
+    sourceMessageId: existing.sourceMessageId,
+    variant: existing.variant,
+  });
+  if (currency.deliverable || !currency.retire) return;
+  await retireProcurementFileDeliveryDraft({
+    context: args.context,
+    order: args.order,
+    vendorId: args.vendorId,
+    sourceMessageId: existing.sourceMessageId,
+    reason: currency.reason,
+  }).catch(() => false);
+}
+
 async function draftTargets(
   context: NonNullable<Awaited<ReturnType<typeof loadContext>>>,
   bestEffort: boolean,
@@ -130,6 +171,7 @@ async function draftTargets(
   // is a retry too, so a thread that keeps refusing to draft is left alone
   // until its next attempt is due instead of holding the batch every pass.
   skipVendorIds?: ReadonlySet<string>,
+  retireOvertaken?: boolean,
 ) {
   const targets: Array<FileDraftTarget & { answers: string[] }> = [];
   const access = await procurementOperatorAccess(context.summary.officeId);
@@ -169,6 +211,7 @@ async function draftTargets(
       vendorName: vendor.name,
       bestEffort,
       currentStateKey,
+      retireWith: retireOvertaken ? access : undefined,
     });
     if (target) targets.push(target);
   }
@@ -207,6 +250,7 @@ export async function runProcurementFileDraftBatch(args: {
     args.outOfTime,
     args.rotateFrom,
     args.skipVendorIds,
+    true,
   );
   const access = await procurementOperatorAccess(context.summary.officeId);
   const limit = Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? FILE_DRAFT_MAX_PER_RUN)));

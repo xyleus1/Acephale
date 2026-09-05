@@ -1,6 +1,27 @@
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## A saved supplier draft is retired when its thread moves past it
+Date: 2026-09-06
+- Status: accepted
+- Owner: engineering
+- Decision: A saved file bearing draft is judged against the live supplier
+  conversation before it is delivered, by the single pure rule in
+  `src/lib/procurement-draft-currency.ts`. A reply draft whose answer already
+  left the office, from its own mailbox or a pooled one, and a reply draft the
+  supplier overtook with a newer message, and a follow up the supplier answered,
+  are cancelled with a `PROCUREMENT_SUPPLIER_FILE_REPLY_SUPERSEDED` event and
+  reported as `SUPERSEDED`, which counts as progress on that conversation, not
+  as a failed send.
+- Why: the send path refuses a draft the thread moved past, correctly, but the
+  draft stayed PLANNED, so it was offered and refused on every pass, its
+  conversation never left retry, and the supplier was never answered or asked
+  the question it was actually owed.
+- Safety: a conversation that could not be read retires nothing and stays
+  retryable, so an unreadable thread never loses an answer. The retirement is
+  scoped by office and workspace and only cancels the draft whose stored source
+  message it judged, so a draft saved between the read and the write survives.
+
 ## A sender protection pause is a cooldown, not a removal
 Date: 2026-09-06
 - Status: accepted

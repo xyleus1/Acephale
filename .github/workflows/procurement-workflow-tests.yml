@@ -484,6 +484,7 @@ jobs:
           npm run test:procurement-autopilot-plan
           npm run test:procurement-supplier-nudge
           npm run test:procurement-conversation-stage
+          npm run test:procurement-draft-currency
           npm run test:procurement-conversation-task
           npm run test:procurement-supplier-quote-reading
           npm run test:procurement-request-document-merge
