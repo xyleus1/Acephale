@@ -30,6 +30,12 @@ export type ProjectStatusFacts = {
   escalatedThreadIds: string[];
 };
 
+export type ProjectStatusFactsTarget = {
+  kind: "sourcing" | "prospecting";
+  key: string;
+  facts: ProjectStatusFacts;
+};
+
 export function ProjectStatusStrip({
   projectRows,
   selectedProject,
@@ -40,8 +46,8 @@ export function ProjectStatusStrip({
   projectRows: ProjectStatusRow[];
   selectedProject: ProjectSelection;
   onProjectChange: (project: ProjectSelection) => void;
-  onFactsChange?: (facts: ProjectStatusFacts | null) => void;
-  onEscalationsClick?: () => void;
+  onFactsChange?: (target: ProjectStatusFactsTarget | null) => void;
+  onEscalationsClick?: (target: Pick<ProjectStatusFactsTarget, "kind" | "key">) => void;
 }) {
   const headerSlot = useSupplyOsHeaderSlot();
   const activeRows = useMemo(() => projectRows.filter((project) => project.active), [projectRows]);
@@ -96,7 +102,9 @@ export function ProjectStatusStrip({
           if (current !== generation) return;
           setFacts(nextFacts);
           setFactsState("ready");
-          onFactsChange?.(nextFacts);
+          if (projectKind && projectKey) {
+            onFactsChange?.({ kind: projectKind, key: projectKey, facts: nextFacts });
+          }
         })
         .catch((error: unknown) => {
           if (current !== generation) return;
@@ -169,11 +177,13 @@ export function ProjectStatusStrip({
               role={onEscalationsClick ? "button" : undefined}
               tabIndex={onEscalationsClick ? 0 : undefined}
               aria-label={onEscalationsClick ? "Needs your reply" : undefined}
-              onClick={onEscalationsClick}
+              onClick={() => {
+                if (projectKind && projectKey) onEscalationsClick?.({ kind: projectKind, key: projectKey });
+              }}
               onKeyDown={(event) => {
                 if (onEscalationsClick && (event.key === "Enter" || event.key === " ")) {
                   event.preventDefault();
-                  onEscalationsClick();
+                  if (projectKind && projectKey) onEscalationsClick({ kind: projectKind, key: projectKey });
                 }
               }}
             >

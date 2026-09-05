@@ -10397,3 +10397,12 @@ Use this file for chronological implementation notes that future agents should s
 ## 2026-09-05: Sourcing needs-you escalation indicators
 
 - Added pure triage-based sourcing escalation counts and thread IDs, then reused the loaded project facts for red-dot indicators in the status strip and selected project row.
+
+## 2026-09-05: Needs-you target and inbound notice follow-ups
+
+- Project status callbacks now carry the loaded project's kind and key, keeping
+  row indicators aligned with the data shown in the status strip.
+- Escalation navigation selects the loaded project before opening Messages.
+- Latest sourcing inbound selection reuses shared absence-notice semantics,
+  preserving actionable questions and bounce escalation while excluding pure
+  out-of-office notices.

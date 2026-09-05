@@ -12919,3 +12919,11 @@ Verification caveat:
 ## 2026-09-05: Sourcing needs-you escalation indicators
 
 - Sourcing project status now triages the latest inbound supplier message against stored request facts, exposing escalated thread IDs to the status strip and selected project row without adding per-row status fetches.
+
+## 2026-09-05: Needs-you target and inbound notice follow-ups
+
+- Status facts now retain the kind and key of the project actually loaded, so
+  project-row indicators follow the status target even when no project is selected.
+- Needs-you navigation selects that loaded project before opening Messages.
+- Sourcing status ignores pure out-of-office notices while retaining actionable
+  replies and bounce reports for deterministic triage.

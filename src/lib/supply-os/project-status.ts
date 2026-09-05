@@ -20,6 +20,7 @@ import {
 } from "@/lib/procurement-order-status";
 import {
   procurementReplyFacts,
+  supplierInboundNotice,
   supplierInboundKind,
   triageSupplierInbound,
   type ProcurementReplyFacts,
@@ -153,7 +154,7 @@ function humanInbound(message: LocalRfqMessage) {
   });
 }
 
-function sourcingThreadFacts(messages: readonly LocalRfqMessage[]): ProjectStatusThreadFact[] {
+export function sourcingThreadFacts(messages: readonly LocalRfqMessage[]): ProjectStatusThreadFact[] {
   const byThread = new Map<string, LocalRfqMessage[]>();
   for (const message of messages) {
     const bucket = byThread.get(message.threadId) ?? [];
@@ -165,11 +166,17 @@ function sourcingThreadFacts(messages: readonly LocalRfqMessage[]): ProjectStatu
       new Date(left.sentAt).getTime() - new Date(right.sentAt).getTime()
     ));
     const latest = ordered.at(-1);
-    const latestInbound = [...ordered].reverse().find(humanInbound);
+    const latestInbound = [...ordered].reverse().find((message) => (
+      humanInbound(message)
+      && !supplierInboundNotice(message.subject ?? "", message.body)
+    ));
     const latestOutbound = [...ordered].reverse().find((message) => message.direction === "OUTBOUND");
     const latestTriageInbound = [...ordered].reverse().find((message) => (
       message.direction === "INBOUND"
-      && supplierInboundKind(message.subject ?? "", message.body) !== "AUTO_REPLY"
+      && (
+        supplierInboundKind(message.subject ?? "", message.body) === "BOUNCE"
+        || !supplierInboundNotice(message.subject ?? "", message.body)
+      )
     ));
     const latestMessageDirection: ProjectStatusThreadFact["latestMessageDirection"] =
       latest?.direction === "INBOUND" || latest?.direction === "OUTBOUND"

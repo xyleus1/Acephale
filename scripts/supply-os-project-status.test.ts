@@ -6,6 +6,7 @@ import {
   isPositiveReply,
   reduceProspectingProjectStatus,
   reduceSourcingProjectStatus,
+  sourcingThreadFacts,
   storedQuoteGoalFromJobs,
 } from "../src/lib/supply-os/project-status";
 import { OTHER_PROJECT } from "../src/lib/supply-os/prospect-project";
@@ -165,6 +166,47 @@ test("sourcing reducer does not escalate answered or answerable questions", () =
   });
   assert.equal(facts.escalations, 0);
   assert.deepEqual(facts.escalatedThreadIds, []);
+});
+
+test("sourcing triage keeps actionable questions beside absence notices", () => {
+  const messages = (body: string, id: string, subject = "Re: RFQ") => [{
+    id,
+    threadId: id,
+    direction: "INBOUND",
+    fromEmail: "supplier@example.com",
+    fromName: null,
+    toEmails: ["sourcing@example.com"],
+    ccEmails: [],
+    subject,
+    body,
+    sentAt: "2026-09-08T10:00:00.000Z",
+    accountEmail: "sourcing@example.com",
+    externalThreadId: null,
+  }];
+  const threadFacts = sourcingThreadFacts([
+    ...messages("I am away next week but can you confirm the delivery incoterms? Also, what is your target price?", "actionable"),
+    ...messages("I am away next week and will return Monday.", "notice", "Out of office: Re: RFQ"),
+  ]);
+  const replyFacts = {
+    material: "steel parts",
+    quantity: 100,
+    unit: "pcs",
+    neededBy: null,
+    specification: null,
+    destination: null,
+    documentNames: [],
+  };
+  const actionable = reduceSourcingProjectStatus({
+    key: "order-id",
+    progress: { vendors: 2, contacted: 2, quoted: 0 },
+    facts: replyFacts,
+    threads: threadFacts.filter((thread) => thread.threadId === "actionable"),
+  });
+  assert.deepEqual(actionable.escalatedThreadIds, ["actionable"]);
+  assert.deepEqual(
+    threadFacts.find((thread) => thread.threadId === "notice")?.latestInboundAt ?? null,
+    null,
+  );
 });
 
 test("prospecting reducer aggregates campaigns and positive replies", () => {
