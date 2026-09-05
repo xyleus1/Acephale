@@ -49,6 +49,7 @@ export type BulkRfqOrder = {
   orderId: string;
   customerId: string;
   officeId: string;
+  sourceWorkspaceId: string | null;
   companyName: string;
   material: string;
   specification: string | null;
@@ -114,6 +115,7 @@ export type BulkRfqRunResult = {
 type OrderRow = {
   orderId: string;
   customerId: string;
+  sourceWorkspaceId: string | null;
   companyName: string | null;
   material: string;
   specification: string | null;
@@ -198,6 +200,7 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
     SELECT
       orders.id AS "orderId",
       orders.customer_id AS "customerId",
+      orders.request_context->'source'->>'workspace_id' AS "sourceWorkspaceId",
       orders.request_context->'source'->>'company_name' AS "companyName",
       bill_of_materials.material AS "material",
       bill_of_materials.specification AS "specification",
@@ -217,6 +220,7 @@ export async function loadBulkRfqOrder(orderId: string): Promise<BulkRfqOrder | 
     orderId: row.orderId,
     customerId: row.customerId,
     officeId: procurementOfficeIdFromServerMetadata(row.customerId),
+    sourceWorkspaceId: row.sourceWorkspaceId,
     companyName: clean(row.companyName ?? "our customer"),
     material: row.material,
     specification: row.specification,

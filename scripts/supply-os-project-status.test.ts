@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  campaignsForProspectingProject,
   isPositiveReply,
   reduceProspectingProjectStatus,
   reduceSourcingProjectStatus,
+  storedQuoteGoalFromJobs,
 } from "../src/lib/supply-os/project-status";
+import { OTHER_PROJECT } from "../src/lib/supply-os/prospect-project";
 
 test("positive reply heuristic accepts useful supplier intent", () => {
   assert.equal(isPositiveReply("We are interested. Let's schedule a call."), true);
@@ -17,6 +20,34 @@ test("positive reply heuristic rejects negative intent", () => {
   assert.equal(isPositiveReply("We are interested, but not interested in this service."), false);
   assert.equal(isPositiveReply("No thanks, please remove me."), false);
   assert.equal(isPositiveReply("unsubscribe"), false);
+});
+
+test("sourcing quote goal matches the source workspace", () => {
+  const campaign = {
+    classKey: "specialist",
+    label: "Specialist",
+    targetGoodCompanies: 200,
+    contactsPerCompany: 2,
+    quoteGoal: 8,
+    reasons: ["test"],
+  };
+  assert.equal(storedQuoteGoalFromJobs([
+    { payload: { workspaceId: "workspace-a", campaign } },
+  ], "workspace-a"), 8);
+  assert.equal(storedQuoteGoalFromJobs([
+    { payload: { workspaceId: "workspace-a", campaign } },
+  ], "workspace-b"), null);
+});
+
+test("Other lists status only includes campaigns without a project", () => {
+  const campaigns = [
+    { list: { projectId: null }, id: "other" },
+    { list: { projectId: "project-a" }, id: "project" },
+  ];
+  assert.deepEqual(
+    campaignsForProspectingProject(campaigns, OTHER_PROJECT).map((campaign) => campaign.id),
+    ["other"],
+  );
 });
 
 test("sourcing reducer reports persisted progress and replies", () => {

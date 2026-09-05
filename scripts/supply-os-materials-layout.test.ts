@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 
 const root = process.cwd();
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+const inventorySourcing = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx"), "utf8");
+const prospects = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-prospects.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
 
 function cssBlocks(selector: string) {
@@ -14,6 +16,11 @@ function cssBlocks(selector: string) {
 assert.match(dashboard, /const materialsInspectorVisible = activePanel === "materials"[\s\S]*Boolean\(selectedInventoryItem\)[\s\S]*!procurementRequest[\s\S]*!customerProcurementRequest/);
 assert.match(dashboard, /data-materials-inspector=\{activePanel === "materials" \? materialsInspectorVisible : undefined\}/);
 assert.match(dashboard, /activePanel === "materials" && inventoryWorkspaceView === "projects" && selectedInventoryItem && materialsInspectorVisible \? \(/);
+assert.match(prospects, /export \{ OTHER_PROJECT \}/);
+assert.match(inventorySourcing, /name: "Other lists"/);
+assert.match(inventorySourcing, /key: OTHER_PROJECT/);
+assert.match(inventorySourcing, /list\.projectId \?\? OTHER_PROJECT/);
+assert.match(inventorySourcing, /lockedProjectId=\{selectedProject\.key\}/);
 
 const materialsBlocks = cssBlocks('.commandCenter[data-domain="materials"] .commandMapStage');
 assert.ok(materialsBlocks.length >= 3, "Materials layout needs desktop and responsive rules.");

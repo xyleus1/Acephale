@@ -48,6 +48,7 @@ import { SupplyOsMail } from "./supply-os-mail";
 import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 import { ProjectStatusStrip } from "./project-status-strip";
 import type { ResearchProjectSummary } from "@/lib/research-projects";
+import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
 
 export type PendingSourcingQueueItem = {
   id: string;
@@ -73,6 +74,7 @@ type ProjectRow = {
   typeLabel: "Sourcing" | "Prospecting";
   status: string;
   active: boolean;
+  companyId?: string | null;
   officeWide?: boolean;
 };
 
@@ -299,8 +301,8 @@ export function SupplyInventoryWorkspace({
       || projectDataState !== "ready"
     ) return;
     initialResearchListResolvedRef.current = true;
-    const projectId = researchLists.find((list) => list.slug === initialResearchListSlug)?.projectId;
-    if (projectId) onProjectChange({ kind: "prospecting", key: projectId });
+    const list = researchLists.find((candidate) => candidate.slug === initialResearchListSlug);
+    if (list) onProjectChange({ kind: "prospecting", key: list.projectId ?? OTHER_PROJECT });
   }, [canShowProspects, initialResearchListSlug, onProjectChange, projectDataState, researchLists]);
 
   async function createProspectingProject(event: FormEvent<HTMLFormElement>) {
@@ -361,7 +363,8 @@ export function SupplyInventoryWorkspace({
       status: workstreamSummary(casesByRunId.get(run.id) ?? []) ?? resultState(run),
       active: ["QUEUED", "RUNNING"].includes(run.status),
     })),
-    ...(canShowProspects ? researchProjects
+    ...(canShowProspects ? [
+      ...researchProjects
       .filter((project) => project.companyId === null
         || (selectedCompanyState === "ready" && project.companyId === selectedCompanyId))
       .map((project): ProjectRow => {
@@ -384,9 +387,35 @@ export function SupplyInventoryWorkspace({
           typeLabel: "Prospecting",
           status,
           active: projectCampaigns.some((campaign) => ["ACTIVE", "PAUSED"].includes(campaign.status)),
+          companyId: project.companyId,
           officeWide: project.companyId === null,
         };
-      }) : []),
+      }),
+      ...(researchLists.some((list) => list.projectId === null) ? [(() => {
+        const otherListIds = new Set(
+          researchLists.filter((list) => list.projectId === null).map((list) => list.id),
+        );
+        const otherCampaigns = campaignSummaries.filter((campaign) => otherListIds.has(campaign.listId));
+        const active = otherCampaigns.filter((campaign) => campaign.status === "ACTIVE").length;
+        const drafts = otherCampaigns.filter((campaign) => campaign.status === "DRAFT").length;
+        const status = otherCampaigns.length === 0
+          ? "No campaign yet"
+          : [
+              active ? `${active} active campaign${active === 1 ? "" : "s"}` : "",
+              drafts ? `${drafts} draft${drafts === 1 ? "" : "s"}` : "",
+            ].filter(Boolean).join(", ") || `${otherCampaigns.length} campaign${otherCampaigns.length === 1 ? "" : "s"}`;
+        return {
+          kind: "prospecting",
+          key: OTHER_PROJECT,
+          name: "Other lists",
+          typeLabel: "Prospecting",
+          status,
+          active: otherCampaigns.some((campaign) => ["ACTIVE", "PAUSED"].includes(campaign.status)),
+          companyId: null,
+          officeWide: true,
+        } satisfies ProjectRow;
+      })()] : []),
+    ] : []),
   ].sort((left, right) => {
     const activeOrder = Number(right.active) - Number(left.active);
     if (activeOrder) return activeOrder;
@@ -416,10 +445,6 @@ export function SupplyInventoryWorkspace({
   const selectedProjectName = selectedProject
     ? projectRows.find((project) => project.kind === selectedProject.kind && project.key === selectedProject.key)?.name ?? "Project"
     : "";
-  const selectedProjectList = selectedProject?.kind === "prospecting"
-    ? researchProjects.find((project) => project.id === selectedProject.key) ?? null
-    : null;
-
   useEffect(() => {
     if (!selectedProject || selectedProject.kind !== "sourcing") return;
     const row = document.querySelector<HTMLElement>('[data-project-active="true"]');
@@ -644,7 +669,7 @@ export function SupplyInventoryWorkspace({
           <>
             <SupplyOsProspects
               storageScope={storageScope}
-              lockedProjectId={selectedProjectList?.id}
+              lockedProjectId={selectedProject.key}
               initialListSlug={initialResearchListSlug}
               initialQuery={initialResearchQuery}
               initialStatus={initialResearchStatus}

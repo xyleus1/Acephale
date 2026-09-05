@@ -21,6 +21,7 @@ import {
 import { readCampaignPlan } from "@/lib/procurement-campaign-class";
 import { supplierReplyText } from "@/lib/procurement-inbound-triage";
 import { prisma } from "@/lib/prisma";
+import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
 
 export type ProjectStatusFacts = {
   kind: "sourcing" | "prospecting";
@@ -109,6 +110,17 @@ export function reduceProspectingProjectStatus(input: {
   };
 }
 
+export function campaignsForProspectingProject<T extends { list: { projectId: string | null } }>(
+  campaigns: readonly T[],
+  key: string,
+): T[] {
+  return campaigns.filter((campaign) => (
+    key === OTHER_PROJECT
+      ? campaign.list.projectId === null
+      : campaign.list.projectId === key
+  ));
+}
+
 function humanInbound(message: LocalRfqMessage) {
   return message.direction === "INBOUND" && isHumanReplyMessage({
     deliveryKind: message.deliveryKind ?? null,
@@ -143,25 +155,33 @@ function sourcingThreadFacts(messages: readonly LocalRfqMessage[]): ProjectStatu
   }).filter((thread) => thread.latestHumanInboundAt);
 }
 
-async function storedQuoteGoal(officeId: string, orderId: string) {
-  const jobs = await prisma.backgroundJob.findMany({
-    where: { officeId, type: "PROCUREMENT_SOURCING_WAVE" },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: { payload: true },
-  });
+export function storedQuoteGoalFromJobs(
+  jobs: readonly { payload: unknown }[],
+  sourceWorkspaceId: string | null,
+) {
+  if (!sourceWorkspaceId) return null;
   for (const job of jobs) {
     const payload = job.payload && typeof job.payload === "object" && !Array.isArray(job.payload)
       ? job.payload as Record<string, unknown>
       : {};
-    const entries = Array.isArray(payload.plan) ? payload.plan : [];
-    if (!entries.some((entry) => (
-      entry && typeof entry === "object" && !Array.isArray(entry)
-      && (entry as Record<string, unknown>).orderId === orderId
-    ))) continue;
+    if (payload.workspaceId !== sourceWorkspaceId) continue;
     return readCampaignPlan(payload.campaign)?.quoteGoal ?? null;
   }
   return null;
+}
+
+async function storedQuoteGoal(officeId: string, sourceWorkspaceId: string | null) {
+  if (!sourceWorkspaceId) return null;
+  const job = await prisma.backgroundJob.findFirst({
+    where: {
+      officeId,
+      type: "PROCUREMENT_SOURCING_WAVE",
+      payload: { path: ["workspaceId"], equals: sourceWorkspaceId },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { payload: true },
+  });
+  return job ? storedQuoteGoalFromJobs([job], sourceWorkspaceId) : null;
 }
 
 function emptyProjectStatus(kind: "sourcing" | "prospecting", key: string): ProjectStatusFacts {
@@ -193,7 +213,7 @@ async function loadSourcingStatus(officeId: string, key: string) {
       officeId,
     }),
     loadLocalRfqMessages(officeId, order.orderId),
-    storedQuoteGoal(officeId, order.orderId),
+    storedQuoteGoal(officeId, order.sourceWorkspaceId),
   ]);
   if (!progress) return emptyProjectStatus("sourcing", key);
   return reduceSourcingProjectStatus({
@@ -205,10 +225,15 @@ async function loadSourcingStatus(officeId: string, key: string) {
 }
 
 async function loadProspectingStatus(officeId: string, key: string) {
-  const project = await prisma.researchProject.findFirst({
-    where: { id: key, officeId },
-    select: { id: true },
-  });
+  const project = key === OTHER_PROJECT
+    ? await prisma.researchList.findFirst({
+        where: { officeId, projectId: null },
+        select: { id: true },
+      })
+    : await prisma.researchProject.findFirst({
+        where: { id: key, officeId },
+        select: { id: true },
+      });
   if (!project) return null;
   const campaigns = (await listCampaignSummaries(officeId, [
     "DRAFT",
@@ -216,13 +241,14 @@ async function loadProspectingStatus(officeId: string, key: string) {
     "PAUSED",
     "COMPLETED",
     "CANCELLED",
-  ])).filter((campaign) => campaign.list.projectId === key);
+  ]));
+  const projectCampaigns = campaignsForProspectingProject(campaigns, key);
   const digest = await campaignReplyDigest({
     officeId,
-    campaignIds: campaigns.map((campaign) => campaign.id),
+    campaignIds: projectCampaigns.map((campaign) => campaign.id),
     limit: 100_000,
   });
-  const replies = campaigns.flatMap((campaign) => digest.replies
+  const replies = projectCampaigns.flatMap((campaign) => digest.replies
       .filter((reply) => reply.campaignId === campaign.id)
       .map((reply) => ({
         body: reply.snippet,
@@ -231,7 +257,7 @@ async function loadProspectingStatus(officeId: string, key: string) {
             && reply.answeredAt >= new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
         ),
       })));
-  return reduceProspectingProjectStatus({ key, campaigns, replies });
+  return reduceProspectingProjectStatus({ key, campaigns: projectCampaigns, replies });
 }
 
 export async function loadProjectStatusFacts(args: {

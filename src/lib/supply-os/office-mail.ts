@@ -6,6 +6,7 @@ import { parseStoredEmailList } from "@/lib/crm/email-touch";
 import { UNROUTED_MAIL_THREAD_MARKER } from "@/lib/inbound-mail-routing";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { currentAccessContext } from "./supplier-communication-shared";
+import { OTHER_PROJECT } from "./prospect-project";
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -157,6 +158,9 @@ export async function listOfficeMailThreads(
   const cursor = decodeCursor(options.cursor);
   const limit = pageSize(options.limit);
   const search = options.search?.trim().slice(0, 200) ?? "";
+  const listProjectFilter = options.researchProjectId === OTHER_PROJECT
+    ? { projectId: null }
+    : { projectId: options.researchProjectId };
   const projectThreadIds = options.researchProjectId
     ? (await prisma.outreachCampaignSend.findMany({
         where: {
@@ -165,7 +169,7 @@ export async function listOfficeMailThreads(
           localThreadId: { not: null },
           campaign: {
             officeId: accessContext.officeId,
-            list: { projectId: options.researchProjectId },
+            list: listProjectFilter,
           },
         },
         distinct: ["localThreadId"],
@@ -234,6 +238,9 @@ export async function getOfficeMailThread(
   options: { researchProjectId?: string } = {},
 ): Promise<OfficeMailThreadDetail> {
   const accessContext = await assertMailAccess(context);
+  const listProjectFilter = options.researchProjectId === OTHER_PROJECT
+    ? { projectId: null }
+    : { projectId: options.researchProjectId };
   const projectThread = options.researchProjectId
     ? await prisma.outreachCampaignSend.findFirst({
         where: {
@@ -242,7 +249,7 @@ export async function getOfficeMailThread(
           localThreadId: threadId,
           campaign: {
             officeId: accessContext.officeId,
-            list: { projectId: options.researchProjectId },
+            list: listProjectFilter,
           },
         },
         select: { localThreadId: true },

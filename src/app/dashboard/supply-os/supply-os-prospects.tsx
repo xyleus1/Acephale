@@ -11,6 +11,9 @@ import type { ResearchProjectSummary } from "@/lib/research-projects";
 import { ResearchStatusControl } from "../research/research-status-control";
 import styles from "./supply-os-logistics.module.css";
 
+import { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
+export { OTHER_PROJECT } from "@/lib/supply-os/prospect-project";
+
 type ResearchListResponse = Pick<
   ResearchListSummary,
   "id" | "officeId" | "projectId" | "slug" | "name" | "description" | "fields" | "recordCount"
@@ -24,8 +27,6 @@ type ResearchRecordsResponse = ResearchListResponse & {
 };
 
 const statuses: Array<ResearchStatus | "all"> = ["all", "new", "reviewed", "rejected"];
-const OTHER_PROJECT = "__other__";
-
 function safeHttpUrl(value: string) {
   try {
     const url = new URL(value);
@@ -106,7 +107,12 @@ export function SupplyOsProspects({
       ? nextLists.find((list) => list.slug === initialListSlug)
       : undefined;
     const otherListsExist = nextLists.some((list) => list.projectId === null);
-    const lockedProjectIsValid = Boolean(lockedProjectId && nextProjects.some((project) => project.id === lockedProjectId));
+    const lockedProjectIsValid = Boolean(
+      lockedProjectId
+      && (lockedProjectId === OTHER_PROJECT
+        ? otherListsExist
+        : nextProjects.some((project) => project.id === lockedProjectId)),
+    );
     const nextProjectId = lockedProjectIsValid
       ? lockedProjectId!
       : preselectedList

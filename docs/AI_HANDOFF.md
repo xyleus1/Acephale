@@ -12547,6 +12547,13 @@ Verification caveat:
   after quoted text is removed, with explicit negative opt-out phrases winning.
 - Sourcing status reuses RFQ subject-reference thread linkage and the stored
   sourcing-wave campaign plan for its quote goal.
+- Sourcing quote goals resolve the order source workspace from workflow order
+  context, then match the newest office-scoped sourcing-wave job by
+  `payload.workspaceId`. The project status refresh marks failed non-abort
+  requests unavailable instead of retaining stale facts.
+- Unprojected office research lists use the `__other__` project sentinel across
+  Projects, legacy list links, project status, and office mail, with null
+  project filters kept inside the current office.
 
 ## 2026-08-31: Supplier file replies refuse stale sends server side
 

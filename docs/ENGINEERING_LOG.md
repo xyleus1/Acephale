@@ -9934,3 +9934,9 @@ Use this file for chronological implementation notes that future agents should s
   heuristic and its negative guard.
 - Campaign links carry the active company workspace when one exists, using one
   batched office-scoped workspace lookup.
+- Sourcing quote goals now match the order's source workspace against recent
+  office-scoped sourcing-wave payloads. Failed status refreshes show
+  `No status yet` rather than leaving stale or loading state.
+- Added the office-wide `Other lists` project for research lists without a
+  project. Its null-project filtering is preserved for legacy links, status,
+  and project-scoped office mail.

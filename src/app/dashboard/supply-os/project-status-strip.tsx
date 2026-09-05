@@ -67,18 +67,30 @@ export function ProjectStatusStrip({
         headers: { accept: "application/json" },
       });
       if (!response.ok) throw new Error("Project status unavailable.");
-      setFacts(await response.json() as ProjectStatusFacts);
-      setFactsState("ready");
+      return await response.json() as ProjectStatusFacts;
     };
-    void load().catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setFacts(null);
-      setFactsState("unavailable");
-    });
+    let generation = 0;
+    const run = () => {
+      const current = ++generation;
+      void load()
+        .then((nextFacts) => {
+          if (current !== generation) return;
+          setFacts(nextFacts);
+          setFactsState("ready");
+        })
+        .catch((error: unknown) => {
+          if (current !== generation) return;
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setFacts(null);
+          setFactsState("unavailable");
+        });
+    };
+    run();
     const timer = window.setInterval(() => {
-      void load().catch(() => undefined);
+      run();
     }, 60_000);
     return () => {
+      generation += 1;
       controller.abort();
       window.clearInterval(timer);
     };
