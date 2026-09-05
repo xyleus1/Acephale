@@ -5316,3 +5316,7 @@ Use this log for durable product and engineering decisions. Do not put every imp
   are recorded separately because a search with no contacts is free.
 - Verification: `scripts/leadgen.test.ts` and
   `scripts/supply-os-context-prospecting.test.ts`.
+
+## 2026-09-04: Entity-qualified Context prospecting
+
+Context prospecting persists only entity-qualified targets: deterministic non-company rules first, then model classification against the draft brief; model failure degrades to persisting with a fallback flag, never to dropping rows silently.

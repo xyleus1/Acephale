@@ -10047,3 +10047,7 @@ Use this file for chronological implementation notes that future agents should s
 - Added the office-wide `Other lists` project for research lists without a
   project. Its null-project filtering is preserved for legacy links, status,
   and project-scoped office mail.
+
+## 2026-09-04: Entity-qualified Context prospecting
+
+- Context prospecting now screens fit-qualified candidates with deterministic domain rules followed by brief-aware entity classification, stores entity and fit-reason fields, and records fallback and rejection stats.

@@ -1,4 +1,5 @@
 export const STALE_RUN_MS = 300_000;
+export const QUALIFICATION_RESERVE_MS = 40_000;
 
 /**
  * Paid-provider calls one prospecting run may make across all of its batches

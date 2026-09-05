@@ -12682,3 +12682,8 @@ Verification caveat:
   files; `src/lib/thread-actions.ts` and `src/lib/whatsapp.ts` keep their
   preexisting `no-explicit-any` errors), `npm run test:state-recheck`, and
   `npm run test:procurement-file-draft-db`.
+
+## 2026-09-04: Context prospecting entity qualification
+
+- Context prospecting now applies deterministic non-company domain rules before model classification, then persists only target entities for the draft brief.
+- Model failures persist candidates with a fallback qualification flag instead of silently dropping them. Screening counts and rejection types are stored on the action.

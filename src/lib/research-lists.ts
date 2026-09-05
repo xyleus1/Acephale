@@ -196,6 +196,25 @@ export async function assignResearchListProject(
   return { ...updated, fields: fieldsFromJson(updated.fields), recordCount: updated._count.records };
 }
 
+export async function updateResearchList(
+  officeId: string,
+  listId: string,
+  input: { fields: unknown },
+): Promise<ResearchListSummary> {
+  const list = await defaultPrisma.researchList.findFirst({
+    where: { id: listId, officeId },
+    select: { id: true },
+  });
+  if (!list) throw new Error("Research list not found.");
+  const fields = validateResearchFields(input.fields);
+  const updated = await defaultPrisma.researchList.update({
+    where: { id: listId },
+    data: { fields: fields as unknown as Prisma.InputJsonValue },
+    select: { id: true, officeId: true, projectId: true, slug: true, name: true, description: true, fields: true, createdAt: true, updatedAt: true, _count: { select: { records: true } } },
+  });
+  return { ...updated, fields: fieldsFromJson(updated.fields), recordCount: updated._count.records };
+}
+
 function asData(value: Prisma.JsonValue): ResearchRecordData {
   if (!isRecord(value)) return {};
   return Object.fromEntries(

@@ -122,6 +122,12 @@ type ContextProspectingAction = {
     candidatesFound: number;
     rowsCreated: number;
     rowsUpdated: number;
+    qualification?: {
+      evaluated: number;
+      accepted: number;
+      rejected: Record<string, number>;
+      fallback: number;
+    };
     paidUsage?: ProspectingPaidUsage;
   };
   nextQueryOffset: number;
@@ -223,6 +229,19 @@ function paidUsageSummary(usage: ProspectingPaidUsage | undefined) {
         ? "Email check budget reached, free email checks only."
         : null;
   return note ? `${parts.join(", ")}. ${note}` : parts.join(", ");
+}
+
+function qualificationSummary(qualification: ContextProspectingAction["stats"]["qualification"]) {
+  if (!qualification || qualification.evaluated <= 0) return null;
+  const rejected = Object.entries(qualification.rejected)
+    .filter(([, count]) => count > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3);
+  const rejectedTotal = Object.values(qualification.rejected).reduce((total, count) => total + count, 0);
+  const topTypes = rejected.length
+    ? rejected.map(([type, count]) => `${type} ${count}`).join(", ")
+    : "none";
+  return `Screened ${qualification.evaluated}: ${qualification.accepted} kept, ${rejectedTotal} not a target (${topTypes})`;
 }
 
 function prospectingRunIsStale(action: ContextProspectingAction, now: number) {
@@ -1169,6 +1188,9 @@ export function SupplyOsContext({
                 <div><dt>Rows saved</dt><dd>{action.stats.rowsCreated} of {action.draft.rowTarget} rows saved</dd></div>
                 {paidUsageSummary(action.stats.paidUsage) ? (
                   <div><dt>Paid lookups</dt><dd>{paidUsageSummary(action.stats.paidUsage)}</dd></div>
+                ) : null}
+                {qualificationSummary(action.stats.qualification) ? (
+                  <div><dt>Entity screening</dt><dd>{qualificationSummary(action.stats.qualification)}</dd></div>
                 ) : null}
               </dl>
               {documentCitations(action.citations).length ? (

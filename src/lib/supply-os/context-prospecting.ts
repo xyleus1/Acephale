@@ -13,9 +13,11 @@ import {
   createResearchList,
   assignResearchListProject,
   listResearchLists,
+  RESEARCH_MAX_FIELDS,
   RESEARCH_MAX_ROWS,
   rekeyResearchRecords,
   slugify,
+  updateResearchList,
   upsertResearchRecords,
   type ParsedResearchRow,
   type ResearchInputRow,
@@ -35,6 +37,14 @@ import {
 } from "@/lib/leadgen/run";
 import { selectPrimaryContact } from "@/lib/leadgen/enrich";
 import { defaultFetcher } from "@/lib/leadgen/harvest";
+import {
+  createOpenAiQualifier,
+  qualifyCandidates,
+  type CandidateQualifier,
+  type QualificationBrief,
+  type QualificationInput,
+  type QualificationResult,
+} from "@/lib/leadgen/qualify";
 import { createLeadGenRun, finishLeadGenRun, recordLeadDiscoveries } from "@/lib/leadgen/persist";
 import type { VerifyOptions } from "@/lib/leadgen/verify";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
@@ -43,6 +53,7 @@ import { QUERY_PLAN_VERSION } from "@/lib/leadgen/query-plan";
 import {
   EMPTY_PAID_USAGE,
   PROSPECTING_PAID_BUDGET,
+  QUALIFICATION_RESERVE_MS,
   remainingPaidBudget,
   STALE_RUN_MS,
   type ProspectingPaidUsage,
@@ -79,6 +90,8 @@ const LIST_FIELDS = [
   { key: "email_verdict", label: "Email verdict", type: "text" },
   { key: "evidence_urls", label: "Evidence URLs", type: "text" },
   { key: "source_query", label: "Source query", type: "text" },
+  { key: "entity_type", label: "Entity", type: "text" },
+  { key: "fit_reason", label: "Why it fits", type: "text" },
 ] as const;
 
 type ProspectingStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
@@ -89,6 +102,12 @@ type ProspectingStats = {
   candidatesFound: number;
   rowsCreated: number;
   rowsUpdated: number;
+  qualification: {
+    evaluated: number;
+    accepted: number;
+    rejected: Record<string, number>;
+    fallback: number;
+  };
   /** Paid enrichment and verification calls made so far, across all batches of the run. */
   paidUsage: ProspectingPaidUsage;
 };
@@ -145,6 +164,16 @@ export function normalizeProspectingDraft(value: unknown): ProspectingDraft | nu
   return { objective, segments, regions, productFocus, projectName, listSlug, notes, rowTarget };
 }
 
+export function briefFromProspectingDraft(draft: ProspectingDraft): QualificationBrief {
+  return {
+    objective: draft.objective,
+    segments: draft.segments,
+    regions: draft.regions,
+    productFocus: draft.productFocus,
+    notes: draft.notes,
+  };
+}
+
 function customerAccess(context: CompanyContextAccess) {
   return isCustomerContextAccess(context) || context.accessKind === "customer";
 }
@@ -182,6 +211,12 @@ function decodeAction(payload: unknown) {
   const paidUsageValue = statsValue.paidUsage && typeof statsValue.paidUsage === "object" && !Array.isArray(statsValue.paidUsage)
     ? statsValue.paidUsage as Record<string, unknown>
     : {};
+  const qualificationValue = statsValue.qualification && typeof statsValue.qualification === "object" && !Array.isArray(statsValue.qualification)
+    ? statsValue.qualification as Record<string, unknown>
+    : {};
+  const rejectedValue = qualificationValue.rejected && typeof qualificationValue.rejected === "object" && !Array.isArray(qualificationValue.rejected)
+    ? qualificationValue.rejected as Record<string, unknown>
+    : {};
   const citations = Array.isArray(value.citations) ? value.citations.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
     const citation = entry as Record<string, unknown>;
@@ -214,6 +249,16 @@ function decodeAction(payload: unknown) {
       candidatesFound: number(statsValue.candidatesFound),
       rowsCreated: number(statsValue.rowsCreated),
       rowsUpdated: number(statsValue.rowsUpdated),
+      qualification: {
+        evaluated: number(qualificationValue.evaluated),
+        accepted: number(qualificationValue.accepted),
+        rejected: Object.fromEntries(
+          Object.entries(rejectedValue).flatMap(([key, value]) => typeof value === "number" && Number.isFinite(value)
+            ? [[key.slice(0, 80), number(value)]]
+            : []),
+        ),
+        fallback: number(qualificationValue.fallback),
+      },
       paidUsage: {
         enrichmentCalls: number(paidUsageValue.enrichmentCalls),
         enrichmentBillable: number(paidUsageValue.enrichmentBillable),
@@ -299,7 +344,15 @@ export async function createCompanyContextProspectingActions(args: {
     threadId: args.threadId ?? null,
     runningStartedAt: null,
     hiddenAt: null,
-    stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0, paidUsage: { ...EMPTY_PAID_USAGE } },
+    stats: {
+      queriesUsed: 0,
+      pagesFetched: 0,
+      candidatesFound: 0,
+      rowsCreated: 0,
+      rowsUpdated: 0,
+      qualification: { evaluated: 0, accepted: 0, rejected: {}, fallback: 0 },
+      paidUsage: { ...EMPTY_PAID_USAGE },
+    },
     planVersion: QUERY_PLAN_VERSION,
     nextQueryOffset: 0,
     exhausted: false,
@@ -346,10 +399,19 @@ async function ensureResearchList(officeId: string, companyId: string, draft: Pr
     existing = lists.find((list) => list.slug === listSlug);
   }
   if (existing && (!project || existing.projectId === null || existing.projectId === project.id)) {
-    if (project && existing.projectId === null) {
-      return assignResearchListProject(officeId, existing.id, project.id);
+    const current = existing;
+    const missingFields = LIST_FIELDS
+      .filter((field) => !current.fields.some((existingField) => existingField.key === field.key));
+    let resolved = current;
+    if (missingFields.length && current.fields.length + missingFields.length <= RESEARCH_MAX_FIELDS) {
+      resolved = await updateResearchList(officeId, current.id, {
+        fields: [...current.fields, ...missingFields],
+      });
     }
-    return existing;
+    if (project && resolved.projectId === null) {
+      return assignResearchListProject(officeId, resolved.id, project.id);
+    }
+    return resolved;
   }
   try {
     return await createResearchList(officeId, {
@@ -392,10 +454,59 @@ function runProviderStats(stats: Pick<ProspectingBatchStats, "providerStats" | "
   };
 }
 
-export function candidateRows(records: readonly ProspectingBatchCandidate[]) {
+const defaultQualifier: CandidateQualifier = async (brief, inputs, options) =>
+  createOpenAiQualifier()(brief, inputs, options);
+
+function qualificationInputs(records: readonly ProspectingBatchCandidate[]): QualificationInput[] {
+  return records.flatMap(({ candidate, directoryRow, region }, index) => {
+    if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
+    const directoryText = directoryRow
+      ? ` ${directoryRow.companyName} ${directoryRow.rawLine} ${directoryRow.sourceUrl}`
+      : "";
+    return [{
+      id: String(index),
+      companyName: candidate.companyName,
+      domain: candidate.domain,
+      website: candidate.website,
+      country: region ?? null,
+      pageExcerpt: `${candidate.pageExcerpt ?? ""}${directoryText}`.replace(/\s+/g, " ").trim(),
+      evidenceUrls: candidate.evidence.map((item) => item.url),
+    }];
+  });
+}
+
+function mergeQualificationStats(
+  previous: ProspectingStats["qualification"],
+  inputs: readonly QualificationInput[],
+  results: Map<string, QualificationResult>,
+): ProspectingStats["qualification"] {
+  const rejected = { ...previous.rejected };
+  let accepted = 0;
+  let fallback = 0;
+  for (const input of inputs) {
+    const result = results.get(input.id);
+    if (!result) continue;
+    if (result.isTarget) accepted += 1;
+    else rejected[result.entityType] = (rejected[result.entityType] ?? 0) + 1;
+    if (result.source === "fallback") fallback += 1;
+  }
+  return {
+    evaluated: previous.evaluated + inputs.length,
+    accepted: previous.accepted + accepted,
+    rejected,
+    fallback: previous.fallback + fallback,
+  };
+}
+
+export function candidateRows(
+  records: readonly ProspectingBatchCandidate[],
+  qualification?: Map<string, QualificationResult>,
+) {
   return records.flatMap(({ candidate, verifications, region, directoryRow }, index) => {
     if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
     if (directoryRow) return [];
+    const qualified = qualification?.get(String(index));
+    if (qualified && !qualified.isTarget) return [];
     const primary = selectPrimaryContact({ contacts: candidate.contacts, emails: candidate.emails, verifications });
     const verification = primary.verification;
     const email = primary.email;
@@ -405,7 +516,7 @@ export function candidateRows(records: readonly ProspectingBatchCandidate[]) {
       ...primarySources,
     ].slice(0, 8).join("\n");
     const row: ResearchInputRow = {
-      company_name: candidate.companyName,
+      company_name: qualified?.displayName || candidate.companyName,
       website: candidate.website,
       domain: candidate.domain,
       country: region,
@@ -420,6 +531,8 @@ export function candidateRows(records: readonly ProspectingBatchCandidate[]) {
       email_verdict: verification?.verdict ?? "unknown",
       evidence_urls: evidenceUrls,
       source_query: candidate.discoveredVia,
+      entity_type: qualified?.entityType ?? null,
+      fit_reason: qualified?.reason ?? null,
     };
     // Company rows dedupe on the domain: the shown email moves as enrichment or
     // verification changes the best contact, and must update the same row.
@@ -432,16 +545,21 @@ export type ProspectingResearchRow = {
   dedupeField: string;
 };
 
-function directoryInputRows(records: readonly ProspectingBatchCandidate[]): ProspectingResearchRow[] {
+function directoryInputRows(
+  records: readonly ProspectingBatchCandidate[],
+  qualification?: Map<string, QualificationResult>,
+): ProspectingResearchRow[] {
   return records.flatMap(({ candidate, directoryRow, verifications, region }, index) => {
     if (candidate.fit.score < PROSPECTING_MIN_FIT_SCORE) return [];
     if (!directoryRow) return [];
+    const qualified = qualification?.get(String(index));
+    if (qualified && !qualified.isTarget) return [];
     const primary = selectPrimaryContact({ contacts: candidate.contacts, emails: candidate.emails, verifications });
     const email = primary.email;
     const domain = directoryRow.domain;
     const rawLine = directoryRow.rawLine.slice(0, 300);
     const row: ResearchInputRow = {
-      company_name: directoryRow.companyName,
+      company_name: qualified?.displayName || directoryRow.companyName,
       website: domain ? `https://${domain}` : null,
       domain,
       country: region,
@@ -459,6 +577,8 @@ function directoryInputRows(records: readonly ProspectingBatchCandidate[]): Pros
         ...(candidate.contacts?.find((contact) => contact.email === email)?.sourceUrls ?? []),
       ].slice(0, 8).join("\n"),
       source_query: candidate.discoveredVia,
+      entity_type: qualified?.entityType ?? null,
+      fit_reason: qualified?.reason ?? null,
     };
     return [{
       row: { row, sourceRow: index + 1 },
@@ -487,8 +607,16 @@ export function groupProspectingResearchRows(items: readonly ProspectingResearch
   return groups;
 }
 
-async function persistCandidates(officeId: string, listSlug: string, records: readonly ProspectingBatchCandidate[]) {
-  const groups = groupProspectingResearchRows([...candidateRows(records), ...directoryInputRows(records)]);
+async function persistCandidates(
+  officeId: string,
+  listSlug: string,
+  records: readonly ProspectingBatchCandidate[],
+  qualification?: Map<string, QualificationResult>,
+) {
+  const groups = groupProspectingResearchRows([
+    ...candidateRows(records, qualification),
+    ...directoryInputRows(records, qualification),
+  ]);
   let created = 0;
   let updated = 0;
   const persistedRecordIndexes = new Set<number>();
@@ -660,6 +788,7 @@ async function executeProspectingAction(args: {
   batchBudgetMs?: number;
   backgroundNow?: number;
   bookkeeping?: ProspectingBookkeeping;
+  qualifier?: CandidateQualifier;
 }) {
   const claimToken = args.action.claimToken;
   if (!claimToken) throw lostClaimError();
@@ -670,6 +799,8 @@ async function executeProspectingAction(args: {
   const recordDiscoveries = args.bookkeeping?.recordLeadDiscoveries ?? recordLeadDiscoveries;
   const finishRun = args.bookkeeping?.finishLeadGenRun ?? finishLeadGenRun;
   try {
+    const batchBudgetMs = args.batchBudgetMs ?? 240_000;
+    const startedAt = Date.now();
     const list = await ensureResearchList(args.context.officeId, args.workspace.companyId, args.action.draft);
     const draft = { ...args.action.draft, listSlug: list.slug };
     const profile = profileFromProspectingDraft(draft);
@@ -689,12 +820,19 @@ async function executeProspectingAction(args: {
       search: args.search ?? defaultProspectingSearch,
       fetchPage: args.fetchPage ?? defaultFetcher,
       resolveMx: args.resolveMx,
-      budgetMs: args.batchBudgetMs,
+      budgetMs: Math.max(1_000, batchBudgetMs - QUALIFICATION_RESERVE_MS),
       maxEnrichments: Math.min(DEFAULT_MAX_ENRICHMENTS, remainingBudget.enrichmentCalls),
       maxVerifications: remainingBudget.verificationCalls,
     });
     batchStats = result.stats;
-    const persisted = await persistCandidates(args.context.officeId, draft.listSlug, result.candidates);
+    const qualificationInputsForBatch = qualificationInputs(result.candidates);
+    const qualification = await qualifyCandidates(
+      briefFromProspectingDraft(draft),
+      qualificationInputsForBatch,
+      args.qualifier ?? defaultQualifier,
+      { deadlineAt: startedAt + batchBudgetMs },
+    );
+    const persisted = await persistCandidates(args.context.officeId, draft.listSlug, result.candidates, qualification);
     const completed: StoredProspectingAction = {
       ...args.action,
       draft,
@@ -706,6 +844,7 @@ async function executeProspectingAction(args: {
         candidatesFound: args.action.stats.candidatesFound + result.stats.candidatesFound,
         rowsCreated: args.action.stats.rowsCreated + persisted.created,
         rowsUpdated: args.action.stats.rowsUpdated + persisted.updated,
+        qualification: mergeQualificationStats(args.action.stats.qualification, qualificationInputsForBatch, qualification),
         paidUsage: addPaidUsage(args.action.stats.paidUsage, result.stats),
       },
       planVersion: QUERY_PLAN_VERSION,
@@ -936,6 +1075,7 @@ export async function runProspectingBackgroundTick(options?: {
   search?: ProspectingSearch;
   fetchPage?: typeof defaultFetcher;
   resolveMx?: VerifyOptions["resolveMx"];
+  qualifier?: CandidateQualifier;
   bookkeeping?: ProspectingBookkeeping;
   beforeClaim?: (action: StoredProspectingAction) => Promise<void>;
 }) {
@@ -1091,6 +1231,7 @@ export async function runProspectingBackgroundTick(options?: {
         runBatch: options?.runBatch,
         batchBudgetMs,
         backgroundNow: now(),
+        qualifier: options?.qualifier,
         bookkeeping: options?.bookkeeping,
       });
       completed += 1;
@@ -1139,12 +1280,14 @@ export async function runCompanyContextProspectingAction(args: {
   search?: ProspectingSearch;
   fetchPage?: typeof defaultFetcher;
   resolveMx?: VerifyOptions["resolveMx"];
+  qualifier?: CandidateQualifier;
   runBatch?: (input: {
     profile: ReturnType<typeof profileFromProspectingDraft>;
     queryOffset: number;
     search: ProspectingSearch;
     fetchPage: typeof defaultFetcher;
     resolveMx?: VerifyOptions["resolveMx"];
+    budgetMs?: number;
     maxEnrichments?: number;
     maxVerifications?: number;
   }) => Promise<ProspectingBatchResult>;
@@ -1171,6 +1314,7 @@ export async function runCompanyContextProspectingAction(args: {
           search: input.search,
           fetchPage: input.fetchPage,
           resolveMx: input.resolveMx,
+          budgetMs: input.budgetMs,
           maxEnrichments: input.maxEnrichments,
           maxVerifications: input.maxVerifications,
         })

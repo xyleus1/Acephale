@@ -41,6 +41,7 @@ export type LeadCandidate = {
   domain: string;
   website: string;
   companyName: string;
+  pageExcerpt?: string;
   city: string | null;
   emails: string[];
   phones: string[];
@@ -228,6 +229,7 @@ export async function harvestSite(
     domain,
     website: home.url,
     companyName,
+    pageExcerpt: combinedText.replace(/\s+/g, " ").trim().slice(0, 2_000),
     city: extractCity(combinedText.slice(0, 20_000)),
     emails,
     phones,

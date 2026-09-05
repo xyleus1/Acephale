@@ -75,6 +75,7 @@ const backgroundAction: StoredProspectingAction = {
     candidatesFound: 0,
     rowsCreated: 0,
     rowsUpdated: 0,
+    qualification: { evaluated: 0, accepted: 0, rejected: {}, fallback: 0 },
     paidUsage: { enrichmentCalls: 0, enrichmentBillable: 0, verificationCalls: 0 },
   },
   planVersion: 0,
@@ -502,6 +503,125 @@ async function main() {
     assert.equal(completed.status, "COMPLETED");
     assert.equal(completed.stats.rowsCreated, 1);
     assert.equal(completed.planVersion, QUERY_PLAN_VERSION);
+
+    const qualificationSlug = `qualification-${suffix}`;
+    const qualificationAction = await createBackgroundAction(qualificationSlug);
+    const qualificationCandidates = [
+      {
+        ...candidate,
+        candidate: {
+          ...candidate.candidate,
+          companyName: "TradeIndia",
+          domain: "tradeindia.com",
+          website: "https://tradeindia.com",
+        },
+      },
+      {
+        ...candidate,
+        candidate: {
+          ...candidate.candidate,
+          companyName: "Steel Association",
+          domain: "fixture-association.test",
+          website: "https://fixture-association.test",
+        },
+      },
+      {
+        ...candidate,
+        candidate: {
+          ...candidate.candidate,
+          companyName: "JSW",
+          domain: "jsw.in",
+          website: "https://jsw.in",
+        },
+      },
+      {
+        ...candidate,
+        candidate: {
+          ...candidate.candidate,
+          companyName: "Acme Fabricators",
+          domain: "fixture-processor.test",
+          website: "https://fixture-processor.test",
+        },
+      },
+    ] satisfies ProspectingBatchCandidate[];
+    const qualifiedIds: string[] = [];
+    let qualificationDeadlineAt: number | undefined;
+    let qualificationBudgetMs: number | undefined;
+    const qualified = await runCompanyContextProspectingAction({
+      context,
+      workspaceId: workspace.id,
+      actionId: qualificationAction.id,
+      qualifier: async (_brief, inputs, options) => {
+        qualificationDeadlineAt = options?.deadlineAt;
+        qualifiedIds.push(...inputs.map((input) => input.id));
+        return inputs.map((input) => input.domain === "fixture-association.test"
+          ? {
+              id: input.id,
+              entityType: "association" as const,
+              isTarget: true,
+              sizeSignal: "unknown" as const,
+              displayName: "Steel Association",
+              reason: "An association is not a target company.",
+              confidence: 1,
+              source: "model" as const,
+            }
+          : input.domain === "fixture-processor.test"
+          ? {
+              id: input.id,
+              entityType: "processor" as const,
+              isTarget: true,
+              sizeSignal: "small" as const,
+              displayName: "Acme Fabricators",
+              reason: "The candidate is a fabricator matching the brief.",
+              confidence: 0.9,
+              source: "model" as const,
+            }
+          : {
+              id: input.id,
+              entityType: "producer" as const,
+              isTarget: true,
+              sizeSignal: "large" as const,
+              displayName: "JSW Steel",
+              reason: "The candidate represents a steel producer.",
+              confidence: 0.95,
+              source: "model" as const,
+            });
+      },
+      runBatch: async ({ budgetMs }) => {
+        qualificationBudgetMs = budgetMs;
+        return {
+          candidates: qualificationCandidates,
+          stats: { queriesUsed: 1, pagesFetched: 1, candidatesFound: 4 },
+          nextQueryOffset: 1,
+          exhausted: true,
+        };
+      },
+    });
+    assert.deepEqual(qualifiedIds, ["1", "2", "3"], "deterministic non-company rules skip the model");
+    assert(qualificationDeadlineAt !== undefined);
+    assert.equal(qualificationBudgetMs, 200_000);
+    assert.equal(qualified.stats.rowsCreated, 2);
+    assert.deepEqual(qualified.stats.qualification, {
+      evaluated: 4,
+      accepted: 2,
+      rejected: { media_data: 1, association: 1 },
+      fallback: 0,
+    });
+    const qualificationList = await prisma.researchList.findFirstOrThrow({
+      where: { officeId: office.id, slug: qualificationSlug },
+      include: { records: true },
+    });
+    assert.equal(qualificationList.records.length, 2);
+    const qualificationData = qualificationList.records.map((record) => record.data as Record<string, unknown>);
+    const jswRow = qualificationData.find((record) => record.company_name === "JSW Steel");
+    const processorRow = qualificationData.find((record) => record.company_name === "Acme Fabricators");
+    assert(jswRow);
+    assert(processorRow);
+    assert.equal(jswRow.entity_type, "producer");
+    assert.equal(jswRow.fit_reason, "The candidate represents a steel producer.");
+    assert.equal(processorRow.entity_type, "processor");
+    assert.equal(processorRow.fit_reason, "The candidate is a fabricator matching the brief.");
+
     const legacyResumeAction = await createBackgroundAction(`plan-version-legacy-${suffix}`);
     await setActionPayload(legacyResumeAction.id, {
       status: "COMPLETED",
