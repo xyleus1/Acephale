@@ -19,6 +19,10 @@ apply once so Back to projects clears the URL state.
 
 ## 2026-09-09: Approvals survive tab switches
 
+- Follow-up: the materials `.commandMapStage` at widths up to 1040px no longer
+  forces a 560px row, so a 700px-tall window shows the whole panel including
+  the approvals footer instead of clipping it.
+
 - `SupplyOsOutreachApprovals` loads its proposals from a fresh task. A server
   action dispatched in the same effect flush as the sibling
   `history.replaceState` URL syncs was dropped by the app router queue and never

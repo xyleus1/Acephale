@@ -6110,7 +6110,7 @@
 
   .commandCenter[data-domain="materials"] .commandMapStage {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(560px, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "materials";
     overflow: hidden;
   }
@@ -6124,7 +6124,7 @@
   }
 
   .commandCenter[data-domain="materials"][data-materials-view="messages"] .commandMapStage {
-    grid-template-rows: minmax(560px, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "materials";
     overflow: hidden;
   }

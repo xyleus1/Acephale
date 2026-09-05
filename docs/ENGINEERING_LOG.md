@@ -7,6 +7,18 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-09: Materials stage no longer clips at 700px windows
+
+- Follow up to #420 testing: at widths up to 1040px the materials
+  `.commandMapStage` kept a `minmax(560px, 1fr)` row under `overflow: hidden`,
+  so in a 700px-tall window the 560px `.inventoryWorkspace` overflowed the
+  441px stage and the approvals footer and the panel scrollbar end were cut
+  off. The projects and messages rows are now `minmax(0, 1fr)`; the panel
+  inside already scrolls. The inspector variant keeps its 560px minimum since
+  that stage scrolls as a whole.
+- Verified over CDP at 1024x700, 1024x640 and 1280x900: the last proposal's
+  Start/Discard row sits fully inside the stage after scrolling the panel.
+
 ## 2026-09-09: Short-window layout, approvals reload, All projects name
 
 - Trigger: browser testing of the scrollable Pending approvals found the
