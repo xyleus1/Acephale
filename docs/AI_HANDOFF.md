@@ -12695,3 +12695,5 @@ Verification caveat:
   sending capacity, show the pause reason, and let an admin resume sending.
 - The outreach mailbox ops action reports paused accounts with their protection
   window alongside active pool members.
+- Manual resume is conditional on the pause timestamp shown to the admin, so
+  newer delivery feedback cannot be cleared by an older page.

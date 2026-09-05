@@ -10059,3 +10059,5 @@ Use this file for chronological implementation notes that future agents should s
   excluded from displayed capacity while remaining visible with their reason.
 - Added an admin resume action and paused mailbox details to the outreach ops
   mailboxes response.
+- Manual resume now uses a compare-and-clear pause timestamp guard and reports
+  stale feedback to the connected-email UI.

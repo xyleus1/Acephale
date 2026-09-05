@@ -258,6 +258,7 @@ async function main() {
     listSuppressedEmails,
     applySenderProtection,
     recordDeliveryFeedback,
+    resumeSenderAccount,
     recoverLegacyDeliveryFeedback,
     recoverPausedSenderAccounts,
     SENDER_RECOVERY_ROTATION_MS,
@@ -1188,6 +1189,28 @@ async function main() {
     for (const held of pass.held) pagesSeen.add(held.email);
   }
   assert.equal(pagesSeen.size, 6, "every paused mailbox is judged within one rotation of the pages");
+
+  const viewedPause = new Date("2026-09-01T12:00:00Z");
+  const resumeWrites: Array<{ id: string; sendPausedAt: unknown }> = [];
+  const resumeDb = {
+    emailAccount: {
+      updateMany: async (args: { where: { id: string; sendPausedAt: Date | { not: null } } }) => {
+        resumeWrites.push({ id: args.where.id, sendPausedAt: args.where.sendPausedAt });
+        return {
+          count: args.where.sendPausedAt instanceof Date
+            && args.where.sendPausedAt.getTime() === viewedPause.getTime()
+            ? 1
+            : 0,
+        };
+      },
+    },
+  };
+  assert.equal(await resumeSenderAccount("account-1", viewedPause, resumeDb as never), true);
+  assert.equal(await resumeSenderAccount("account-1", new Date("2026-09-02T12:00:00Z"), resumeDb as never), false);
+  assert.deepEqual(resumeWrites, [
+    { id: "account-1", sendPausedAt: viewedPause },
+    { id: "account-1", sendPausedAt: new Date("2026-09-02T12:00:00Z") },
+  ], "manual resume uses the pause timestamp the admin viewed");
 
   // A report that crosses the threshold again while recovery is measuring a
   // clean window has to restate the pause, since that is what invalidates the

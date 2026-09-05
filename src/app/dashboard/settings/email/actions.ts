@@ -82,13 +82,25 @@ export async function updateEmailSenderPoolAccounts(input: {
   return result;
 }
 
-export async function resumeSenderPoolAccount(input: { accountId: string }) {
+export async function resumeSenderPoolAccount(input: { accountId: string; pausedAt: string }) {
   await requireEmailAccountAdminSession();
   const accountId = typeof input?.accountId === "string" ? input.accountId.trim() : "";
-  if (!accountId || accountId.length > 220) return { resumed: false };
-  const resumed = await resumeSenderAccount(accountId);
-  if (resumed) revalidateEmailAccountPages();
-  return { resumed };
+  const pausedAt = typeof input?.pausedAt === "string" ? new Date(input.pausedAt) : null;
+  if (!accountId || accountId.length > 220 || !pausedAt || Number.isNaN(pausedAt.getTime())) {
+    return { resumed: false, stale: false };
+  }
+  const resumed = await resumeSenderAccount(accountId, pausedAt);
+  if (resumed) {
+    revalidateEmailAccountPages();
+    return { resumed: true, stale: false };
+  }
+  const account = await prisma.emailAccount.findUnique({
+    where: { id: accountId },
+    select: { sendPausedAt: true },
+  });
+  const stale = account?.sendPausedAt != null;
+  if (stale) revalidateEmailAccountPages();
+  return { resumed: false, stale };
 }
 
 export async function makeDefaultEmailSender(accountId: string) {

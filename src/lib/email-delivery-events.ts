@@ -558,9 +558,16 @@ export async function listSuppressedEmails(
   return new Map(rows.map((row) => [row.email, storedSuppressionReason(row.reason)]));
 }
 
-export async function resumeSenderAccount(accountId: string, db: DeliveryDb = prisma) {
+export async function resumeSenderAccount(
+  accountId: string,
+  expectedPausedAt?: Date | null,
+  db: DeliveryDb = prisma,
+) {
   const updated = await db.emailAccount.updateMany({
-    where: { id: accountId, sendPausedAt: { not: null } },
+    where: {
+      id: accountId,
+      sendPausedAt: expectedPausedAt != null ? expectedPausedAt : { not: null },
+    },
     data: { sendPausedAt: null, sendPausedReason: null },
   });
   return updated.count > 0;

@@ -88,7 +88,14 @@ export function EmailSenderPool({ accounts }: { accounts: EmailSenderPoolRow[] }
     setError(null);
     startTransition(async () => {
       try {
-        const result = await resumeSenderPoolAccount({ accountId });
+        const result = await resumeSenderPoolAccount({
+          accountId,
+          pausedAt: rows.find((row) => row.id === accountId)?.sendPausedAt ?? "",
+        });
+        if (result.stale) {
+          setError("Pause was updated by new delivery feedback, refresh to see the current reason.");
+          return;
+        }
         if (!result.resumed) {
           setError("The sender account was already resumed.");
           return;
