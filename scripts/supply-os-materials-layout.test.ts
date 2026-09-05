@@ -29,7 +29,8 @@ assert.match(projectStatus, /<dt>Mails sent<\/dt>[\s\S]*<dd>\{facts\.mailsSent\}
 assert.match(projectStatus, /<dt>Replies<\/dt>[\s\S]*<dd>\{facts\.replies\}<\/dd>/);
 assert.match(projectStatus, /<dt>Active threads<\/dt>[\s\S]*<dd>\{facts\.activeThreads\}<\/dd>/);
 assert.match(projectStatus, /<dt>\{facts\.successLabel\.slice/);
-assert.match(operatingShell, /\.headerStatusSlot\s*\{[\s\S]*flex: 1 1 auto;[\s\S]*justify-content: flex-end;/);
+assert.match(operatingShell, /\.headerStatusSlot\s*\{[\s\S]*flex: 1 0 auto;[\s\S]*max-width: 62%;[\s\S]*justify-content: flex-end;/);
+assert.match(operatingShell, /\.headerProjectFacts\s*\{[\s\S]*overflow-x: auto;/);
 assert.match(operatingShell, /\.headerProjectFacts > div \+ div\s*\{[\s\S]*border-left: 1px solid var\(--os-line\);/);
 assert.doesNotMatch(styles, /projectStatusStrip|projectStatusFacts|projectStatusIdentity|projectStatusLoading/);
 

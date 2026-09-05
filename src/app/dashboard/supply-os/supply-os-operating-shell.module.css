@@ -354,8 +354,9 @@
 }
 
 .headerStatusSlot {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-width: 0;
+  max-width: 62%;
   display: flex;
   justify-content: flex-end;
 }
@@ -366,7 +367,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 18px;
+  gap: 14px;
 }
 
 .headerProjectSwitcher {
@@ -389,7 +390,7 @@
 
 .headerProjectSelect {
   min-width: 0;
-  max-width: 190px;
+  max-width: 150px;
   padding: 3px 20px 3px 0;
   border: 0;
   color: var(--os-ink);
@@ -416,16 +417,18 @@
   display: flex;
   align-items: stretch;
   margin: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .headerProjectFacts > div {
   min-width: max-content;
-  padding: 0 0 0 14px;
+  padding: 0 0 0 12px;
 }
 
 .headerProjectFacts > div + div {
   border-left: 1px solid var(--os-line);
-  padding: 0 14px;
+  padding: 0 12px;
 }
 
 .headerProjectFacts dt {
@@ -609,11 +612,6 @@
     max-width: 60%;
   }
 
-  .headerProjectFacts {
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-
   .panelStage {
     padding: 20px;
   }
@@ -734,7 +732,13 @@
   }
 
   .headerStatusSlot {
+    flex: 0 1 auto;
     max-width: 50%;
+  }
+
+  .identity {
+    flex: 1 1 auto;
+    min-width: 96px;
   }
 
   .headerProjectStatus {
@@ -751,6 +755,7 @@
   }
 
   .headerProjectSelect {
+    min-width: 72px;
     max-width: 110px;
     font-size: 12px;
   }
@@ -765,7 +770,7 @@
   }
 
   .identity h1 {
-    max-width: 44vw;
+    max-width: min(44vw, 100%);
     font-size: 17px;
   }
 
@@ -785,6 +790,14 @@
 }
 
 @media (max-width: 520px) {
+  .headerStatusSlot {
+    max-width: 44%;
+  }
+
+  .headerProjectSwitcher {
+    display: none;
+  }
+
   .operatingSidebar {
     grid-template-columns: 44px minmax(0, 1fr) 44px;
   }
