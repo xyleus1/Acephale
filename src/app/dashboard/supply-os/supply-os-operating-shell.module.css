@@ -610,7 +610,8 @@
   }
 
   .headerProjectFacts {
-    flex-wrap: wrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
   }
 
   .panelStage {
@@ -730,6 +731,37 @@
   .commandHeader {
     min-height: 68px;
     padding: 10px 16px;
+  }
+
+  .headerStatusSlot {
+    max-width: 50%;
+  }
+
+  .headerProjectStatus {
+    gap: 10px;
+  }
+
+  .headerProjectKind {
+    display: none;
+  }
+
+  .headerProjectName {
+    max-width: 90px;
+    font-size: 12px;
+  }
+
+  .headerProjectSelect {
+    max-width: 110px;
+    font-size: 12px;
+  }
+
+  .headerProjectFacts > div,
+  .headerProjectFacts > div + div {
+    padding: 0 10px;
+  }
+
+  .headerProjectFacts dd {
+    font-size: 13px;
   }
 
   .identity h1 {
