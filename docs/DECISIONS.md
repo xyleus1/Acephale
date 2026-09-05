@@ -1,6 +1,28 @@
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## An automatic notice is not a supplier message anywhere in procurement
+Date: 2026-09-07
+- Status: accepted
+- Owner: engineering
+- Decision: An out of office reply and a bounce report are machine notices, and
+  every procurement read of a supplier thread looks past them through
+  `supplierInboundNotice`, `supplierLatestWritten`, and
+  `supplierAwaitingMessage` in `src/lib/procurement-inbound-triage.ts`. The
+  message a thread owes an answer to is the newest supplier message someone
+  wrote, so a notice never marks a thread answered, never overtakes a saved
+  draft, and never refuses the reply that answers the question behind it. A
+  wrong recipient notice is written by a person and still routes to an operator,
+  so it is not a notice under this rule.
+- Why: a notice arriving after a supplier question read as a newer supplier
+  message, which retired the draft that answered the question, moved the stage
+  off waiting on us, and made the send guard refuse the reply, so the supplier
+  was never answered.
+- Safety: the send guards are unchanged in what they protect. A reply is still
+  only delivered against its own source message, with no answer after it and no
+  real supplier message after it, and a thread that cannot be read still refuses
+  the send and retires nothing.
+
 ## A saved supplier draft is retired when its thread moves past it
 Date: 2026-09-06
 - Status: accepted

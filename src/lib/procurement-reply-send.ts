@@ -10,7 +10,7 @@ import {
   procurementSupplierSenderVouched,
   type ProcurementConversation,
 } from "@/lib/procurement-conversation-model";
-import { supplierInboundKind } from "@/lib/procurement-inbound-triage";
+import { supplierInboundNotice, supplierWrittenMessages } from "@/lib/procurement-inbound-triage";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import { PROCUREMENT_REPLY_EMAIL_TASK_TYPE } from "@/lib/procurement-reply-record";
 import { chasesSentAfterLastReply, supplierChaseDecision } from "@/lib/procurement-supplier-chase";
@@ -173,7 +173,11 @@ function requireQuietThread(args: {
   sourceMessageId: string;
   now?: number;
 }) {
-  const messages = args.conversation.messages;
+  // An out of office note or a bounce report is not the supplier answering, so
+  // the follow up is judged against the thread as the people on it wrote it.
+  // Otherwise a notice arriving after our answer would hold a due follow up
+  // forever, and a follow up would anchor on a message no supplier reads.
+  const messages = supplierWrittenMessages(args.conversation.messages);
   const latest = messages.at(-1);
   if (!args.conversation.available || !latest || latest.direction !== "OUTBOUND") {
     throw new SupplyPersistenceError("This supplier thread is not waiting on the supplier, so no follow up is sent.", "conflict");
@@ -186,9 +190,10 @@ function requireQuietThread(args: {
     lastDirection: "OUTBOUND",
     lastMessageAt: latest.sentAt,
     chasesSent: chasesSentAfterLastReply(messages, {
-      // An automatic notice is never answered, so on such a thread every
-      // outbound message after it is a follow up and counts against the cap.
-      answeredReply: supplierInboundKind(inbound.subject ?? "", inbound.body) !== "AUTO_REPLY",
+      // Notices are already out of this thread view, so the newest inbound
+      // message is a reply the supplier wrote and the first outbound message
+      // after it is the answer to it rather than a follow up.
+      answeredReply: true,
     }),
     hasQuote: false,
     now: args.now,
@@ -211,21 +216,41 @@ function requireCurrentInbound(args: {
   vendor: ProcurementOrderVendor;
   sourceMessageId: string;
 }) {
-  const latest = args.conversation.messages.at(-1);
-  if (!args.conversation.available || !latest || latest.direction !== "INBOUND") {
+  const messages = args.conversation.messages;
+  if (!args.conversation.available) {
     throw new SupplyPersistenceError("The latest supplier message is not awaiting a reply. Refresh the conversation before sending.", "conflict");
   }
-  if (latest.id !== args.sourceMessageId) {
+  const index = messages.findIndex((message) => message.id === args.sourceMessageId);
+  const source = index >= 0 ? messages[index]! : null;
+  if (!source) {
+    // The thread does not carry the message this reply answers at all, so what
+    // it answers cannot be judged and the operator refreshes before sending.
+    throw new SupplyPersistenceError("A newer supplier message arrived. Review the refreshed conversation before sending.", "conflict");
+  }
+  if (source.direction !== "INBOUND") {
+    throw new SupplyPersistenceError("The latest supplier message is not awaiting a reply. Refresh the conversation before sending.", "conflict");
+  }
+  const after = messages.slice(index + 1);
+  if (after.some((message) => message.direction === "OUTBOUND")) {
+    throw new SupplyPersistenceError("The latest supplier message is not awaiting a reply. Refresh the conversation before sending.", "conflict");
+  }
+  // An out of office note or a bounce report answers nothing and is never
+  // answered itself, so it does not take the question away from the reply that
+  // answers it. Only a real supplier message does.
+  if (after.some((message) => (
+    message.direction === "INBOUND"
+    && !supplierInboundNotice(message.subject ?? "", message.body)
+  ))) {
     throw new SupplyPersistenceError("A newer supplier message arrived. Review the refreshed conversation before sending.", "conflict");
   }
   if (!procurementSupplierSenderVouched({
     conversation: args.conversation,
     contactEmail: args.vendor.contact?.email ?? null,
-    senderEmail: latest.fromEmail,
+    senderEmail: source.fromEmail,
   })) {
     throw new SupplyPersistenceError("The supplier sender could not be verified for this thread.", "conflict");
   }
-  return latest;
+  return source;
 }
 
 async function resolveReplyAnchor(args: {

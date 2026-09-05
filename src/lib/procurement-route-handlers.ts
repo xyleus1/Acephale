@@ -12,6 +12,7 @@ import {
   overlayRequestOutreach,
   overlayVendorOutreach,
 } from "@/lib/procurement-local-outreach-model";
+import { supplierAwaitingMessage } from "@/lib/procurement-inbound-triage";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import type { draftProcurementSupplierReply } from "@/lib/procurement-reply-draft";
 import type { sendProcurementSupplierReply } from "@/lib/procurement-reply-send";
@@ -468,6 +469,11 @@ export async function handleProcurementReplyDraft(
       return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });
     }
     if (parsedInput.data.withRequestFiles) {
+      // The draft answers the message the operator was shown, so its recipient
+      // and subject come from that message rather than from whatever sits on top
+      // of the thread, which can be an automatic notice nobody answers.
+      const source = conversation.messages.find((message) => message.id === parsedInput.data.sourceMessageId)
+        ?? supplierAwaitingMessage(conversation.messages);
       const saved = await dependencies.saveFileDraft({
         context: {
           officeId: session.officeId,
@@ -479,8 +485,8 @@ export async function handleProcurementReplyDraft(
         order,
         vendor,
         sourceMessageId: parsedInput.data.sourceMessageId,
-        recipient: conversation.messages.at(-1)?.fromEmail ?? vendor.contact?.email ?? "",
-        conversationSubject: conversation.messages.at(-1)?.subject ?? null,
+        recipient: source?.fromEmail ?? vendor.contact?.email ?? "",
+        conversationSubject: source?.subject ?? null,
       });
       return Response.json({ draft: saved }, { headers: responseHeaders });
     }

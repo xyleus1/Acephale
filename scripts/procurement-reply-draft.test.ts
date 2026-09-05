@@ -97,6 +97,36 @@ async function main() {
   assert.match(capturedPrompt, /Please send me the data/);
   assert.doesNotMatch(draft.body, /\u2014/);
 
+  // An out of office note landing on top of the supplier's question answers
+  // nothing, so drafting still targets the question rather than refusing to
+  // draft at all.
+  const behindNotice = await draftProcurementSupplierReply({
+    order,
+    vendor,
+    conversation: {
+      ...conversation,
+      messages: [
+        ...conversation.messages,
+        {
+          id: "inbound-2",
+          direction: "INBOUND",
+          fromEmail: "sfielding@bacircuits.com",
+          fromName: "Spencer Fielding",
+          toEmails: ["mert@example.com"],
+          ccEmails: [],
+          subject: "Automatic reply: Re: [RFQ 24cb31bd] Turnkey 4-layer PCBA",
+          body: "I am out of the office until Monday with no access to email.",
+          sentAt: "2026-08-19T17:16:00.000Z",
+          truncated: false,
+        },
+      ],
+    },
+    generateText: async () => "Thank you.\n\nBest,\nMert\nDerya Supply Chain",
+  });
+  assert.equal(behindNotice.sourceMessageId, "inbound-1");
+  assert.equal(behindNotice.recipient, "sfielding@bacircuits.com");
+  assert.equal(behindNotice.subject, "Re: [RFQ 24cb31bd] Turnkey 4-layer PCBA");
+
   const prefixed = await draftProcurementSupplierReply({
     order,
     vendor,

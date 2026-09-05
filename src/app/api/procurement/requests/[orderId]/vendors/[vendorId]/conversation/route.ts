@@ -4,6 +4,7 @@ import { procurementVendorConversation } from "@/lib/procurement-conversation";
 import { getProcurementFileDeliveryDraft } from "@/lib/procurement-file-delivery-draft";
 import {
   procurementReplyFacts,
+  supplierAwaitingMessage,
   triageSupplierInbound,
 } from "@/lib/procurement-inbound-triage";
 import {
@@ -49,11 +50,13 @@ export async function GET(
     const fileDraft = order
       ? await getProcurementFileDeliveryDraft({ officeId: session.officeId, order, vendorId })
       : null;
-    const latest = conversation.messages.at(-1);
-    const triage = order && latest?.direction === "INBOUND"
+    // An automatic notice on top of the thread does not take the supplier's
+    // question away from the operator looking at it.
+    const awaiting = supplierAwaitingMessage(conversation.messages);
+    const triage = order && awaiting
       ? triageSupplierInbound({
-          subject: latest.subject,
-          body: latest.body,
+          subject: awaiting.subject,
+          body: awaiting.body,
           facts: procurementReplyFacts(order),
         })
       : null;

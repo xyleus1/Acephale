@@ -128,6 +128,75 @@ export function supplierInboundKind(subject: string, body: string): SupplierInbo
   return supplierQuestions(body).length > 0 ? "QUESTION" : "STATEMENT";
 }
 
+// Money and delivery wording a machine notice never carries, so a supplier
+// apologising for an absence and then pricing the job is read as the supplier
+// writing, not as an away notice.
+const COMMERCIAL_TEXT = /(\b(usd|eur|gbp|try|cny|rmb)\s?[\d.,]|[$€£]\s?[\d.,]|[\d.,]\s?(usd|eur|gbp|try|cny|rmb)\b)|\b(unit price|total price|lead ?time|moq|minimum order|price is|we can (do|offer|supply)|our (price|cost|offer))\b/i;
+
+// Away wording appears in ordinary supplier prose ("sorry, I was out of the
+// office last week"), and skipping a message is a send safety decision, so it
+// only counts where an away notice actually puts it: the subject, or the opening
+// of the supplier's own text with nothing asked and nothing priced under it.
+function supplierAwayNotice(subject: string, written: string) {
+  if (AUTO_REPLY.test(subject)) return true;
+  const opening = written.split("\n")[0] ?? "";
+  if (!AUTO_REPLY.test(opening)) return false;
+  return supplierQuestions(written).length === 0 && !COMMERCIAL_TEXT.test(written);
+}
+
+// An automatic notice is a machine message on the thread, not something the
+// supplier wrote and not something anyone answers, so the whole procurement
+// pipeline has to look past it to the message that is really owed a reply.
+// Evidence is taken from the supplier's own text, never from the thread history
+// quoted under it, so a reply quoting an earlier notice is still a real reply.
+export function supplierInboundNotice(subject: string, body: string) {
+  const written = normalizeBody(body);
+  if (supplierBounceText(subject, written)) return true;
+  return supplierAwayNotice(subject, written);
+}
+
+type SupplierThreadMessage = {
+  direction: "INBOUND" | "OUTBOUND";
+  subject?: string | null;
+  body: string;
+};
+
+// The thread as the people on it wrote it, with machine notices dropped, so
+// every read of who owes whom an answer sees the same messages.
+export function supplierWrittenMessages<T extends SupplierThreadMessage>(
+  messages: readonly T[],
+): T[] {
+  return messages.filter((message) => (
+    message.direction !== "INBOUND"
+    || !supplierInboundNotice(message.subject ?? "", message.body)
+  ));
+}
+
+// The newest message on the thread that anyone actually wrote, so an out of
+// office note or a bounce report landing after a supplier question does not make
+// the thread look answered or make the question disappear.
+export function supplierLatestWritten<T extends SupplierThreadMessage>(
+  messages: readonly T[],
+): T | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.direction === "INBOUND" && supplierInboundNotice(message.subject ?? "", message.body)) {
+      continue;
+    }
+    return message;
+  }
+  return null;
+}
+
+// The supplier message this thread still owes an answer to, or null when the
+// thread is waiting on the supplier instead.
+export function supplierAwaitingMessage<T extends SupplierThreadMessage>(
+  messages: readonly T[],
+): T | null {
+  const latest = supplierLatestWritten(messages);
+  return latest && latest.direction === "INBOUND" ? latest : null;
+}
+
 export function supplierQuestions(body: string): string[] {
   const normalized = normalizeBody(body);
   if (!normalized) return [];

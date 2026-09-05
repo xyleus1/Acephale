@@ -187,6 +187,54 @@ async function main() {
   assert.equal(fileDraftInput?.recipient, "sfielding@bacircuits.com");
   assert.equal(fileDraftInput?.context.officeId, "office-a");
 
+  // An out of office note on top of the supplier's question is not the message
+  // the operator is answering, so the saved file draft still goes to the
+  // question's sender and keeps its subject.
+  let noticeDraftInput: Parameters<ProcurementReplyDraftDependencies["saveFileDraft"]>[0] | null = null;
+  const behindNotice = await handleProcurementReplyDraft(
+    request({ sourceMessageId, withRequestFiles: true }),
+    orderId,
+    vendorId,
+    dependencies({
+      conversation: async () => ({
+        ...conversation,
+        messages: [
+          ...conversation.messages,
+          {
+            id: "inbound-notice-1",
+            direction: "INBOUND" as const,
+            fromEmail: "autoreply@bacircuits.com",
+            fromName: "Spencer Fielding",
+            toEmails: ["mert@example.com"],
+            ccEmails: [],
+            subject: "Automatic reply: Re: RFQ",
+            body: "I am out of the office until Monday.",
+            sentAt: "2026-08-19T17:16:00.000Z",
+            truncated: false,
+          },
+        ],
+      }),
+      saveFileDraft: async (input) => {
+        noticeDraftInput = input;
+        return {
+          state: "DRAFT",
+          orderId,
+          vendorId,
+          sourceMessageId,
+          recipient: input.recipient,
+          subject: "Re: RFQ",
+          body: "The technical package is attached.",
+          attachments: [],
+          withheld: [],
+          savedAt: "2026-08-25T00:00:00.000Z",
+        };
+      },
+    }),
+  );
+  assert.equal(behindNotice.status, 200);
+  assert.equal(noticeDraftInput?.recipient, "sfielding@bacircuits.com");
+  assert.equal(noticeDraftInput?.conversationSubject, "Re: RFQ");
+
   const draftScopeFailure = await handleProcurementReplyDraft(
     request({ sourceMessageId, withRequestFiles: true }),
     orderId,

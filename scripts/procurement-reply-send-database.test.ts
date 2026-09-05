@@ -264,6 +264,32 @@ async function main() {
     await assert.rejects(deliver({ context, fixture: closed, provider: guardProvider }), /not awaiting a reply/);
     assert.equal(rejectedBeforeProvider, 0, "Stale, changed-recipient, and closed-thread requests must stop before Gmail.");
 
+    // An out of office note that lands after the supplier's question answers
+    // nothing and is never answered itself, so the reply the supplier is owed
+    // still goes out instead of being refused until someone looks at the thread.
+    const noticed = fixture(workspace.id, `notice-${suffix}`);
+    noticed.conversation.messages.push({
+      ...noticed.conversation.messages[0]!,
+      id: `auto-notice-${suffix}`,
+      subject: `Automatic reply: Re: RFQ notice-${suffix}`,
+      body: "I am out of the office until Monday with limited access to email.",
+      sentAt: "2026-08-22T16:05:00.000Z",
+    });
+    const noticedSends: SupplierEmailSendInput[] = [];
+    const noticedDelivery = await deliver({
+      context,
+      fixture: noticed,
+      provider: {
+        send: async (input) => {
+          noticedSends.push(input);
+          return sentReceipt(input);
+        },
+        reconcile: async () => ({ state: "NOT_FOUND" }),
+      },
+    });
+    assert.equal(noticedDelivery.alreadySent, false);
+    assert.equal(noticedSends.length, 1, "An automatic notice must not withhold the answer the supplier is owed.");
+
     const success = fixture(workspace.id, `success-${suffix}`);
     const successfulSends: SupplierEmailSendInput[] = [];
     const successProvider: SupplierEmailProvider = {

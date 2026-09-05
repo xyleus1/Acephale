@@ -2,7 +2,10 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { procurementDraftCurrency } from "@/lib/procurement-draft-currency";
+import {
+  procurementDraftCurrency,
+  procurementDraftCurrencyConversation,
+} from "@/lib/procurement-draft-currency";
 import {
   getProcurementFileDeliveryDraft,
   markProcurementFileDeliveryDraftSent,
@@ -138,7 +141,7 @@ export async function runProcurementFileDraftSendBatch(args: {
       // newer supplier message, makes this draft undeliverable for good, so it
       // is retired and the conversation moves on instead of failing every pass.
       const currency = procurementDraftCurrency({
-        conversation,
+        conversation: procurementDraftCurrencyConversation(conversation),
         sourceMessageId: draft.sourceMessageId,
         variant: draft.variant,
       });

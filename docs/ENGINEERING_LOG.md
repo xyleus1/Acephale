@@ -3,6 +3,31 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-07: A machine notice on a supplier thread is not a supplier message
+
+- Trigger: review of the draft retirement work. An out of office note or a
+  bounce report arriving after a supplier question is inbound like any other
+  message, so a saved reply looked overtaken, a thread with an unanswered
+  question read as waiting on the supplier, and the send guard refused the reply
+  the supplier was actually owed.
+- `src/lib/procurement-inbound-triage.ts` now owns the notion:
+  `supplierInboundNotice` (an `AUTO_REPLY` or a `BOUNCE`; a wrong recipient
+  notice is still a human message and still needs an operator, so it is not one),
+  `supplierLatestWritten` (the newest message anyone wrote) and
+  `supplierAwaitingMessage` (the supplier message the thread owes an answer to).
+  The autopilot scan, the draft scan, the send guard, and the draft currency rule
+  all read the thread through them, so they cannot disagree.
+- Also from review: a follow up draft is retired when the newest supplier reply
+  is not the one it was saved against, even when our own answer came after that
+  reply, because the send guard anchors a follow up on the newest reply and would
+  otherwise refuse it forever.
+- Verification: `test:procurement-draft-currency`,
+  `test:procurement-inbound-triage`, `test:procurement-conversation-stage`,
+  `test:procurement-autopilot-plan`, `test:procurement-file-draft-batch`,
+  `test:supply-os-active-sourcing`, `test:procurement-reply-send-db`,
+  `test:procurement-file-draft-db`, `test:procurement-conversation-task-db`,
+  `npx tsc --noEmit`.
+
 ## 2026-09-06: A supplier draft the thread moved past is retired, not retried forever
 
 - Trigger: after pooled delivery reconciliation shipped, production passes on

@@ -1,6 +1,25 @@
 Context research operations are stored as typed CompanyContext action payloads. Status and audit run inline; pause, resume, purge, region expansion, requalification, and contact enrichment require operator approval and never touch outreach.
 # AI Handoff
 
+## 2026-09-07: An automatic notice never takes a supplier question away from the reply that answers it
+
+- Context: an out of office note or a bounce report landing after a supplier
+  question is inbound like any other message, so the draft scan, the stage read,
+  the send guard, and the draft currency rule all read the thread as either
+  answered or overtaken and the real question was never answered.
+- `supplierInboundNotice`, `supplierLatestWritten`, and
+  `supplierAwaitingMessage` in `src/lib/procurement-inbound-triage.ts` are the
+  one place the pipeline looks past notices. The autopilot scan reads the stage
+  from the newest written message, the draft scan drafts against the awaiting
+  question, `requireCurrentInbound` judges the draft's own source message and
+  only a real newer inbound refuses it, and `procurementDraftCurrency` retires a
+  reply draft only for a real newer message or an answer that already left. A
+  follow up is now also retired when the newest supplier reply is not the one it
+  was saved against, even if our own answer came after it.
+- Tests: `npm run test:procurement-draft-currency`,
+  `npm run test:procurement-inbound-triage`,
+  `npm run test:procurement-reply-send-db` (migrated disposable database).
+
 ## 2026-09-06: A saved supplier draft is judged against its live thread before it is sent
 
 - Context: the send path refuses a draft whose thread moved on, which is right,

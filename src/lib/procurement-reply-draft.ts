@@ -6,6 +6,7 @@ import {
   type ProcurementConversation,
   type ProcurementConversationMessage,
 } from "@/lib/procurement-conversation-model";
+import { supplierAwaitingMessage } from "@/lib/procurement-inbound-triage";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "@/lib/procurement-workflow";
 
 const MAX_DRAFT_CONTEXT_CHARACTERS = 14_000;
@@ -52,8 +53,11 @@ function latestInbound(args: {
   conversation: ProcurementConversation;
   contactEmail: string | null;
 }) {
-  const latest = args.conversation.messages.at(-1);
-  if (!latest || latest.direction !== "INBOUND") return null;
+  // An out of office note or a bounce report answers nothing and is never
+  // answered, so the message this thread owes a reply to is the newest one the
+  // supplier wrote, notices aside.
+  const latest = supplierAwaitingMessage(args.conversation.messages);
+  if (!latest) return null;
   return procurementSupplierSenderVouched({
     conversation: args.conversation,
     contactEmail: args.contactEmail,

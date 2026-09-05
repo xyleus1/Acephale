@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
 import {
   procurementContextReplyBody,
+  supplierAwaitingMessage,
   type ProcurementInboundTriage,
 } from "@/lib/procurement-inbound-triage";
 import { PROCUREMENT_APPROVAL_STATUSES } from "@/lib/procurement-status";
@@ -350,7 +351,7 @@ export function ActiveSourcingWorkspace({
         setConversation(payload.conversation);
         setTriage(payload.triage ?? null);
         const saved = payload.fileDraft;
-        if (saved && saved.sourceMessageId === payload.conversation.messages.at(-1)?.id) {
+        if (saved && saved.sourceMessageId === supplierAwaitingMessage(payload.conversation.messages)?.id) {
           setReplyDraft({ ...saved, saved: true });
           setReplyDraftState("ready");
         }
@@ -374,13 +375,21 @@ export function ActiveSourcingWorkspace({
     setReplyDelivery(null);
   }, [workflowRequestId, workflowVendorId]);
 
+  // The supplier message this thread owes an answer to. An automatic notice
+  // still shows in the transcript, but it never takes the question away from the
+  // draft controls or retires a draft that answers it.
+  const answerableMessage = useMemo(
+    () => (conversation ? supplierAwaitingMessage(conversation.messages) : null),
+    [conversation],
+  );
+
   useEffect(() => {
     if (conversationState !== "ready" || !replyDraft || replySendState === "sent") return;
-    if (conversation?.messages.at(-1)?.id === replyDraft.sourceMessageId) return;
+    if (answerableMessage?.id === replyDraft.sourceMessageId) return;
     setReplyDraft(null);
     setReplyDraftState("idle");
     setReplySendState("idle");
-  }, [conversation, conversationState, replyDraft, replySendState]);
+  }, [answerableMessage, conversationState, replyDraft, replySendState]);
 
   const threadReceipt = supplierThreadReceipt(conversation);
   const workflowContacted = activeWorkflowRequests.reduce((sum, request) => sum + request.contactedCount, 0);
@@ -401,8 +410,8 @@ export function ActiveSourcingWorkspace({
 
   const createReplyDraft = async () => {
     if (!workflowRequestId || !workflowVendorId) return;
-    const displayedInbound = conversation?.messages.at(-1);
-    if (displayedInbound?.direction !== "INBOUND") return;
+    const displayedInbound = answerableMessage;
+    if (!displayedInbound) return;
     const selectionKey = replySelectionRef.current;
     setReplyDraft(null);
     setReplyDraftState("loading");
@@ -434,8 +443,8 @@ export function ActiveSourcingWorkspace({
   // send confirmation below.
   const draftReplyWithRequestFiles = async () => {
     if (!workflowRequestId || !workflowVendorId) return;
-    const displayedInbound = conversation?.messages.at(-1);
-    if (displayedInbound?.direction !== "INBOUND") return;
+    const displayedInbound = answerableMessage;
+    if (!displayedInbound) return;
     const selectionKey = replySelectionRef.current;
     setReplyDraft(null);
     setReplyDraftState("loading");
@@ -461,8 +470,8 @@ export function ActiveSourcingWorkspace({
   };
 
   const useContextAnswer = () => {
-    const displayedInbound = conversation?.messages.at(-1);
-    if (!triage || triage.decision !== "AUTO_ANSWER" || displayedInbound?.direction !== "INBOUND") return;
+    const displayedInbound = answerableMessage;
+    if (!triage || triage.decision !== "AUTO_ANSWER" || !displayedInbound) return;
     setReplyDraft({
       recipient: displayedInbound.fromEmail,
       subject: contextAnswerSubject(displayedInbound.subject),
@@ -634,13 +643,13 @@ export function ActiveSourcingWorkspace({
                 <header>
                   <span><MessageSquare size={16} /><strong>Conversation</strong></span>
                   <div>
-                    {conversationState === "ready" && conversation?.messages.at(-1)?.direction === "INBOUND" ? (
+                    {conversationState === "ready" && answerableMessage ? (
                       <button type="button" onClick={createReplyDraft} disabled={replyDraftState === "loading"}>
                         {replyDraftState === "loading" ? <LoaderCircle size={12} /> : <PenLine size={12} />}
                         {replyDraftState === "loading" ? "Drafting" : replyDraft ? "Redraft reply" : "Draft reply"}
                       </button>
                     ) : null}
-                    {conversationState === "ready" && conversation?.messages.at(-1)?.direction === "INBOUND" ? (
+                    {conversationState === "ready" && answerableMessage ? (
                       <button type="button" onClick={draftReplyWithRequestFiles} disabled={replyDraftState === "loading"}>
                         <Paperclip size={12} /> Draft with request files
                       </button>

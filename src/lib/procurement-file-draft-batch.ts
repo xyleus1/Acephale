@@ -2,7 +2,10 @@ import "server-only";
 
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { procurementDraftCurrency } from "@/lib/procurement-draft-currency";
+import {
+  procurementDraftCurrency,
+  procurementDraftCurrencyConversation,
+} from "@/lib/procurement-draft-currency";
 import {
   getProcurementFileDeliveryDraft,
   procurementFileDraftCurrentStateKey,
@@ -16,6 +19,7 @@ import {
 } from "@/lib/procurement-file-draft-selection";
 import {
   procurementReplyFacts,
+  supplierAwaitingMessage,
   supplierInboundKind,
   triageSupplierInbound,
 } from "@/lib/procurement-inbound-triage";
@@ -82,8 +86,11 @@ async function vendorTarget(args: {
     orderId: args.order.id,
     vendorId: args.vendorId,
   });
-  const latest = conversation.messages.at(-1);
-  if (!latest || latest.direction !== "INBOUND") {
+  // An out of office note or a bounce report that landed after a supplier
+  // question answers nothing and is never answered itself, so the question
+  // behind it is still owed this reply rather than being buried by the notice.
+  const latest = supplierAwaitingMessage(conversation.messages);
+  if (!latest) {
     // The thread is not waiting on us, so it holds no reply to draft. A draft
     // saved before the answer went out is retired here, in the pass that reads
     // the thread anyway: left in place it would be offered to the send path and
@@ -148,7 +155,7 @@ async function retireOvertakenDraft(args: {
   });
   if (!existing) return;
   const currency = procurementDraftCurrency({
-    conversation: args.conversation,
+    conversation: procurementDraftCurrencyConversation(args.conversation),
     sourceMessageId: existing.sourceMessageId,
     variant: existing.variant,
   });

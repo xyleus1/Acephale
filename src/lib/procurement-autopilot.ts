@@ -44,7 +44,11 @@ import { sweepSupplierQuoteCapture } from "@/lib/procurement-supplier-quote";
 import type { SupplierQuoteMissingFact } from "@/lib/procurement-supplier-quote-reading";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
-import { procurementReplyFacts, supplierInboundKind, triageSupplierInbound } from "@/lib/procurement-inbound-triage";
+import {
+  procurementReplyFacts,
+  supplierWrittenMessages,
+  triageSupplierInbound,
+} from "@/lib/procurement-inbound-triage";
 import {
   getProcurementRequest,
   procurementWorkflowDatabase,
@@ -224,9 +228,15 @@ async function vendorStates(args: {
       orderId: args.order.id,
       vendorId: vendor.id,
     });
-    const latest = conversation.messages.at(-1);
+    // An out of office note or a bounce report answers nothing and is never
+    // answered itself, so the whole scan reads the thread as the people on it
+    // wrote it: a supplier question sitting behind such a notice is still owed an
+    // answer, a notice landing after our answer still leaves the thread waiting
+    // on the supplier, and a follow up anchors on a reply a supplier can read.
+    const written = supplierWrittenMessages(conversation.messages);
+    const latest = written.at(-1) ?? null;
     const inbound = latest?.direction === "INBOUND" ? latest : null;
-    const newestReply = [...conversation.messages].reverse().find((message) => message.direction === "INBOUND") ?? null;
+    const newestReply = [...written].reverse().find((message) => message.direction === "INBOUND") ?? null;
     if (newestReply) {
       anchors.set(vendor.id, {
         sourceMessageId: newestReply.id,
@@ -256,13 +266,11 @@ async function vendorStates(args: {
       hasDraft: Boolean(draft),
       hasQuote: Boolean(vendor.quote),
       lastMessageAt: latest?.sentAt ?? null,
-      chasesSent: chasesSentAfterLastReply(conversation.messages, {
-        // A thread whose newest inbound message is an automatic notice was
-        // never answered, so nothing after it is an answer and every one of
-        // those messages counts against the follow up cap.
-        answeredReply: newestReply
-          ? supplierInboundKind(newestReply.subject ?? "", newestReply.body) !== "AUTO_REPLY"
-          : true,
+      chasesSent: chasesSentAfterLastReply(written, {
+        // Notices are already out of this thread view, so the newest inbound
+        // message is a reply the supplier wrote and the first outbound message
+        // after it is the answer to it rather than a follow up.
+        answeredReply: newestReply !== null,
       }),
       missingQuoteFacts: args.missingQuoteFacts?.get(vendor.id) ?? null,
     });

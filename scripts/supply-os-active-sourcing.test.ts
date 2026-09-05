@@ -175,6 +175,11 @@ assert.match(active, /conversation\/send/);
 assert.match(active, /Derya sends only after you confirm/);
 assert.match(active, /externalVendorResponseCount\(vendor\)/);
 assert.match(active, /sourceMessageId: displayedInbound\.id/);
+// An automatic notice still shows in the transcript, but the draft controls and
+// the saved draft target the supplier message the thread owes an answer to.
+assert.match(active, /supplierAwaitingMessage\(conversation\.messages\)/);
+assert.match(active, /const displayedInbound = answerableMessage;/);
+assert.doesNotMatch(active, /messages\.at\(-1\)\?\.direction === "INBOUND"/);
 assert.match(active, /error\.status === 409/);
 assert.match(active, /setConversationRevision/);
 assert.match(inventory, /value=\{workspaceView\}/);

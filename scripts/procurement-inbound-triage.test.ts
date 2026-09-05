@@ -4,7 +4,10 @@ import {
   procurementContextReplyBody,
   procurementReplyFacts,
   questionTopics,
+  supplierAwaitingMessage,
   supplierInboundKind,
+  supplierInboundNotice,
+  supplierLatestWritten,
   supplierQuestions,
   triageSupplierInbound,
   type ProcurementReplyFacts,
@@ -304,8 +307,8 @@ function surfaces() {
   assert.ok(route.includes("triageSupplierInbound("), "the conversation route triages the latest inbound message");
   assert.ok(route.includes("procurementReplyFacts(order)"), "triage reads facts from the tenant scoped order");
   assert.ok(
-    route.includes('latest?.direction === "INBOUND"'),
-    "triage runs only when the newest message is inbound",
+    route.includes("supplierAwaitingMessage(conversation.messages)"),
+    "triage runs on the supplier message the thread owes an answer to, notices aside",
   );
 
   const ui = readFileSync("src/app/dashboard/supply-os/supply-os-active-sourcing.tsx", "utf8");
@@ -329,8 +332,117 @@ function surfaces() {
   );
 }
 
+// A machine notice on the thread is not a supplier message: it answers nothing
+// and nobody answers it, so the question behind it is still the one owed a reply.
+function awaitingMessage() {
+  const question = {
+    id: "in-1",
+    direction: "INBOUND" as const,
+    subject: "Re: RFQ",
+    body: "What tolerance do you need on the board edge?",
+  };
+  const away = {
+    id: "in-2",
+    direction: "INBOUND" as const,
+    subject: "Automatic reply: Re: RFQ",
+    body: "I am out of the office until Monday with limited access to email.",
+  };
+  const bounce = {
+    id: "in-3",
+    direction: "INBOUND" as const,
+    subject: "Undelivered Mail Returned to Sender",
+    body: "Delivery to the following recipient failed permanently: 550 5.1.1 user unknown.",
+  };
+  const answer = {
+    id: "out-1",
+    direction: "OUTBOUND" as const,
+    subject: "Re: RFQ",
+    body: "The edge tolerance is plus or minus 0.15 mm.",
+  };
+  assert.equal(supplierAwaitingMessage([question, away, bounce])?.id, "in-1");
+  assert.equal(supplierLatestWritten([question, away, bounce])?.id, "in-1");
+  assert.equal(
+    supplierAwaitingMessage([question, answer, away]),
+    null,
+    "a notice after our answer does not put the thread back on us",
+  );
+  assert.equal(supplierLatestWritten([question, answer, away])?.id, "out-1");
+  assert.equal(supplierAwaitingMessage([answer]), null);
+  assert.equal(supplierAwaitingMessage([]), null);
+  assert.equal(
+    supplierLatestWritten([away, bounce]),
+    null,
+    "a thread carrying nothing but notices holds no message anyone wrote",
+  );
+}
+
+// Skipping a message is a send safety decision, so notice evidence is taken from
+// what the supplier wrote at the top of their own text, never from ordinary prose
+// mentioning an absence or from the thread history quoted underneath it.
+function humanRepliesAreNotNotices() {
+  const cases = [
+    {
+      why: "an apology for an absence is still the supplier writing",
+      subject: "Re: RFQ",
+      body: "Sorry for the delay, I was out of the office last week. Can you confirm the quantity?",
+    },
+    {
+      why: "a supplier quoting the bounce we asked about is still the supplier writing",
+      subject: "Re: RFQ",
+      body: [
+        "That address is dead, use mine instead.",
+        "",
+        "> Your message could not be delivered to sales@example.com",
+        "> Delivery to the following recipient failed permanently",
+      ].join("\n"),
+    },
+    {
+      why: "commercial prose carrying failure wording is still the supplier writing",
+      subject: "Re: RFQ",
+      body: "Boards that fail delivery inspection are reworked at our cost. Unit price is USD 12.40 with a 15 day lead time.",
+    },
+    {
+      why: "an away line above a real price is still the supplier writing",
+      subject: "Re: RFQ",
+      body: "I am out of the office this week but wanted to answer.\nOur price is USD 9.80 per board, lead time 12 days.",
+    },
+  ];
+  for (const example of cases) {
+    assert.equal(supplierInboundNotice(example.subject, example.body), false, example.why);
+    assert.equal(
+      supplierAwaitingMessage([
+        { id: "in-1", direction: "INBOUND" as const, subject: example.subject, body: example.body },
+      ])?.id,
+      "in-1",
+      example.why,
+    );
+  }
+  const notices = [
+    {
+      why: "an away subject is a machine notice",
+      subject: "Automatic reply: Re: RFQ",
+      body: "I will return on Monday. For urgent matters contact the front desk.",
+    },
+    {
+      why: "an away opening with nothing asked and nothing priced is a machine notice",
+      subject: "Re: RFQ",
+      body: "I am currently away on annual leave with no access to email.\nYour message will be read on my return.",
+    },
+    {
+      why: "a delivery status report is a machine notice",
+      subject: "Undelivered Mail Returned to Sender",
+      body: "This is the mail delivery subsystem. Delivery to the following recipients failed.",
+    },
+  ];
+  for (const example of notices) {
+    assert.equal(supplierInboundNotice(example.subject, example.body), true, example.why);
+  }
+}
+
 function main() {
   classification();
+  awaitingMessage();
+  humanRepliesAreNotNotices();
   questionExtraction();
   autoAnswer();
   bestEffort();
