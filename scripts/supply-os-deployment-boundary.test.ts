@@ -46,7 +46,7 @@ assert.equal(
 );
 assert.equal(
   packageJson.scripts?.build,
-  "prisma generate && next build",
+  "prisma generate && prisma generate --schema prisma/world/schema.prisma && next build",
   "the application build must not require migration-ledger privileges",
 );
 assert.equal(

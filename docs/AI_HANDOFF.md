@@ -25,8 +25,8 @@ Supplier waves now derive deterministic capability profiles from each request, k
   resent to a corrected address is not left competing with the dead one and a
   later reply from a colleague, helpdesk or forwarder is still attributable.
   Which address failed comes from `classifyDeliveryFeedback`, so only a
-  permanent failure retires a recipient; a nonstandard notice falls back to the
-  addresses on its own failure lines.
+  permanent failure retires a recipient; a nonstandard notice falls back to
+  the addresses on its own failure lines.
 
 - `contactsByThread` in `src/lib/procurement-local-outreach-model.ts` anchors a
   thread on the addresses mailed before any reply arrived, so answering a
@@ -34,6 +34,12 @@ Supplier waves now derive deterministic capability profiles from each request, k
   the RFQ went to.
 - `attributeLocalRfqThread` also keeps our own answer to a vouched address in
   the transcript, so an answered thread does not read as unanswered.
+
+## 2026-09-05: World company spine
+
+- Added a separate Prisma schema, migration, loader, merge layer, CLI, and tests for GLEIF, Companies House, and the PDL free dataset.
+- The world database is isolated through `WORLD_DATABASE_URL`; promotion is currently a pure payload mapper and does not write to CRM offices.
+- Verification and database test results belong in the implementation handoff after the local checks run.
 
 ## 2026-09-08: One attribution rule for every local supplier thread
 

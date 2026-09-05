@@ -7,6 +7,12 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-05: World company spine
+
+- Added the isolated `prisma/world/schema.prisma` schema and migration without changing the tenant CRM schema or its migrations.
+- World source loaders normalize company identity, preserve raw payloads, classify manufacturer signals, and merge provenance with LEI, domain, and country plus name matching.
+- ZIP archives remain an explicit unzip-first workflow, while CSV, gzipped CSV, and PDL JSONL are streamed by the CLI.
+
 ## 2026-09-08: A thread belongs to the addresses we mailed before the first reply
 
 - Follow up: a bounced address kept anchoring its thread, so an RFQ resent to a

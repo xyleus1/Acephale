@@ -1,0 +1,121 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../../src/generated/world-client"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("WORLD_DATABASE_URL")
+}
+
+model WorldCompany {
+  id                   String              @id @default(cuid())
+  canonicalName        String
+  nameNormalized       String
+  domain               String?             @unique
+  lei                  String?             @unique
+  country              String?
+  region               String?
+  city                 String?
+  postalCode           String?
+  addressLine          String?
+  legalIds             Json?
+  industryCodes        Json?
+  isManufacturer       Boolean             @default(false)
+  manufacturerEvidence Json?
+  sizeBand             String?
+  foundedYear          Int?
+  linkedinUrl          String?
+  website              String?
+  entityStatus         String?
+  sourceCount          Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  sourceRecords WorldSourceRecord[]
+  contacts      WorldContact[]
+
+  @@index([country, nameNormalized])
+  @@index([isManufacturer, country])
+  @@index([nameNormalized])
+  @@map("world_company")
+}
+
+model WorldSourceRecord {
+  id                   String              @id @default(cuid())
+  source               String
+  sourceRecordId       String
+  loadRunId            String?
+  companyId            String?
+  merged               Boolean             @default(false)
+  name                 String
+  nameNormalized       String
+  domain               String?
+  lei                  String?
+  country              String?
+  region               String?
+  city                 String?
+  postalCode           String?
+  addressLine          String?
+  legalIds             Json?
+  industryCodes        Json?
+  isManufacturer       Boolean             @default(false)
+  manufacturerEvidence Json?
+  sizeBand             String?
+  foundedYear          Int?
+  linkedinUrl          String?
+  website              String?
+  entityStatus         String?
+  payload              Json
+  fetchedAt            DateTime            @default(now())
+
+  company WorldCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  loadRun WorldLoadRun? @relation(fields: [loadRunId], references: [id], onDelete: SetNull)
+
+  @@unique([source, sourceRecordId])
+  @@index([merged])
+  @@index([companyId])
+  @@index([lei])
+  @@index([domain])
+  @@index([country, nameNormalized])
+  @@map("world_source_record")
+}
+
+model WorldContact {
+  id           String       @id @default(cuid())
+  companyId    String
+  email        String       @unique
+  emailStatus  String?
+  fullName     String?
+  title        String?
+  role         String?
+  source       String
+  verifiedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  company WorldCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("world_contact")
+}
+
+model WorldLoadRun {
+  id            String              @id @default(cuid())
+  source        String
+  fileName      String
+  startedAt     DateTime            @default(now())
+  finishedAt    DateTime?
+  status        String              @default("RUNNING")
+  rowsRead      Int                 @default(0)
+  rowsInserted  Int                 @default(0)
+  rowsSkipped   Int                 @default(0)
+  rowsMerged    Int                 @default(0)
+  error         String?
+
+  sourceRecords WorldSourceRecord[]
+
+  @@index([source, startedAt])
+  @@map("world_load_run")
+}

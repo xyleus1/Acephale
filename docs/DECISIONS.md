@@ -5,6 +5,12 @@ Sourcing categories are derived from the request; curated categories are overrid
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## 2026-09-05: Separate world company spine
+
+- The office-less world company spine lives in its own Postgres database through `WORLD_DATABASE_URL`, never in the office-scoped `Company` table.
+- Source rows retain provenance and are deduplicated in priority order: LEI, domain, then country plus normalized name.
+- Promotion into an office is a later explicit action that links a world company instead of copying the global spine into tenant data.
+
 ## OpenAI web search is the leadgen backbone
 Date: 2026-09-08
 
