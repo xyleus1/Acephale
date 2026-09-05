@@ -104,7 +104,7 @@ export function reduceSourcingProjectStatus(input: {
   return {
     kind: "sourcing",
     key: input.key,
-    leads: input.progress.vendors,
+    leads: input.progress.companies,
     mailsSent: input.progress.contacted,
     replies: input.threads.filter((thread) => dateValue(thread.latestHumanInboundAt)).length,
     activeThreads: input.threads.filter((thread) => activeThread(thread, new Date())).length,

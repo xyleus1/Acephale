@@ -12940,10 +12940,18 @@ Verification caveat:
 
 - Sourcing project status now triages the latest inbound supplier message against stored request facts, exposing escalated thread IDs to the status strip and selected project row without adding per-row status fetches.
 
+## 2026-09-05: Supplier company progress and contact windows
+
+- Procurement progress now reports both supplier rows and distinct supplier
+  companies, with sourcing project leads using the company count.
+- Customer supplier search summaries deduplicate contacts from the same company.
+- Multi-contact waves inspect the bounded email list after risky addresses,
+  rather than letting an early rejected address consume the contact window.
+
 ## 2026-09-05: Needs-you target and inbound notice follow-ups
 
 - Status facts now retain the kind and key of the project actually loaded, so
-  project-row indicators follow the status target even when no project is selected.
+ project-row indicators follow the status target even when no project is selected.
 - Needs-you navigation selects that loaded project before opening Messages.
 - Sourcing status ignores pure out-of-office notices while retaining actionable
   replies and bounce reports for deterministic triage.

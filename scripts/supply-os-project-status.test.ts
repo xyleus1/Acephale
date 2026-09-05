@@ -54,7 +54,7 @@ test("Other lists status only includes campaigns without a project", () => {
 test("sourcing reducer reports persisted progress and replies", () => {
   const facts = reduceSourcingProjectStatus({
     key: "order-id",
-    progress: { vendors: 4, contacted: 3, quoted: 2 },
+    progress: { vendors: 4, companies: 2, contacted: 3, quoted: 2 },
     facts: {
       material: "steel parts",
       quantity: 100,
@@ -87,7 +87,7 @@ test("sourcing reducer reports persisted progress and replies", () => {
   assert.deepEqual(facts, {
     kind: "sourcing",
     key: "order-id",
-    leads: 4,
+    leads: 2,
     mailsSent: 3,
     replies: 2,
     activeThreads: 2,
@@ -119,7 +119,7 @@ test("sourcing reducer marks bounce, wrong recipient, and unanswered commercial 
   });
   const facts = reduceSourcingProjectStatus({
     key: "order-id",
-    progress: { vendors: 1, contacted: 1, quoted: 0 },
+    progress: { vendors: 1, companies: 1, contacted: 1, quoted: 0 },
     facts: replyFacts,
     threads: [
       thread("bounce", "Delivery failure", "Delivery to the following recipient failed."),
@@ -135,7 +135,7 @@ test("sourcing reducer marks bounce, wrong recipient, and unanswered commercial 
 test("sourcing reducer does not escalate answered or answerable questions", () => {
   const facts = reduceSourcingProjectStatus({
     key: "order-id",
-    progress: { vendors: 1, contacted: 1, quoted: 0 },
+    progress: { vendors: 1, companies: 1, contacted: 1, quoted: 0 },
     facts: {
       material: "steel parts",
       quantity: 100,
@@ -198,7 +198,7 @@ test("sourcing triage keeps actionable questions beside absence notices", () => 
   };
   const actionable = reduceSourcingProjectStatus({
     key: "order-id",
-    progress: { vendors: 2, contacted: 2, quoted: 0 },
+    progress: { vendors: 2, companies: 2, contacted: 2, quoted: 0 },
     facts: replyFacts,
     threads: threadFacts.filter((thread) => thread.threadId === "actionable"),
   });

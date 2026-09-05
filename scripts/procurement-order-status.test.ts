@@ -72,29 +72,29 @@ test("advanceProcurementOrderStatus swallows database failures", async () => {
 
 test("procurementOrderProgressEventForFacts chooses the furthest persisted fact", () => {
   assert.equal(
-    procurementOrderProgressEventForFacts({ vendors: 1, contacted: 1, quoted: 1 }),
+    procurementOrderProgressEventForFacts({ vendors: 1, companies: 1, contacted: 1, quoted: 1 }),
     "quote_recorded",
   );
   assert.equal(
-    procurementOrderProgressEventForFacts({ vendors: 1, contacted: 1, quoted: 0 }),
+    procurementOrderProgressEventForFacts({ vendors: 1, companies: 1, contacted: 1, quoted: 0 }),
     "rfq_sent",
   );
   assert.equal(
-    procurementOrderProgressEventForFacts({ vendors: 1, contacted: 0, quoted: 0 }),
+    procurementOrderProgressEventForFacts({ vendors: 1, companies: 1, contacted: 0, quoted: 0 }),
     "supplier_discovered",
   );
   assert.equal(
-    procurementOrderProgressEventForFacts({ vendors: 0, contacted: 0, quoted: 0 }),
+    procurementOrderProgressEventForFacts({ vendors: 0, companies: 0, contacted: 0, quoted: 0 }),
     null,
   );
 });
 
 test("reconcileProcurementOrderStatus advances once from persisted facts", async () => {
   for (const [facts, event] of [
-    [{ vendors: 1, contacted: 0, quoted: 0 }, "supplier_discovered"],
-    [{ vendors: 1, contacted: 1, quoted: 0 }, "rfq_sent"],
-    [{ vendors: 1, contacted: 1, quoted: 1 }, "quote_recorded"],
-    [{ vendors: 0, contacted: 0, quoted: 0 }, null],
+    [{ vendors: 1, companies: 1, contacted: 0, quoted: 0 }, "supplier_discovered"],
+    [{ vendors: 1, companies: 1, contacted: 1, quoted: 0 }, "rfq_sent"],
+    [{ vendors: 1, companies: 1, contacted: 1, quoted: 1 }, "quote_recorded"],
+    [{ vendors: 0, companies: 0, contacted: 0, quoted: 0 }, null],
   ] as const) {
     const calls: unknown[] = [];
     const database = {
@@ -140,7 +140,7 @@ test("reconcileProcurementOrderStatus uses recorded send reservations as contact
   }, {
     database: {
       async $queryRawUnsafe() {
-        return [{ vendors: 1, contacted: 0, quoted: 0 }];
+        return [{ vendors: 1, companies: 1, contacted: 0, quoted: 0 }];
       },
     },
     countRecordedSends: async (officeId, orderId) => {
@@ -196,7 +196,7 @@ test("reconcileProcurementOrderStatus swallows recorded reservation failures", a
       }, {
         database: {
           async $queryRawUnsafe() {
-            return [{ vendors: 1, contacted: 0, quoted: 0 }];
+            return [{ vendors: 1, companies: 1, contacted: 0, quoted: 0 }];
           },
         },
         countRecordedSends: async () => {

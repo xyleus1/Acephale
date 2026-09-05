@@ -18,6 +18,7 @@ export type ProcurementOrderProgressEvent =
 
 export type ProcurementOrderProgressFacts = {
   vendors: number;
+  companies: number;
   contacted: number;
   quoted: number;
 };
@@ -115,6 +116,12 @@ export async function loadProcurementOrderProgressFacts(
     const rows = await database.$queryRawUnsafe<Array<ProcurementOrderProgressFacts>>(`
       SELECT
         count(*)::int AS "vendors",
+        count(DISTINCT lower(coalesce(
+          nullif(website, ''),
+          contact_email,
+          email,
+          id::text
+        )))::int AS "companies",
         count(*) FILTER (
           WHERE coalesce(
             NULLIF(to_jsonb(order_vendors)->>'last_email_message_id', ''),
@@ -128,7 +135,7 @@ export async function loadProcurementOrderProgressFacts(
       FROM order_vendors
       WHERE order_vendors.order_id = $1::uuid
     `, args.orderId);
-    const facts = rows[0] ?? { vendors: 0, contacted: 0, quoted: 0 };
+    const facts = rows[0] ?? { vendors: 0, companies: 0, contacted: 0, quoted: 0 };
     const countRecordedSends = dependencies?.countRecordedSends ?? (async (
       officeId: string,
       orderId: string,

@@ -42,10 +42,25 @@ function clockLabel(value: string | null) {
   return parsed.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
+function supplierCompanyKey(vendor: CustomerProcurementRequestDetail["vendors"][number]) {
+  return vendor.website?.trim().toLowerCase()
+    || vendor.contact?.email?.trim().toLowerCase()
+    || vendor.id;
+}
+
+function supplierCompanyCount(vendors: CustomerProcurementRequestDetail["vendors"]) {
+  return new Set(vendors.map(supplierCompanyKey)).size;
+}
+
 function supplierNameLine(vendors: CustomerProcurementRequestDetail["vendors"]) {
   if (!vendors.length) return null;
-  const names = vendors.slice(0, 3).map((vendor) => vendor.name);
-  const remaining = vendors.length - names.length;
+  const companies = new Map<string, string>();
+  for (const vendor of vendors) {
+    const key = supplierCompanyKey(vendor);
+    if (!companies.has(key)) companies.set(key, vendor.name);
+  }
+  const names = [...companies.values()].slice(0, 3);
+  const remaining = companies.size - names.length;
   return remaining > 0 ? `${names.join(", ")} and ${remaining} more` : names.join(", ");
 }
 
@@ -194,7 +209,8 @@ export function CustomerProcurementWorkspace({
 
   const researchSteps = useMemo(() => {
     const claimed = detail.status !== "new";
-    const suppliersFound = customerProcurementResearchComplete(detail.status, detail.vendors.length);
+    const companyCount = supplierCompanyCount(detail.vendors);
+    const suppliersFound = customerProcurementResearchComplete(detail.status, companyCount);
     const contacted = detail.vendors.filter((vendor) => vendor.contacted).length;
     const replied = detail.vendors.filter((vendor) => vendor.responseCount > 0).length;
     const quoted = detail.vendors.filter((vendor) => Boolean(vendor.quote)).length;
@@ -224,7 +240,7 @@ export function CustomerProcurementWorkspace({
       {
         label: "Supplier search",
         detail: suppliersFound
-          ? `${detail.vendors.length} supplier candidate${detail.vendors.length === 1 ? "" : "s"} found`
+          ? `${companyCount} supplier candidate${companyCount === 1 ? "" : "s"} found`
           : claimed
             ? detail.progress?.trim() || "Searching public sources for supplier candidates"
             : "Starts once sourcing begins",

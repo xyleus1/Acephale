@@ -10440,6 +10440,14 @@ Use this file for chronological implementation notes that future agents should s
 
 - Added pure triage-based sourcing escalation counts and thread IDs, then reused the loaded project facts for red-dot indicators in the status strip and selected project row.
 
+## 2026-09-05: Supplier company progress and contact windows
+
+- Added distinct-company progress facts while preserving row-level vendor counts.
+- Sourcing project leads and customer supplier search labels now represent
+  distinct companies, including deduplicated supplier names.
+- Multi-contact qualification continues through the bounded site email list
+  until the requested number of deliverable contacts is accepted.
+
 ## 2026-09-05: Needs-you target and inbound notice follow-ups
 
 - Project status callbacks now carry the loaded project's kind and key, keeping

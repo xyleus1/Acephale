@@ -44,6 +44,10 @@ const MULTI_CONTACT_HOME = [
   "We support export documentation and worldwide shipping for industrial customers.",
   "Contact sales@hydraulic.example, rfq@hydraulic.example, info@hydraulic.example, and ops@hydraulic.example.",
 ].join(" ").padEnd(600, " ");
+const TOP_UP_CONTACT_HOME = MULTI_CONTACT_HOME.replace(
+  "sales@hydraulic.example, rfq@hydraulic.example, info@hydraulic.example, and ops@hydraulic.example",
+  "quotes@topup.example, sales@topup.example, info@topup.example, ops@topup.example, and engineering@topup.example",
+).replace("Hydraulic Fittings Factory", "Top Up Fittings Factory");
 
 async function main() {
   const sourcingSource = readFileSync(
@@ -490,6 +494,49 @@ async function main() {
   });
   assert.equal(singleContact.added, 1);
   assert.equal(singleContact.contactsAdded, 1);
+
+  const topUpInserted: string[] = [];
+  const topUpVerified: string[] = [];
+  const topUpVerify = async (email: string) => {
+    topUpVerified.push(email);
+    return {
+      email,
+      verdict: email === "quotes@topup.example" ? "risky" as const : "deliverable_likely" as const,
+      confidence: 0.8,
+      hasMx: true,
+      isRole: true,
+      domainMatchesCompany: true,
+      reasons: email === "quotes@topup.example" ? ["risky inbox"] : [],
+    };
+  };
+  const topUpWave = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 5,
+    contactsPerCompany: 4,
+    proposers: [{
+      name: "top-up",
+      propose: async () => [{ domain: "topup.example", url: "https://topup.example/", via: "test" }],
+    }] as never,
+    fetchPage: (async (url: string) => (
+      url === "https://topup.example/" ? page(url, TOP_UP_CONTACT_HOME) : null
+    )) as never,
+    verify: topUpVerify as never,
+    loadOrder: (async () => derivedOrder) as never,
+    loadExistingKeys: (async () => ({ domains: new Map<string, number>(), emails: new Set<string>() })) as never,
+    insertVendor: (async (args: { contactEmail: string }) => {
+      topUpInserted.push(args.contactEmail);
+      return `top-up-vendor-${topUpInserted.length}`;
+    }) as never,
+  });
+  assert.equal(topUpWave.added, 1);
+  assert.equal(topUpWave.contactsAdded, 4);
+  assert.equal(topUpVerified.length, 5);
+  assert.deepEqual([...topUpInserted].sort(), [
+    "sales@topup.example",
+    "info@topup.example",
+    "ops@topup.example",
+    "engineering@topup.example",
+  ].sort());
   await assert.rejects(
     runProcurementSupplierSourcingWave({
       orderId: order.orderId,

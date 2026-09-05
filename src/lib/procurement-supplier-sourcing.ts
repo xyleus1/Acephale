@@ -623,7 +623,7 @@ export async function runProcurementSupplierSourcingWave(input: {
       const accepted: Array<{ email: string; verification: EmailVerification }> = [];
       const domainCount = seenDomains.get(site.domain) ?? 0;
       const remainingContacts = Math.max(0, contactsPerCompany - domainCount);
-      for (const email of site.emails.slice(0, Math.max(4, remainingContacts))) {
+      for (const email of site.emails.slice(0, 12)) {
         if (accepted.length >= remainingContacts) break;
         if (usedEmails.has(email)) continue;
         let verification: EmailVerification;
