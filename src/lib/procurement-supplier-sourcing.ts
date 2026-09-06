@@ -374,7 +374,7 @@ async function insertSourcedVendor(args: {
         WHERE NOT EXISTS (
           SELECT 1 FROM order_vendors existing
           WHERE existing.order_id = $3::uuid
-            AND lower(coalesce(existing.contact_email, existing.email, '')) = lower($6)
+            AND lower(coalesce(existing.contact_email, to_jsonb(existing)->>'email', '')) = lower($6)
         )
         AND (
           SELECT count(*)
@@ -623,7 +623,7 @@ export async function runProcurementSupplierSourcingWave(input: {
       const accepted: Array<{ email: string; verification: EmailVerification }> = [];
       const domainCount = seenDomains.get(site.domain) ?? 0;
       const remainingContacts = Math.max(0, contactsPerCompany - domainCount);
-      for (const email of site.emails.slice(0, 12)) {
+      for (const email of site.emails.slice(0, Math.max(12, remainingContacts * 3))) {
         if (accepted.length >= remainingContacts) break;
         if (usedEmails.has(email)) continue;
         let verification: EmailVerification;

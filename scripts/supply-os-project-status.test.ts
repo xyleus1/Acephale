@@ -10,6 +10,7 @@ import {
   storedQuoteGoalFromJobs,
 } from "../src/lib/supply-os/project-status";
 import { OTHER_PROJECT } from "../src/lib/supply-os/prospect-project";
+import { customerProcurementSupplierCompanyKey } from "../src/lib/supply-os/customer-procurement-status";
 
 test("positive reply heuristic accepts useful supplier intent", () => {
   assert.equal(isPositiveReply("We are interested. Let's schedule a call."), true);
@@ -21,6 +22,65 @@ test("positive reply heuristic rejects negative intent", () => {
   assert.equal(isPositiveReply("We are interested, but not interested in this service."), false);
   assert.equal(isPositiveReply("No thanks, please remove me."), false);
   assert.equal(isPositiveReply("unsubscribe"), false);
+});
+
+test("supplier company identity uses registrable domains", () => {
+  assert.equal(customerProcurementSupplierCompanyKey({
+    id: "vendor-1",
+    website: null,
+    contact: { email: "buyer@acme.com" },
+  }), "acme.com");
+  assert.notEqual(customerProcurementSupplierCompanyKey({
+    id: "gmail-1",
+    website: null,
+    contact: { email: "one@gmail.com" },
+  }), customerProcurementSupplierCompanyKey({
+    id: "gmail-2",
+    website: null,
+    contact: { email: "two@gmail.com" },
+  }));
+  assert.notEqual(customerProcurementSupplierCompanyKey({
+    id: "yahoo-uk-1",
+    website: null,
+    contact: { email: "one@yahoo.co.uk" },
+  }), customerProcurementSupplierCompanyKey({
+    id: "yahoo-uk-2",
+    website: null,
+    contact: { email: "two@yahoo.co.uk" },
+  }));
+  assert.equal(customerProcurementSupplierCompanyKey({
+    id: "mail-tr-1",
+    website: null,
+    contact: { email: "one@mail.com.tr" },
+  }), customerProcurementSupplierCompanyKey({
+    id: "mail-tr-2",
+    website: null,
+    contact: { email: "two@mail.com.tr" },
+  }));
+  assert.equal(customerProcurementSupplierCompanyKey({
+    id: "acme-shop",
+    website: "https://shop.acme.com",
+    contact: null,
+  }), customerProcurementSupplierCompanyKey({
+    id: "acme-www",
+    website: "https://www.acme.com",
+    contact: null,
+  }));
+  assert.equal(customerProcurementSupplierCompanyKey({
+    id: "vendor-2",
+    website: null,
+    contact: { email: "sales@acme.com" },
+  }), "acme.com");
+  assert.equal(customerProcurementSupplierCompanyKey({
+    id: "vendor-3",
+    website: "https://acme.com/",
+    contact: null,
+  }), "acme.com");
+  assert.equal(customerProcurementSupplierCompanyKey({
+    id: "vendor-4",
+    website: "http://www.acme.com/contact",
+    contact: null,
+  }), "acme.com");
 });
 
 test("sourcing quote goal matches the source workspace", () => {

@@ -10456,3 +10456,12 @@ Use this file for chronological implementation notes that future agents should s
 - Latest sourcing inbound selection reuses shared absence-notice semantics,
   preserving actionable questions and bounce escalation while excluding pure
   out-of-office notices.
+
+## 2026-09-05: Registrable supplier company keys
+
+- Normalized supplier company identity to registrable domains in progress SQL
+  and customer procurement summaries.
+- Expanded multi-contact email inspection to `max(12, remainingContacts * 3)`
+  and covered a 15-contact company plan.
+- Shared company-key logic now preserves separate identities for free-mail and
+  disposable-provider contacts while merging website variants.

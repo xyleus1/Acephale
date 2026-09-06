@@ -1,7 +1,11 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { procurementWorkflowDatabase } from "@/lib/procurement-workflow";
+import {
+  procurementWorkflowDatabase,
+  vendorIdentitySql,
+} from "@/lib/procurement-workflow";
+import { supplierCompanyKey } from "@/lib/leadgen/extract";
 
 // The lifecycle status of a sourcing request used to be written only by the
 // external procurement worker, so a request the application sourced itself sat
@@ -21,6 +25,16 @@ export type ProcurementOrderProgressFacts = {
   companies: number;
   contacted: number;
   quoted: number;
+};
+
+type ProcurementOrderProgressQueryRow = Omit<ProcurementOrderProgressFacts, "companies"> & {
+  companies?: number;
+  companyRows?: Array<{
+    id: string;
+    website: string | null;
+    contact_email: string | null;
+    email: string | null;
+  }> | null;
 };
 
 export const PROCUREMENT_ORDER_STATUS_LADDER: Record<string, number> = {
@@ -113,15 +127,9 @@ export async function loadProcurementOrderProgressFacts(
 ): Promise<ProcurementOrderProgressFacts | null> {
   try {
     const database = dependencies?.database ?? procurementWorkflowDatabase();
-    const rows = await database.$queryRawUnsafe<Array<ProcurementOrderProgressFacts>>(`
+    const rows = await database.$queryRawUnsafe<Array<ProcurementOrderProgressQueryRow>>(`
       SELECT
         count(*)::int AS "vendors",
-        count(DISTINCT lower(coalesce(
-          nullif(website, ''),
-          contact_email,
-          email,
-          id::text
-        )))::int AS "companies",
         count(*) FILTER (
           WHERE coalesce(
             NULLIF(to_jsonb(order_vendors)->>'last_email_message_id', ''),
@@ -131,11 +139,30 @@ export async function loadProcurementOrderProgressFacts(
         count(*) FILTER (
           WHERE jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
             AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
-        )::int AS "quoted"
+        )::int AS "quoted",
+        json_agg(json_build_object(
+          'id', id,
+          'website', ${vendorIdentitySql("website")},
+          'contact_email', contact_email,
+          'email', ${vendorIdentitySql("email")}
+        )) AS "companyRows"
       FROM order_vendors
       WHERE order_vendors.order_id = $1::uuid
     `, args.orderId);
-    const facts = rows[0] ?? { vendors: 0, companies: 0, contacted: 0, quoted: 0 };
+    const row = rows[0];
+    const companies = row?.companyRows
+      ? new Set(row.companyRows.map((vendor) => supplierCompanyKey({
+        id: vendor.id,
+        website: vendor.website,
+        email: vendor.contact_email || vendor.email,
+      }))).size
+      : row?.companies ?? 0;
+    const facts: ProcurementOrderProgressFacts = {
+      vendors: row?.vendors ?? 0,
+      companies,
+      contacted: row?.contacted ?? 0,
+      quoted: row?.quoted ?? 0,
+    };
     const countRecordedSends = dependencies?.countRecordedSends ?? (async (
       officeId: string,
       orderId: string,

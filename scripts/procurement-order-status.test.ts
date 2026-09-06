@@ -1,13 +1,86 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import {
   advanceProcurementOrderStatus,
+  loadProcurementOrderProgressFacts,
   nextProcurementOrderStatus,
   procurementOrderProgressEventForFacts,
   reconcileProcurementOrderStatus,
 } from "../src/lib/procurement-order-status";
 import { procurementResearchMode } from "../src/lib/procurement-research-mode";
+
+test("progress company count derives shared company identity in SQL", () => {
+  const source = readFileSync("src/lib/procurement-order-status.ts", "utf8");
+  const workflowSource = readFileSync("src/lib/procurement-workflow.ts", "utf8");
+  assert.ok(source.includes("json_agg(json_build_object("));
+  assert.ok(source.includes('vendorIdentitySql("website")'));
+  assert.ok(source.includes('vendorIdentitySql("email")'));
+  assert.ok(workflowSource.includes("vendor_website"));
+  assert.ok(workflowSource.includes("->'contact'->>'email'"));
+  assert.ok(source.includes("supplierCompanyKey({"));
+});
+
+test("progress facts separate free-mail suppliers and merge website variants", async () => {
+  const database = {
+    async $queryRawUnsafe<T>() {
+      return [{
+        vendors: 4,
+        contacted: 0,
+        quoted: 0,
+        companyRows: [
+          { id: "gmail-1", website: null, contact_email: "one@gmail.com", email: null },
+          { id: "gmail-2", website: null, contact_email: "two@gmail.com", email: null },
+          { id: "acme-shop", website: "https://shop.acme.com", contact_email: null, email: null },
+          { id: "acme-www", website: "https://www.acme.com", contact_email: null, email: null },
+        ],
+      }] as T;
+    },
+  };
+  const facts = await loadProcurementOrderProgressFacts({
+    orderId: "order-id",
+    officeId: "office-id",
+  }, {
+    database,
+    countRecordedSends: async () => 0,
+  });
+  assert.deepEqual(facts, {
+    vendors: 4,
+    companies: 3,
+    contacted: 0,
+    quoted: 0,
+  });
+});
+
+test("progress facts merge legacy identity fallbacks with canonical domains", async () => {
+  const database = {
+    async $queryRawUnsafe<T>() {
+      return [{
+        vendors: 2,
+        contacted: 0,
+        quoted: 0,
+        companyRows: [
+          { id: "legacy-acme", website: "https://legacy.acme.com", contact_email: null, email: "legacy@acme.com" },
+          { id: "canonical-acme", website: "https://www.acme.com", contact_email: null, email: null },
+        ],
+      }] as T;
+    },
+  };
+  const facts = await loadProcurementOrderProgressFacts({
+    orderId: "order-id",
+    officeId: "office-id",
+  }, {
+    database,
+    countRecordedSends: async () => 0,
+  });
+  assert.deepEqual(facts, {
+    vendors: 2,
+    companies: 1,
+    contacted: 0,
+    quoted: 0,
+  });
+});
 
 test("nextProcurementOrderStatus advances only along the sourcing ladder", () => {
   assert.equal(nextProcurementOrderStatus("new", "supplier_discovered"), "researching");

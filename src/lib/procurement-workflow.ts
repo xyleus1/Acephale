@@ -255,6 +255,26 @@ async function procurementCommunicationLedgerAvailable(database: RawDatabase) {
   }
 }
 
+export function vendorIdentitySql(field: "website" | "email") {
+  if (field === "website") {
+    return `COALESCE(
+      to_jsonb(order_vendors)->>'website',
+      to_jsonb(order_vendors)->>'vendor_website',
+      to_jsonb(order_vendors)->'identity'->>'website'
+    )`;
+  }
+  return `COALESCE(
+    to_jsonb(order_vendors)->>'contact_email',
+    to_jsonb(order_vendors)->'contact'->>'email',
+    to_jsonb(order_vendors)->'identity'->>'contact_email',
+    to_jsonb(order_vendors)->'identity'->>'email',
+    to_jsonb(order_vendors)->'research'->>'contact_email',
+    to_jsonb(order_vendors)->'research'->'contact'->>'email',
+    to_jsonb(order_vendors)->'research'->'identity'->>'email',
+    to_jsonb(order_vendors)->>'email'
+  )`;
+}
+
 function vendorContactEmailSql(ledgerAvailable: boolean) {
   const ledgerFallback = ledgerAvailable ? `,
     (
@@ -267,13 +287,7 @@ function vendorContactEmailSql(ledgerAvailable: boolean) {
       LIMIT 1
     )` : "";
   return `COALESCE(
-    to_jsonb(order_vendors)->>'contact_email',
-    to_jsonb(order_vendors)->'contact'->>'email',
-    to_jsonb(order_vendors)->'identity'->>'contact_email',
-    to_jsonb(order_vendors)->'identity'->>'email',
-    to_jsonb(order_vendors)->'research'->>'contact_email',
-    to_jsonb(order_vendors)->'research'->'contact'->>'email',
-    to_jsonb(order_vendors)->'research'->'identity'->>'email'
+    ${vendorIdentitySql("email")}
     ${ledgerFallback}
   )`;
 }

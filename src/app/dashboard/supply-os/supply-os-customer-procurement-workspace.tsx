@@ -26,6 +26,7 @@ import {
   customerProcurementPublicPriceSummary,
   customerProcurementQuoteSummary,
   customerProcurementResearchComplete,
+  customerProcurementSupplierCompanyKey,
   customerProcurementVendorStateLabel,
   startCustomerProcurementPolling,
   type CustomerProcurementOrderState,
@@ -43,9 +44,7 @@ function clockLabel(value: string | null) {
 }
 
 function supplierCompanyKey(vendor: CustomerProcurementRequestDetail["vendors"][number]) {
-  return vendor.website?.trim().toLowerCase()
-    || vendor.contact?.email?.trim().toLowerCase()
-    || vendor.id;
+  return customerProcurementSupplierCompanyKey(vendor);
 }
 
 function supplierCompanyCount(vendors: CustomerProcurementRequestDetail["vendors"]) {

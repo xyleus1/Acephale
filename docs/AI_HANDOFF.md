@@ -12951,7 +12951,16 @@ Verification caveat:
 ## 2026-09-05: Needs-you target and inbound notice follow-ups
 
 - Status facts now retain the kind and key of the project actually loaded, so
- project-row indicators follow the status target even when no project is selected.
+  project-row indicators follow the status target even when no project is selected.
 - Needs-you navigation selects that loaded project before opening Messages.
 - Sourcing status ignores pure out-of-office notices while retaining actionable
-  replies and bounce reports for deterministic triage.
+ replies and bounce reports for deterministic triage.
+
+## 2026-09-05: Registrable supplier company keys
+
+- Supplier progress and customer procurement summaries now group contacts by
+  registrable domain, including website URL variants and email-only contacts.
+- Multi-contact waves scale their bounded email scan with the requested company
+  quota so larger approved contact plans can be filled.
+- Free-mail and disposable domains now fall back to vendor identity, preventing
+  unrelated website-less suppliers from collapsing into one company.

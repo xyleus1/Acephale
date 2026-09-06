@@ -182,6 +182,21 @@ export function emailDomain(email: string) {
   return email.split("@")[1]?.toLowerCase() ?? "";
 }
 
+export const FREE_PROVIDERS = new Set([
+  "gmail.com", "googlemail.com", "hotmail.com", "hotmail.co.uk", "hotmail.fr", "hotmail.de",
+  "hotmail.it", "hotmail.com.tr", "outlook.com", "outlook.co.uk", "outlook.fr", "outlook.de",
+  "outlook.com.tr", "yahoo.com", "yahoo.co.uk", "yahoo.fr", "yahoo.de", "yahoo.it", "yahoo.es",
+  "yahoo.com.tr", "ymail.com", "rocketmail.com", "yandex.com", "yandex.com.tr", "yandex.ru", "mynet.com", "windowslive.com",
+  "icloud.com", "me.com", "live.com", "live.co.uk", "live.fr", "live.de", "msn.com",
+  "superonline.com", "ttmail.com", "mail.ru", "mail.com", "gmx.com", "gmx.de", "gmx.net",
+  "web.de", "aol.com", "protonmail.com", "proton.me", "zoho.com", "qq.com", "163.com", "126.com",
+]);
+
+export const DISPOSABLE_PROVIDERS = new Set([
+  "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com", "yopmail.com",
+  "sharklasers.com", "trashmail.com", "getnada.com", "temp-mail.org",
+]);
+
 // Second-level labels that country registries hand out registrations under
 // (com.au, co.uk, com.tr, co.jp, ...). Applied only beneath a two-letter
 // country code, so alpha.com.au and beta.com.au are two organisations while
@@ -222,6 +237,24 @@ export function registrableDomain(hostOrUrl: string) {
   const keep = publicSuffixLength(parts) + 1;
   if (parts.length <= keep) return parts.join(".");
   return parts.slice(-keep).join(".");
+}
+
+export function supplierCompanyKey(input: {
+  id: string;
+  website?: string | null;
+  email?: string | null;
+}) {
+  const websiteDomain = input.website ? registrableDomain(input.website) : "";
+  if (websiteDomain) return websiteDomain;
+  const domain = emailDomain(input.email ?? "");
+  const companyDomain = registrableDomain(domain);
+  if (
+    !companyDomain
+    || FREE_PROVIDERS.has(domain)
+    || FREE_PROVIDERS.has(companyDomain)
+    || DISPOSABLE_PROVIDERS.has(domain)
+  ) return input.id;
+  return companyDomain;
 }
 
 /** Pull absolute and relative links out of raw HTML, resolved against baseUrl. */

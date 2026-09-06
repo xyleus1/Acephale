@@ -67,6 +67,7 @@ assert.equal(isRoleAddress("Sales.Team@acme.eu"), true);
 assert.equal(isRoleAddress("no-reply@acme.eu"), true);
 assert.equal(isRoleAddress("jane.doe@acme.eu"), false);
 assert.equal(isFreeMailAddress("someone@gmail.com"), true);
+assert.equal(isFreeMailAddress("someone@yahoo.co.uk"), true);
 assert.equal(isFreeMailAddress("someone@acme.eu"), false);
 
 const clean = summarizeRecipientQuality(audience);

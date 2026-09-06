@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { FREE_PROVIDERS } from "@/lib/leadgen/extract";
 
 // Review helpers for approving one batch of outbound mail at a time instead of
 // one recipient at a time. Everything here is pure so the outreach campaign
@@ -22,13 +23,6 @@ const ROLE_MAILBOXES = new Set([
   "purchasing", "procurement", "team", "general", "webmaster", "postmaster", "noreply",
   "no-reply", "service", "customerservice", "reception", "accounts", "billing", "hr", "jobs",
   "careers", "press", "media", "privacy", "legal", "abuse", "security",
-]);
-
-const FREE_MAIL_DOMAINS = new Set([
-  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "yahoo.fr", "yahoo.de", "hotmail.com",
-  "hotmail.co.uk", "hotmail.fr", "hotmail.de", "outlook.com", "live.com", "msn.com", "aol.com",
-  "icloud.com", "me.com", "mail.com", "gmx.com", "gmx.de", "gmx.net", "web.de", "yandex.com",
-  "yandex.ru", "mail.ru", "protonmail.com", "proton.me", "zoho.com", "qq.com", "163.com", "126.com",
 ]);
 
 function stableFraction(seed: string, index: number) {
@@ -94,7 +88,7 @@ export function isRoleAddress(email: string) {
 
 export function isFreeMailAddress(email: string) {
   const domain = normalizeEmail(email).split("@")[1] ?? "";
-  return FREE_MAIL_DOMAINS.has(domain);
+  return FREE_PROVIDERS.has(domain);
 }
 
 export function summarizeRecipientQuality(

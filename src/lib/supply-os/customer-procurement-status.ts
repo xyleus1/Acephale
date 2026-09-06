@@ -1,4 +1,5 @@
 import { PROCUREMENT_POLLING_STATUSES } from "@/lib/procurement-status";
+import { supplierCompanyKey } from "@/lib/leadgen/extract";
 
 export const CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS = 7_000;
 
@@ -21,6 +22,16 @@ export type CustomerProcurementVendor = {
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;
 };
+
+export function customerProcurementSupplierCompanyKey(
+  vendor: Pick<CustomerProcurementVendor, "id" | "website" | "contact">,
+) {
+  return supplierCompanyKey({
+    id: vendor.id,
+    website: vendor.website,
+    email: vendor.contact?.email,
+  });
+}
 
 export type CustomerProcurementOrderState = {
   orderId: string | null;

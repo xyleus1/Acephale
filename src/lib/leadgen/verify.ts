@@ -8,7 +8,15 @@
 
 import { promises as dns } from "node:dns";
 import { createBouncerVerifier, fetchBouncerCredits } from "./bouncer";
-import { emailDomain, isRoleEmail, registrableDomain } from "./extract";
+import {
+  DISPOSABLE_PROVIDERS,
+  emailDomain,
+  FREE_PROVIDERS,
+  isRoleEmail,
+  registrableDomain,
+} from "./extract";
+
+export { DISPOSABLE_PROVIDERS, FREE_PROVIDERS } from "./extract";
 
 export type EmailVerdict = "deliverable_likely" | "risky" | "undeliverable" | "unknown";
 
@@ -67,17 +75,6 @@ export function emailSyntaxValid(email: string) {
   const normalized = email.trim();
   return normalized.length <= 254 && normalized.indexOf("@") <= 64 && EMAIL_SYNTAX.test(normalized);
 }
-
-export const FREE_PROVIDERS = new Set([
-  "gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "yandex.com", "yandex.com.tr",
-  "mynet.com", "windowslive.com", "icloud.com", "live.com", "msn.com", "superonline.com",
-  "ttmail.com", "mail.ru", "gmx.com", "aol.com",
-]);
-
-export const DISPOSABLE_PROVIDERS = new Set([
-  "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com", "yopmail.com",
-  "sharklasers.com", "trashmail.com", "getnada.com", "temp-mail.org",
-]);
 
 export const PLACEHOLDER_LOCAL_PARTS = new Set([
   "email", "eposta", "mail", "adres", "ornek", "example", "test", "yourname", "isim",

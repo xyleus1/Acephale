@@ -48,13 +48,20 @@ const TOP_UP_CONTACT_HOME = MULTI_CONTACT_HOME.replace(
   "sales@hydraulic.example, rfq@hydraulic.example, info@hydraulic.example, and ops@hydraulic.example",
   "quotes@topup.example, sales@topup.example, info@topup.example, ops@topup.example, and engineering@topup.example",
 ).replace("Hydraulic Fittings Factory", "Top Up Fittings Factory");
+const LARGE_CONTACT_HOME = [
+  "Large Contact Fittings Factory manufactures stainless steel hydraulic fittings and tube adapters.",
+  "Our OEM production facility is an ISO 9001 certified contract manufacturer.",
+  "Request a quote for prototypes, production runs, capacity planning, and lead time.",
+  "We support export documentation and worldwide shipping for industrial customers.",
+  `Contact ${Array.from({ length: 15 }, (_, index) => `contact${index + 1}@large.example`).join(", ")}.`,
+].join(" ").padEnd(600, " ");
 
 async function main() {
   const sourcingSource = readFileSync(
     new URL("../src/lib/procurement-supplier-sourcing.ts", import.meta.url),
     "utf8",
   );
-  assert.match(sourcingSource, /lower\(coalesce\(existing\.contact_email, existing\.email, ''\)\) = lower\(\$6\)/);
+  assert.match(sourcingSource, /lower\(coalesce\(existing\.contact_email, to_jsonb\(existing\)->>'email', ''\)\) = lower\(\$6\)/);
   assert.match(sourcingSource, /pg_advisory_xact_lock\(hashtext\(\$1\)\)/);
   assert.match(sourcingSource, /SELECT count\(\*\)[\s\S]*e2\.website ~\* \('\(\^\|\[\.\/@\]\)' \|\| \$8 \|\| '\(\[\/:\?#\]\|\$\)'\)[\s\S]*< \$9::int/);
   assert.match(sourcingSource, /registrableDomain\(args\.site\.domain\)/);
@@ -537,6 +544,30 @@ async function main() {
     "ops@topup.example",
     "engineering@topup.example",
   ].sort());
+
+  const largeInserted: string[] = [];
+  const largeWave = await runProcurementSupplierSourcingWave({
+    orderId: order.orderId,
+    target: 5,
+    contactsPerCompany: 15,
+    proposers: [{
+      name: "large-contact",
+      propose: async () => [{ domain: "large.example", url: "https://large.example/", via: "test" }],
+    }] as never,
+    fetchPage: (async (url: string) => (
+      url === "https://large.example/" ? page(url, LARGE_CONTACT_HOME) : null
+    )) as never,
+    verify: verify as never,
+    loadOrder: (async () => derivedOrder) as never,
+    loadExistingKeys: (async () => ({ domains: new Map<string, number>(), emails: new Set<string>() })) as never,
+    insertVendor: (async (args: { contactEmail: string }) => {
+      largeInserted.push(args.contactEmail);
+      return `large-vendor-${largeInserted.length}`;
+    }) as never,
+  });
+  assert.equal(largeWave.added, 1);
+  assert.equal(largeWave.contactsAdded, 15);
+  assert.equal(largeInserted.length, 15);
   await assert.rejects(
     runProcurementSupplierSourcingWave({
       orderId: order.orderId,
