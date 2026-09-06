@@ -56,6 +56,7 @@ export function SupplyOsOperatingShell({
   allowedWorkspaceIds,
   initialWorkspaceId,
   initialMaterialsView,
+  initialProjectTab,
   initialProject,
   initialResearchListSlug,
   initialResearchQuery,
@@ -78,6 +79,7 @@ export function SupplyOsOperatingShell({
   allowedWorkspaceIds?: string[];
   initialWorkspaceId?: string;
   initialMaterialsView?: "projects" | "messages";
+  initialProjectTab?: "messages";
   initialProject?: SupplyProjectSelection;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -326,6 +328,7 @@ export function SupplyOsOperatingShell({
                     (canViewWholeOffice || accountRole === "ADMIN" || accountRole === "MANAGER")
                   }
                   initialMaterialsView={initialMaterialsView}
+                  initialProjectTab={initialProjectTab}
                   initialProject={initialProject}
                   initialResearchListSlug={initialResearchListSlug}
                   initialResearchQuery={initialResearchQuery}

@@ -3543,7 +3543,11 @@ model OutreachCampaignReply {
   draft             String?
   sentMessageId     String?
   providerMessageId String?
+  rfcMessageId     String?
+  reservationId     String?
   sentAt            DateTime?
+  claimedAt        DateTime?
+  pendingAt        DateTime?
   createdAt         DateTime @default(now())
 
   office   Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)

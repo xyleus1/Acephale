@@ -334,6 +334,7 @@ export async function POST(request: NextRequest) {
     if (action === "auto-replies") {
       const result = await runOutreachCampaignAutoReplies({
         campaignId,
+        officeId: office.id,
         limit: typeof body?.limit === "number" ? body.limit : 25,
       });
       return NextResponse.json(result);

@@ -124,6 +124,7 @@ function timeAgo(value: string | null) {
 
 export function SupplyInventoryWorkspace({
   activeView,
+  initialProjectTab,
   onViewChange,
   selectedSku,
   items = [],
@@ -169,6 +170,7 @@ export function SupplyInventoryWorkspace({
   initialResearchPage,
 }: {
   activeView: SupplyInventoryWorkspaceView;
+  initialProjectTab?: "messages";
   onViewChange: (view: SupplyInventoryWorkspaceView) => void;
   selectedSku: string;
   items?: SupplyInventoryItem[];
@@ -245,7 +247,7 @@ export function SupplyInventoryWorkspace({
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
   const [projectSection, setProjectSection] = useState<"leads" | "messages" | "replies">(
-    activeView === "messages" ? "messages" : "leads",
+    initialProjectTab === "messages" || activeView === "messages" ? "messages" : "leads",
   );
   const [leadReport, setLeadReport] = useState<LeadPipelineReport | null>(null);
   const [projectStatusFacts, setProjectStatusFacts] = useState<ProjectStatusFactsTarget | null>(null);
@@ -485,8 +487,8 @@ export function SupplyInventoryWorkspace({
     setLeadStatusStage("all");
     setLeadStatusQuery("");
     setLeadStatusFilterNonce((nonce) => nonce + 1);
-    setProjectSection(activeViewRef.current === "messages" ? "messages" : "leads");
-  }, [selectedProject?.key, selectedProject?.kind]);
+    setProjectSection(initialProjectTab === "messages" || activeViewRef.current === "messages" ? "messages" : "leads");
+  }, [initialProjectTab, selectedProject?.key, selectedProject?.kind]);
   useEffect(() => {
     if (!selectedProject || selectedProject.kind !== "sourcing") return;
     const row = document.querySelector<HTMLElement>('[data-project-active="true"]');

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { listCampaignSummaries } from "@/lib/outreach-campaigns";
-import { prisma } from "@/lib/prisma";
 import { ActiveCampaignControls } from "@/components/active-campaign-controls";
 import styles from "./active-campaign-banner.module.css";
 
@@ -10,15 +9,6 @@ export async function ActiveCampaignBanner() {
   if (session.accessKind === "customer" || session.role === "EMPLOYEE") return null;
   const campaigns = await listCampaignSummaries(session.officeId, ["ACTIVE", "PAUSED"]);
   if (campaigns.length === 0) return null;
-  const companyIds = [...new Set(campaigns.map((campaign) => campaign.list.companyId).filter((id): id is string => Boolean(id)))];
-  const workspaces = companyIds.length
-    ? await prisma.supplyWorkspace.findMany({
-        where: { officeId: session.officeId, companyId: { in: companyIds }, status: "ACTIVE" },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, companyId: true },
-      })
-    : [];
-  const workspaceByCompanyId = new Map(workspaces.map((workspace) => [workspace.companyId, workspace.id]));
 
   return (
     <section className={styles.banner} aria-label="Outreach campaigns">
@@ -30,7 +20,7 @@ export async function ActiveCampaignBanner() {
             <div className={styles.value}>
               <Link
                 href={campaign.list.projectId
-                  ? `/dashboard/supply-os?materialsView=projects&project=prospecting:${campaign.list.projectId}${workspaceByCompanyId.get(campaign.list.companyId) ? `&workspaceId=${encodeURIComponent(workspaceByCompanyId.get(campaign.list.companyId) as string)}` : ""}`
+                  ? `/dashboard/supply-os?materialsView=projects&project=prospecting:${campaign.list.projectId}${campaign.list.workspaceId ? `&workspace=${encodeURIComponent(campaign.list.workspaceId)}` : ""}`
                   : "/dashboard/supply-os?materialsView=projects"}
               >
                 {campaign.name}
@@ -66,7 +56,7 @@ export async function ActiveCampaignBanner() {
                   <div key={reply.threadId}>
                     {reply.intent.toLowerCase()} · {reply.reason ?? "needs review"}{reply.draft ? ` · ${reply.draft.slice(0, 120)}` : ""}
                     {" "}
-                    <Link href={`/dashboard/supply-os?materialsView=mail${campaign.list.projectId ? `&project=prospecting:${campaign.list.projectId}` : ""}&threadId=${encodeURIComponent(reply.threadId)}`}>
+                    <Link href={`/dashboard/supply-os?materialsView=messages&projectTab=messages${campaign.list.projectId ? `&project=prospecting:${campaign.list.projectId}` : ""}${campaign.list.workspaceId ? `&workspace=${encodeURIComponent(campaign.list.workspaceId)}` : ""}&threadId=${encodeURIComponent(reply.threadId)}`}>
                       Open thread
                     </Link>
                   </div>

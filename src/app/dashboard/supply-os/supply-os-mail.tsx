@@ -73,8 +73,10 @@ export function SupplyOsMail({ researchProjectId }: { researchProjectId: string 
   const [detailError, setDetailError] = useState("");
   const activeSearchRef = useRef("");
   const listRequestIdRef = useRef(0);
+  const listReplacementRef = useRef(0);
   const detailRequestIdRef = useRef(0);
   const loadingCursorsRef = useRef(new Set<string>());
+  const initialThreadHandledRef = useRef(false);
 
   const loadThreads = useCallback(async (
     query: string,
@@ -86,6 +88,7 @@ export function SupplyOsMail({ researchProjectId }: { researchProjectId: string 
     if (append && appendCursor === null) return;
     if (appendCursor !== null && loadingCursorsRef.current.has(appendCursor)) return;
     const requestId = ++listRequestIdRef.current;
+    if (!append) listReplacementRef.current += 1;
     if (appendCursor !== null) {
       loadingCursorsRef.current.add(appendCursor);
       setAppendLoading(true);
@@ -168,15 +171,52 @@ export function SupplyOsMail({ researchProjectId }: { researchProjectId: string 
   }, [expandedId, researchProjectId]);
 
   useEffect(() => {
-    if (!initialThreadId || state !== "ready" || expandedId || !threads.length) return;
+    if (!initialThreadId || state !== "ready" || expandedId || initialThreadHandledRef.current) return;
+    initialThreadHandledRef.current = true;
     const thread = threads.find((candidate) => candidate.id === initialThreadId);
-    if (thread) void openThread(thread);
-  }, [expandedId, initialThreadId, openThread, state, threads]);
+    if (thread) {
+      void openThread(thread);
+      return;
+    }
+    const requestId = ++detailRequestIdRef.current;
+    const listReplacementId = listReplacementRef.current;
+    setExpandedId(initialThreadId);
+    setDetail(null);
+    setDetailState("loading");
+    setDetailError("");
+    void (async () => {
+      try {
+        const response = await fetch(`/api/supply-os/mail/${encodeURIComponent(initialThreadId)}?researchProjectId=${encodeURIComponent(researchProjectId)}`, {
+          cache: "no-store",
+          headers: { accept: "application/json" },
+        });
+        const body = await response.json().catch(() => ({})) as MailThreadDetail & { error?: string };
+        if (!response.ok) throw new Error(body.error || "Mail thread is unavailable.");
+        if (requestId !== detailRequestIdRef.current || listReplacementId !== listReplacementRef.current) {
+          if (requestId === detailRequestIdRef.current) {
+            setExpandedId(null);
+            setDetail(null);
+            setDetailState("idle");
+          }
+          return;
+        }
+        setThreads((current) => current.some((candidate) => candidate.id === body.id) ? current : [body, ...current]);
+        setDetail(body);
+        setDetailState("idle");
+      } catch {
+        if (requestId !== detailRequestIdRef.current) return;
+        setExpandedId(null);
+        setDetail(null);
+        setDetailState("idle");
+      }
+    })();
+  }, [expandedId, initialThreadId, openThread, researchProjectId, state, threads]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = search.trim();
     activeSearchRef.current = query;
+    detailRequestIdRef.current += 1;
     setExpandedId(null);
     setDetail(null);
     void loadThreads(query);

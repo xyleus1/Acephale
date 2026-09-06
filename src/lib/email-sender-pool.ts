@@ -120,6 +120,7 @@ type ReservedSender = {
 
 type SenderPoolFailure = {
   error: string;
+  reservationId?: string;
   code:
     | "INVALID_REQUEST"
     | "IDEMPOTENCY_CONFLICT"
@@ -244,6 +245,7 @@ async function reserveEmailSenderAttempt(args: {
         error: existing.usageDate.getTime() === start.getTime()
           ? "This pooled delivery is already in progress or its delivery outcome is unknown. Reconcile it before retrying."
           : "This pooled delivery has an unresolved reservation from an earlier day. Reconcile it before retrying.",
+        reservationId: existing.id,
         code: "DELIVERY_UNCERTAIN",
       };
     }

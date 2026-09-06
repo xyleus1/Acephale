@@ -31,6 +31,7 @@ export default async function SupplyOsPage({
     previewWorkspace?: string;
     workspace?: string;
     materialsView?: string;
+    projectTab?: string;
     project?: string;
     researchList?: string;
     q?: string;
@@ -113,6 +114,7 @@ export default async function SupplyOsPage({
               ? "projects"
             : undefined
         }
+        initialProjectTab={params.projectTab === "messages" ? "messages" : undefined}
         initialProject={!isCustomer && !previewMode ? parseProject(params.project) : null}
         initialResearchListSlug={!isCustomer && !previewMode ? params.researchList : undefined}
         initialResearchQuery={!isCustomer && !previewMode ? params.q : undefined}

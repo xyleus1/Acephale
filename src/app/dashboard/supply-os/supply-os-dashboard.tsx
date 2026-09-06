@@ -316,6 +316,7 @@ export function SupplyOsDashboardWorkspace({
   canShowProjectStatus = false,
   canShowMail = false,
   initialMaterialsView,
+  initialProjectTab,
   initialProject,
   initialResearchListSlug,
   initialResearchQuery,
@@ -336,6 +337,7 @@ export function SupplyOsDashboardWorkspace({
   canShowProjectStatus?: boolean;
   canShowMail?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
+  initialProjectTab?: "messages";
   initialProject?: SupplyProjectSelection;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -649,6 +651,7 @@ export function SupplyOsDashboardWorkspace({
             canShowProjectStatus={canShowProjectStatus}
             canShowMail={canShowMail}
             initialMaterialsView={initialMaterialsView}
+            initialProjectTab={initialProjectTab}
             initialProject={initialProject}
             initialResearchListSlug={initialResearchListSlug}
             initialResearchQuery={initialResearchQuery}
@@ -784,6 +787,7 @@ function CaseCommandCenter({
   canShowProjectStatus,
   canShowMail,
   initialMaterialsView,
+  initialProjectTab,
   initialProject,
   initialResearchListSlug,
   initialResearchQuery,
@@ -804,6 +808,7 @@ function CaseCommandCenter({
   canShowProjectStatus?: boolean;
   canShowMail?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
+  initialProjectTab?: "messages";
   initialProject?: SupplyProjectSelection;
   initialResearchListSlug?: string;
   initialResearchQuery?: string;
@@ -1472,6 +1477,7 @@ function CaseCommandCenter({
           <SupplyInventoryWorkspace
             key={`sourcing-queue:${sourcingWorkspaceId ?? modelDashboard.id}`}
             activeView={inventoryWorkspaceView}
+            initialProjectTab={initialProjectTab}
             onViewChange={changeInventoryWorkspaceView}
             canShowProspects={canShowProspects}
             canShowProjectStatus={canShowProjectStatus}

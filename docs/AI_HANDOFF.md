@@ -12976,6 +12976,19 @@ Verification caveat:
 
 ## 2026-09-05: Supplier company progress and contact windows
 
+## 2026-09-06: Outreach reply lifecycle hardening
+
+- Auto-reply claims are recoverable after 30 minutes, while fresh claims remain
+  untouched. Unknown provider receipts remain pending for reconciliation.
+- Ops execution is explicitly office-scoped, and campaign reply context bounds
+  are enforced before persistence.
+- Campaign summaries now resolve the active SupplyWorkspace for each campaign
+  company, and Supply OS links use the workspace identifier expected by the
+  dashboard route.
+- Interrupted sends persist deterministic RFC and reservation identifiers
+  before provider delivery. Delivery-uncertain reclaimed sends remain pending,
+  and reconciliation uses the reservation account as its source of truth.
+
 - Procurement progress now reports both supplier rows and distinct supplier
   companies, with sourcing project leads using the company count.
 - Customer supplier search summaries deduplicate contacts from the same company.
@@ -12998,6 +13011,30 @@ Verification caveat:
   quota so larger approved contact plans can be filled.
 - Free-mail and disposable domains now fall back to vendor identity, preventing
   unrelated website-less suppliers from collapsing into one company.
+
+## 2026-09-06: Auto-reply delivery and suppression retry safety
+
+- Reclaimed rows with persisted RFC and reservation identifiers move directly
+  back to PENDING without invoking the classifier or provider.
+- Failed suppression writes leave CLAIMED rows retryable with a null claim
+  timestamp, and the next run can record SUPPRESSED.
+- Expired NOT_FOUND reconciliation releases its sender reservation before
+  marking delivery unconfirmed.
+
+## 2026-09-06: Auto-reply thread and reservation fencing
+
+- Pending and reconciling reply locks are scoped to the candidate thread, so
+  one pending delivery cannot stall another thread in the same campaign.
+- A claim lost after sender reservation releases that reservation before the
+  skipped result is recorded.
+- If persisting RFC and reservation identifiers fails before provider delivery,
+  the reservation is released before the existing FAILED handler runs.
+
+## 2026-09-06: Supply OS mail deep links
+
+- Initial mail thread links now fetch the access-checked detail endpoint when
+  the thread is outside the first page, prepend the returned thread, and open
+  its detail without surfacing a fetch error.
 
 ## 2026-09-06: Scheduled sourcing reply loop
 

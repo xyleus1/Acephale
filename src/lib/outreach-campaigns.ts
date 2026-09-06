@@ -153,6 +153,7 @@ export type CampaignPlan = {
   alreadyContactedElsewhere: number;
   variants: CampaignVariant[] | null;
   blockers: string[];
+  warnings: string[];
 };
 
 export type PlanOutreachCampaignInput = {
@@ -522,6 +523,13 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     return { ...recipient, position: pick.position, pick: pick.pick, subject: rendered.subject, body: rendered.body };
   });
   const audienceQuality = summarizeRecipientQuality(eligibleRows.map(recipientOf));
+  const replyContext = input.replyContext && typeof input.replyContext === "object" && !Array.isArray(input.replyContext)
+    ? input.replyContext as Record<string, unknown>
+    : null;
+  const warnings = input.replyMode !== "OFF"
+    && (typeof replyContext?.pitch !== "string" || !replyContext.pitch.trim())
+    ? ["Auto-reply is on but the campaign has no reply context (pitch, offer, FAQs)."]
+    : [];
   return {
     list: { name: list.name, slug: list.slug },
     eligible: eligibleWithoutContacted.length,
@@ -562,11 +570,12 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
         dailyCap,
         replyMode: input.replyMode ?? "AUTO",
         replyContext: input.replyContext,
-        enforceReplyContext: true,
+        enforceReplyContext: false,
         variants,
       }),
       ...campaignFollowUpBlockers(followUps),
     ],
+    warnings,
   };
 }
 
@@ -774,7 +783,7 @@ export async function activateCampaign(input: {
       dailyCap: campaign.dailyCap,
       replyMode: campaign.replyMode,
       replyContext: campaign.replyContext,
-      enforceReplyContext: true,
+      enforceReplyContext: false,
       variants,
     }),
     ...campaignFollowUpBlockers(followUps),
@@ -933,7 +942,7 @@ export type CampaignSummary = {
   listId: string;
   name: string;
   status: CampaignStatus;
-  list: { name: string; slug: string; projectId: string | null; companyId: string | null };
+  list: { name: string; slug: string; projectId: string | null; companyId: string | null; workspaceId: string | null };
   total: number;
   sent: number;
   sentToday: number;
@@ -991,6 +1000,20 @@ export async function listCampaignSummaries(
       orderBy: { createdAt: "asc" },
     });
     if (campaigns.length === 0) return [];
+    const companyIds = [...new Set(campaigns.map((campaign) => campaign.list.project?.companyId).filter((id): id is string => Boolean(id)))];
+    const workspaces = companyIds.length
+      ? await prisma.supplyWorkspace.findMany({
+        where: { officeId, companyId: { in: companyIds }, status: "ACTIVE" },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, companyId: true },
+      })
+      : [];
+    const workspaceByCompanyId = new Map<string, string>();
+    for (const workspace of workspaces) {
+      if (workspace.companyId && !workspaceByCompanyId.has(workspace.companyId)) {
+        workspaceByCompanyId.set(workspace.companyId, workspace.id);
+      }
+    }
     const followUpCounts = await prisma.outreachCampaignFollowUp.groupBy({
       by: ["campaignId", "status"],
       where: { officeId, campaignId: { in: campaigns.map((campaign) => campaign.id) } },
@@ -1078,6 +1101,9 @@ export async function listCampaignSummaries(
           slug: campaign.list.slug,
           projectId: campaign.list.projectId,
           companyId: campaign.list.project?.companyId ?? null,
+          workspaceId: campaign.list.project?.companyId
+            ? workspaceByCompanyId.get(campaign.list.project.companyId) ?? null
+            : null,
         },
         total: campaign.audienceTotal,
         sent: counts.get("SENT") ?? 0,

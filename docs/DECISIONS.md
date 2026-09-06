@@ -5431,6 +5431,53 @@ Context prospecting persists only entity-qualified targets: deterministic non-co
   the worker. Every inbound message is claimed by its unique message id
   before processing.
 
+## 2026-09-06: Outreach reply claims and pending delivery
+
+- Status: accepted
+- Decision: reply claims use `CLAIMED` with a 30-minute recovery window.
+  Provider `UNKNOWN` results use `PENDING` with RFC and reservation identifiers
+  until reconciliation confirms delivery or marks the attempt failed.
+- RFC and reservation identifiers are persisted before provider delivery so an
+  interrupted send can be reclaimed without generating a second message id.
+  Reconciliation trusts the office-scoped sender reservation for account
+  identity, and a sent reply remains SENT if post-send suppression persistence
+  fails.
+
+## 2026-09-06: Auto-reply suppression persistence is retryable
+
+- Status: accepted
+- Owner: engineering
+- Decision: A reclaimed auto-reply row with persisted RFC and reservation
+  identifiers is reconciled as PENDING rather than sent again. Suppression
+  persistence failures retain a retryable CLAIMED row, and expired NOT_FOUND
+  reconciliation releases the sender reservation before failure recording.
+
+## 2026-09-06: Scope reply locks and release abandoned reservations
+
+- Status: accepted
+- Owner: engineering
+- Decision: Auto-reply lifecycle locks are evaluated per thread, not across
+  the campaign. If a worker loses its claim after reserving a sender but before
+  provider delivery, the RESERVED row is released immediately.
+
+## 2026-09-06: Release reservations on pre-send persistence failure
+
+- Status: accepted
+- Owner: engineering
+- Decision: If the claimed reply cannot persist its RFC and reservation
+  identifiers after reserving a sender, release the reservation before
+  propagating the error to the existing FAILED outcome handler. No provider
+  call has occurred at that boundary.
+
+## 2026-09-06: Supply OS mail links resolve beyond the first page
+
+- Status: accepted
+- Owner: engineering
+- Decision: An initial mail deep link uses the access-checked thread detail
+  endpoint when the first page does not contain the requested thread. The
+  returned detail is inserted into the list and opened directly, stale
+  responses are ignored, and fetch failures remain silent.
+
 ## 2026-09-06: Scheduled sourcing reply loop
 
 - Scheduled autopilot sends follow ups unattended and stops them at the campaign

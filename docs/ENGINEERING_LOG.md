@@ -10503,6 +10503,19 @@ Use this file for chronological implementation notes that future agents should s
 
 ## 2026-09-06: Outreach campaign auto-reply engine
 
+## 2026-09-06: Outreach campaign reply lifecycle hardening
+
+- Added stale claim recovery, pending provider reconciliation fields, and
+  office-scoped Ops execution.
+- Delivery opt-out checks now use recipient-authored, quote-stripped text.
+- Fixed campaign reply deep links to open the Messages view.
+- Resolved active SupplyWorkspace ids once per campaign summary query and used
+  them for Supply OS deep links.
+- Made reply RFC ids deterministic, persisted send identifiers before provider
+  calls, and kept uncertain reclaimed sends recoverable through PENDING.
+- Reconciliation now reads sender identity from the stored reservation, while
+  post-send suppression failures preserve the SENT result.
+
 - Added campaign `replyMode` and `replyContext`, plus tenant-scoped
   `OutreachCampaignReply` outcome records and production verification SQL.
 - Added deterministic prechecks, idempotent inbound claims, strict
@@ -10510,3 +10523,26 @@ Use this file for chronological implementation notes that future agents should s
   reservations, same-thread persistence, suppression, and cron/Ops wiring.
 - Added campaign summary and Supply OS indicators for auto reply mode,
   answered counts, needs-you counts, and escalation summaries.
+
+## 2026-09-06: Auto-reply retry safety follow-up
+
+- Stale CLAIMED rows carrying both delivery identifiers are reclaimed into
+  PENDING for reconciliation instead of being sent again.
+- Deterministic and classifier-based suppression writes are retryable; failed
+  writes retain CLAIMED state with a null claim timestamp.
+- Pending delivery expiry releases the reserved sender capacity.
+
+## 2026-09-06: Auto-reply thread lock scope
+
+- Candidate blocking now groups lifecycle replies by thread id.
+- Reservations are released when the claim fence is lost after reservation
+  and before provider delivery.
+- Reservations are also released when the pre-send identifier persistence
+  update throws before any provider call.
+
+## 2026-09-06: Supply OS mail deep-link recovery
+
+- The initial `threadId` query now fetches a missing thread from the detail
+  endpoint instead of searching only the first 25 loaded rows.
+- Successful detail responses are prepended and opened directly, while
+  request-id fencing prevents stale responses from changing the panel.

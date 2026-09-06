@@ -240,7 +240,7 @@ function withoutOwn(recipients: readonly string[], input: DeliveryFeedbackInput)
 }
 
 // Lines quoted from the original message are not the recipient's own words.
-function unquotedBody(body: string) {
+export function recipientAuthoredBody(body: string) {
   const lines = body.split(/\r?\n/);
   const kept: string[] = [];
   for (const line of lines) {
@@ -448,7 +448,7 @@ function recipientAuthoredSubject(subject: string) {
 }
 
 function optOutText(input: DeliveryFeedbackInput) {
-  return `${recipientAuthoredSubject(input.subject)}\n${unquotedBody(input.bodyText).slice(0, OPT_OUT_MAX_BODY_CHARS)}`;
+  return `${recipientAuthoredSubject(input.subject)}\n${recipientAuthoredBody(input.bodyText).slice(0, OPT_OUT_MAX_BODY_CHARS)}`;
 }
 
 function isOptOut(input: DeliveryFeedbackInput) {
