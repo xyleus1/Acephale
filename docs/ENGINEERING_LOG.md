@@ -85,6 +85,10 @@ Context chat now reports and manages existing prospect research through office-s
   source message id, retryable write failure, the plan and stage outcomes, the
   faded funnel exclusion, capacity queueing and normal failure backoff.
 
+## 2026-09-06: Outreach stale recovery identity
+
+- Stale recovery reuses the sender reservation request hash when available and preserves SENT outcomes after post-commit recording errors.
+
 ## 2026-09-06: Outreach personalization review fixes
 
 - Follow-up copy edits now share the campaign runner advisory lock, empty copy

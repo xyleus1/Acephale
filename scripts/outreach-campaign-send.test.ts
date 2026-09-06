@@ -174,7 +174,7 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
     sendRows: Array<Record<string, unknown>> = [],
     options: {
       researchRows?: Array<Record<string, unknown>>;
-      reservation?: { accountId: string; updatedAt: Date };
+      reservation?: { accountId: string; updatedAt: Date; requestHash?: string };
       messageLog?: Array<Record<string, unknown>>;
     } = {},
   ) {
@@ -246,7 +246,13 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
       },
       outreachCampaignSend: send,
       outreachCampaignFollowUp: { count: async () => 0, findMany: async () => [] },
-      emailSenderReservation: { findUnique: async () => options.reservation ?? null, count: async () => 0 },
+      emailSenderReservation: {
+        findUnique: async () => options.reservation ?? null,
+        findFirst: async () => options.reservation?.requestHash
+          ? { requestHash: options.reservation.requestHash }
+          : null,
+        count: async () => 0,
+      },
       researchRecord: {
         findFirst: async (args: { where?: { id?: string } }) => researchRows.find((row) => row.id === args.where?.id) ?? null,
         findMany: async () => researchRows,
@@ -1353,6 +1359,126 @@ const pinnedRows = selectOutreachCampaignSnapshotRows({
   assert.equal(recoveryLlmCalls, 0);
   assert.match(recoveryBody, /^Original intro\. Hello Buyer Co\./);
   assert.equal(staleSendRow.status, "SENT");
+
+  const repeatedIntroRow = {
+    ...staleSendRow,
+    id: "send-repeated-intro",
+    intro: "Repeated intro.",
+    status: "QUEUED",
+  };
+  let repeatedIntroRequestHash = "";
+  const repeatedIntroRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: fakeDatabase({
+      bodyTemplate: "Repeated intro. before {{ai_intro}} after",
+    }, [], [repeatedIntroRow], {
+      reservation: {
+        accountId: "account-1",
+        updatedAt: new Date("2026-01-01T10:00:00.000Z"),
+        requestHash: "stored-reservation-request-hash",
+      },
+    }) as never,
+    provider,
+    reserve: async (input) => {
+      repeatedIntroRequestHash = input.requestHash;
+      return reservation;
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(repeatedIntroRun.sent, 1);
+  assert.equal(repeatedIntroRequestHash, "stored-reservation-request-hash");
+  assert.equal(repeatedIntroRow.status, "SENT");
+
+  const changedCopyRow = {
+    ...staleSendRow,
+    id: "send-changed-copy",
+    status: "QUEUED",
+    renderedSubject: null,
+    renderedBody: null,
+  };
+  const changedCopyDb = fakeDatabase({
+    bodyTemplate: "Edited body {{company}}",
+  }, [], [changedCopyRow], {
+    reservation: {
+      accountId: "account-1",
+      updatedAt: new Date("2026-01-01T10:00:00.000Z"),
+      requestHash: "stored-reservation-request-hash",
+    },
+  });
+  changedCopyDb.emailSenderReservation.findFirst = async () => {
+    throw new Error("snapshot-less recovery must not load the stored request hash");
+  };
+  let changedCopyRequestHash = "";
+  const changedCopyBody = renderCampaignEmail({
+    subject: "Hello {{company}}",
+    bodyTemplate: "Edited body {{company}}",
+    row: { data: { email: "buyer@buyerco.com", company: "Buyer Co" } },
+    intro: "",
+  }).body;
+  const changedCopyExpectedHash = outreachCampaignRequestHash({
+    campaignId: "campaign-1",
+    recordId: "record-1",
+    recipient: "buyer@buyerco.com",
+    subject: "Hello Buyer Co",
+    body: changedCopyBody,
+  });
+  const changedCopyRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: changedCopyDb as never,
+    provider: {
+      ...provider,
+      send: async () => {
+        throw new Error("a changed snapshot-less copy must not send");
+      },
+    },
+    reserve: async (input) => {
+      changedCopyRequestHash = input.requestHash;
+      return { error: "key used for different content", code: "IDEMPOTENCY_CONFLICT" as const };
+    },
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(changedCopyRequestHash, changedCopyExpectedHash);
+  assert.notEqual(changedCopyRequestHash, "stored-reservation-request-hash");
+  assert.equal(changedCopyRun.rejected, 1);
+  assert.equal(changedCopyRow.status, "REJECTED");
+
+  const recoveryCommittedRow = {
+    ...staleSendRow,
+    id: "send-recovery-committed",
+    status: "QUEUED",
+  };
+  const recoveryCommittedDb = fakeDatabase({}, [], [recoveryCommittedRow]);
+  const recoveryCommittedTransaction = recoveryCommittedDb.$transaction;
+  recoveryCommittedDb.$transaction = async (callback) => {
+    await recoveryCommittedTransaction(callback);
+    throw new Error("connection closed before the commit acknowledgement arrived");
+  };
+  const recoveryCommittedRun = await runOutreachCampaignBatch({
+    officeId: "office-1",
+    campaignId: "campaign-1",
+    db: recoveryCommittedDb as never,
+    provider,
+    reserve: async () => reservation,
+    complete: async () => ({ completed: false }),
+    pauseMs: 0,
+    recipientCheck: offlineRecipientCheck,
+    now: new Date("2026-01-01T12:00:00Z"),
+  });
+  assert.equal(recoveryCommittedRun.sent, 1);
+  assert.equal(recoveryCommittedRun.unknown, 0);
+  assert.deepEqual(
+    recoveryCommittedRun.outcomes.map((outcome) => [outcome.recordId, outcome.state]),
+    [["record-1", "SENT"]],
+  );
+  assert.equal(recoveryCommittedRow.status, "SENT");
 
   const whitespaceBodyTemplate = " \n{{ai_intro}} Hello {{company}}. \n ";
   const whitespaceRenderedBody = renderCampaignEmail({

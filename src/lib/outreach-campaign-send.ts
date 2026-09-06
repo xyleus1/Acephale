@@ -979,31 +979,39 @@ async function recoverStaleReservedCampaignSends(
         row: data,
         fields,
         intro,
-      });
-    const bodyWithoutIntroValue = hasRenderedSnapshot
-      ? bodyWithoutIntro(email.body, intro)
-      : renderCampaignEmail({
+    });
+    const idempotencyKey = outreachCampaignIdempotencyKey(campaign.id, staleRow.recordId);
+    const storedReservation = hasRenderedSnapshot
+      ? await db.emailSenderReservation.findFirst({
+        where: { id: staleRow.reservationId, officeId: campaign.officeId },
+        select: { requestHash: true },
+      })
+      : null;
+    const requestHash = storedReservation?.requestHash ?? (() => {
+      const bodyWithoutIntroValue = hasRenderedSnapshot
+        ? bodyWithoutIntro(email.body, intro)
+        : renderCampaignEmail({
+          subject: subjectTemplate,
+          bodyTemplate,
+          row: data,
+          fields,
+          intro: "",
+        }).body;
+      const originalBodyWithoutIntro = bodyWithoutIntroValue ?? renderCampaignEmail({
         subject: subjectTemplate,
         bodyTemplate,
         row: data,
         fields,
         intro: "",
       }).body;
-    const originalBodyWithoutIntro = bodyWithoutIntroValue ?? renderCampaignEmail({
-      subject: subjectTemplate,
-      bodyTemplate,
-      row: data,
-      fields,
-      intro: "",
-    }).body;
-    const idempotencyKey = outreachCampaignIdempotencyKey(campaign.id, staleRow.recordId);
-    const requestHash = outreachCampaignRequestHash({
-      campaignId: campaign.id,
-      recordId: staleRow.recordId,
-      recipient: staleRow.recipient,
-      subject: email.subject,
-      body: originalBodyWithoutIntro,
-    });
+      return outreachCampaignRequestHash({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        subject: email.subject,
+        body: originalBodyWithoutIntro,
+      });
+    })();
     const reservation = await reserve({
       officeId: campaign.officeId,
       idempotencyKey,
@@ -1231,7 +1239,7 @@ async function recoverStaleReservedCampaignSends(
         });
       } catch (error) {
         const recordingError = outreachCampaignRecordingFailure(error);
-        await settleUnrecordedSend(db, {
+        const settled = await settleUnrecordedSend(db, {
           officeId: campaign.officeId,
           campaignId: campaign.id,
           recordId: staleRow.recordId,
@@ -1243,16 +1251,29 @@ async function recoverStaleReservedCampaignSends(
           renderedSubject: email.subject,
           renderedBody: email.body,
         });
-        output.unknown += 1;
-        output.outcomes.push({
-          campaignId: campaign.id,
-          recordId: staleRow.recordId,
-          recipient: staleRow.recipient,
-          state: "UNKNOWN",
-          senderEmail: reservation.senderEmail,
-          variantKey: variant?.key ?? null,
-          error: recordingError,
-        });
+        if (!settled) {
+          output.sent += 1;
+          output.outcomes.push({
+            campaignId: campaign.id,
+            recordId: staleRow.recordId,
+            recipient: staleRow.recipient,
+            state: "SENT",
+            senderEmail: reservation.senderEmail,
+            variantKey: variant?.key ?? null,
+            error: null,
+          });
+        } else {
+          output.unknown += 1;
+          output.outcomes.push({
+            campaignId: campaign.id,
+            recordId: staleRow.recordId,
+            recipient: staleRow.recipient,
+            state: "UNKNOWN",
+            senderEmail: reservation.senderEmail,
+            variantKey: variant?.key ?? null,
+            error: recordingError,
+          });
+        }
       }
     } else if (receipt.state === "REJECTED") {
       await release({ officeId: campaign.officeId, reservationId: reservation.reservationId });

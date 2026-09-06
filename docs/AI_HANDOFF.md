@@ -12997,6 +12997,7 @@ Verification caveat:
   neither SKIPPED rows nor sends.
 - Ops copy normalizes variants and refreshes the revision hash for DRAFT
   campaigns while preserving the hash for ACTIVE and PAUSED campaigns.
+- Stale recovery reuses persisted reservation request hashes and preserves SENT outcomes after post-commit recording errors.
 - The send test still reaches an existing local PostgreSQL TLS limitation in
   its database-backed email-touch path.
 
