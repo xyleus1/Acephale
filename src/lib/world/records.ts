@@ -5,6 +5,7 @@ export type NormalizedSourceRecord = {
   sourceRecordId: string;
   name: string;
   nameNormalized: string;
+  nameMatchable: boolean;
   domain: string | null;
   lei: string | null;
   country: string | null;

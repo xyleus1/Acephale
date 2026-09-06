@@ -4,6 +4,8 @@ import { readCsvRows } from "../src/lib/world/csv";
 import { classifyManufacturer } from "../src/lib/world/manufacturing";
 import { normalizeCompanyName, normalizeCountry, normalizeDomain } from "../src/lib/world/normalize";
 import { parseCompaniesHouseRow } from "../src/lib/world/sources/companies-house";
+import { parseEpaFrsRow } from "../src/lib/world/sources/epa-frs";
+import { parseEuIndustrialEmissionsRow } from "../src/lib/world/sources/eu-industrial-emissions";
 import { extractGleifLatestCsvUrl, parseGleifRow } from "../src/lib/world/sources/gleif";
 import { parsePdlFreeRow } from "../src/lib/world/sources/pdl-free";
 
@@ -71,7 +73,115 @@ async function main() {
     URI: "https://find-and-update.company-information.service.gov.uk/company/01234567",
   });
   check("Companies House parser maps SIC and year", Boolean(companiesHouse?.isManufacturer && companiesHouse.foundedYear === 2001));
+  check("Companies House parser permits name matching", companiesHouse?.nameMatchable === true);
   check("Companies House parser skips missing number", parseCompaniesHouseRow({ CompanyName: "Missing" }) === null);
+
+  const epa = parseEpaFrsRow({
+    REGISTRY_ID: "110071337641",
+    PRIMARY_NAME: "Acme Industrial Plant",
+    LOCATION_ADDRESS: "Factory Road 1",
+    CITY_NAME: "Birmingham",
+    STATE_CODE: "AL",
+    POSTAL_CODE: "35005",
+    NAICS_CODES: "332710",
+    SIC_CODES: "3469",
+  });
+  check("EPA FRS parser maps registry and address", Boolean(
+    epa?.sourceRecordId === "110071337641"
+      && epa.country === "US"
+      && epa.nameNormalized === "acme industrial plant"
+      && epa.region === "AL"
+      && epa.city === "Birmingham"
+      && epa.postalCode === "35005"
+      && epa.addressLine === "Factory Road 1",
+  ));
+  check("EPA FRS facility names are not name-matchable", epa?.nameMatchable === false);
+  check("EPA FRS parser classifies manufacturer with source evidence", Boolean(
+    epa?.isManufacturer
+      && Array.isArray(epa.manufacturerEvidence)
+      && epa.manufacturerEvidence.some((entry) => (
+        typeof entry === "object"
+        && entry !== null
+        && "source" in entry
+        && entry.source === "epa_frs"
+      )),
+  ));
+  check("EPA FRS parser retains payload and skips missing registry", Boolean(
+    typeof epa?.payload === "object"
+      && epa.payload !== null
+      && "REGISTRY_ID" in epa.payload
+  ) && parseEpaFrsRow({ PRIMARY_NAME: "Missing registry" }) === null);
+  check("EPA FRS parser keeps non-manufacturing codes false", !parseEpaFrsRow({
+    REGISTRY_ID: "110071337642",
+    PRIMARY_NAME: "Acme Services",
+    NAICS_CODES: "541110",
+    SIC_CODES: "8742",
+  })?.isManufacturer);
+
+  const euIndustrialEmissions = parseEuIndustrialEmissionsRow({
+    FacilityInspireId: "DE.example.facility-1",
+    facilityName: "Acme Chemie GmbH",
+    CountryName: "Germany",
+    City: "Berlin",
+    PostalCode: "10115",
+    Street: "Industriestrasse 1",
+    NACECode: "20.16",
+    website: "",
+  });
+  check("EU industrial emissions parser maps facility identity and address", Boolean(
+    euIndustrialEmissions?.sourceRecordId === "DE.example.facility-1"
+      && euIndustrialEmissions.nameNormalized === "acme chemie"
+      && euIndustrialEmissions.country === "DE"
+      && euIndustrialEmissions.city === "Berlin"
+      && euIndustrialEmissions.postalCode === "10115"
+      && euIndustrialEmissions.addressLine === "Industriestrasse 1",
+  ));
+  check("EU facility names are not name-matchable", euIndustrialEmissions?.nameMatchable === false);
+  check("EU industrial emissions parser classifies NACE activity", Boolean(
+    euIndustrialEmissions?.isManufacturer
+      && Array.isArray(euIndustrialEmissions.manufacturerEvidence)
+      && euIndustrialEmissions.manufacturerEvidence.some((entry) => (
+        typeof entry === "object"
+        && entry !== null
+        && "source" in entry
+        && entry.source === "eu_industrial_emissions"
+        && "kind" in entry
+        && entry.kind === "activity"
+      )),
+  ));
+  const eprtrFacility = parseEuIndustrialEmissionsRow({
+    FacilityInspireId: "DE.example.facility-chemicals",
+    facilityName: "Acme Chemicals",
+    EPRTRAnnexIMainActivity: "4(a)",
+    EPRTR_SectorName: "Chemical industry",
+  });
+  check("EU industrial emissions maps E-PRTR chemical activity", Boolean(
+    eprtrFacility?.isManufacturer
+      && Array.isArray(eprtrFacility.manufacturerEvidence)
+      && eprtrFacility.manufacturerEvidence.some((entry) => (
+        typeof entry === "object"
+        && entry !== null
+        && "kind" in entry
+        && entry.kind === "eprtr_sector"
+        && "value" in entry
+        && entry.value === "4 Chemical industry"
+      )),
+  ));
+  const wasteInstallation = parseEuIndustrialEmissionsRow({
+    InstallationInspireId: "DE.example.installation-waste",
+    installationName: "Acme Waste Facility",
+    IEDAnnexIMainActivity: "5.1",
+  });
+  check("EU industrial emissions keeps IED waste activity non-manufacturing", !wasteInstallation?.isManufacturer);
+  check("EU industrial emissions parser keeps website null and skips missing name", Boolean(
+    euIndustrialEmissions?.website === null
+      && typeof euIndustrialEmissions.payload === "object"
+      && euIndustrialEmissions.payload !== null
+      && "FacilityInspireId" in euIndustrialEmissions.payload
+  ) && parseEuIndustrialEmissionsRow({ FacilityInspireId: "missing-name" }) === null);
+  check("EU industrial emissions parser skips missing facility id", parseEuIndustrialEmissionsRow({
+    facilityName: "Missing facility id",
+  }) === null);
 
   const pdl = parsePdlFreeRow({
     id: "pdl-1",

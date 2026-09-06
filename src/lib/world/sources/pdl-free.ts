@@ -26,6 +26,7 @@ export function parsePdlFreeRow(row: Record<string, unknown>): NormalizedSourceR
     sourceRecordId,
     name,
     nameNormalized: normalizeCompanyName(name),
+    nameMatchable: true,
     domain: normalizeDomain(value(row, "website")),
     lei: null,
     country: normalizeCountry(value(row, "country")),

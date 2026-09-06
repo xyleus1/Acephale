@@ -7,6 +7,66 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-06: World merge identity and industry-code safeguards
+
+- Name matching now rejects conflicting identifiers across cursor windows,
+  unions industry-code arrays across matched records and existing companies,
+  and ignores unmatchable facility companies when applying same-batch deferral.
+- Identifier-less records now inspect identifier-bearing name candidates across
+  source windows, requiring unique source identifiers before attaching by name.
+- Candidate source-identifier scans now run only for names containing both
+  plain and identifier-bearing records in the current merge batch.
+
+## 2026-09-06: World merge uses bounded keyset windows
+
+- The world merge now selects each pending batch's first and last source-record
+  ids once, then bounds matching, insertion, and the second matching pass to
+  that id window while advancing an `afterId` cursor.
+- This avoids rescanning already merged rows from the beginning of the source
+  primary key without adding a schema index. The world database integration
+  test covers five out-of-order ids with a batch size of two.
+- Bounded windows now remove the inner limit after selecting their upper
+  boundary, so records inserted concurrently inside the selected range cannot
+  be skipped. Name-linked siblings also contribute to the matched-by-name
+  counter.
+- A single retry now reprocesses records left behind after insertion, covering
+  rows that arrive after the first insertion snapshot but before the second
+  matching pass.
+- Retries now apply existing-company matches before inserting unmatched rows,
+  preventing late identifier or name matches from becoming duplicate companies.
+- A bounded second cursor pass now revisits pending rows committed below the
+  first pass cursor boundary.
+
+## 2026-09-06: World merge grouped name aggregation
+
+- Name-only sibling legal identifiers, industry codes, and manufacturer
+  evidence now use separate grouped JSON aggregation CTEs instead of
+  correlated per-company subqueries.
+- Large insert batches run the statement with nested-loop planning disabled,
+  preventing the planner from repeatedly scanning low-cardinality CTEs.
+- A 20,000-row name-only regression test completed in approximately 18 seconds
+  locally, with all rows linked and no left-behind records.
+
+## 2026-09-06: World merge existing-name deferral guard
+
+- Same-batch deferral now checks for an existing country and normalized-name
+  company before withholding a domain or name-only record for pass two.
+- Coverage includes two pre-existing same-name companies plus new LEI,
+  domain-only, and name-only records, verifying all records merge and the
+  left-behind count remains zero.
+
+## 2026-09-06: World merge records left-behind batches
+
+- Same-batch name candidates are inserted when zero or multiple higher-priority
+  candidates share the key, preventing ambiguous records from being skipped.
+- Name-only siblings sharing a newly inserted ambiguous key link to that
+  company and contribute their profile fields, identifiers, manufacturer
+  evidence, and source count.
+- Each bounded merge window reports records still unmerged after both matching
+  passes through the `leftBehind` counter.
+
+## 2026-09-06: World merge candidate-count performance
+## 2026-09-09: Prospecting project screen declutter
 ## 2026-09-09: A wrapped capability refusal is not a wrong desk
 
 - "We do not handle RFQs" only says the mail reached the wrong desk where the
@@ -100,27 +160,28 @@ Context chat now reports and manages existing prospect research through office-s
 
 ## 2026-09-09: Prospecting project screen declutter
 
-- Trigger: the project detail screen stacked a project header, a Lead status
-  header with row count and boxed Refresh, a stage bar, inline stage text,
-  three filled action buttons, a 220px flow chart, a 150px country ring, a
-  second "Prospects" header with its own count and Leads link, a controls row
-  and a table with wrapped cells and 42px selects, all competing at once.
-- Removed the redundant Lead status and Prospects headers inside a locked
-  project, turned the stage counts into a compact metric row with a quiet
-  Refresh, outlined the action buttons, shrank both charts, hid the flow chart
-  under 560px, clamped table cells to three lines with `-` for empty values,
-  and aligned the controls row to the shared 32px `AppSelect` height.
-- Found `.shell button { font: inherit }` overriding CSS-module button
-  typography (stage counts rendered at 14px instead of 11px); it is now
-  `.shell :where(button)`. Global `input`/`select` min-height (42px) needed a
-  higher-specificity module rule for the search input and the row status
-  select.
-- Dropped the `text-decoration: underline` and the sticky-header
-  `box-shadow: inset` this screen used; both are forbidden by
-  `supply-os-enterprise-design.test.ts`, which still fails on main for older
-  inset shadows elsewhere in the module.
-- Verified over CDP at 1440x1000 and 420x860 on the 55-row QA fixture; Chat,
-  Logistics and the Messages tab render unchanged after the shell reset change.
+- Replaced per-record same-batch count subqueries with grouped
+  `lei_name_counts` and `batch_name_counts` CTEs.
+- Removed the full-table existing-name key materialization in favor of direct
+  world company existence checks.
+- Grouped JSON enrichment during match updates as well as unmatched insertion,
+  preventing repeated scans when 20,000 deferred name records link in pass two.
+- Regression coverage completed the 40,000-record LEI-heavy fixture in about
+  13 seconds locally, with 20,000 inserted companies and zero left-behind
+  records.
+
+## 2026-09-09: World source activity and domain conflict safeguards
+
+- EEA manufacturer classification now uses explicit NACE fields only, while
+  E-PRTR and IED activity evidence remains classified through dedicated paths.
+- Conflicting same-name domain siblings now create separate companies instead
+  of being deferred into a pass that cannot name-match them.
+
+## 2026-09-06: World merge matched-set stability
+
+- Pin each apply batch's matched records before updating companies or source
+  records, and reject conflicting identifiers across the complete source
+  fixture while preserving indexed name lookups.
 
 ## 2026-09-06: Outreach campaign personalization
 
@@ -10613,6 +10674,52 @@ Use this file for chronological implementation notes that future agents should s
 - Shared company-key logic now preserves separate identities for free-mail and
   disposable-provider contacts while merging website variants.
 
+## 2026-09-06: Outreach campaign auto-reply engine
+
+- Added campaign `replyMode` and `replyContext`, plus tenant-scoped
+  `OutreachCampaignReply` outcome records and production verification SQL.
+- Added deterministic prechecks, idempotent inbound claims, strict
+  `gpt-5.6` classification using the authored prompt, sender-capacity
+  reservations, same-thread persistence, suppression, and cron/Ops wiring.
+- Added campaign summary and Supply OS indicators for auto reply mode,
+  answered counts, needs-you counts, and escalation summaries.
+
+## 2026-09-06: World merge candidate-count performance
+
+- Replaced per-record same-batch count subqueries with grouped
+  `lei_name_counts` and `batch_name_counts` CTEs.
+- Removed the full-table existing-name key materialization in favor of direct
+  world company existence checks.
+- Grouped JSON enrichment during match updates as well as unmatched insertion,
+  preventing repeated scans when 20,000 deferred name records link in pass two.
+- Regression coverage completed the 40,000-record LEI-heavy fixture in about
+  13 seconds locally, with 20,000 inserted companies and zero left-behind
+  records.
+
+## 2026-09-09: Prospecting project screen declutter
+
+- Trigger: the project detail screen stacked a project header, a Lead status
+  header with row count and boxed Refresh, a stage bar, inline stage text,
+  three filled action buttons, a 220px flow chart, a 150px country ring, a
+  second "Prospects" header with its own count and Leads link, a controls row
+  and a table with wrapped cells and 42px selects, all competing at once.
+- Removed the redundant Lead status and Prospects headers inside a locked
+  project, turned the stage counts into a compact metric row with a quiet
+  Refresh, outlined the action buttons, shrank both charts, hid the flow chart
+  under 560px, clamped table cells to three lines with `-` for empty values,
+  and aligned the controls row to the shared 32px `AppSelect` height.
+- Found `.shell button { font: inherit }` overriding CSS-module button
+  typography (stage counts rendered at 14px instead of 11px); it is now
+  `.shell :where(button)`. Global `input`/`select` min-height (42px) needed a
+  higher-specificity module rule for the search input and the row status
+  select.
+- Dropped the `text-decoration: underline` and the sticky-header
+  `box-shadow: inset` this screen used; both are forbidden by
+  `supply-os-enterprise-design.test.ts`, which still fails on main for older
+  inset shadows elsewhere in the module.
+- Verified over CDP at 1440x1000 and 420x860 on the 55-row QA fixture; Chat,
+  Logistics and the Messages tab render unchanged after the shell reset change.
+
 ## 2026-09-06: Scheduled sourcing reply loop
 
 - Enabled scheduled autopilot follow ups with the existing quiet period,
@@ -10647,6 +10754,7 @@ Use this file for chronological implementation notes that future agents should s
   reservations, same-thread persistence, suppression, and cron/Ops wiring.
 - Added campaign summary and Supply OS indicators for auto reply mode,
   answered counts, needs-you counts, and escalation summaries.
+
 ## 2026-09-06: Auto-reply retry safety follow-up
 
 - Stale CLAIMED rows carrying both delivery identifiers are reclaimed into

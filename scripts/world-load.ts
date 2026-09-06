@@ -5,6 +5,8 @@ import { loadSourceFile } from "../src/lib/world/load";
 import { mergeSourceRecords } from "../src/lib/world/merge";
 import { resolveGleifLatestCsvUrl } from "../src/lib/world/sources/gleif";
 import { downloadHint as companiesHouseHint } from "../src/lib/world/sources/companies-house";
+import { downloadHint as epaFrsHint } from "../src/lib/world/sources/epa-frs";
+import { downloadHint as euIndustrialEmissionsHint } from "../src/lib/world/sources/eu-industrial-emissions";
 import { downloadHint as gleifHint } from "../src/lib/world/sources/gleif";
 import { downloadHint as pdlHint } from "../src/lib/world/sources/pdl-free";
 
@@ -44,8 +46,8 @@ function numberArg(args: Args, key: string, fallback: number) {
 function printHelp() {
   console.log(`World company spine CLI
 
-  load --source gleif|companies_house|pdl_free --file <path> [--limit N] [--batch N]
-  merge [--source X]
+  load --source gleif|companies_house|pdl_free|epa_frs|eu_industrial_emissions --file <path> [--limit N] [--batch N]
+  merge [--source X] [--max-runs N]
   stats
   urls
 
@@ -90,6 +92,8 @@ async function main() {
       gleif: { hint: gleifHint, latestCsvUrl: await resolveGleifLatestCsvUrl() },
       companies_house: companiesHouseHint,
       pdl_free: pdlHint,
+      epa_frs: epaFrsHint,
+      eu_industrial_emissions: euIndustrialEmissionsHint,
     }, null, 2));
     return;
   }
@@ -97,7 +101,7 @@ async function main() {
   if (command === "load") {
     const result = await loadSourceFile({
       client,
-      source: stringArg(args, "source") as "gleif" | "companies_house" | "pdl_free",
+      source: stringArg(args, "source") as "gleif" | "companies_house" | "pdl_free" | "epa_frs" | "eu_industrial_emissions",
       filePath: stringArg(args, "file"),
       limit: typeof args.limit === "string" ? numberArg(args, "limit", 1) : undefined,
       batchSize: numberArg(args, "batch", 2000),
@@ -113,10 +117,29 @@ async function main() {
     return;
   }
   if (command === "merge") {
-    console.log(JSON.stringify(await mergeSourceRecords({
+    const maxRuns = numberArg(args, "max-runs", 5);
+    let result = await mergeSourceRecords({
       client,
       source: typeof args.source === "string" ? args.source : undefined,
-    }), null, 2));
+    });
+    for (let run = 1; result.leftBehind > 0 && run < maxRuns; run += 1) {
+      const rerun = await mergeSourceRecords({
+        client,
+        source: typeof args.source === "string" ? args.source : undefined,
+      });
+      result = {
+        matchedByLei: result.matchedByLei + rerun.matchedByLei,
+        matchedByDomain: result.matchedByDomain + rerun.matchedByDomain,
+        matchedByName: result.matchedByName + rerun.matchedByName,
+        inserted: result.inserted + rerun.inserted,
+        leftBehind: rerun.leftBehind,
+      };
+    }
+    console.log(JSON.stringify(result, null, 2));
+    if (result.leftBehind > 0) {
+      console.error(`merge left ${result.leftBehind} source records pending after ${maxRuns} runs`);
+      process.exitCode = 1;
+    }
     return;
   }
   if (command === "stats") {

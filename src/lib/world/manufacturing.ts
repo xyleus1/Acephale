@@ -1,5 +1,5 @@
 export type ManufacturerEvidence = {
-  kind: "uk_sic" | "nace" | "naics" | "industry_label";
+  kind: "uk_sic" | "sic" | "nace" | "naics" | "industry_label";
   value: string;
 };
 
@@ -49,14 +49,22 @@ function sectionC(code: string) {
   return number >= 10 && number <= 33;
 }
 
+function usSicManufacturing(code: string) {
+  const prefix = code.trim().replace(/\D/g, "").slice(0, 2);
+  const number = Number(prefix);
+  return number >= 20 && number <= 39;
+}
+
 export function classifyManufacturer(input: {
   ukSic?: string[];
+  sic?: string[];
   nace?: string[];
   naics?: string[];
   industryLabels?: string[];
 }) {
   const evidence: ManufacturerEvidence[] = [];
   for (const value of input.ukSic ?? []) if (sectionC(value)) evidence.push({ kind: "uk_sic", value });
+  for (const value of input.sic ?? []) if (usSicManufacturing(value)) evidence.push({ kind: "sic", value });
   for (const value of input.nace ?? []) if (sectionC(value)) evidence.push({ kind: "nace", value });
   for (const value of input.naics ?? []) {
     const prefix = value.trim().replace(/\D/g, "").slice(0, 2);

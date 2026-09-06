@@ -27,6 +27,7 @@ export function parseCompaniesHouseRow(row: Record<string, string>): NormalizedS
     sourceRecordId,
     name,
     nameNormalized: normalizeCompanyName(name),
+    nameMatchable: true,
     domain: null,
     lei: null,
     country: "GB",

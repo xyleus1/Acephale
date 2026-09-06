@@ -20,6 +20,74 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-06: World merge keyset cursor
+
+- `src/lib/world/merge.ts` now advances through bounded source-record id
+  windows, passing the lower and upper cursor bounds through both matching
+  passes and unmatched insertion.
+- Added database coverage for five source records inserted out of id order
+  with a batch size of two. All records link and the expected five companies
+  remain.
+- The timeout fix remains in this branch because the upstream timeout change
+  is not yet merged.
+
+## 2026-09-06: World merge name aggregation performance
+
+- Name-only sibling JSON fields now aggregate through separate grouped CTEs
+  for legal identifiers, industry codes, and manufacturer evidence.
+- Large unmatched batches disable nested-loop planning for the single
+  insert-and-link statement, avoiding repeated scans of the grouped CTEs.
+- The world database test covers 20,000 distinct name-only records in one
+  batch and requires completion within 30 seconds with no left-behind rows.
+
+## 2026-09-06: World merge existing-name deferral guard
+
+- Same-batch records defer to the second matching pass only when exactly one
+  higher-priority candidate exists and no existing world company has the same
+  country and normalized name.
+- Added coverage for two existing same-name companies followed by a new
+  LEI, name-only, and domain-only batch. All records merge with no
+  left-behind rows.
+- The bounded-window regression can insert a source record after selecting a
+  window, and the optional merge hook verifies that all records inside the
+  selected range are still processed. Name-linked siblings are included in
+  matched-by-name counters.
+
+## 2026-09-06: World merge ambiguous batch guard
+
+- Same-batch name candidates are only withheld from insertion when exactly one
+  higher-priority candidate exists. Ambiguous batches insert their own company
+  instead of leaving records behind.
+- Name-only siblings sharing a newly inserted name key link to that company;
+  their profile fields, identifiers, manufacturer evidence, source count, and
+  manufacturer flag are aggregated.
+- Merge counters now include `leftBehind`, counted after both matching passes
+  in each cursor window. Database coverage exercises two LEIs plus one shared
+  name-only record.
+
+## 2026-09-09: Prospecting project screen declutter
+
+- `LeadStatusPanel` lost its "Lead status" header, row-count subtitle and
+  boxed Refresh; the pipeline bar plus a compact metric row (mono count over
+  an 11px label) is the summary, Refresh is a quiet text button at the end of
+  that row. Actions are outlined 38px buttons, the flow chart is 180px and the
+  country ring 124px; on screens under 560px the flow chart is hidden because
+  its labels collide (the metric row carries the same numbers).
+- Inside a locked project the Prospects header ("Prospects", count, Leads
+  link) is gone; the count sits at the end of the controls row. Table cells
+  clamp to three lines and show `-` instead of `n/a`; the header is sticky;
+  the row status select is 28px inside the table.
+- `.shell button { font: inherit }` in `supply-os-operating-shell.module.css`
+  is now `.shell :where(button)` so component-level button typography in
+  CSS modules applies. Global `input` and `select` rules set
+  `min-height: var(--ds-control-height)` (42px) at specificity (0,2,1); a
+  module rule needs `.prospectsWorkspace .prospectsControls input` or similar
+  to win.
+- `test:supply-os-enterprise-design` still fails on main for pre-existing
+  `box-shadow: inset` rules (lines around `.inventoryTabs`, `.leadReplies`),
+  and `test:supply-os-operations-ui` still expects the removed Opportunities
+  panel; neither is introduced here.
+
 ## 2026-09-09: A wrong contact is re-sourced, and capacity queues instead of dropping
 
 - `recoverProcurementWrongContact` in `src/lib/procurement-wrong-contact.ts`
@@ -12984,6 +13052,29 @@ Verification caveat:
 - The cron route runs every 15 minutes. The feature is not visually verified
   in a browser in this pass.
 
+## 2026-09-06: World manufacturer source parsers
+
+- Added EPA FRS and EEA Industrial Reporting parsers to the isolated world
+  loader, preserving raw rows and source-specific manufacturer evidence.
+- EPA preparation used a 7,423,983-byte Alabama state archive because the
+  349,469,314-byte national ZIP was intentionally not downloaded.
+- EEA preparation inspected bounded byte ranges from the 147,626,010-byte
+  user-friendly CSV archive. Current facility exports provide stable Inspire
+  IDs, names, countries, cities, and activity fields, but no postal or street
+  fields in the inspected exports.
+- E-PRTR sector and IED chapter mappings now provide deterministic
+  manufacturer signals when those exports do not include NACE columns.
+
+## 2026-09-06: Facility identity safeguards and EEA aggregation
+
+- World source records now carry `nameMatchable`; facility sources set it
+  false, so facility names cannot merge companies by name.
+- EEA Industrial Reporting rows are buffered and aggregated by stable facility
+  ID during loading. The latest reporting year supplies the preferred name and
+  status, while raw rows, industry codes, and manufacturer evidence are
+  retained.
+- The additive world migration is applied only to the local test database.
+
 ## 2026-09-06: Outreach campaign personalization hardening
 
 - Deterministic merge fields now preserve audience snapshot fields for first
@@ -13072,6 +13163,39 @@ Verification caveat:
   quota so larger approved contact plans can be filled.
 - Free-mail and disposable domains now fall back to vendor identity, preventing
   unrelated website-less suppliers from collapsing into one company.
+
+## 2026-09-06: World merge candidate-count performance
+
+- World merge unmatched insertion now groups same-batch LEI and name candidates
+  before applying deferral rules, avoiding correlated count scans.
+- Existing company name checks use direct indexed existence checks, and large
+  insert batches disable nested-loop plans for grouped sibling aggregation.
+- The local regression suite covers 20,000 LEI records plus 20,000 matching
+  name-only records in one batch. The fixture completed in about 13 seconds,
+  linked all records, created 20,000 companies, and left no records behind.
+
+## 2026-09-09: Prospecting project screen declutter
+
+- `LeadStatusPanel` lost its "Lead status" header, row-count subtitle and
+  boxed Refresh; the pipeline bar plus a compact metric row (mono count over
+  an 11px label) is the summary, Refresh is a quiet text button at the end of
+  that row. Actions are outlined 38px buttons, the flow chart is 180px and the
+  country ring 124px; on screens under 560px the flow chart is hidden because
+  its labels collide (the metric row carries the same numbers).
+- Inside a locked project the Prospects header ("Prospects", count, Leads
+  link) is gone; the count sits at the end of the controls row. Table cells
+  clamp to three lines and show `-` instead of `n/a`; the header is sticky;
+  the row status select is 28px inside the table.
+- `.shell button { font: inherit }` in `supply-os-operating-shell.module.css`
+  is now `.shell :where(button)` so component-level button typography in
+  CSS modules applies. Global `input` and `select` rules set
+  `min-height: var(--ds-control-height)` (42px) at specificity (0,2,1); a
+  module rule needs `.prospectsWorkspace .prospectsControls input` or similar
+  to win.
+- `test:supply-os-enterprise-design` still fails on main for pre-existing
+  `box-shadow: inset` rules (lines around `.inventoryTabs`, `.leadReplies`),
+  and `test:supply-os-operations-ui` still expects the removed Opportunities
+  panel; neither is introduced here.
 
 ## 2026-09-06: Outreach personalization copy review
 

@@ -13,6 +13,7 @@ model WorldCompany {
   id                   String              @id @default(cuid())
   canonicalName        String
   nameNormalized       String
+  nameMatchable        Boolean             @default(true)
   domain               String?             @unique
   lei                  String?             @unique
   country              String?
@@ -51,6 +52,7 @@ model WorldSourceRecord {
   merged               Boolean             @default(false)
   name                 String
   nameNormalized       String
+  nameMatchable        Boolean             @default(true)
   domain               String?
   lei                  String?
   country              String?

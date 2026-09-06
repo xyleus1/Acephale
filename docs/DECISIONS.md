@@ -5,6 +5,17 @@ Sourcing categories are derived from the request; curated categories are overrid
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## 2026-09-06: Facility names are not company identity
+
+- Status: accepted
+- World facility sources such as EPA FRS and EEA Industrial Reporting set
+  `nameMatchable = false`. Name matching requires both the source record and
+  target world company to be explicitly name-matchable.
+- EEA pollutant and reporting-year rows are aggregated by stable facility ID
+  during loading. The source payload keeps a bounded summary (first and latest
+  row, row count, distinct reporting years, pollutants, activities, files);
+  row-level provenance is the retained source archive, not the payload.
+
 ## An unsettled supplier conversation is owned until it is quoted or durably faded
 Date: 2026-09-09
 

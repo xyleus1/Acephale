@@ -19,6 +19,7 @@ export function parseGleifRow(row: Record<string, string>): NormalizedSourceReco
     sourceRecordId: lei,
     name,
     nameNormalized: normalizeCompanyName(name),
+    nameMatchable: true,
     domain: null,
     lei,
     country: normalizeCountry(value(row, "Entity.LegalAddress.Country")),
