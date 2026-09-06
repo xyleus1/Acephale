@@ -184,15 +184,15 @@ assert.equal(
 // saved ask is delivered rather than being stranded behind that rule.
 const autopilotSource = readFileSync(resolve(__dirname, "../src/lib/procurement-autopilot.ts"), "utf8");
 assert.ok(
-  /entry\.action\.kind === "ASK_QUOTE_FACTS" && \(sendFollowUps \|\| askQuoteFacts\)/.test(autopilotSource),
+  /entry\.action\.kind === "ASK_QUOTE_FACTS" && \(followUps \|\| quoteFactAsks\)/.test(autopilotSource),
   "An ask for a missing commercial fact is drafted even when chases are withheld.",
 );
 assert.ok(
-  /entry\.action\.kind === "CHASE" && sendFollowUps/.test(autopilotSource),
+  /entry\.action\.kind === "CHASE" && followUps/.test(autopilotSource),
   "A chase that only repeats the brief still waits for a confirmation.",
 );
 assert.ok(
-  /askQuoteFacts && Boolean\(entry\.state\.missingQuoteFacts\?\.length\)/.test(autopilotSource),
+  /quoteFactAsks && Boolean\(entry\.state\.missingQuoteFacts\?\.length\)/.test(autopilotSource),
   "A saved ask is delivered by the same pass rule that delivers an answer.",
 );
 assert.ok(

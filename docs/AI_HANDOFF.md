@@ -12998,3 +12998,14 @@ Verification caveat:
   quota so larger approved contact plans can be filled.
 - Free-mail and disposable domains now fall back to vendor identity, preventing
   unrelated website-less suppliers from collapsing into one company.
+
+## 2026-09-06: Scheduled sourcing reply loop
+
+- The scheduled sourcing pass now answers replies, sends bounded chases and
+  nudges, and stops unsolicited follow ups at the stored campaign quote goal.
+- Answers to inbound replies remain deliverable after the goal, while price,
+  terms, dates, and legal questions still escalate to an operator.
+- No existing DB-mocked `runProcurementAutopilot` harness was found under
+  `scripts/`, so the goal-reached integration case was not added.
+- This branch uses one per-request send budget with replies first, and a failed
+  quote-goal lookup blocks unsolicited follow ups while preserving reply answers.

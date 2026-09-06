@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import {
   autopilotEscalations,
   autopilotFailures,
+  autopilotGoalReached,
+  autopilotNudgeBudget,
   autopilotRequestStage,
   planAutopilotVendorAction,
   rotateAutopilotOrderIds,
@@ -77,6 +79,14 @@ assert.equal(autopilotRequestStage({ quotes: 0 }), "COLLECTING_REPLIES");
 assert.equal(autopilotRequestStage({ quotes: 2 }), "COLLECTING_REPLIES");
 assert.equal(autopilotRequestStage({ quotes: 3 }), "QUOTES_READY_FOR_PO");
 assert.equal(autopilotRequestStage({ quotes: 1, required: 1 }), "QUOTES_READY_FOR_PO");
+assert.equal(autopilotGoalReached({ quotes: 10, quoteGoal: null }), false);
+assert.equal(autopilotGoalReached({ quotes: 4, quoteGoal: 5 }), false);
+assert.equal(autopilotGoalReached({ quotes: 5, quoteGoal: 5 }), true);
+assert.equal(autopilotGoalReached({ quotes: 1, quoteGoal: 0.5 }), true);
+assert.equal(autopilotGoalReached({ quotes: 0, quoteGoal: 0.5 }), false);
+assert.equal(autopilotNudgeBudget(8, 0), 8);
+assert.equal(autopilotNudgeBudget(8, 3), 5);
+assert.equal(autopilotNudgeBudget(8, 12), 0);
 
 const plan = [
   { vendorId: "a", vendorName: "A", action: planAutopilotVendorAction(state({ inboundKind: "BOUNCE" }), draftOnly) },
@@ -248,28 +258,34 @@ assert.ok(
   /autoSend: true/.test(cronSource) && /bestEffort: true/.test(cronSource),
   "The scheduled pass answers supplier replies instead of waiting for an operator command.",
 );
-// Answering a reply is what the supplier is waiting for. A quiet thread chase
-// and a first contact nudge are unsolicited mail, so an unattended pass plans
-// and reports them and an operator confirms them.
+// The scheduled pass sends follow ups until the campaign quote goal is met.
 assert.ok(
-  /sendFollowUps: false/.test(cronSource),
-  "The scheduled pass must not deliver chases or nudges.",
+  /sendFollowUps: true/.test(cronSource),
+  "The scheduled pass delivers chases and nudges.",
 );
 assert.ok(
   /const sendFollowUps = autoSend && args\.sendFollowUps !== false/.test(autopilotSource),
   "Follow up sending is a separate control that defaults to the send instruction.",
 );
 assert.ok(
-  /const nudgeRun = sendFollowUps/.test(autopilotSource),
-  "Nudges are delivered only when follow up sending is on.",
+  /const nudgeRun = followUps && nudgeLimit > 0 && !outOfScanTime\(\)/.test(autopilotSource),
+  "Nudges use the effective follow up gate.",
 );
 assert.ok(
-  /entry\.action\.kind === "CHASE" && sendFollowUps/.test(autopilotSource),
-  "A chase draft is not even written when follow up sending is off, or a later pass would send it as a ready draft.",
+  /entry\.action\.kind === "CHASE" && followUps/.test(autopilotSource),
+  "A chase draft is gated by the campaign quote goal.",
 );
 assert.ok(
-  /sendFollowUps\s*\|\| entry\.state\.lastDirection === "INBOUND"/.test(autopilotSource),
-  "Without follow up sending, delivery is restricted to threads whose newest message is the supplier's, or to a saved ask for a missing commercial fact.",
+  /followUps\s*\|\| entry\.state\.lastDirection === "INBOUND"/.test(autopilotSource),
+  "Inbound replies remain deliverable after the quote goal.",
+);
+assert.ok(
+  /const quoteFactAsks = askQuoteFacts && !goalReached/.test(autopilotSource),
+  "Quote fact asks stop at the campaign quote goal.",
+);
+assert.ok(
+  /runProcurementSupplierNudges\(\{ orderId: args\.orderId, limit: nudgeLimit \}\)/.test(autopilotSource),
+  "Nudges use the remaining per-request send budget.",
 );
 assert.ok(
   /const deadlineAt = startedAt \+ PASS_BUDGET_MS/.test(cronSource)
@@ -293,7 +309,7 @@ for (const phase of [
   /const draftRun = outOfScanTime\(\) \? null :/,
   /if \(args\.outOfTime\?\.\(\)\) return \{ states, anchors, stopped: true \}/,
   /if \(args\.outOfTime\?\.\(\)\) return \{ drafted, failures, stopped: true \}/,
-  /const nudgeRun = sendFollowUps && !outOfScanTime\(\)/,
+  /const nudgeRun = followUps && nudgeLimit > 0 && !outOfScanTime\(\)/,
   /const sendRun = autoSend && deliverable\.length && !outOfTime\(\)/,
 ]) {
   assert.ok(phase.test(autopilotSource), `Every phase of a pass checks the deadline: ${String(phase)}`);

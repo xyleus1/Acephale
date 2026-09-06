@@ -13,9 +13,8 @@ import {
 export const AUTOPILOT_QUOTES_FOR_PO = 3;
 
 export type AutopilotPolicy = {
-  // Off by default. Only an explicit operator instruction turns supplier
-  // facing sending on, and even then it covers file delivery and answers the
-  // stored facts fully support, never price, terms, dates or legal replies.
+  // The scheduled pass turns sending on, while price, terms, dates and legal
+  // issues still escalate rather than being answered automatically.
   autoSend: boolean;
   // Injected by tests so a chase decision is reproducible.
   now?: number;
@@ -104,6 +103,17 @@ export function planAutopilotVendorAction(
 }
 
 export type AutopilotStage = "COLLECTING_REPLIES" | "QUOTES_READY_FOR_PO";
+
+export type AutopilotGoal = { quotes: number; quoteGoal: number | null };
+
+export function autopilotGoalReached(goal: AutopilotGoal): boolean {
+  return goal.quoteGoal !== null
+    && goal.quotes >= Math.max(1, Math.trunc(goal.quoteGoal));
+}
+
+export function autopilotNudgeBudget(limit: number, deliverable: number): number {
+  return Math.max(0, limit - Math.min(limit, deliverable));
+}
 
 // A request is only called PO ready when enough real quotes exist to compare.
 // Drafts, replies and interest never count as a quote.

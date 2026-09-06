@@ -211,7 +211,7 @@ export function storedQuoteGoalFromJobs(
   return null;
 }
 
-async function storedQuoteGoal(officeId: string, sourceWorkspaceId: string | null) {
+export async function storedQuoteGoal(officeId: string, sourceWorkspaceId: string | null) {
   if (!sourceWorkspaceId) return null;
   const job = await prisma.backgroundJob.findFirst({
     where: {

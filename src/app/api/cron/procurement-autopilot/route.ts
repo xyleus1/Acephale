@@ -19,18 +19,11 @@ const responseHeaders = {
   "x-content-type-options": "nosniff",
 };
 
-// The scheduled pass keeps every live sourcing request moving between operator
-// commands, and answers the supplier replies it finds: a reply that only an
-// operator command could answer stayed unanswered for as long as nobody ran
-// one. Commercial commitments are still not automated, because a question about
-// price, payment terms, or legal wording is escalated rather than answered.
-// Only replies that currently await an answer are delivered. A quiet thread
-// chase and a first contact nudge are unsolicited mail nobody asked us to
-// send, so this pass plans and reports them and an operator confirms them.
-// The exception is a supplier who already answered with part of a quote: the
-// one question standing between their reply and a purchase order is asked on
-// their own thread, because leaving that for an operator command is what left
-// partial readings sitting untouched between commands.
+// The scheduled pass answers replies, chases quiet threads, and nudges silent
+// suppliers without an operator command. Chases are bounded by
+// MAX_SUPPLIER_CHASES, the quiet period, the per-request send limit, and
+// sender-pool pacing. Follow ups stop when the campaign quote goal is reached.
+// Price, terms, dates, and legal issues still escalate for operator review.
 const PASS_BUDGET_MS = 240_000;
 const REQUEST_SEND_LIMIT = 8;
 
@@ -110,7 +103,7 @@ export async function GET(request: Request) {
         const run = await runProcurementAutopilot({
           orderId,
           autoSend: true,
-          sendFollowUps: false,
+          sendFollowUps: true,
           bestEffort: true,
           limit: REQUEST_SEND_LIMIT,
           // Starting a request in time is not the same as finishing it: one
@@ -129,6 +122,9 @@ export async function GET(request: Request) {
             material: run.material,
             stage: run.stage,
             quotes: run.quotes,
+            quoteGoal: run.quoteGoal,
+            quoteGoalReadFailed: run.quoteGoalReadFailed,
+            goalReached: run.goalReached,
             replied: run.replied,
             drafted: run.drafted,
             sent: run.sent,

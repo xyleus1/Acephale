@@ -3,6 +3,8 @@ import "server-only";
 import {
   autopilotEscalations,
   autopilotFailures,
+  autopilotGoalReached,
+  autopilotNudgeBudget,
   autopilotRequestStage,
   planAutopilotVendorAction,
   prioritizeAutopilotQueue,
@@ -49,6 +51,7 @@ import {
   supplierWrittenMessages,
   triageSupplierInbound,
 } from "@/lib/procurement-inbound-triage";
+import { storedQuoteGoal } from "@/lib/supply-os/project-status";
 import {
   getProcurementRequest,
   procurementWorkflowDatabase,
@@ -133,9 +136,11 @@ export type AutopilotRunResult = {
   failed: number;
   failures: Array<{ vendorId: string; vendorName: string; error: string }>;
   autoSend: boolean;
-  // False when the pass answered current replies but left quiet thread chases
-  // and first contact nudges planned and unsent, which is what a scheduled
-  // pass does.
+  quoteGoal: number | null;
+  quoteGoalReadFailed: boolean;
+  goalReached: boolean;
+  // Reports whether unsolicited chases, nudges, and quote fact asks were
+  // enabled for this pass after the campaign goal gate was applied.
   sendFollowUps: boolean;
   // True when the pass stopped starting work to stay inside the invocation it
   // was given. What it did is reported and the rest is left for the next pass,
@@ -431,6 +436,22 @@ export async function runProcurementAutopilot(args: {
     state,
     action: planAutopilotVendorAction(state, { autoSend }),
   }));
+  // The quote count spans every vendor on the request. The thread scan can
+  // omit backing-off vendors or stop at its deadline, but the order snapshot
+  // still carries the complete quote state after the capture sweep.
+  const quotes = order.vendors.filter((vendor) => Boolean(vendor.quote)).length;
+  const goalLookup = await storedQuoteGoal(summary.officeId, summary.sourceWorkspaceId)
+    .then((quoteGoal) => ({ quoteGoal, failed: false as const }))
+    .catch((error: unknown) => {
+      console.error("procurement campaign quote goal not read", args.orderId, error);
+      return { quoteGoal: null, failed: true as const };
+    });
+  const quoteGoal = goalLookup.quoteGoal;
+  const goalReached = autopilotGoalReached({ quotes, quoteGoal });
+  // A goal that could not be read blocks unsolicited mail until a later pass
+  // can read it. Answers to replies do not wait on the lookup.
+  const followUps = sendFollowUps && !goalReached && !goalLookup.failed;
+  const quoteFactAsks = askQuoteFacts && !goalReached && !goalLookup.failed;
   // Drafts exist for threads the plan escalates, so delivery is restricted to
   // the suppliers the plan chose. The plan is therefore computed before the
   // send, never after it.
@@ -440,10 +461,10 @@ export async function runProcurementAutopilot(args: {
   // still names every quiet thread, so nothing is hidden from the operator.
   const chaseTargets = plan.flatMap((entry) => {
     if (backingOff.has(entry.vendorId)) return [];
-    if (entry.action.kind === "ASK_QUOTE_FACTS" && (sendFollowUps || askQuoteFacts)) {
+    if (entry.action.kind === "ASK_QUOTE_FACTS" && (followUps || quoteFactAsks)) {
       return [{ vendorId: entry.vendorId, missing: entry.action.missing }];
     }
-    return entry.action.kind === "CHASE" && sendFollowUps
+    return entry.action.kind === "CHASE" && followUps
       ? [{ vendorId: entry.vendorId, missing: [] as SupplierQuoteMissingFact[] }]
       : [];
   });
@@ -468,24 +489,19 @@ export async function runProcurementAutopilot(args: {
         // newest message is the supplier's, which is exactly a reply awaiting
         // an answer. A chase draft saved by an earlier operator pass sits on a
         // thread we spoke last on, so it stays behind its confirmation.
-        && (sendFollowUps
+        && (followUps
           || entry.state.lastDirection === "INBOUND"
           // A saved ask for a missing commercial fact belongs to a thread that
           // already engaged, so a pass that withholds unsolicited follow ups
           // still delivers it. Leaving it undelivered would strand the one
           // question standing between the reply and a purchase order.
-          || (askQuoteFacts && Boolean(entry.state.missingQuoteFacts?.length))))
+          || (quoteFactAsks && Boolean(entry.state.missingQuoteFacts?.length))))
       .map((entry) => entry.vendorId),
     ...chaseRun.drafted,
   ];
   // Suppliers that never replied have no inbound message to answer, so their
   // follow up rides on our own RFQ thread instead of being silently skipped.
-  const nudgeRun = sendFollowUps && !outOfScanTime()
-    ? await runProcurementSupplierNudges({ orderId: args.orderId, limit })
-    : null;
-  const nudgePlan = nudgeRun || outOfScanTime()
-    ? null
-    : await listSupplierNudgeTargets({ order: summary, limit });
+  const nudgeLimit = autopilotNudgeBudget(limit, deliverable.length);
   // Answering is the last phase to be given up, since a supplier is waiting on
   // it, and an unsent draft is delivered by the next pass either way.
   const sendRun = autoSend && deliverable.length && !outOfTime()
@@ -500,9 +516,12 @@ export async function runProcurementAutopilot(args: {
       allowPooledSender: true,
     })
     : null;
-  // Quotes recorded earlier in this pass are already on the vendor rows the
-  // plan was built from, so counting the states counts them once.
-  const quotes = states.filter((state) => state.hasQuote).length;
+  const nudgeRun = followUps && nudgeLimit > 0 && !outOfScanTime()
+    ? await runProcurementSupplierNudges({ orderId: args.orderId, limit: nudgeLimit })
+    : null;
+  const nudgePlan = nudgeRun || outOfScanTime()
+    ? null
+    : await listSupplierNudgeTargets({ order: summary, limit });
   // The funnel covers the whole request, not only the threads this pass read: a
   // reply scan walks the suppliers that answered, so counting only those would
   // report nothing owed while hundreds of silent suppliers wait. Suppliers whose
@@ -593,7 +612,7 @@ export async function runProcurementAutopilot(args: {
   return {
     orderId: summary.orderId,
     material: summary.material,
-    stage: autopilotRequestStage({ quotes }),
+    stage: autopilotRequestStage({ quotes, required: quoteGoal ?? undefined }),
     quotes,
     replied: states.filter((state) => state.lastDirection === "INBOUND").length,
     drafted: draftRun?.drafted ?? 0,
@@ -619,7 +638,10 @@ export async function runProcurementAutopilot(args: {
     // written counts too, since it leaves a priced reply invisible.
     failures,
     autoSend,
-    sendFollowUps,
+    quoteGoal,
+    quoteGoalReadFailed: goalLookup.failed,
+    goalReached,
+    sendFollowUps: followUps,
     stoppedAtDeadline: scanStopped || chaseRun.stopped || outOfTime(),
     escalations: autopilotEscalations(plan),
     funnel: conversationFunnel(funnelEntries),

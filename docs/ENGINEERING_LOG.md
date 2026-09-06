@@ -10490,6 +10490,17 @@ Use this file for chronological implementation notes that future agents should s
 - Shared company-key logic now preserves separate identities for free-mail and
   disposable-provider contacts while merging website variants.
 
+## 2026-09-06: Scheduled sourcing reply loop
+
+- Enabled scheduled autopilot follow ups with the existing quiet period,
+  chase bound, request send limit, and sender-pool pacing.
+- Follow ups and quote-fact asks now stop at the stored campaign quote goal,
+  while inbound reply answers continue through the goal.
+- The run result and cron summary expose `quoteGoal` and `goalReached`.
+- No DB-mocked autopilot execution harness exists under `scripts/`.
+- This branch shares one send budget across replies and nudges, and treats a
+  failed quote-goal lookup as a block for unsolicited mail only.
+
 ## 2026-09-06: Outreach campaign auto-reply engine
 
 - Added campaign `replyMode` and `replyContext`, plus tenant-scoped

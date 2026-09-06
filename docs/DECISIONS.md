@@ -5430,3 +5430,9 @@ Context prospecting persists only entity-qualified targets: deterministic non-co
 - DRAFT mode creates an escalation with the suggested reply, while OFF skips
   the worker. Every inbound message is claimed by its unique message id
   before processing.
+
+## 2026-09-06: Scheduled sourcing reply loop
+
+- Scheduled autopilot sends follow ups unattended and stops them at the campaign
+  quote goal; answers to replies never stop; commercial questions still
+  escalate.
