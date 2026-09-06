@@ -5,6 +5,13 @@ Sourcing categories are derived from the request; curated categories are overrid
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## Supplier delivery suppression is the autopilot bounce source of truth
+Date: 2026-09-08
+- Status: accepted
+- Owner: engineering
+- Decision: Scheduled procurement autopilot reads permanent, per-recipient suppression reasons from the office-scoped email suppression ledger. Bounced and undeliverable addresses escalate for a new contact, while complaints, opt-outs, and other suppressions stop further contact without parsing stored thread text.
+- Why: local stored-thread projections intentionally drop delivery notices, and raw notice text cannot safely distinguish permanent failures or attribute a failure to one recipient.
+
 ## 2026-09-05: Separate world company spine
 
 - The office-less world company spine lives in its own Postgres database through `WORLD_DATABASE_URL`, never in the office-scoped `Company` table.

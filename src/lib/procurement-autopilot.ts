@@ -1,5 +1,6 @@
 import "server-only";
 
+import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import {
   autopilotEscalations,
   autopilotFailures,
@@ -207,6 +208,11 @@ async function vendorStates(args: {
   });
   const states: AutopilotVendorState[] = [];
   const anchors = new Map<string, ChaseAnchor>();
+  const storedContactEmails = args.order.vendors
+    .map((vendor) => vendor.contact?.email?.trim().toLowerCase() ?? "")
+    .filter(Boolean);
+  const checkedSuppressionEmails = new Set(storedContactEmails);
+  const suppressed = await listSuppressedEmails(args.officeId, storedContactEmails);
   // Every action this plan can take needs a supplier reply to work from, so the
   // scan follows the replies rather than the supplier count. Suppliers that
   // never answered are followed up through the nudge path, which selects them
@@ -224,9 +230,14 @@ async function vendorStates(args: {
     : scanned.vendors;
   // A history read cut short leaves repliers unseen, so the pass is unfinished
   // even if every thread it did find is handled.
-  const stopped = !scanned.complete;
+  let stopped = !scanned.complete;
+  const processedIds = new Set<string>();
   for (const vendor of replied) {
-    if (args.outOfTime?.()) return { states, anchors, stopped: true };
+    if (args.outOfTime?.()) {
+      stopped = true;
+      break;
+    }
+    processedIds.add(vendor.id);
     const conversation = await procurementVendorConversation({
       officeId: args.officeId,
       customerId: args.customerId,
@@ -242,6 +253,12 @@ async function vendorStates(args: {
     const latest = written.at(-1) ?? null;
     const inbound = latest?.direction === "INBOUND" ? latest : null;
     const newestReply = [...written].reverse().find((message) => message.direction === "INBOUND") ?? null;
+    const recipient = (newestReply?.fromEmail ?? vendor.contact?.email ?? "").trim().toLowerCase();
+    if (recipient && !checkedSuppressionEmails.has(recipient)) {
+      const recipientSuppression = await listSuppressedEmails(args.officeId, [recipient]);
+      checkedSuppressionEmails.add(recipient);
+      for (const [email, reason] of recipientSuppression) suppressed.set(email, reason);
+    }
     if (newestReply) {
       anchors.set(vendor.id, {
         sourceMessageId: newestReply.id,
@@ -270,6 +287,7 @@ async function vendorStates(args: {
       triageDecision: triage?.decision ?? null,
       hasDraft: Boolean(draft),
       hasQuote: Boolean(vendor.quote),
+      suppressed: suppressed.get(recipient) ?? null,
       lastMessageAt: latest?.sentAt ?? null,
       chasesSent: chasesSentAfterLastReply(written, {
         // Notices are already out of this thread view, so the newest inbound
@@ -278,6 +296,23 @@ async function vendorStates(args: {
         answeredReply: newestReply !== null,
       }),
       missingQuoteFacts: args.missingQuoteFacts?.get(vendor.id) ?? null,
+    });
+  }
+  const allVendors = args.order.vendors;
+  for (const vendor of allVendors) {
+    if (args.skipVendorIds?.has(vendor.id) || processedIds.has(vendor.id)) continue;
+    const email = vendor.contact?.email?.trim().toLowerCase() ?? "";
+    const suppression = email ? suppressed.get(email) ?? null : null;
+    if (!suppression) continue;
+    states.push({
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      lastDirection: vendor.contacted ? "OUTBOUND" : null,
+      inboundKind: null,
+      triageDecision: null,
+      hasDraft: false,
+      hasQuote: Boolean(vendor.quote),
+      suppressed: suppression,
     });
   }
   return { states, anchors, stopped };

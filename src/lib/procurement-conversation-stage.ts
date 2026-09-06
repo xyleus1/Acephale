@@ -13,8 +13,9 @@ import type { SupplierQuoteMissingFact } from "@/lib/procurement-supplier-quote-
 export type SupplierConversationStage =
   // Never mailed, so the thread owes a first contact rather than a reply.
   | "NOT_CONTACTED"
-  // Sourcing found the supplier but no address to mail, so there is no
-  // conversation to carry and no action the loop can take.
+  // Sourcing found the supplier but no address to mail, or the address is
+  // suppressed after a complaint or opt out, so there is no conversation to
+  // carry and no action the loop can take.
   | "NO_CONTACT_METHOD"
   // Mailed and the supplier has not answered at all.
   | "AWAITING_FIRST_REPLY"
@@ -68,6 +69,10 @@ export function supplierConversationStage(
   input: SupplierConversationInput,
 ): SupplierConversationStage {
   if (input.hasQuote) return "QUOTED";
+  if (input.suppressed === "BOUNCED" || input.suppressed === "UNDELIVERABLE") {
+    return "NEEDS_OPERATOR";
+  }
+  if (input.suppressed) return "NO_CONTACT_METHOD";
   if (input.inboundKind === "BOUNCE" || input.inboundKind === "WRONG_RECIPIENT") return "NEEDS_OPERATOR";
   if (input.triageDecision === "NEEDS_HUMAN") return "NEEDS_OPERATOR";
   if (input.hasDraft) return "ANSWER_READY";

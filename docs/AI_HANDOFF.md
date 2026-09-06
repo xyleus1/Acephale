@@ -13046,3 +13046,4 @@ Verification caveat:
   `scripts/`, so the goal-reached integration case was not added.
 - This branch uses one per-request send budget with replies first, and a failed
   quote-goal lookup blocks unsolicited follow ups while preserving reply answers.
+- Permanent, recipient-specific delivery suppressions use the actual reply recipient when available, recheck immediately before sends, and stop complaint or opt-out addresses without relying on dropped thread notices.

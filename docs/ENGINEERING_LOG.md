@@ -10500,6 +10500,7 @@ Use this file for chronological implementation notes that future agents should s
 - No DB-mocked autopilot execution harness exists under `scripts/`.
 - This branch shares one send budget across replies and nudges, and treats a
   failed quote-goal lookup as a block for unsolicited mail only.
+- The autopilot now keys the office-scoped suppression ledger to the actual reply recipient, rechecks drafts before send, escalates delivery failures, and settles complaint or opt-out addresses as unreachable.
 
 ## 2026-09-06: Outreach campaign auto-reply engine
 

@@ -45,6 +45,19 @@ assert.equal(
   "NEEDS_OPERATOR",
 );
 assert.equal(
+  supplierConversationStage(input({ suppressed: "BOUNCED" })),
+  "NEEDS_OPERATOR",
+);
+assert.equal(
+  supplierConversationStage(input({ suppressed: "UNDELIVERABLE" })),
+  "NEEDS_OPERATOR",
+);
+assert.equal(
+  supplierConversationStage(input({ suppressed: "OPTED_OUT" })),
+  "NO_CONTACT_METHOD",
+);
+assert.equal(conversationOwesAction("NO_CONTACT_METHOD"), false);
+assert.equal(
   supplierConversationStage(input({ inboundKind: "WRONG_RECIPIENT", triageDecision: "NEEDS_HUMAN" })),
   "NEEDS_OPERATOR",
 );

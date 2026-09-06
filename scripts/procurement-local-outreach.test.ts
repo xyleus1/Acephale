@@ -366,7 +366,7 @@ assert.ok(
   "the reply scope carries the deadline in and the completeness out",
 );
 for (const [moduleName, expected] of [
-  ["procurement-autopilot", /const stopped = !scanned\.complete;/],
+  ["procurement-autopilot", /let stopped = !scanned\.complete;/],
   ["procurement-file-draft-batch", /outOfTime,/],
   ["procurement-supplier-quote", /outOfTime: input\.outOfTime,/],
 ] as const) {

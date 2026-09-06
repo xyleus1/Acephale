@@ -1,4 +1,5 @@
 import type { ProcurementInboundTriage, SupplierInboundKind } from "@/lib/procurement-inbound-triage";
+import type { EmailSuppressionReason } from "@/lib/email-delivery-feedback";
 import { supplierChaseDecision } from "@/lib/procurement-supplier-chase";
 import {
   SUPPLIER_QUOTE_MISSING_FACT_ASK,
@@ -28,6 +29,7 @@ export type AutopilotVendorState = {
   triageDecision: ProcurementInboundTriage["decision"] | null;
   hasDraft: boolean;
   hasQuote: boolean;
+  suppressed?: EmailSuppressionReason | null;
   // Set for threads that can be chased. Left out by callers that only report a
   // plan, in which case a quiet thread stays untouched.
   lastMessageAt?: string | null;
@@ -52,6 +54,12 @@ export function planAutopilotVendorAction(
   policy: AutopilotPolicy,
 ): AutopilotAction {
   if (state.hasQuote) return { kind: "NONE", reason: "A supplier quote is already recorded." };
+  if (state.suppressed === "BOUNCED" || state.suppressed === "UNDELIVERABLE") {
+    return { kind: "ESCALATE", reason: "Delivery bounced, so this supplier needs a new address." };
+  }
+  if (state.suppressed) {
+    return { kind: "NONE", reason: "This address is suppressed (complaint or opt out), so it is not contacted again." };
+  }
   if (state.inboundKind === "BOUNCE") {
     return { kind: "ESCALATE", reason: "Delivery bounced, so this supplier needs a new address." };
   }

@@ -125,6 +125,7 @@ export async function GET(request: Request) {
             quoteGoal: run.quoteGoal,
             quoteGoalReadFailed: run.quoteGoalReadFailed,
             goalReached: run.goalReached,
+            sendFollowUps: run.sendFollowUps,
             replied: run.replied,
             drafted: run.drafted,
             sent: run.sent,

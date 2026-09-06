@@ -48,6 +48,10 @@ assert.equal(
   "ESCALATE",
   "A bounce needs a new address from an operator, never another send.",
 );
+assert.equal(planAutopilotVendorAction(state({ suppressed: "BOUNCED" }), sending).kind, "ESCALATE");
+assert.equal(planAutopilotVendorAction(state({ suppressed: "UNDELIVERABLE" }), sending).kind, "ESCALATE");
+assert.equal(planAutopilotVendorAction(state({ suppressed: "OPTED_OUT" }), sending).kind, "NONE");
+assert.equal(planAutopilotVendorAction(state({ suppressed: "BOUNCED", hasQuote: true }), sending).kind, "NONE");
 assert.equal(
   planAutopilotVendorAction(state({ inboundKind: "AUTO_REPLY", triageDecision: "NO_REPLY_NEEDED" }), sending).kind,
   "NONE",
@@ -263,6 +267,16 @@ assert.ok(
   /sendFollowUps: true/.test(cronSource),
   "The scheduled pass delivers chases and nudges.",
 );
+assert.match(
+  autopilotSource,
+  /listSuppressedEmails\(args\.officeId,/,
+  "The autopilot reads permanent recipient suppression inside the office scope.",
+);
+assert.match(
+  autopilotSource,
+  /const recipient = \(newestReply\?\.fromEmail \?\? vendor\.contact\?\.email \?\? ""\)/,
+  "Replied-vendor suppression follows the actual reply recipient.",
+);
 assert.ok(
   /const sendFollowUps = autoSend && args\.sendFollowUps !== false/.test(autopilotSource),
   "Follow up sending is a separate control that defaults to the send instruction.",
@@ -307,7 +321,7 @@ assert.ok(
 for (const phase of [
   /const quoteRun = outOfScanTime\(\)/,
   /const draftRun = outOfScanTime\(\) \? null :/,
-  /if \(args\.outOfTime\?\.\(\)\) return \{ states, anchors, stopped: true \}/,
+  /if \(args\.outOfTime\?\.\(\)\) \{\s*stopped = true;\s*break;/,
   /if \(args\.outOfTime\?\.\(\)\) return \{ drafted, failures, stopped: true \}/,
   /const nudgeRun = followUps && nudgeLimit > 0 && !outOfScanTime\(\)/,
   /const sendRun = autoSend && deliverable\.length && !outOfTime\(\)/,

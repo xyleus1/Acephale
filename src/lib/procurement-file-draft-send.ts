@@ -1,5 +1,6 @@
 import "server-only";
 
+import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import { loadBulkRfqOrder } from "@/lib/procurement-bulk-rfq";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
 import {
@@ -110,6 +111,27 @@ export async function runProcurementFileDraftSendBatch(args: {
     drafts += 1;
     if (outcomes.length >= limit) continue;
     const attachments = draft.attachments.map((attachment) => attachment.name);
+    const lateSuppression = (await listSuppressedEmails(summary.officeId, [draft.recipient]))
+      .get(draft.recipient.trim().toLowerCase());
+    if (lateSuppression) {
+      console.error("procurement supplier reply suppressed before send", {
+        orderId: args.orderId,
+        vendorId: vendor.id,
+        recipient: draft.recipient,
+        reason: lateSuppression,
+      });
+      outcomes.push({
+        vendorId: vendor.id,
+        vendorName: vendor.name,
+        recipient: draft.recipient,
+        state: "STALE",
+        sender: null,
+        attachments,
+        providerMessageId: null,
+        error: `Recipient suppressed: ${lateSuppression}.`,
+      });
+      continue;
+    }
     const decision = await procurementFileDraftSendDecision({
       context: access,
       order: live,
