@@ -17,6 +17,29 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-09: Prospecting project screen declutter
+
+- `LeadStatusPanel` lost its "Lead status" header, row-count subtitle and
+  boxed Refresh; the pipeline bar plus a compact metric row (mono count over
+  an 11px label) is the summary, Refresh is a quiet text button at the end of
+  that row. Actions are outlined 38px buttons, the flow chart is 180px and the
+  country ring 124px; on screens under 560px the flow chart is hidden because
+  its labels collide (the metric row carries the same numbers).
+- Inside a locked project the Prospects header ("Prospects", count, Leads
+  link) is gone; the count sits at the end of the controls row. Table cells
+  clamp to three lines and show `-` instead of `n/a`; the header is sticky;
+  the row status select is 28px inside the table.
+- `.shell button { font: inherit }` in `supply-os-operating-shell.module.css`
+  is now `.shell :where(button)` so component-level button typography in
+  CSS modules applies. Global `input` and `select` rules set
+  `min-height: var(--ds-control-height)` (42px) at specificity (0,2,1); a
+  module rule needs `.prospectsWorkspace .prospectsControls input` or similar
+  to win.
+- `test:supply-os-enterprise-design` still fails on main for pre-existing
+  `box-shadow: inset` rules (lines around `.inventoryTabs`, `.leadReplies`),
+  and `test:supply-os-operations-ui` still expects the removed Opportunities
+  panel; neither is introduced here.
+
 ## 2026-09-09: Approvals survive tab switches
 
 - Follow-up: the materials `.commandMapStage` at widths up to 1040px no longer

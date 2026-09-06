@@ -25,7 +25,7 @@
   box-sizing: border-box;
 }
 
-.shell button {
+.shell :where(button) {
   font: inherit;
 }
 

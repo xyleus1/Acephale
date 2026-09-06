@@ -7,6 +7,30 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-09: Prospecting project screen declutter
+
+- Trigger: the project detail screen stacked a project header, a Lead status
+  header with row count and boxed Refresh, a stage bar, inline stage text,
+  three filled action buttons, a 220px flow chart, a 150px country ring, a
+  second "Prospects" header with its own count and Leads link, a controls row
+  and a table with wrapped cells and 42px selects, all competing at once.
+- Removed the redundant Lead status and Prospects headers inside a locked
+  project, turned the stage counts into a compact metric row with a quiet
+  Refresh, outlined the action buttons, shrank both charts, hid the flow chart
+  under 560px, clamped table cells to three lines with `-` for empty values,
+  and aligned the controls row to the shared 32px `AppSelect` height.
+- Found `.shell button { font: inherit }` overriding CSS-module button
+  typography (stage counts rendered at 14px instead of 11px); it is now
+  `.shell :where(button)`. Global `input`/`select` min-height (42px) needed a
+  higher-specificity module rule for the search input and the row status
+  select.
+- Dropped the `text-decoration: underline` and the sticky-header
+  `box-shadow: inset` this screen used; both are forbidden by
+  `supply-os-enterprise-design.test.ts`, which still fails on main for older
+  inset shadows elsewhere in the module.
+- Verified over CDP at 1440x1000 and 420x860 on the 55-row QA fixture; Chat,
+  Logistics and the Messages tab render unchanged after the shell reset change.
+
 ## 2026-09-09: Materials stage no longer clips at 700px windows
 
 - Follow up to #420 testing: at widths up to 1040px the materials

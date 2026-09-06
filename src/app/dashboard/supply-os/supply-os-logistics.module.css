@@ -18,6 +18,11 @@
   --success-soft: #eaf2ed;
   --danger: #944b45;
   --danger-soft: #f6ecea;
+  --ink-secondary: var(--ink-soft);
+  --muted: var(--ink-muted);
+  --surface-subtle: var(--panel-subtle);
+  --surface-selected: var(--panel-selected);
+  --panel-muted: var(--panel-subtle);
   width: 100%;
   min-width: 0;
   height: 100%;
@@ -1245,7 +1250,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   height: 100%;
   padding: 18px;
   overflow: hidden;
@@ -1282,9 +1287,13 @@
 
 .prospectsHeader a,
 .prospectsExport {
+  color: var(--ink-secondary);
+  text-decoration: none;
+}
+
+.prospectsHeader a:hover,
+.prospectsExport:hover {
   color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .newListPanel {
@@ -1377,8 +1386,7 @@
 
 .prospectsControls {
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 12px;
+  align-items: end;
 }
 
 .prospectsControls form {
@@ -1396,14 +1404,40 @@
 .prospectsControls select,
 .prospectsControls button,
 .prospectsPager button {
-  min-height: 30px;
+  min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
   color: var(--ink);
   font: inherit;
   font-size: 12px;
-  padding: 5px 8px;
+  padding: 5px 10px;
+}
+
+.prospectsWorkspace .prospectsControls input {
+  min-width: 180px;
+  min-height: 32px;
+}
+
+.prospectsControls .prospectsExport {
+  align-self: end;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+
+.prospectsCount {
+  margin-left: auto;
+  align-self: end;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .prospectsControls button,
@@ -1429,32 +1463,80 @@
   min-width: 720px;
   border-collapse: collapse;
   font-size: 12px;
+  line-height: 1.45;
 }
 
 .prospectsTable th,
 .prospectsTable td {
-  padding: 9px 10px;
+  max-width: 260px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line);
+  color: var(--ink-secondary);
   text-align: left;
   vertical-align: top;
+}
+
+.prospectsTable td:first-child {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.prospectsWorkspace .prospectsTable td select {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.prospectsTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.prospectsTable tbody tr:hover td {
+  background: var(--panel-subtle);
 }
 
 .prospectsTable th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--panel-muted);
+  background: var(--panel);
+  background-clip: padding-box;
   color: var(--ink-muted);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
+.prospectsCell {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+.prospectsCell a,
 .prospectsTable a {
   color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.prospectsCell a:hover,
+.prospectsTable a:hover {
+  border-bottom-color: var(--ink);
+}
+
+.prospectsEmpty {
+  color: var(--line-strong);
 }
 
 .prospectsState,
@@ -6691,17 +6773,20 @@
 
 .projectViewHeader {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
-  padding: 16px 22px;
+  gap: 8px 14px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--line);
 }
 
 .projectViewHeader h2 {
+  min-width: 0;
   margin: 0;
   color: var(--ink);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 620;
+  letter-spacing: -0.01em;
 }
 
 .projectViewHeader button {
@@ -6716,14 +6801,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
   color: var(--ink-secondary);
 }
 
 .leadStatusPanel {
   display: grid;
-  gap: 32px;
+  gap: 20px;
   margin: 0;
-  padding: 22px 24px;
+  padding: 20px 24px 24px;
   border-bottom: 1px solid var(--line);
   background: transparent;
 }
@@ -6731,7 +6817,7 @@
 .projectSectionTabs {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   padding: 0 24px 32px;
 }
 
@@ -6769,24 +6855,6 @@
   overflow: visible;
 }
 
-.leadStatusHeader,
-.leadStatusActions,
-.leadStatusTitle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.leadStatusHeader h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.leadStatusTitle span,
-.leadStageLabels b,
 .leadStatusLive b,
 .leadReplies time {
   color: var(--muted);
@@ -6795,22 +6863,48 @@
   font-variant-numeric: tabular-nums;
 }
 
-.leadStatusActions button {
-  min-height: 42px;
+.leadStageRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.leadStageMeta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.leadRefresh {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
   border: 0;
   border-radius: 8px;
+  color: var(--ink-muted);
   background: transparent;
-  color: var(--ink-secondary);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  padding: 0 10px;
+}
+
+.leadRefresh:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.leadRefresh:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .leadStatusLiveBlock {
   display: grid;
   gap: 4px;
-  margin-bottom: 32px;
   line-height: 1.5;
 }
 
@@ -6824,10 +6918,10 @@
 .leadStageBar {
   display: flex;
   gap: 2px;
-  height: 6px;
+  height: 4px;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--surface-subtle);
+  background: var(--panel-subtle);
 }
 
 .leadStageSegment {
@@ -6837,22 +6931,26 @@
 }
 
 .leadStageLabels {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 8px;
 }
 
-.leadStageLabels > * {
-  min-height: 32px;
-  padding: 7px 8px;
+.leadStageLabels > button,
+.leadStageLabels > span {
+  min-width: 72px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
   border: 0;
   border-radius: 8px;
-  color: var(--ink-secondary);
+  color: var(--ink-muted);
   background: none;
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: left;
 }
 
 .leadStageLabels button {
@@ -6860,17 +6958,22 @@
 }
 
 .leadStageLabels b {
-  color: var(--ink-muted);
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 18px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .leadStageLabels button:hover,
 .leadStageLabels button:focus-visible {
-  text-decoration: underline;
+  background: var(--panel-subtle);
 }
 
 .leadStageLabels button[data-selected="true"] {
-  background: var(--surface-selected);
+  color: var(--ink-secondary);
+  background: var(--panel-selected);
 }
 
 .leadStageShimmer .leadStageSegment {
@@ -6878,14 +6981,16 @@
 }
 
 .leadSankey {
-  height: 220px;
-  max-height: 220px;
+  height: 180px;
+  max-height: 180px;
 }
 
 .leadCharts {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(200px, 1fr);
   gap: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
 }
 
 .leadCharts > section {
@@ -6894,12 +6999,10 @@
 
 .leadChartLabel {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--ink-muted);
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .leadCountryChartBody {
@@ -6946,14 +7049,20 @@
 
 .leadActionRow button,
 .leadOperation button {
-  min-height: 42px;
+  min-height: 38px;
   padding: 0 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   color: var(--ink);
   background: var(--panel);
   cursor: pointer;
   font-size: 12px;
+  transition: border-color 140ms ease;
+}
+
+.leadActionRow button:hover:not(:disabled),
+.leadOperation button:hover:not(:disabled) {
+  border-color: var(--line-strong);
 }
 
 .leadOperations {
@@ -7116,6 +7225,12 @@
 
   .leadCountryChartBody {
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .leadFlowChart {
+    display: none;
   }
 }
 

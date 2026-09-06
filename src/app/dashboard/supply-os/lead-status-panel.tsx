@@ -37,7 +37,7 @@ function LeadFlowNode({ x, y, width, height, payload }: SankeyNodeProps) {
 function LeadFlowLink({ sourceX, targetX, sourceY, targetY, sourceControlX, targetControlX, linkWidth, payload }: SankeyLinkProps) {
   const target = payload.target.name;
   const stroke = target === "Screened target" ? flowColors.success : ["Not a target", "No email", "Not sent", "No reply"].includes(target) ? flowColors.muted : ["Replied", "Positive", "Other reply"].includes(target) ? flowColors.warm : flowColors.navy;
-  return <path d={`M${sourceX},${sourceY}C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`} fill="none" stroke={stroke} strokeOpacity={0.18} strokeWidth={Math.max(1, linkWidth)} />;
+  return <path d={`M${sourceX},${sourceY}C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`} fill="none" stroke={stroke} strokeOpacity={0.14} strokeWidth={Math.max(1, linkWidth)} />;
 }
 
 function timeAgo(value: string | null) {
@@ -140,55 +140,69 @@ export function LeadStatusPanel({
   const countryColors = ["#29485c", "#3f6c55", "#a76b45", "#8b9690", "#c7ceca", "#5f7a8c"];
   const totalPurgeable = report ? Object.values(report.actions.purgeable).reduce((sum, value) => sum + value, 0) : 0;
   const emptyActive = Boolean(report && report.funnel.found === 0 && report.live.activeJobs > 0);
+  const researchIdle = Boolean(report && report.live.activeJobs === 0 && report.live.pausedJobs === 0);
+  const liveLines = report ? [
+    report.live.activeJobs > 0
+      ? <>Research running: <b>{report.funnel.found.toLocaleString()}</b> of <b>{report.live.target?.toLocaleString() ?? report.funnel.found.toLocaleString()}</b> rows, last batch <b>{timeAgo(report.live.lastBatchAt)}</b></>
+      : report.live.pausedJobs > 0 ? <>Paused: <b>{report.live.pausedJobs}</b> jobs</> : null,
+    !emptyActive && report.live.rejectedBeforePersist > 0 ? <>{report.live.rejectedBeforePersist.toLocaleString()} candidates screened out before the list</> : null,
+    !emptyActive && report.live.pendingOperations > 0 ? <>{report.live.pendingOperations} operation{report.live.pendingOperations === 1 ? "" : "s"} waiting for approval</> : null,
+  ].filter((line) => line !== null) : [];
 
   return <section className={styles.leadStatusPanel} aria-label="Lead status">
-    <header className={styles.leadStatusHeader}>
-      <div className={styles.leadStatusTitle}><h2>Lead status</h2><span>{report ? `${report.funnel.found.toLocaleString()} rows` : "Loading"}</span></div>
-      <div className={styles.leadStatusActions}><button type="button" onClick={() => void load()} disabled={state === "loading"}>Refresh</button></div>
-    </header>
     {state === "error" ? <p className={styles.prospectsError}>{error}</p> : null}
+    {!report && state === "loading" ? <p className={styles.leadStatusEmpty}>Loading</p> : null}
     {report ? <>
-      <div className={styles.leadStatusLiveBlock}>
-        <p className={styles.leadStatusLive}>{report.live.activeJobs > 0 ? <>Research running: <b>{report.funnel.found.toLocaleString()}</b> of <b>{report.live.target?.toLocaleString() ?? report.funnel.found.toLocaleString()}</b> rows, last batch <b>{timeAgo(report.live.lastBatchAt)}</b></> : report.live.pausedJobs > 0 ? <>Paused: <b>{report.live.pausedJobs}</b> jobs</> : "No active research"}</p>
-        {!emptyActive && report.live.rejectedBeforePersist > 0 ? <p className={styles.leadStatusLive}>{report.live.rejectedBeforePersist.toLocaleString()} candidates screened out before the list</p> : null}
-        {!emptyActive && report.live.pendingOperations > 0 ? <p className={styles.leadStatusLive}>{report.live.pendingOperations} operation{report.live.pendingOperations === 1 ? "" : "s"} waiting for approval</p> : null}
-      </div>
       <div className={`${styles.leadStageBar}${emptyActive ? ` ${styles.leadStageShimmer}` : ""}`} aria-label="Lead stages">{report.stages.map((stage, index) => <div key={stage.key} className={styles.leadStageSegment} style={{ width: `${report.funnel.found ? Math.max(1, stage.count / report.funnel.found * 100) : 0}%`, background: stageColors[index] }}><span className={styles.srOnly}>{stage.label} {stage.count}</span></div>)}</div>
-      <div className={styles.leadStageLabels}>
-        {report.stages.map((stage) => {
-          const filter = stageFilter(stage.key);
-          if (filter === null) {
+      <div className={styles.leadStageRow}>
+        <div className={styles.leadStageLabels}>
+          {report.stages.map((stage) => {
+            const filter = stageFilter(stage.key);
+            if (filter === null) {
+              return (
+                <span key={stage.key}>
+                  <b>{stage.count.toLocaleString()}</b>
+                  {stage.label}
+                </span>
+              );
+            }
             return (
-              <span key={stage.key}>
-                {stage.label} <b>{stage.count.toLocaleString()}</b>
-              </span>
+              <button
+                key={stage.key}
+                type="button"
+                data-selected={selectedStage === filter}
+                onClick={() => {
+                  setSelectedStage(filter);
+                  onStageSelect(filter === "all" ? null : filter);
+                }}
+              >
+                <b>{stage.count.toLocaleString()}</b>
+                {stage.label}
+              </button>
             );
-          }
-          return (
-            <button
-              key={stage.key}
-              type="button"
-              data-selected={selectedStage === filter}
-              onClick={() => {
-                setSelectedStage(filter);
-                onStageSelect(filter === "all" ? null : filter);
-              }}
-            >
-              {stage.label} <b>{stage.count.toLocaleString()}</b>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          data-selected={selectedStage === "unscreened"}
-          onClick={() => {
-            setSelectedStage("unscreened");
-            onStageSelect("unscreened");
-          }}
-        >
-          Unscreened <b>{report.funnel.unscreened.toLocaleString()}</b>
-        </button>
+          })}
+          <button
+            type="button"
+            data-selected={selectedStage === "unscreened"}
+            onClick={() => {
+              setSelectedStage("unscreened");
+              onStageSelect("unscreened");
+            }}
+          >
+            <b>{report.funnel.unscreened.toLocaleString()}</b>
+            Unscreened
+          </button>
+        </div>
+        <div className={styles.leadStageMeta}>
+          {researchIdle ? <span>No active research</span> : null}
+          <button type="button" className={styles.leadRefresh} onClick={() => void load()} disabled={state === "loading"}>Refresh</button>
+        </div>
       </div>
+      {liveLines.length ? (
+        <div className={styles.leadStatusLiveBlock}>
+          {liveLines.map((line, index) => <p key={index} className={styles.leadStatusLive}>{line}</p>)}
+        </div>
+      ) : null}
       {emptyActive ? <p className={styles.leadStatusEmpty}>No rows yet. Next batch within 5 minutes.</p> : <>
         {projectId !== null ? <div className={styles.leadActionRow}>
           {report.actions.unscreened > 0 ? (
@@ -290,12 +304,12 @@ export function LeadStatusPanel({
           </div>
         ) : null}
         <div className={styles.leadCharts}>
-          <section>
+          <section className={styles.leadFlowChart}>
             <span className={styles.leadChartLabel}>Lead flow by origin</span>
             {report.funnel.found >= 2 && chartData.nodes.length && chartData.links.length ? (
               <div className={styles.leadSankey}>
-                <ResponsiveContainer width="100%" height={220}>
-                  <Sankey data={chartData} nodePadding={12} nodeWidth={8} margin={{ top: 8, right: 100, bottom: 8, left: 100 }} link={LeadFlowLink} node={LeadFlowNode}>
+                <ResponsiveContainer width="100%" height={180}>
+                  <Sankey data={chartData} nodePadding={10} nodeWidth={6} margin={{ top: 6, right: 96, bottom: 6, left: 96 }} link={LeadFlowLink} node={LeadFlowNode}>
                     <ChartTooltip />
                   </Sankey>
                 </ResponsiveContainer>
@@ -306,9 +320,9 @@ export function LeadStatusPanel({
             <span className={styles.leadChartLabel}>Rows by country</span>
             {report.funnel.found >= 2 ? (
               <div className={styles.leadCountryChartBody}>
-                <ResponsiveContainer width={150} height={150}>
+                <ResponsiveContainer width={124} height={124}>
                   <PieChart>
-                    <Pie data={countryData} dataKey="rows" nameKey="label" innerRadius={42} outerRadius={66} paddingAngle={1}>
+                    <Pie data={countryData} dataKey="rows" nameKey="label" innerRadius={36} outerRadius={56} paddingAngle={1}>
                       {countryData.map((country, index) => <Cell key={country.label} fill={countryColors[index % countryColors.length]} />)}
                     </Pie>
                   </PieChart>

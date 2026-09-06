@@ -398,15 +398,19 @@ export function SupplyOsProspects({
     }
   }
 
+  const recordCount = records ? `${records.total} records` : selectedSlug ? `${selectedList?.recordCount ?? 0} records` : `${projects.length} projects`;
+
   return (
     <section className={styles.prospectsWorkspace} aria-label="Prospects">
-      <header className={styles.prospectsHeader}>
-        <div>
-          <h2>Prospects</h2>
-          <span>{records ? `${records.total} records` : selectedSlug ? `${selectedList?.recordCount ?? 0} records` : `${projects.length} projects`}</span>
-        </div>
-        <a href="/dashboard/leads?directory=1">Leads</a>
-      </header>
+      {!lockedProjectId ? (
+        <header className={styles.prospectsHeader}>
+          <div>
+            <h2>Prospects</h2>
+            <span>{recordCount}</span>
+          </div>
+          <a href="/dashboard/leads?directory=1">Leads</a>
+        </header>
+      ) : null}
       {!lockedProjectId ? <div className={styles.newListPanel}>
         <button type="button" onClick={() => { setNewListOpen((open) => !open); setNewListError(""); }}>
           {newListOpen ? "Close new list" : "New list"}
@@ -526,6 +530,7 @@ export function SupplyOsProspects({
               Export CSV
             </a>
           ) : null}
+          {lockedProjectId ? <span className={styles.prospectsCount}>{recordCount}</span> : null}
         </div>
       ) : null}
       {state === "loading" ? <p className={styles.prospectsState}>Loading prospects</p> : null}
@@ -555,8 +560,12 @@ export function SupplyOsProspects({
                       const value = String(row.data[field.key] ?? "");
                       const safe = field.type === "url" ? safeHttpUrl(value) : null;
                       return (
-                        <td key={field.key}>
-                          {safe ? <a href={safe} target="_blank" rel="noreferrer noopener">{value}</a> : value || <span>n/a</span>}
+                        <td key={field.key} title={value || undefined}>
+                          {safe
+                            ? <span className={styles.prospectsCell}><a href={safe} target="_blank" rel="noreferrer noopener">{value}</a></span>
+                            : value
+                              ? <span className={styles.prospectsCell}>{value}</span>
+                              : <span className={styles.prospectsEmpty} aria-label="No value">-</span>}
                         </td>
                       );
                     })}
