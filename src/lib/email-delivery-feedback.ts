@@ -504,6 +504,12 @@ export function classifyDeliveryFeedback(input: DeliveryFeedbackInput): Delivery
 export const SENDER_PROTECTION_WINDOW_HOURS = 24;
 export const SENDER_PROTECTION_MIN_SENDS = 10;
 export const SENDER_PROTECTION_BOUNCE_RATE = 0.05;
+// A rate alone pauses a mailbox on a single dead supplier address, since one
+// bounce in eleven sends reads as 9 percent. Supplier outreach mails cold
+// addresses, so a lone bounce is expected and pausing on it shrank the pool
+// every day and left answered conversations with no mailbox to leave from. A
+// pause needs a pattern, not one bad address.
+export const SENDER_PROTECTION_MIN_BOUNCES = 3;
 export const SENDER_PROTECTION_COMPLAINT_COUNT = 2;
 
 // A pause is held for at least the window it was measured over, so the sends
@@ -524,7 +530,11 @@ export function senderProtectionDecision(input: {
       reason: `${input.complaints} spam complaints in ${SENDER_PROTECTION_WINDOW_HOURS} hours.`,
     };
   }
-  if (input.sent >= SENDER_PROTECTION_MIN_SENDS && input.permanentBounces / input.sent >= SENDER_PROTECTION_BOUNCE_RATE) {
+  if (
+    input.sent >= SENDER_PROTECTION_MIN_SENDS
+    && input.permanentBounces >= SENDER_PROTECTION_MIN_BOUNCES
+    && input.permanentBounces / input.sent >= SENDER_PROTECTION_BOUNCE_RATE
+  ) {
     const percent = Math.round((input.permanentBounces / input.sent) * 100);
     return {
       pause: true,

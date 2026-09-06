@@ -17,6 +17,7 @@ import {
   loadBulkRfqOrder,
   type BulkRfqOrder,
 } from "@/lib/procurement-bulk-rfq";
+import { conversationFailureIsCapacity } from "@/lib/procurement-conversation-task";
 import {
   EMPTY_RFQ_ATTACHMENT_PACKAGE,
   loadProcurementRfqAttachmentPackage,
@@ -65,6 +66,10 @@ export type SupplierNudgeRunResult = {
   sent: number;
   alreadySent: number;
   failed: number;
+  // A follow up no mailbox was free for. The message is written and the thread
+  // is ready, so it waits for capacity to return rather than counting as a
+  // supplier an operator has to repair.
+  queued: number;
   skipped: Array<{ vendorId: string; vendorName: string; reason: string }>;
   blocked: string | null;
   outcomes: SupplierNudgeOutcome[];
@@ -733,6 +738,7 @@ export async function runProcurementSupplierNudges(args: {
     sent: 0,
     alreadySent: 0,
     failed: 0,
+    queued: 0,
     skipped,
     blocked,
     outcomes: [],
@@ -776,10 +782,18 @@ export async function runProcurementSupplierNudges(args: {
       // A follow up leaves from the mailbox that owns the supplier's thread, so
       // that mailbox being paused by sender protection defers the follow up
       // until it is resumed rather than blocking the supplier for good.
+      // A pinned mailbox reports `SENDER_UNAVAILABLE` whether it is paused,
+      // disconnected, disabled or has sending turned off, and only a pause
+      // lifts by itself, so the reason decides, by the same rule the pass
+      // reports capacity and failures apart with.
       const exhausted = reservation.code === "POOL_EXHAUSTED"
         || reservation.code === "POOL_EMPTY"
-        || reservation.code === "SENDER_UNAVAILABLE";
-      result.failed += 1;
+        || conversationFailureIsCapacity(reservation.error);
+      // Capacity is not this supplier's fault and returns by itself (a daily cap
+      // resets, a protection pause expires), so it is counted apart from a
+      // follow up that genuinely failed.
+      if (exhausted) result.queued += 1;
+      else result.failed += 1;
       result.outcomes.push({
         vendorId: target.vendorId,
         vendorName: target.vendorName,

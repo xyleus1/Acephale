@@ -401,9 +401,22 @@ async function main() {
   assert.deepEqual(senderProtectionDecision({ sent: 100, permanentBounces: 0, complaints: 1 }), { pause: false });
   assert.equal(senderProtectionDecision({ sent: 0, permanentBounces: 0, complaints: 2 }).pause, true, "two complaints pause regardless of volume");
   assert.equal(senderProtectionDecision({ sent: SENDER_PROTECTION_MIN_SENDS - 1, permanentBounces: 9, complaints: 0 }).pause, false, "below the minimum volume bounces do not pause");
-  const bounceSpike = senderProtectionDecision({ sent: 20, permanentBounces: 1, complaints: 0 });
-  assert.deepEqual(bounceSpike, { pause: true, reason: "1 of 20 sends bounced (5%) in 24 hours." });
+  const bounceSpike = senderProtectionDecision({ sent: 20, permanentBounces: 3, complaints: 0 });
+  assert.deepEqual(bounceSpike, { pause: true, reason: "3 of 20 sends bounced (15%) in 24 hours." });
   assert.deepEqual(senderProtectionDecision({ sent: 40, permanentBounces: 1, complaints: 0 }), { pause: false });
+  // Supplier outreach mails cold addresses, so one or two dead ones are normal.
+  // Pausing on a single bounce shrank the pool every day and left answered
+  // conversations with no mailbox to leave from.
+  assert.deepEqual(
+    senderProtectionDecision({ sent: 11, permanentBounces: 1, complaints: 0 }),
+    { pause: false },
+    "one dead address in eleven sends is not a pattern, even though it reads as 9%",
+  );
+  assert.deepEqual(
+    senderProtectionDecision({ sent: 12, permanentBounces: 2, complaints: 0 }),
+    { pause: false },
+    "two bounces stay under the minimum a bounce rate pause needs",
+  );
 
   for (const reason of EMAIL_SUPPRESSION_REASONS) {
     assert.ok(!suppressionSkipMessage(reason).includes("\u2014"), "skip copy must not contain em dashes");
@@ -413,6 +426,9 @@ async function main() {
   type FailurePoint = "event" | "suppression" | "protection";
   function fakeDeliveryDb(input: {
     outboundSent: number;
+    // Permanent bounces the mailbox already has in the window, so a report can
+    // be the one that completes the pattern a pause needs.
+    priorPermanentBounces?: number;
     outboundRecipients?: string[];
     outboundCc?: string[];
     // Outbound history of the mailbox, used to attribute unthreaded reports.
@@ -480,7 +496,11 @@ async function main() {
         },
         count: async (args: { where: { kind: string; permanent?: boolean } }) => [...events.values()]
           .filter((event) => event.kind === args.where.kind && (args.where.permanent === undefined || event.permanent === args.where.permanent))
-          .length,
+          .length
+          // Bounces the mailbox already carried into this window. They are held
+          // apart from the reports this test stores so the event assertions
+          // stay about those.
+          + (args.where.kind === "BOUNCE" && args.where.permanent !== false ? input.priorPermanentBounces ?? 0 : 0),
       },
       emailMessage: {
         updateMany: async (args: { where: { id: string; deliveryKind?: null }; data: Record<string, unknown> }) => {
@@ -612,7 +632,9 @@ async function main() {
   }
 
   const now = new Date("2026-08-31T12:00:00Z");
-  const bounceDb = fakeDeliveryDb({ outboundSent: 20 });
+  // Two dead addresses already bounced in this window, so this report is the
+  // third and completes the pattern a pause needs.
+  const bounceDb = fakeDeliveryDb({ outboundSent: 20, priorPermanentBounces: 2 });
   const bounceInput = {
     routing: { routed: true as const, officeId: "office-1" },
     accountId: "account-1",
@@ -625,14 +647,14 @@ async function main() {
   };
   const recorded = await recordDeliveryFeedback(bounceDb as never, bounceInput);
   assert.deepEqual(recorded.suppressed, ["buyer@acme-machining.example"]);
-  assert.equal(recorded.senderPaused, true, "1 permanent bounce in 20 sends crosses the 5% threshold");
+  assert.equal(recorded.senderPaused, true, "3 permanent bounces in 20 sends cross the threshold");
   assert.equal(bounceDb.events.size, 1);
   assert.equal(bounceDb.suppressions.get("office-1:buyer@acme-machining.example")?.reason, "BOUNCED");
   assert.equal(bounceDb.suppressions.get("office-1:buyer@acme-machining.example")?.evidenceMessageId, "message-dsn-1");
   assert.equal(recorded.officeId, "office-1");
   assert.deepEqual(bounceDb.messageUpdates, [{ id: "message-dsn-1", deliveryKind: "BOUNCE" }]);
   assert.equal(bounceDb.accountUpdates.length, 2, "the restating write runs first, then the write that pauses an unpaused mailbox");
-  assert.equal(bounceDb.accountUpdates[1].sendPausedReason, "1 of 20 sends bounced (5%) in 24 hours.");
+  assert.equal(bounceDb.accountUpdates[1].sendPausedReason, "3 of 20 sends bounced (15%) in 24 hours.");
 
   // A re-synced copy of the same message changes nothing.
   const again = await recordDeliveryFeedback(bounceDb as never, bounceInput);
@@ -646,7 +668,7 @@ async function main() {
 
   // Two copies of one report processed at once: the insert decides which call
   // carries the evidence, so only that call may restate the pause.
-  const concurrentDb = fakeDeliveryDb({ outboundSent: 20 });
+  const concurrentDb = fakeDeliveryDb({ outboundSent: 20, priorPermanentBounces: 2 });
   const concurrentInput = { ...bounceInput, messageId: "message-dsn-concurrent" };
   await Promise.all([
     recordDeliveryFeedback(concurrentDb as never, concurrentInput),
@@ -757,7 +779,7 @@ async function main() {
   // Persistence that fails part way leaves the message recoverable, and the
   // retry finishes the job without a second event or suppression.
   for (const point of ["event", "suppression", "protection"] as const) {
-    const retryDb = fakeDeliveryDb({ outboundSent: 20 });
+    const retryDb = fakeDeliveryDb({ outboundSent: 20, priorPermanentBounces: 2 });
     retryDb.failNextAt(point);
     const retryInput = { ...bounceInput, messageId: `message-retry-${point}` };
     await assert.rejects(recordDeliveryFeedback(retryDb as never, retryInput), /simulated/);
@@ -959,6 +981,7 @@ async function main() {
   const unrouted = { routed: false as const, fallbackOfficeId: "office-1" };
   const otherOfficeDb = fakeDeliveryDb({
     outboundSent: 20,
+    priorPermanentBounces: 2,
     outboundHistory: [{ toEmails: ["Buyer@Acme-Machining.example"], officeId: "office-2" }],
   });
   const otherOffice = await recordDeliveryFeedback(otherOfficeDb as never, {
@@ -990,6 +1013,7 @@ async function main() {
   // on the connecting office for manual routing.
   const ambiguousDb = fakeDeliveryDb({
     outboundSent: 20,
+    priorPermanentBounces: 2,
     outboundHistory: [
       { toEmails: ["buyer@acme-machining.example"], officeId: "office-2" },
       { toEmails: ["buyer@acme-machining.example"], officeId: "office-3" },
@@ -1077,7 +1101,7 @@ async function main() {
     pausedAt,
     now: new Date("2026-09-01T12:00:00Z"),
     sent: 20,
-    permanentBounces: 2,
+    permanentBounces: 3,
     complaints: 0,
   });
   assert.equal(stillBouncing.resume, false, "a mailbox that would be paused again stays paused");

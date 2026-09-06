@@ -7,6 +7,103 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-09: A protection pause is capacity, and one dead address is not a pattern
+
+- Production reported four answered PCBA threads as failed conversations with
+  "The mailbox this thread was sent from is paused by sender protection", which
+  is capacity that lifts by itself, so `conversationFailureIsCapacity` now reads
+  that wording as queued work. The task stays due instead of spending a retry
+  attempt and being reported as a thread needing repair.
+- A follow up stopped by an exhausted or empty pool, or by a pinned mailbox whose
+  reason reads as capacity, counts on `SupplierNudgeRunResult.queued` rather than
+  `failed`. The reservation code alone cannot decide it: a pinned mailbox reports
+  `SENDER_UNAVAILABLE` whether it is paused, disconnected, disabled or has sending
+  turned off, and only the pause lifts by itself, so the other three stay failures
+  an operator is told about.
+- A bounce rate pause now needs `SENDER_PROTECTION_MIN_BOUNCES` (3) permanent
+  bounces as well as the 5 percent rate. Supplier outreach mails cold addresses,
+  so one bounce in eleven sends read as 9 percent and paused a mailbox on a
+  single dead address, shrinking the pool every day. Complaints still pause on
+  their own count.
+
+## 2026-09-09: A wrapped capability refusal is not a wrong desk
+
+- "We do not handle RFQs" only says the mail reached the wrong desk where the
+  statement ends there or names the writer's own desk ("here", "at all",
+  "myself", "personally", "in this office"). A line break no longer ends it,
+  because mail wraps a qualifier ("below 500 units", "with quantities below
+  500") onto its own line, and reading a wrapped refusal as unqualified is what
+  would move or fade a supplier that is answering us.
+
+## 2026-09-09: Queued capacity work and accumulated retired addresses
+
+- A pass reports the work no mailbox was free for as `queued`, apart from
+  `failed`, and the scheduled response carries that count. The durable task
+  still stores the capacity reason, which is what keeps the thread due without
+  spending a retry attempt, so an operator is only sent after conversations
+  that actually need repair.
+- The pass failure total is now the failures it names, so a count and a list can
+  no longer disagree.
+- A wrong contact recovery carries every address the supplier already refused,
+  read back off `research.wrongContact.retired`, so a shop that turns us away a
+  second time is not moved back onto an address it rejected (those addresses sit
+  in the row's own sourcing list) and a send to either one can still be
+  reconciled.
+
+## 2026-09-09: Wrong contact evidence before a supplier is moved or faded
+
+- Recovery mutates the supplier row, so classification now needs deterministic
+  evidence. `supplierWrongRecipientText` takes an explicit statement ("wrong
+  department", "no longer with", "we do not handle"), or a redirect sentence
+  that also sends the request away from the recipient, by saying so or by naming
+  the address it belongs at.
+- Redirect wording alone is ordinary supplier prose ("please contact our sales
+  team for the pricing sheet"), and under the old single regex such a reply was
+  classified as a wrong recipient, so the loop could move that supplier off the
+  address that was answering, or fade it out of the funnel when the message
+  named no other address. Such a message is now the question or statement it is,
+  answered where it was written from.
+
+## 2026-09-09: Attributing an uncertain send after a wrong contact recovery
+
+- An RFQ or follow up whose delivery is still uncertain is reconciled against
+  the address its reservation was made for, never the address the row carries
+  now, which a wrong contact recovery may have replaced.
+- A key written before addresses were part of the send identity names no
+  address, so its recipient is the first address the row retired when one
+  exists, and the current address only while nothing was retired. Reading the
+  current address instead recorded that delivery against the replacement,
+  stamped it contacted, and held the replacement RFQ out of every later batch.
+- A follow up now carries the address in its reservation key and Message-ID, so
+  reconciliation settles it on the RFQ thread of that address instead of the
+  supplier's newest thread, which would have shown a replacement conversation an
+  outbound message it never received. An addressless follow up predates any
+  recovery, so it belongs to the first RFQ thread.
+- `BULK_RFQ_VENDOR_RETIRED_EMAILS_SQL` reads `research.wrongContact.retired`
+  for both paths, and `scripts/procurement-wrong-contact.test.ts` covers the
+  addressless attribution, the follow up key and id identity, and the thread the
+  reconciled follow up is filed on.
+
+## 2026-09-09: Wrong contact recovery, faded suppliers, capacity queueing
+
+- Why: three leaks kept a conversation from carrying to an order. A wrong
+  contact reply escalated once and sat forever, a supplier stopped by send
+  capacity was reported as a failure and burned retry attempts, and an
+  escalation named a category instead of the question the supplier asked.
+- Wrong contact: candidates come only from the supplier's own registrable
+  domains, skip addresses already mailed and role mailboxes that cannot quote,
+  and are ranked so a quoting inbox beats a personal one. Sourcing alternatives
+  are tried after what the supplier named. The write clears
+  `last_email_message_id` and `email_thread_id`, which is what makes the RFQ
+  send pick the row up again; a fade leaves both alone.
+- Capacity: `conversationFailureIsCapacity` classifies pool exhaustion, a paused
+  pool and an empty pool. Such a task stays due and keeps its attempt count, so
+  work resumes by itself when a mailbox frees up and no supplier is dropped.
+- Tests: `scripts/procurement-wrong-contact.test.ts` covers replacement,
+  domain restriction, already-mailed rejection, ranking, fade, idempotence by
+  source message id, retryable write failure, the plan and stage outcomes, the
+  faded funnel exclusion, capacity queueing and normal failure backoff.
+
 ## 2026-09-06: World merge identity and industry-code safeguards
 
 - Name matching now rejects conflicting identifiers across cursor windows,

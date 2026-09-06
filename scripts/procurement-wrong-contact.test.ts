@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { pinnedSenderUnavailableReason } from "../src/lib/email-sender-pool-policy";
 import { planAutopilotVendorAction } from "../src/lib/procurement-autopilot-plan";
 import {
   bulkRfqAddressHash,
@@ -488,6 +489,54 @@ async function main() {
     conversationFailureIsCapacity(new ProcurementReplySenderUnavailableError("ops@derya.ai", "THREAD_MAILBOX").message),
     false,
     "A disconnected thread mailbox needs an operator, so it keeps its backoff.",
+  );
+
+  // A follow up leaves from the mailbox that owns the supplier's thread, and a
+  // protection pause on that mailbox lifts itself, so the thread is waiting for
+  // a sender. Counted as a failure it was backed off for hours and reported as
+  // a supplier needing repair, which is what left answered threads unnudged.
+  const pausedMailbox = {
+    isActive: true,
+    sendEnabled: true,
+    sendPausedAt: new Date("2026-09-06T12:00:00Z"),
+    sendPausedReason: "3 of 20 sends bounced (15%) in 24 hours.",
+  };
+  assert.equal(
+    conversationFailureIsCapacity(pinnedSenderUnavailableReason(pausedMailbox)),
+    true,
+    "A thread mailbox paused by sender protection queues the conversation.",
+  );
+  assert.equal(
+    conversationFailureIsCapacity(pinnedSenderUnavailableReason({ ...pausedMailbox, sendPausedReason: null })),
+    true,
+    "The pause queues the conversation even when its reason was not stored.",
+  );
+  for (const [label, account] of [
+    ["disabled", { ...pausedMailbox, sendPausedAt: null, isActive: false }],
+    ["sending turned off", { ...pausedMailbox, sendPausedAt: null, sendEnabled: false }],
+    ["disconnected", null],
+  ] as const) {
+    assert.equal(
+      conversationFailureIsCapacity(pinnedSenderUnavailableReason(account)),
+      false,
+      `A thread mailbox that is ${label} needs an operator, so it keeps its backoff.`,
+    );
+  }
+
+  // The follow up path counts that shortage apart from a failure too, so a
+  // capacity report does not read as threads needing repair.
+  const followUpSource = readFileSync(resolve(__dirname, "../src/lib/procurement-supplier-nudge.ts"), "utf8");
+  assert.ok(
+    /if \(exhausted\) result\.queued \+= 1;\s*else result\.failed \+= 1;/.test(followUpSource),
+    "A follow up no mailbox was free for is queued, not failed.",
+  );
+  // A pinned mailbox reports one reservation code whether it is paused or
+  // disconnected, so reading the code alone would report a mailbox an operator
+  // has to reconnect as work that resumes by itself.
+  assert.ok(
+    /\|\| conversationFailureIsCapacity\(reservation\.error\)/.test(followUpSource)
+      && !/reservation\.code === "SENDER_UNAVAILABLE"/.test(followUpSource),
+    "The follow up counts capacity by the same reason rule the pass reports with.",
   );
 
   // A recovery that could not be written is a failure of the pass, so it cannot

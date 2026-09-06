@@ -20,6 +20,42 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-09: A sender protection pause queues a supplier conversation
+
+- A paused thread mailbox is capacity, not a supplier failure:
+  `conversationFailureIsCapacity` matches the paused-by-sender-protection
+  wording, so the conversation task stays due for the next scheduled pass and is
+  reported under `queued` instead of `failed`.
+- `runProcurementSupplierNudges` reports `queued` for a follow up no mailbox was
+  free for, apart from a follow up that genuinely failed.
+- Sender protection pauses on a bounce pattern (3 permanent bounces and the 5
+  percent rate) rather than on one dead supplier address, so the shared pool
+  keeps the mailboxes answered conversations leave from.
+
+## 2026-09-09: A wrong contact is re-sourced, and capacity queues instead of dropping
+
+- `recoverProcurementWrongContact` in `src/lib/procurement-wrong-contact.ts`
+  works a "wrong contact" reply instead of escalating it: an address the shop
+  named on its own registrable domain becomes the supplier's contact, the send
+  receipt and thread link are cleared so the RFQ send mails the replacement, and
+  when the reply offers nothing to move to the row fades to `excluded` with the
+  retired addresses and the source message id kept on `research.wrongContact`.
+  Nothing is deleted, and the same reply is recovered from once.
+- `SUPPLIER_FADED` is a conversation stage that counts as unreachable, so a faded
+  shop leaves the funnel and the nudge and due-task work without looking settled.
+- A send stopped by sender capacity (daily pooled cap, paused pool, empty pool)
+  is queued rather than failed: `conversationFailureIsCapacity` keeps the task
+  due now, does not spend a retry attempt, and the conversation backlog reports
+  `queued` separately from stuck work.
+- An escalation now carries the supplier's exact unanswered questions from
+  `triageSupplierInbound`, so an operator reads the question rather than a
+  category.
+- `GET /api/admin/procurement-bulk-rfq/replies` accepts `chars` (400 to 6000) so
+  a long supplier question can be read in full, read only.
+- Verified: every pure procurement suite, `test:procurement-wrong-contact`,
+  typecheck. Lint shows only the pre-existing errors in `thread-actions.ts` and
+  `whatsapp.ts`.
+
 ## 2026-09-06: World merge keyset cursor
 
 - `src/lib/world/merge.ts` now advances through bounded source-record id

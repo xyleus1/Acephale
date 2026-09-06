@@ -73,9 +73,13 @@ export const CONVERSATION_TASK_BACKOFF_MS: readonly number[] = [
 // again instead of pushing it hours out and calling it stuck. This is the
 // difference between a thread that refuses to work and one nobody could send
 // for.
+// A pinned thread mailbox paused by sender protection is in this class too. A
+// follow up leaves from the mailbox that owns the supplier's thread, and that
+// pause lifts itself once the window it was measured over has passed, so the
+// thread is waiting for a sender rather than needing an operator.
 // A pinned thread mailbox that is disconnected or disabled is not in this
 // class: that one needs an operator to reconnect it, so it keeps its backoff.
-const CAPACITY_FAILURE = /daily pooled-send limit|no connected email account is enabled in the sender pool|no mailbox in the shared sender pool is currently able|sender pool (is )?(empty|exhausted)|paused or (has|have) sending turned off|mailboxes? in the sender pool (is|are) paused/i;
+const CAPACITY_FAILURE = /daily pooled-send limit|no connected email account is enabled in the sender pool|no mailbox in the shared sender pool is currently able|sender pool (is )?(empty|exhausted)|paused or (has|have) sending turned off|mailboxes? in the sender pool (is|are) paused|this thread was sent from is paused by sender protection/i;
 
 export function conversationFailureIsCapacity(failure: string | null | undefined): boolean {
   return CAPACITY_FAILURE.test(failure ?? "");
