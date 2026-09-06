@@ -322,7 +322,7 @@ assert.ok(
   activate.indexOf("campaignStatusBlocker(campaign.status)") < activate.indexOf("eligibleRecords(campaign, true)"),
   "the status precondition runs before any audience or revision work",
 );
-assert.match(activate, /prisma\.\$transaction\(async \(tx\) => \{\s*const written = await tx\.outreachCampaign\.updateMany\(\{\s*where: campaignActivationTransitionWhere\(\{\s*officeId: input\.officeId,\s*campaignId: campaign\.id,\s*revisionHash: campaign\.revisionHash,\s*\}\)/, "activation is a compare-and-set from DRAFT on the reviewed revision inside a transaction, so a cancel or re-plan racing the approval wins");
+assert.match(activate, /prisma\.\$transaction\(async \(tx\) => \{\s*const written = await tx\.outreachCampaign\.updateMany\(\{\s*where: campaignActivationTransitionWhere\(\{\s*officeId: input\.officeId,\s*campaignId: campaign\.id,\s*revisionHash: campaign\.revisionHash,\s*(?:status: [^,]+,\s*)?\}\)/, "activation is a compare-and-set from DRAFT or PAUSED on the reviewed revision inside a transaction, so a cancel or re-plan racing the approval wins");
 assert.match(activate, /approvedAt: now,\s*startedAt: now,/, "activation stamps approvedAt in the same write that leaves DRAFT; recovery relies on it");
 assert.match(activate, /if \(written\.count > 0 && input\.finalize && !\(await input\.finalize\(tx\)\)\) throw new ClaimLostError\(\);/, "a claim that no longer belongs to the caller rolls the activation back inside the transaction");
 assert.match(activate, /if \(error instanceof ClaimLostError\) return \{ activated: false, blockers: \[CAMPAIGN_CLAIM_LOST_BLOCKER\] \};/, "a lost claim is reported as a blocker, not thrown");

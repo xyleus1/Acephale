@@ -10,10 +10,12 @@ import {
   outreachCampaignContactedWhere,
   outreachCampaignReclaimBefore,
   renderCampaignEmail,
+  campaignMergeFields,
   selectCampaignVariant,
   storedCampaignVariants,
   type CampaignPersonalization,
 } from "@/lib/outreach-campaign-copy";
+import { campaignIntroEvidence, generateCampaignIntro, type CampaignIntroEvidence } from "@/lib/outreach-campaign-intro";
 import {
   lockOutreachCampaignClaims,
   outreachCampaignRecordingFailure,
@@ -83,6 +85,7 @@ export type CampaignBatchResult = {
   verificationChecks: number;
   verifierExhausted: boolean;
   poolExhausted: boolean;
+  introFailed: number;
   blocked?: "NOT_ACTIVE" | "DAILY_CAP" | "NO_SENDER" | "NO_AUDIENCE";
   outcomes: CampaignBatchSend[];
   followUps?: CampaignFollowUpBatchResult;
@@ -150,6 +153,7 @@ export function selectOutreachCampaignSnapshotRows(input: {
           [input.emailField]: personalization.email,
           ...(input.companyField ? { [input.companyField]: personalization.company } : {}),
           ...(input.countryField ? { [input.countryField]: personalization.country } : {}),
+          ...(personalization.fields ?? {}),
         },
       };
     })
@@ -185,8 +189,11 @@ export function outreachCampaignRequestHash(input: {
   recipient: string;
   subject: string;
   body: string;
+  intro?: string;
 }) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  const deterministicInput = { ...input };
+  delete deterministicInput.intro;
+  return createHash("sha256").update(JSON.stringify(deterministicInput)).digest("hex");
 }
 
 export function outreachCampaignRfcMessageId(campaignId: string, recordId: string) {
@@ -195,6 +202,14 @@ export function outreachCampaignRfcMessageId(campaignId: string, recordId: strin
 }
 
 export { outreachCampaignReclaimBefore };
+
+function bodyWithoutIntro(renderedBody: string, intro: string) {
+  const cleanIntro = intro.trim();
+  if (!cleanIntro) return renderedBody;
+  const introIndex = renderedBody.indexOf(cleanIntro);
+  if (introIndex < 0) return null;
+  return `${renderedBody.slice(0, introIndex)}${renderedBody.slice(introIndex + cleanIntro.length)}`;
+}
 
 export function outreachCampaignClaimLimit(
   limit: number | undefined,
@@ -293,6 +308,9 @@ function jsonPersonalization(value: Prisma.JsonValue | null): Record<string, Cam
       email: object.email,
       company: typeof object.company === "string" ? object.company : null,
       country: typeof object.country === "string" ? object.country : null,
+      fields: object.fields && typeof object.fields === "object" && !Array.isArray(object.fields)
+        ? Object.fromEntries(Object.entries(object.fields).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+        : undefined,
     }]];
   }));
 }
@@ -309,6 +327,9 @@ async function recordSent(
     reservationId: string;
     subject: string;
     body: string;
+    intro: string;
+    renderedSubject: string;
+    renderedBody: string;
     rfcMessageId: string;
     providerMessageId: string;
     providerThreadId: string;
@@ -392,6 +413,9 @@ async function recordSent(
         providerMessageId: input.providerMessageId,
         providerThreadId: input.providerThreadId,
         localThreadId,
+        intro: input.intro,
+        renderedSubject: input.renderedSubject,
+        renderedBody: input.renderedBody,
         sentAt: input.sentAt,
       },
       update: {
@@ -404,6 +428,9 @@ async function recordSent(
         providerMessageId: input.providerMessageId,
         providerThreadId: input.providerThreadId,
         localThreadId,
+        intro: input.intro,
+        renderedSubject: input.renderedSubject,
+        renderedBody: input.renderedBody,
         error: null,
         sentAt: input.sentAt,
       },
@@ -481,6 +508,9 @@ async function settleUnrecordedSend(
     recordId: string;
     senderEmail: string;
     variantKey: string | null;
+    intro: string;
+    renderedSubject: string;
+    renderedBody: string;
     error: string;
     reservationId: string;
   },
@@ -492,6 +522,9 @@ async function settleUnrecordedSend(
       senderEmail: input.senderEmail,
       variantKey: input.variantKey,
       reservationId: input.reservationId,
+      intro: input.intro,
+      renderedSubject: input.renderedSubject,
+      renderedBody: input.renderedBody,
       error: input.error,
     },
   });
@@ -511,6 +544,7 @@ function result(campaignId: string): CampaignBatchResult {
     verificationChecks: 0,
     verifierExhausted: false,
     poolExhausted: false,
+    introFailed: 0,
     outcomes: [],
   };
 }
@@ -536,6 +570,10 @@ async function reconcileUnknownCampaignSends(
       senderEmail: true,
       reservationId: true,
       updatedAt: true,
+      intro: true,
+      variantKey: true,
+      renderedSubject: true,
+      renderedBody: true,
     },
     orderBy: { createdAt: "asc" },
     take: 20,
@@ -563,18 +601,42 @@ async function reconcileUnknownCampaignSends(
     }
     if (receipt.state !== "SENT") continue;
     const personalization = jsonPersonalization(campaign.audiencePersonalization)[send.recordId];
-    if (!personalization) continue;
-    const recipient = personalization.email.trim().toLowerCase();
-    const variant = selectCampaignVariant({
-      campaignId: campaign.id,
-      recordId: send.recordId,
-      variants: storedCampaignVariants(campaign.variants),
-    });
-    const email = renderCampaignEmail({
-      subject: variant?.subject ?? campaign.subject,
-      bodyTemplate: variant?.bodyTemplate ?? campaign.bodyTemplate,
-      row: personalization,
-    });
+    const recipient = send.recipient;
+    const variants = storedCampaignVariants(campaign.variants);
+    const variant = variants.find((candidate) => candidate.key === send.variantKey)
+      ?? selectCampaignVariant({
+        campaignId: campaign.id,
+        recordId: send.recordId,
+        variants,
+      });
+    let email: { subject: string; body: string };
+    if (send.renderedSubject && send.renderedBody) {
+      email = { subject: send.renderedSubject, body: send.renderedBody };
+    } else {
+      if (!personalization) continue;
+      let fields = personalization.fields;
+      if (!fields) {
+        const record = await db.researchRecord.findFirst({
+          where: { id: send.recordId, officeId: campaign.officeId, listId: campaign.listId },
+          select: { data: true },
+        });
+        if (record?.data && typeof record.data === "object" && !Array.isArray(record.data)) {
+          fields = campaignMergeFields({
+            data: record.data as Record<string, unknown>,
+            emailField: campaign.emailField,
+            companyField: campaign.companyField,
+            countryField: campaign.countryField,
+          });
+        }
+      }
+      email = renderCampaignEmail({
+        subject: variant?.subject ?? campaign.subject,
+        bodyTemplate: variant?.bodyTemplate ?? campaign.bodyTemplate,
+        row: personalization,
+        fields,
+        intro: send.intro ?? undefined,
+      });
+    }
     try {
       await recordSent(db, {
         officeId: campaign.officeId,
@@ -586,6 +648,9 @@ async function reconcileUnknownCampaignSends(
         reservationId: send.reservationId,
         subject: email.subject,
         body: email.body,
+        intro: send.intro ?? "",
+        renderedSubject: email.subject,
+        renderedBody: email.body,
         rfcMessageId: outreachCampaignRfcMessageId(campaign.id, send.recordId),
         providerMessageId: receipt.providerMessageId,
         providerThreadId: receipt.providerThreadId,
@@ -784,16 +849,17 @@ async function claimOutreachCampaignRows(
         officeId: campaign.officeId,
         campaignId: campaign.id,
         status: "QUEUED",
+        reservationId: null,
         createdAt: { lt: outreachCampaignReclaimBefore(now) },
       },
     });
     await lockOutreachCampaignClaims(tx, campaign.id);
     const sends = await tx.outreachCampaignSend.findMany({
       where: { officeId: campaign.officeId, campaignId: campaign.id },
-      select: { recordId: true, status: true },
+      select: { recordId: true },
     });
     const remaining = await outreachCampaignRemainingCapacity(tx, campaign, now);
-    const claimLimit = Math.max(0, Math.min(requestedLimit ?? campaign.dailyCap, remaining));
+    const claimLimit = Math.min(requestedLimit ?? campaign.dailyCap, remaining);
     const handled = new Set(sends.map((send) => send.recordId));
     const contacted = await tx.outreachCampaignSend.findMany({
       where: outreachCampaignContactedWhere({
@@ -803,29 +869,32 @@ async function claimOutreachCampaignRows(
       }),
       select: { recipient: true },
     });
-    const candidates = dedupeRecipients({
+    const freshCandidates = dedupeRecipients({
       rows: excludeContactedRecipients({
         rows: records.filter((record) => !handled.has(record.id)),
         recipientOf: (record) => String(record.data[campaign.emailField] ?? ""),
         contacted: new Set(contacted.map((send) => send.recipient.trim().toLowerCase())),
       }),
       recipientOf: (record) => String(record.data[campaign.emailField] ?? ""),
-    }).slice(0, claimLimit);
+    });
+    const candidates = freshCandidates.slice(0, claimLimit);
     if (!candidates.length) return [];
-    await tx.outreachCampaignSend.createMany({
-      data: candidates.map((row) => ({
-        officeId: campaign.officeId,
-        campaignId: campaign.id,
-        recordId: row.id,
-        recipient: String(row.data[campaign.emailField] ?? "").trim().toLowerCase(),
-        status: "QUEUED",
-        variantKey: selectCampaignVariant({
+    if (candidates.length) {
+      await tx.outreachCampaignSend.createMany({
+        data: candidates.map((row) => ({
+          officeId: campaign.officeId,
           campaignId: campaign.id,
           recordId: row.id,
-          variants: storedCampaignVariants(campaign.variants),
-        })?.key ?? null,
-      })),
-    });
+          recipient: String(row.data[campaign.emailField] ?? "").trim().toLowerCase(),
+          status: "QUEUED",
+          variantKey: selectCampaignVariant({
+            campaignId: campaign.id,
+            recordId: row.id,
+            variants: storedCampaignVariants(campaign.variants),
+          })?.key ?? null,
+        })),
+      });
+    }
     return candidates;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -844,6 +913,397 @@ async function claimOutreachCampaignRows(
   return [];
 }
 
+async function recoverStaleReservedCampaignSends(
+  db: CampaignDb,
+  campaign: LoadedCampaign,
+  staleRows: Array<{
+    recordId: string;
+    recipient: string;
+    reservationId: string;
+    intro: string | null;
+    variantKey: string | null;
+    renderedSubject: string | null;
+    renderedBody: string | null;
+  }>,
+  recordsById: ReadonlyMap<string, CampaignBatchRow>,
+  audiencePersonalization: Readonly<Record<string, CampaignPersonalization>>,
+  provider: SupplierEmailProvider,
+  reserve: typeof reserveEmailSender,
+  release: typeof releaseEmailSenderReservation,
+  output: CampaignBatchResult,
+  now: Date,
+  budget: number,
+) {
+  let recoverySends = 0;
+  for (const staleRow of staleRows) {
+    const current = await db.outreachCampaign.findFirst({
+      where: { id: campaign.id, officeId: campaign.officeId },
+      select: { status: true },
+    });
+    if (!outreachCampaignStatusAllowsSend(current?.status)) break;
+    const record = recordsById.get(staleRow.recordId);
+    const personalization = audiencePersonalization[staleRow.recordId];
+    const data = record?.data ?? {};
+    const snapshotFields = personalization?.fields;
+    const hasSnapshot = Boolean(snapshotFields && Object.keys(snapshotFields).length > 0);
+    const hasRenderedSnapshot = Boolean(staleRow.renderedSubject && staleRow.renderedBody);
+    const fields = snapshotFields && Object.keys(snapshotFields).length > 0
+      ? { ...snapshotFields, email: staleRow.recipient }
+      : {
+        ...campaignMergeFields({
+          data,
+          emailField: campaign.emailField,
+          companyField: campaign.companyField,
+          countryField: campaign.countryField,
+        }),
+        email: staleRow.recipient,
+      };
+    const variants = storedCampaignVariants(campaign.variants);
+    const variant = variants.find((candidate) => candidate.key === staleRow.variantKey)
+      ?? selectCampaignVariant({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        variants,
+      });
+    const bodyTemplate = variant?.bodyTemplate ?? campaign.bodyTemplate;
+    const subjectTemplate = variant?.subject ?? campaign.subject;
+    const intro = staleRow.intro ?? "";
+    const email = hasRenderedSnapshot
+      ? {
+        subject: staleRow.renderedSubject as string,
+        body: staleRow.renderedBody as string,
+      }
+      : renderCampaignEmail({
+        subject: subjectTemplate,
+        bodyTemplate,
+        row: data,
+        fields,
+        intro,
+      });
+    const bodyWithoutIntroValue = hasRenderedSnapshot
+      ? bodyWithoutIntro(email.body, intro)
+      : renderCampaignEmail({
+        subject: subjectTemplate,
+        bodyTemplate,
+        row: data,
+        fields,
+        intro: "",
+      }).body;
+    const originalBodyWithoutIntro = bodyWithoutIntroValue ?? renderCampaignEmail({
+      subject: subjectTemplate,
+      bodyTemplate,
+      row: data,
+      fields,
+      intro: "",
+    }).body;
+    const idempotencyKey = outreachCampaignIdempotencyKey(campaign.id, staleRow.recordId);
+    const requestHash = outreachCampaignRequestHash({
+      campaignId: campaign.id,
+      recordId: staleRow.recordId,
+      recipient: staleRow.recipient,
+      subject: email.subject,
+      body: originalBodyWithoutIntro,
+    });
+    const reservation = await reserve({
+      officeId: campaign.officeId,
+      idempotencyKey,
+      requestHash,
+      ...(campaign.senderRotation ? {} : { accountId: campaign.senderAccountId ?? undefined }),
+      now,
+    });
+    if (!("ok" in reservation)) {
+      const reservationOutcome = outreachCampaignReservationOutcome(reservation.code);
+      if (reservationOutcome.poolExhausted) {
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          recipient: staleRow.recipient,
+          state: reservationOutcome.state,
+          senderEmail: null,
+          variantKey: variant?.key ?? null,
+          error: reservation.error,
+        });
+        output.poolExhausted = true;
+        continue;
+      }
+      const settlement = await settleOutreachReservationFailure(db, {
+        officeId: campaign.officeId,
+        idempotencyKey,
+        code: reservation.code,
+      });
+      if (settlement.kind === "UNKNOWN") {
+        await recordOutcome(db, {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          recipient: staleRow.recipient,
+          status: "UNKNOWN",
+          senderEmail: settlement.senderEmail,
+          error: reservation.error,
+          reservationId: settlement.reservationId,
+          variantKey: variant?.key ?? null,
+        });
+        output.unknown += 1;
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          recipient: staleRow.recipient,
+          state: "UNKNOWN",
+          senderEmail: settlement.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: reservation.error,
+        });
+        continue;
+      }
+      await db.outreachCampaignSend.updateMany({
+        where: {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          status: "QUEUED",
+        },
+        data: { status: "REJECTED", error: reservation.error, variantKey: variant?.key ?? null },
+      });
+      output.rejected += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        state: "REJECTED",
+        senderEmail: null,
+        variantKey: variant?.key ?? null,
+        error: reservation.error,
+      });
+      continue;
+    }
+    output.attempted += 1;
+    if (reservation.completed) {
+      await db.outreachCampaignSend.updateMany({
+        where: {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          status: "QUEUED",
+        },
+        data: {
+          status: "SENT",
+          senderEmail: reservation.senderEmail,
+          reservationId: reservation.reservationId,
+          providerMessageId: reservation.providerMessageId,
+          providerThreadId: reservation.providerThreadId,
+          localThreadId: reservation.localThreadId,
+          error: null,
+          variantKey: variant?.key ?? null,
+          renderedSubject: email.subject,
+          renderedBody: email.body,
+          sentAt: reservation.sentAt ?? now,
+        },
+      });
+      output.alreadySent += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        state: "ALREADY_SENT",
+        senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
+        error: null,
+      });
+      continue;
+    }
+    if (!record && !hasSnapshot && !hasRenderedSnapshot) {
+      await release({ officeId: campaign.officeId, reservationId: reservation.reservationId });
+      const error = "recipient record no longer exists";
+      await db.outreachCampaignSend.updateMany({
+        where: {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          status: "QUEUED",
+        },
+        data: { status: "REJECTED", error, variantKey: variant?.key ?? null },
+      });
+      output.rejected += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        state: "REJECTED",
+        senderEmail: null,
+        variantKey: variant?.key ?? null,
+        error,
+      });
+      continue;
+    }
+    const lateSuppression = (await listSuppressedEmails(campaign.officeId, [staleRow.recipient], db)).get(staleRow.recipient);
+    if (lateSuppression) {
+      await release({ officeId: campaign.officeId, reservationId: reservation.reservationId });
+      const error = suppressionSkipMessage(lateSuppression);
+      await db.outreachCampaignSend.updateMany({
+        where: {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          status: "QUEUED",
+        },
+        data: { status: "REJECTED", error, variantKey: variant?.key ?? null },
+      });
+      output.rejected += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        state: "REJECTED",
+        senderEmail: null,
+        variantKey: variant?.key ?? null,
+        error,
+      });
+      continue;
+    }
+    if (recoverySends >= budget) {
+      await release({ officeId: campaign.officeId, reservationId: reservation.reservationId });
+      continue;
+    }
+    await db.outreachCampaignSend.updateMany({
+      where: {
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        status: "QUEUED",
+      },
+      data: {
+        reservationId: reservation.reservationId,
+        intro,
+        renderedSubject: email.subject,
+        renderedBody: email.body,
+      },
+    });
+    const beforeSend = await db.outreachCampaign.findFirst({
+      where: { id: campaign.id, officeId: campaign.officeId },
+      select: { status: true },
+    });
+    if (!outreachCampaignStatusAllowsSend(beforeSend?.status)) {
+      await release({ officeId: campaign.officeId, reservationId: reservation.reservationId });
+      break;
+    }
+    const rfcMessageId = outreachCampaignRfcMessageId(campaign.id, staleRow.recordId);
+    recoverySends += 1;
+    const receipt = await provider.send({
+      officeId: campaign.officeId,
+      accountId: reservation.accountId,
+      senderEmail: reservation.senderEmail,
+      recipient: staleRow.recipient,
+      subject: email.subject,
+      body: email.body,
+      rfcMessageId,
+      senderDisplayName: campaign.senderDisplayName,
+    });
+    if (receipt.state === "SENT") {
+      try {
+        await recordSent(db, {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          recipient: staleRow.recipient,
+          senderEmail: reservation.senderEmail,
+          reservationId: reservation.reservationId,
+          accountId: reservation.accountId,
+          subject: email.subject,
+          body: email.body,
+          intro,
+          renderedSubject: email.subject,
+          renderedBody: email.body,
+          rfcMessageId,
+          providerMessageId: receipt.providerMessageId,
+          providerThreadId: receipt.providerThreadId,
+          sentAt: now,
+          variantKey: variant?.key ?? null,
+        });
+        output.sent += 1;
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          recipient: staleRow.recipient,
+          state: "SENT",
+          senderEmail: reservation.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: null,
+        });
+      } catch (error) {
+        const recordingError = outreachCampaignRecordingFailure(error);
+        await settleUnrecordedSend(db, {
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          senderEmail: reservation.senderEmail,
+          error: recordingError,
+          reservationId: reservation.reservationId,
+          variantKey: variant?.key ?? null,
+          intro,
+          renderedSubject: email.subject,
+          renderedBody: email.body,
+        });
+        output.unknown += 1;
+        output.outcomes.push({
+          campaignId: campaign.id,
+          recordId: staleRow.recordId,
+          recipient: staleRow.recipient,
+          state: "UNKNOWN",
+          senderEmail: reservation.senderEmail,
+          variantKey: variant?.key ?? null,
+          error: recordingError,
+        });
+      }
+    } else if (receipt.state === "REJECTED") {
+      await release({ officeId: campaign.officeId, reservationId: reservation.reservationId });
+      await recordOutcome(db, {
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        status: "REJECTED",
+        senderEmail: reservation.senderEmail,
+        error: receipt.error,
+        reservationId: reservation.reservationId,
+        variantKey: variant?.key ?? null,
+      });
+      output.rejected += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        state: "REJECTED",
+        senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
+        error: receipt.error,
+      });
+    } else {
+      await recordOutcome(db, {
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        status: "UNKNOWN",
+        senderEmail: reservation.senderEmail,
+        error: receipt.error,
+        reservationId: reservation.reservationId,
+        variantKey: variant?.key ?? null,
+      });
+      output.unknown += 1;
+      output.outcomes.push({
+        campaignId: campaign.id,
+        recordId: staleRow.recordId,
+        recipient: staleRow.recipient,
+        state: "UNKNOWN",
+        senderEmail: reservation.senderEmail,
+        variantKey: variant?.key ?? null,
+        error: receipt.error,
+      });
+    }
+  }
+  return recoverySends;
+}
+
 export async function runOutreachCampaignBatch(input: {
   officeId: string;
   campaignId: string;
@@ -856,6 +1316,7 @@ export async function runOutreachCampaignBatch(input: {
   release?: typeof releaseEmailSenderReservation;
   complete?: typeof completeCampaignIfDone;
   recipientCheck?: LiveRecipientCheck;
+  introLlm?: { generate: (input: { evidence: CampaignIntroEvidence; pitch: string }) => Promise<string | { intro: string; used: string[] }> };
 }): Promise<CampaignBatchResult> {
   const db = input.db ?? prisma;
   const campaign = await db.outreachCampaign.findFirst({
@@ -893,41 +1354,117 @@ export async function runOutreachCampaignBatch(input: {
   if (!outreachCampaignStatusAllowsSend(campaign.status)) return { ...output, blocked: "NOT_ACTIVE" };
   const audienceRecordIds = jsonStrings(campaign.audienceRecordIds);
   const audiencePersonalization = jsonPersonalization(campaign.audiencePersonalization);
-  if (!audienceRecordIds.length || !Object.keys(audiencePersonalization).length) {
-    return { ...output, blocked: "NO_AUDIENCE" };
-  }
-  if (!campaign.senderAccountId && !campaign.senderRotation) return { ...output, blocked: "NO_SENDER" };
   const sendProvider = input.provider ?? gmailSupplierEmailProvider;
   const reserveSender = input.reserve ?? reserveEmailSender;
   const releaseReservation = input.release ?? releaseEmailSenderReservation;
   await reconcileUnknownCampaignSends(db, campaign, sendProvider, now, releaseReservation);
+  const handledRecords = await db.outreachCampaignSend.findMany({
+    where: { officeId: input.officeId, campaignId: campaign.id },
+    select: {
+      recordId: true,
+      status: true,
+      reservationId: true,
+      recipient: true,
+      intro: true,
+      variantKey: true,
+      renderedSubject: true,
+      renderedBody: true,
+      createdAt: true,
+    },
+  });
+  const reclaimBefore = outreachCampaignReclaimBefore(now);
+  const staleReservedRows = handledRecords.filter((row) =>
+    row.status === "QUEUED"
+    && Boolean(row.reservationId)
+    && row.createdAt < reclaimBefore,
+  );
+  const recordIdsToLoad = [...new Set([
+    ...audienceRecordIds,
+    ...staleReservedRows.map((row) => row.recordId),
+  ])];
   const records = await db.researchRecord.findMany({
     where: {
       officeId: input.officeId,
       listId: campaign.listId,
-      ...(audienceRecordIds.length
-        ? { id: { in: audienceRecordIds } }
+      ...(recordIdsToLoad.length
+        ? { id: { in: recordIdsToLoad } }
         : {}),
     },
     select: { id: true, status: true, data: true, createdAt: true },
   }) as CampaignBatchRow[];
+  const recordsById = new Map(records.map((record) => [record.id, record]));
+  const recoveryBudget = Math.min(
+    await outreachCampaignRemainingCapacity(db, campaign, now, {
+      reclaimableQueuedSends: staleReservedRows.length,
+    }),
+    input.limit ?? Infinity,
+  );
+  const recoverySends = await recoverStaleReservedCampaignSends(
+    db,
+    campaign,
+    staleReservedRows.map((row) => ({
+      recordId: row.recordId,
+      recipient: row.recipient,
+      reservationId: row.reservationId as string,
+      intro: row.intro,
+      variantKey: row.variantKey,
+      renderedSubject: row.renderedSubject,
+      renderedBody: row.renderedBody,
+    })),
+    recordsById,
+    audiencePersonalization,
+    sendProvider,
+    reserveSender,
+    releaseReservation,
+    output,
+    now,
+    recoveryBudget,
+  );
+  const freshRunLimit = input.limit === undefined
+    ? undefined
+    : Math.max(0, input.limit - recoverySends);
+  if (!audienceRecordIds.length || !Object.keys(audiencePersonalization).length) {
+    return { ...output, blocked: "NO_AUDIENCE" };
+  }
+  if (!campaign.senderAccountId && !campaign.senderRotation) return { ...output, blocked: "NO_SENDER" };
   // Every record that already has a ledger row (sent, rejected, unknown, or
   // claimed) is excluded before the daily-cap slice, so later runs page into
   // the rest of the audience instead of re-reading the first rows every day.
-  const handledRecords = await db.outreachCampaignSend.findMany({
-    where: { officeId: input.officeId, campaignId: campaign.id },
-    select: { recordId: true },
-  });
+  const sentRecordIds = new Set(
+    handledRecords.map((row) => row.recordId),
+  );
   const rows = selectOutreachCampaignSnapshotRows({
     rows: records,
     audienceRecordIds,
     audiencePersonalization,
-    sentRecordIds: new Set(handledRecords.map((row) => row.recordId)),
+    sentRecordIds,
     statuses: jsonStrings(campaign.rowStatuses),
     emailField: campaign.emailField,
     companyField: campaign.companyField,
     countryField: campaign.countryField,
   });
+  const loadedDataById = new Map<string, Record<string, unknown>>();
+  const dataForRow = async (row: CampaignBatchRow) => {
+    const snapshot = audiencePersonalization[row.id];
+    if (snapshot?.fields && Object.keys(snapshot.fields).length > 0) {
+      return row.data;
+    }
+    const cached = loadedDataById.get(row.id) ?? recordsById.get(row.id)?.data;
+    if (cached) {
+      const merged = { ...cached, ...row.data };
+      loadedDataById.set(row.id, merged);
+      return merged;
+    }
+    const record = await db.researchRecord.findFirst({
+      where: { id: row.id, officeId: input.officeId, listId: campaign.listId },
+      select: { data: true },
+    });
+    const data = (record?.data && typeof record.data === "object" && !Array.isArray(record.data))
+      ? { ...record.data as Record<string, unknown>, ...row.data }
+      : row.data;
+    loadedDataById.set(row.id, data);
+    return data;
+  };
   const runFollowUps = (consumed: number) => runOutreachCampaignFollowUps({
     db,
     campaign: {
@@ -940,6 +1477,7 @@ export async function runOutreachCampaignBatch(input: {
       followUps: campaign.followUps ?? null,
       variants: campaign.variants,
       emailField: campaign.emailField,
+      listId: campaign.listId,
       audiencePersonalization,
     },
     provider: sendProvider,
@@ -953,7 +1491,7 @@ export async function runOutreachCampaignBatch(input: {
   });
   const researchData = new Map(records.map((record) => [record.id, record.data]));
   const remainingCapacity = await outreachCampaignRemainingCapacity(db, campaign, now);
-  const verificationLimit = outreachCampaignVerificationLimit(input.limit, campaign.dailyCap, remainingCapacity);
+  const verificationLimit = outreachCampaignVerificationLimit(freshRunLimit, campaign.dailyCap, remainingCapacity);
   const sendableRows = verificationLimit > 0
     ? await selectSendableCampaignRows(
       db,
@@ -966,14 +1504,14 @@ export async function runOutreachCampaignBatch(input: {
     )
     : [];
   const claimedRows = sendableRows.length
-    ? await claimOutreachCampaignRows(db, campaign, sendableRows, input.limit, now)
+    ? await claimOutreachCampaignRows(db, campaign, sendableRows, freshRunLimit, now)
     : [];
   if (claimedRows.length === 0) {
     const { start, end } = utcDayBounds(now);
     const sentToday = await db.outreachCampaignSend.count({
       where: { officeId: input.officeId, campaignId: campaign.id, status: "SENT", sentAt: { gte: start, lt: end } },
     });
-    const followUps = await runFollowUps(0);
+    const followUps = await runFollowUps(recoverySends);
     output.followUps = followUps;
     output.verifierExhausted = output.verifierExhausted || followUps.verifierExhausted;
     await (input.complete ?? completeCampaignIfDone)({
@@ -1007,28 +1545,78 @@ export async function runOutreachCampaignBatch(input: {
       await releaseClaimsFrom(index);
       break;
     }
-    const data = row.data;
+    const data = await dataForRow(row);
+    const queuedSend = await db.outreachCampaignSend.findFirst({
+      where: {
+        officeId: input.officeId,
+        campaignId: campaign.id,
+        recordId: row.id,
+        status: "QUEUED",
+      },
+      select: { reservationId: true, intro: true },
+    });
+    const evidenceData = recordsById.get(row.id)?.data ?? data;
     const recipient = String(data[campaign.emailField] ?? "").trim().toLowerCase();
     const variant = selectCampaignVariant({
       campaignId: campaign.id,
       recordId: row.id,
       variants: storedCampaignVariants(campaign.variants),
     });
+    const bodyTemplate = variant?.bodyTemplate ?? campaign.bodyTemplate;
+    const snapshotFields = audiencePersonalization[row.id]?.fields;
+    const fields = snapshotFields && Object.keys(snapshotFields).length > 0
+      ? snapshotFields
+      : campaignMergeFields({
+        data,
+        emailField: campaign.emailField,
+        companyField: campaign.companyField,
+        countryField: campaign.countryField,
+      });
+    if (!snapshotFields || Object.keys(snapshotFields).length === 0) {
+      fields.email = recipient;
+    }
+    let intro = queuedSend?.reservationId && queuedSend.intro ? queuedSend.intro : "";
+    if (/\{\{\s*ai_intro(?:\||\s*\}\})/.test(bodyTemplate)) {
+      const pitch = renderCampaignEmail({
+        subject: "",
+        bodyTemplate,
+        row: data,
+        fields,
+      }).body.match(/^[\s\S]*?[.!?](?:\s|$)/)?.[0]?.trim()
+        ?? renderCampaignEmail({ subject: "", bodyTemplate, row: data, fields }).body.trim();
+      if (!intro) {
+        intro = await generateCampaignIntro({
+          evidence: campaignIntroEvidence(evidenceData, {
+            companyField: campaign.companyField,
+            countryField: campaign.countryField,
+            segmentField: null,
+          }),
+          pitch,
+          llm: input.introLlm,
+        });
+        if (!intro) output.introFailed += 1;
+      }
+    }
     const email = renderCampaignEmail({
       subject: variant?.subject ?? campaign.subject,
-      bodyTemplate: variant?.bodyTemplate ?? campaign.bodyTemplate,
-      row: {
-        company: campaign.companyField ? data[campaign.companyField] : data.company,
-        country: campaign.countryField ? data[campaign.countryField] : data.country,
-        email: data[campaign.emailField],
-      },
+      bodyTemplate,
+      row: data,
+      fields,
+      intro,
     });
     const requestHash = outreachCampaignRequestHash({
       campaignId: campaign.id,
       recordId: row.id,
       recipient,
       subject: email.subject,
-      body: email.body,
+      body: renderCampaignEmail({
+        subject: variant?.subject ?? campaign.subject,
+        bodyTemplate,
+        row: data,
+        fields,
+        intro: "",
+      }).body,
+      intro,
     });
     const idempotencyKey = outreachCampaignIdempotencyKey(campaign.id, row.id);
     const reservation = await reserveSender({
@@ -1115,6 +1703,8 @@ export async function runOutreachCampaignBatch(input: {
           localThreadId: reservation.localThreadId,
           error: null,
           variantKey: variant?.key ?? null,
+          renderedSubject: email.subject,
+          renderedBody: email.body,
           sentAt: reservation.sentAt ?? now,
         },
       });
@@ -1137,7 +1727,12 @@ export async function runOutreachCampaignBatch(input: {
         recordId: row.id,
         status: "QUEUED",
       },
-      data: { reservationId: reservation.reservationId },
+      data: {
+        reservationId: reservation.reservationId,
+        intro,
+        renderedSubject: email.subject,
+        renderedBody: email.body,
+      },
     });
     const beforeSend = await db.outreachCampaign.findFirst({
       where: { id: campaign.id, officeId: input.officeId },
@@ -1201,6 +1796,9 @@ export async function runOutreachCampaignBatch(input: {
           accountId: reservation.accountId,
           subject: email.subject,
           body: email.body,
+          intro,
+          renderedSubject: email.subject,
+          renderedBody: email.body,
           rfcMessageId,
           providerMessageId: receipt.providerMessageId,
           providerThreadId: receipt.providerThreadId,
@@ -1219,6 +1817,9 @@ export async function runOutreachCampaignBatch(input: {
           error: recordingError,
           reservationId: reservation.reservationId,
           variantKey: variant?.key ?? null,
+          intro,
+          renderedSubject: email.subject,
+          renderedBody: email.body,
         });
         if (!settled) recordingError = null;
       }
@@ -1322,7 +1923,7 @@ export async function runOutreachCampaignBatch(input: {
     if ((input.pauseMs ?? 400) > 0) await new Promise((resolve) => setTimeout(resolve, input.pauseMs ?? 400));
   }
   if (!output.poolExhausted) {
-    const followUps = await runFollowUps(claimedRows.length);
+    const followUps = await runFollowUps(recoverySends + claimedRows.length);
     output.followUps = followUps;
     output.verifierExhausted = output.verifierExhausted || followUps.verifierExhausted;
   }

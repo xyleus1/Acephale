@@ -3489,6 +3489,9 @@ model OutreachCampaignSend {
   providerMessageId String?
   providerThreadId  String?
   localThreadId     String?
+  intro             String?
+  renderedSubject   String?
+  renderedBody      String?
   error             String?
   sentAt            DateTime?
   createdAt         DateTime @default(now())

@@ -12,6 +12,12 @@ Date: 2026-09-08
 - Decision: Scheduled procurement autopilot reads permanent, per-recipient suppression reasons from the office-scoped email suppression ledger. Bounced and undeliverable addresses escalate for a new contact, while complaints, opt-outs, and other suppressions stop further contact without parsing stored thread text.
 - Why: local stored-thread projections intentionally drop delivery notices, and raw notice text cannot safely distinguish permanent failures or attribute a failure to one recipient.
 
+## 2026-09-06: Deterministic campaign merge fields and guarded introductions
+
+- Campaign merge fields resolve deterministically from the recipient research row, with bounded snapshots retained on the campaign audience.
+- `ai_intro` is generated only from evidence included in the recipient row and is rejected when it violates the length, sentence, punctuation, banned phrase, or numeric evidence guard.
+- The final guarded intro is persisted on each campaign send so reconciliation can reproduce the exact body that was delivered.
+
 ## 2026-09-05: Separate world company spine
 
 - The office-less world company spine lives in its own Postgres database through `WORLD_DATABASE_URL`, never in the office-scoped `Company` table.
@@ -5437,6 +5443,57 @@ Context prospecting persists only entity-qualified targets: deterministic non-co
 - DRAFT mode creates an escalation with the suggested reply, while OFF skips
   the worker. Every inbound message is claimed by its unique message id
   before processing.
+
+## 2026-09-06: Outreach campaign introductions are evidence grounded
+
+- Status: accepted
+- Owner: engineering
+- Decision: Deterministic merge fields are the source of truth for campaign
+  rendering. AI introductions may use only persisted evidence and must return
+  non-empty evidence keys that pass deterministic grounding and claim guards.
+  The guarded intro is persisted per send so retries and reconciliation cannot
+  produce a different body.
+
+## 2026-09-06: Outreach campaign copy requires reapproval after edits
+
+- Status: accepted
+- Owner: engineering
+- Decision: The campaign base subject and body are always synchronized with
+  normalized variant zero. Copy edits recompute the revision hash for DRAFT,
+  ACTIVE, and PAUSED campaigns. Editing an ACTIVE campaign changes it to PAUSED
+  atomically, and approval resumes a matching PAUSED revision to ACTIVE.
+
+## 2026-09-06: Outreach personalization edits invalidate approval
+
+- Status: accepted
+- Owner: engineering
+- Decision: Copy edits clear approval timestamps and identity, reject
+  follow-up replacement after execution begins, and require activation against
+  the new revision hash before a paused campaign can resume.
+- Deterministic send reservations hash templates and approved fields without
+  nondeterministic AI intro text. Referenced custom fields take priority in the
+  bounded personalization snapshot.
+- Reclaimed sends reuse their persisted introduction and approved recipient
+  address, rather than regenerating copy from changed research data.
+
+## 2026-09-06: Recover reserved sends before fresh-send gates
+
+- Status: accepted
+- Owner: engineering
+- Decision: A stale queued send with a persisted reservation is recovered
+  before daily-cap accounting, audience quality checks, or suppression
+  filters. Recovery reuses its persisted intro and deterministic idempotency
+  hash, because the provider may already have accepted the original attempt.
+  All ledger rows remain excluded from fresh-send selection after recovery.
+
+## 2026-09-06: Persist rendered outreach snapshots
+
+- Status: accepted
+- Owner: engineering
+- Decision: Persist the rendered subject and body with each first-touch send
+  reservation. Reconciliation and stale recovery must use those snapshots
+  before current campaign copy, and follow-up threading must prefer the
+  original rendered subject or pinned variant.
 
 ## 2026-09-06: Outreach reply claims and pending delivery
 

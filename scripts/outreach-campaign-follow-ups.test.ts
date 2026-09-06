@@ -6,6 +6,7 @@ import {
   outreachFollowUpInReplyTo,
   outreachFollowUpRfcMessageId,
   outreachUnknownDeliveryExpired,
+  followUpInitialSubject,
   renderFollowUpEmail,
   runOutreachCampaignFollowUps,
   unresolvedOutreachCampaignDeliveries,
@@ -16,6 +17,15 @@ import { isHumanReplyMessage } from "../src/lib/outreach-campaign-copy";
 import type { LiveRecipientCheck } from "../src/lib/outreach-recipient-quality";
 import { SHARED_MAILBOX_POOL_FILTER } from "../src/lib/email-account-pool";
 import { MailboxVerifierError } from "../src/lib/leadgen/bouncer";
+
+assert.equal(
+  followUpInitialSubject({
+    id: "campaign-1",
+    subject: "Edited current subject",
+    variants: [{ key: "original", subject: "Original subject", bodyTemplate: "Body" }],
+  }, "record-1", { renderedSubject: "Rendered original subject", variantKey: "original" }),
+  "Rendered original subject",
+);
 
 type FollowUpRow = {
   officeId: string;
@@ -63,6 +73,7 @@ function fakeDatabase(input: {
   // SHARED_MAILBOX_POOL_FILTER match (active with credentials).
   emailAccounts?: Array<{ id: string; email: string; officeId: string; connected: boolean; sendEnabled: boolean; sendPausedAt: Date | null }>;
   queuedSends?: number;
+  campaignFollowUps?: unknown;
   followUps?: FollowUpRow[];
   repliedThreadIds?: string[];
   // Inbound rows beyond plain replies, e.g. delivery feedback whose
@@ -94,7 +105,8 @@ function fakeDatabase(input: {
   const messages: Array<Record<string, unknown>> = [];
   const threadUpdates: Array<Record<string, unknown>> = [];
   const reservationUpdates: Array<Record<string, unknown>> = [];
-  const campaign = { id: "campaign-1", officeId: "office-1", status: input.status ?? "ACTIVE" };
+  const campaignState = { id: "campaign-1", officeId: "office-1", status: input.status ?? "ACTIVE" };
+  const campaignFollowUps = input.campaignFollowUps === undefined ? campaign.followUps : input.campaignFollowUps;
   const followUpModel = {
     findMany: async (args: { where?: Where }) => followUps.filter((row) => matches(row, args.where)),
     count: async (args: { where?: Where }) => followUps.filter((row) => matches(row, args.where)).length,
@@ -145,9 +157,9 @@ function fakeDatabase(input: {
     threadUpdates,
     reservationUpdates,
     repliedThreads,
-    campaign,
+    campaign: campaignState,
     outreachCampaign: {
-      findFirst: async () => ({ status: campaign.status }),
+      findFirst: async () => ({ status: campaignState.status, followUps: campaignFollowUps }),
       updateMany: async () => ({ count: 1 }),
     },
     outreachCampaignSend: {
@@ -249,6 +261,7 @@ function fakeDatabase(input: {
       },
     },
     $queryRaw: async () => [{ locked: 1 }],
+    $executeRaw: async () => 0,
     $transaction: async <T>(callback: (tx: typeof db) => Promise<T>) => callback(db),
   };
   return db;
@@ -297,6 +310,16 @@ async function main() {
   });
   assert.equal(rendered.subject, "Re: Hello Buyer Co");
   assert.equal(rendered.body, "Still interested, Buyer Co? Reply STOP to opt out.");
+  const approvedRecipientRendered = renderFollowUpEmail({
+    step: { waitDays: 3, subject: null, bodyTemplate: "Still interested, {{email}}?" },
+    campaignSubject: "Hello {{company}}",
+    personalization: {
+      ...campaign.audiencePersonalization["record-1"],
+      fields: undefined,
+    },
+    fields: { email: "approved@buyerco.com" },
+  });
+  assert.equal(approvedRecipientRendered.body, "Still interested, approved@buyerco.com?");
   assert.equal(outreachFollowUpIdempotencyKey("campaign-1", "record-1", 2), "outreach-campaign:campaign-1:record-1:follow-up:2");
   assert.equal(outreachFollowUpInReplyTo("campaign-1", "record-1", 1), "<outreach-campaign-record-1@derya.ai>");
   assert.equal(outreachFollowUpInReplyTo("campaign-1", "record-1", 2), outreachFollowUpRfcMessageId("campaign-1", "record-1", 1));
@@ -362,6 +385,45 @@ async function main() {
   assert.equal(dueDb.messages[0].direction, "OUTBOUND");
   assert.equal(dueDb.threadUpdates.length, 1);
   assert.equal(dueDb.reservationUpdates[0]?.status, "RECORDED");
+
+  // A campaign edit committed after planning invalidates the stale plan while
+  // the claim transaction holds the campaign lock.
+  const editedBeforeClaimDb = fakeDatabase({
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    campaignFollowUps: [{
+      waitDays: 3,
+      subject: "Changed after planning",
+      body: "Still interested, {{company}}? Reply STOP to opt out.",
+    }],
+    now,
+  });
+  const providerCallsBeforeEditedClaim = providerCalls.length;
+  const editedBeforeClaimRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    db: editedBeforeClaimDb as never,
+  });
+  assert.equal(editedBeforeClaimRun.sent, 0);
+  assert.equal(editedBeforeClaimDb.followUps.length, 0);
+  assert.equal(providerCalls.length, providerCallsBeforeEditedClaim);
+
+  const editedBeforeSkipDb = fakeDatabase({
+    sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    repliedThreadIds: ["thread-1"],
+    campaignFollowUps: [{
+      waitDays: 3,
+      subject: "Changed before skip persistence",
+      body: "Still interested, {{company}}? Reply STOP to opt out.",
+    }],
+    now,
+  });
+  const providerCallsBeforeEditedSkip = providerCalls.length;
+  const editedBeforeSkipRun = await runOutreachCampaignFollowUps({
+    ...baseInput,
+    db: editedBeforeSkipDb as never,
+  });
+  assert.equal(editedBeforeSkipRun.skipped, 0);
+  assert.equal(editedBeforeSkipDb.followUps.length, 0);
+  assert.equal(providerCalls.length, providerCallsBeforeEditedSkip);
 
   // Re-running the same day does nothing: step 1 is sent and step 2 is not due yet.
   const rerun = await runOutreachCampaignFollowUps({ ...baseInput, db: dueDb as never });
@@ -587,6 +649,7 @@ async function main() {
   // a later cron run confirms it as SENT.
   const pendingDb = fakeDatabase({
     sends: [{ recordId: "record-1", recipient: "buyer@buyerco.com", sentAt: day(-3), localThreadId: "thread-1", providerThreadId: "provider-thread-1" }],
+    campaignFollowUps: campaign.followUps.slice(0, 1),
     reservedIds: ["reservation-1"],
     now,
   });
@@ -953,7 +1016,7 @@ async function main() {
   // Campaigns without follow-ups are a no-op.
   const noneRun = await runOutreachCampaignFollowUps({
     ...baseInput,
-    db: fakeDatabase({ sends: [], now }) as never,
+    db: fakeDatabase({ sends: [], campaignFollowUps: null, now }) as never,
     campaign: { ...campaign, followUps: null },
   });
   assert.equal(noneRun.steps, 0);

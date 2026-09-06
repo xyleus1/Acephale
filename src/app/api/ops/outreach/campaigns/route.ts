@@ -6,8 +6,14 @@ import { opsSecretAuthorized } from "@/lib/ops-secret";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/research-lists";
 import {
+  campaignBlockers,
   campaignFollowUpBlockers,
+  applyCampaignCopyEdit,
   normalizeCampaignFollowUps,
+  renderCampaignEmail,
+  campaignMergeFields,
+  normalizeCampaignVariants,
+  storedCampaignVariants,
   resolveCampaignOffice,
 } from "@/lib/outreach-campaign-copy";
 import {
@@ -15,6 +21,7 @@ import {
   CAMPAIGN_STATUSES_ALL,
   campaignRecipientFeedback,
   campaignReplyDigest,
+  campaignRevisionHashForEdit,
   listCampaignSummaries,
   planOutreachCampaign,
   saveDraftCampaign,
@@ -24,12 +31,14 @@ import {
   outreachCampaignRunNowLimitValid,
   runOutreachCampaignBatch,
 } from "@/lib/outreach-campaign-send";
+import { lockOutreachCampaignFollowUps } from "@/lib/outreach-campaign-follow-ups";
 import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
 import { senderProtectionWindow } from "@/lib/email-delivery-events";
 import { mailboxVerifierCreditsFromEnv } from "@/lib/leadgen/verify";
 import { runOutreachCampaignAutoReplies } from "@/lib/outreach-campaign-auto-reply";
 import { replyContextInput, replyModeInput } from "@/lib/outreach-campaign-reply-settings";
+import { campaignIntroEvidence, generateCampaignIntro } from "@/lib/outreach-campaign-intro";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -169,8 +178,8 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   const action = boundedText(body?.action, 30);
-  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run", "reply-settings", "auto-replies"].includes(action)) {
-    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, run, reply-settings, or auto-replies." }, { status: 400 });
+  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run", "reply-settings", "auto-replies", "copy"].includes(action)) {
+    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, run, reply-settings, auto-replies, or copy." }, { status: 400 });
   }
 
   try {
@@ -229,6 +238,165 @@ export async function POST(request: NextRequest) {
           ...summary,
           feedback: feedback.get(summary.id) ?? { bounced: 0, complained: 0, optedOut: 0, blocked: 0 },
         })),
+      });
+    }
+    if (action === "copy") {
+      const campaign = await prisma.outreachCampaign.findFirst({
+        where: { id: boundedText(body?.campaignId, 120) ?? "", officeId: office.id },
+        select: {
+          id: true,
+          officeId: true,
+          status: true,
+          subject: true,
+          bodyTemplate: true,
+          variants: true,
+          followUps: true,
+          dailyCap: true,
+          senderAccountId: true,
+          senderRotation: true,
+          emailField: true,
+          companyField: true,
+          countryField: true,
+          audienceRecordIds: true,
+          audiencePersonalization: true,
+          listId: true,
+          revisionHash: true,
+        },
+      });
+      if (!campaign) return NextResponse.json({ error: "Outreach campaign not found." }, { status: 404 });
+      if (!["DRAFT", "ACTIVE", "PAUSED"].includes(campaign.status)) {
+        return NextResponse.json({ error: "Outreach campaign is not editable." }, { status: 409 });
+      }
+      const suppliedSubject = typeof body?.subject === "string" ? body.subject : undefined;
+      const suppliedBodyTemplate = typeof body?.body === "string" ? body.body : undefined;
+      const variantsProvided = body?.variants !== undefined;
+      if (
+        suppliedSubject === undefined
+        && suppliedBodyTemplate === undefined
+        && !variantsProvided
+        && body?.followUps === undefined
+      ) {
+        return NextResponse.json({ error: "At least one copy field is required." }, { status: 400 });
+      }
+      const suppliedVariants = variantsProvided
+        ? normalizeCampaignVariants(variantsInput(body?.variants))
+        : undefined;
+      if (body?.followUps !== undefined) {
+        if (!Array.isArray(body.followUps) || body.followUps.length === 0) {
+          return NextResponse.json({
+            error: "Follow-up steps must be a non-empty array.",
+          }, { status: 400 });
+        }
+        const normalizedFollowUps = normalizeCampaignFollowUps(body.followUps);
+        if (normalizedFollowUps.length !== body.followUps.length) {
+          return NextResponse.json({
+            error: "Each follow-up step must include a valid wait and body.",
+          }, { status: 400 });
+        }
+      }
+      const copy = applyCampaignCopyEdit({
+        subject: campaign.subject,
+        bodyTemplate: campaign.bodyTemplate,
+        storedVariants: storedCampaignVariants(campaign.variants),
+        suppliedSubject,
+        suppliedBodyTemplate,
+        suppliedVariants,
+        variantsProvided,
+      });
+      const subject = copy.subject;
+      const bodyTemplate = copy.bodyTemplate;
+      const normalizedVariants = copy.variants;
+      const followUps = body?.followUps === undefined
+        ? normalizeCampaignFollowUps(campaign.followUps)
+        : normalizeCampaignFollowUps(body.followUps);
+      const mailboxes = await listEmailSenderPoolAccounts();
+      const blockers = campaignBlockers({
+        eligible: Number(campaign.audienceRecordIds && Array.isArray(campaign.audienceRecordIds) ? campaign.audienceRecordIds.length : 0),
+        mailboxesAvailable: mailboxes.length,
+        poolCapacityToday: mailboxes.reduce((sum, mailbox) => sum + Math.max(0, mailbox.dailySendLimit - mailbox.sentToday - mailbox.reservedToday), 0),
+        senderPinned: Boolean(campaign.senderAccountId),
+        senderRotation: campaign.senderRotation,
+        subject,
+        bodyTemplate,
+        dailyCap: campaign.dailyCap,
+        variants: normalizedVariants,
+        followUps,
+      });
+      if (followUps) blockers.push(...campaignFollowUpBlockers(followUps));
+      if (blockers.length) return NextResponse.json({ error: blockers[0], blockers }, { status: 400 });
+      const revisionHash = await campaignRevisionHashForEdit({
+        officeId: office.id,
+        campaignId: campaign.id,
+        subject,
+        bodyTemplate,
+        variants: normalizedVariants,
+        followUps,
+      });
+      const variantsChanged = variantsProvided
+        || ((suppliedSubject !== undefined || suppliedBodyTemplate !== undefined) && (normalizedVariants?.length ?? 0) > 0);
+      const nextStatus = campaign.status === "ACTIVE" ? "PAUSED" : campaign.status;
+      const followUpsAlreadyInFlight = await prisma.$transaction(async (tx) => {
+        await lockOutreachCampaignFollowUps(tx, office.id, campaign.id);
+        if (body?.followUps !== undefined) {
+          const existingFollowUp = await tx.outreachCampaignFollowUp.findFirst({
+            where: { officeId: office.id, campaignId: campaign.id },
+            select: { id: true },
+          });
+          if (existingFollowUp) return true;
+        }
+        await tx.outreachCampaign.update({
+          where: { id: campaign.id },
+          data: {
+            subject,
+            bodyTemplate,
+            ...(variantsChanged ? { variants: normalizedVariants as Prisma.InputJsonValue } : {}),
+            ...(body?.followUps === undefined ? {} : { followUps: followUps as Prisma.InputJsonValue }),
+            status: nextStatus,
+            revisionHash,
+            approvedAt: null,
+            approvedByUserId: null,
+          },
+        });
+        return false;
+      });
+      if (followUpsAlreadyInFlight) {
+        return NextResponse.json({
+          error: "Follow-up steps cannot be replaced once follow-ups have been queued or sent.",
+          reason: "FOLLOW_UPS_ALREADY_IN_FLIGHT",
+        }, { status: 409 });
+      }
+      const ids = Array.isArray(campaign.audienceRecordIds)
+        ? campaign.audienceRecordIds.filter((id): id is string => typeof id === "string").slice(0, 3)
+        : [];
+      const records = await prisma.researchRecord.findMany({
+        where: { officeId: office.id, listId: campaign.listId, id: { in: ids } },
+        select: { id: true, data: true },
+      });
+      const samples = await Promise.all(records.map(async (record) => {
+        const data = record.data as Record<string, unknown>;
+        const fields = campaignMergeFields({
+          data,
+          emailField: campaign.emailField,
+          companyField: campaign.companyField,
+          countryField: campaign.countryField,
+        });
+        const pitch = renderCampaignEmail({ subject: "", bodyTemplate, row: data, fields }).body.split(/[.!?]/)[0] ?? "";
+        const intro = process.env.OPENAI_API_KEY
+          ? await generateCampaignIntro({
+            evidence: campaignIntroEvidence(data, { companyField: campaign.companyField, countryField: campaign.countryField }),
+            pitch,
+          })
+          : "";
+        return renderCampaignEmail({ subject, bodyTemplate, row: data, fields, intro });
+      }));
+      return NextResponse.json({
+        campaignId: campaign.id,
+        subject,
+        body: bodyTemplate,
+        status: nextStatus,
+        revisionHash,
+        requiresApproval: true,
+        samples,
       });
     }
     if (action === "replies") {

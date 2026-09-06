@@ -10,6 +10,9 @@ import {
   campaignFollowUpDueAt,
   campaignFollowUpSubject,
   campaignPersonalizationMap,
+  campaignReferencedFieldKeys,
+  campaignMergeFieldCapBlocker,
+  snapshotMergeFields,
   campaignReplyCounts,
   normalizeCampaignFollowUps,
   planCampaignFollowUps,
@@ -28,6 +31,9 @@ import {
   asciiCampaignSenderDisplayName,
   buildCampaignFromHeader,
   renderCampaignEmail,
+  campaignMergeFields,
+  applyCampaignCopyEdit,
+  mergeFieldsAvailable,
   resolveCampaignOffice,
   normalizeCampaignVariants,
   selectCampaignVariant,
@@ -273,8 +279,166 @@ assert.deepEqual(campaignPersonalizationMap({
   companyField: "company_name",
   countryField: "country_name",
 }), {
-  "record-1": { email: "one@buyerco.com", company: "One", country: "UK" },
+    "record-1": {
+      email: "one@buyerco.com",
+      company: "One",
+      country: "UK",
+      fields: {
+        company: "One",
+        country: "UK",
+        email: "one@buyerco.com",
+        "field:email_address": "one@buyerco.com",
+        "field:company_name": "One",
+        "field:country_name": "UK",
+      },
+    },
 });
+assert.deepEqual(campaignMergeFields({
+  data: {
+    email_address: "hello@example.com",
+    company_name: "Baker House",
+    contact_name: "Jane Smith",
+    town: "Bath",
+    county: "Somerset",
+    postcode: "BA1 1AA",
+    website: "https://www.baker-house.example/path",
+    segment: "tea_room",
+    google_rating: 4.8,
+    google_reviews: 123,
+  },
+  emailField: "email_address",
+  companyField: "company_name",
+}), {
+  company: "Baker House",
+  country: "",
+  email: "hello@example.com",
+  first_name: "Jane",
+  name: "Jane Smith",
+  town: "Bath",
+  county: "Somerset",
+  postcode: "BA1 1AA",
+  location: "Bath, Somerset",
+  website: "baker-house.example",
+  segment: "tea_room",
+  segment_label: "tea room",
+  rating: "4.8",
+  reviews: "123",
+  ai_intro: "",
+  "field:email_address": "hello@example.com",
+  "field:company_name": "Baker House",
+  "field:contact_name": "Jane Smith",
+  "field:town": "Bath",
+  "field:county": "Somerset",
+  "field:postcode": "BA1 1AA",
+  "field:website": "https://www.baker-house.example/path",
+  "field:segment": "tea_room",
+  "field:google_rating": "4.8",
+  "field:google_reviews": "123",
+});
+const businessNameOnlyFields = campaignMergeFields({
+  data: { name: "Acme Ltd", email: "buyer@acme.example" },
+  emailField: "email",
+});
+assert.equal(businessNameOnlyFields.first_name, "");
+assert.equal(businessNameOnlyFields.name, "");
+const prefixedFieldFields = campaignMergeFields({
+  data: { "field:some_custom": "Snapshot value" },
+  emailField: "email",
+});
+assert.equal(prefixedFieldFields["field:some_custom"], "Snapshot value");
+assert.equal(prefixedFieldFields["field:field:some_custom"], undefined);
+const lateFields = Object.fromEntries(
+  [...Array(45)].map((_, index) => [`field:custom_${index}`, `value-${index}`]),
+);
+lateFields["field:zz"] = "late value";
+assert.equal(snapshotMergeFields(lateFields, ["field:zz"])["field:zz"], "late value");
+const aliasFieldsWithCustomCap = Object.fromEntries(
+  [...Array(40)].map((_, index) => [`field:custom_${index}`, `value-${index}`]),
+);
+aliasFieldsWithCustomCap.first_name = "Jane";
+aliasFieldsWithCustomCap.town = "Bath";
+const aliasFieldsSnapshot = snapshotMergeFields(aliasFieldsWithCustomCap);
+assert.equal(aliasFieldsSnapshot.first_name, "Jane");
+assert.equal(aliasFieldsSnapshot.town, "Bath");
+assert.equal(
+  Object.keys(aliasFieldsSnapshot).filter((key) => key.startsWith("field:")).length,
+  40,
+);
+assert.deepEqual(campaignReferencedFieldKeys(["{{field:one|{{field:two}}}}"]), ["field:one", "field:two"]);
+assert.equal(
+  campaignMergeFieldCapBlocker([...Array(41)].map((_, index) => `{{field:custom_${index}}}`)),
+  "Campaign references more than 40 custom merge fields.",
+);
+const variantBaseEdit = applyCampaignCopyEdit({
+  subject: "Old subject",
+  bodyTemplate: "Old body",
+  storedVariants: [{ key: "old", subject: "Old subject", bodyTemplate: "Old body" }],
+  suppliedVariants: [{ key: "new", subject: "New subject", bodyTemplate: "New body" }],
+  variantsProvided: true,
+});
+assert.equal(variantBaseEdit.subject, "New subject");
+assert.equal(variantBaseEdit.bodyTemplate, "New body");
+const directBaseEdit = applyCampaignCopyEdit({
+  subject: "Old subject",
+  bodyTemplate: "Old body",
+  storedVariants: [
+    { key: "old", subject: "Old subject", bodyTemplate: "Old body" },
+    { key: "other", subject: "Other subject", bodyTemplate: "Other body" },
+  ],
+  suppliedSubject: "Edited subject",
+  suppliedBodyTemplate: "Edited body",
+  variantsProvided: false,
+});
+assert.deepEqual(directBaseEdit.variants, [
+  { key: "old", subject: "Edited subject", bodyTemplate: "Edited body" },
+  { key: "other", subject: "Other subject", bodyTemplate: "Other body" },
+]);
+assert.equal(campaignActivationTransitionWhere({
+  officeId: "office-1",
+  campaignId: "campaign-1",
+  revisionHash: "revision-1",
+  status: "PAUSED",
+}).status, "PAUSED");
+assert.deepEqual(mergeFieldsAvailable({
+  "record-1": {
+    email: "one@example.com",
+    company: "One",
+    country: "UK",
+    fields: { email: "one@example.com", company: "One" },
+  },
+  "record-2": {
+    email: "two@example.com",
+    company: null,
+    country: null,
+    fields: { email: "two@example.com" },
+  },
+  "record-3": {
+    email: "three@example.com",
+    company: "Three",
+    country: null,
+  },
+}), ["email", "company"]);
+const nestedRow = { data: { company: "Baker House", email: "x@example.com" } };
+assert.equal(renderCampaignEmail({
+  subject: "",
+  bodyTemplate: "Hi {{first_name|{{company}} team}},",
+  row: nestedRow,
+}).body, "Hi Baker House team,");
+assert.equal(renderCampaignEmail({
+  subject: "",
+  bodyTemplate: "{{ai_intro|... across {{county|the South of England}}.}}",
+  row: nestedRow,
+}).body, "... across the South of England.");
+assert.equal(campaignBlockers({
+  eligible: 1,
+  mailboxesAvailable: 1,
+  poolCapacityToday: 1,
+  senderPinned: true,
+  senderRotation: false,
+  subject: "Hi {{unknown}}",
+  bodyTemplate: "Reply STOP to opt out.",
+  dailyCap: 1,
+})[0], "Unknown merge field {{unknown}}");
 assert.doesNotThrow(() => campaignRevisionHash({
   ...revisionInput,
   audiencePersonalization: null,

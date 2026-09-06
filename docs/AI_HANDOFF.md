@@ -1,3 +1,6 @@
+# Outreach campaign personalization
+
+Campaign copy now supports deterministic aliases and nested merge fallbacks. Audience snapshots retain bounded merge fields for follow-ups and legacy rows can be reloaded by office and list scope. The optional `ai_intro` is generated from row evidence only, guarded deterministically, and persisted per send so reconciliation reproduces the delivered body.
 Context research operations are stored as typed CompanyContext action payloads. Status and audit run inline; pause, resume, purge, region expansion, requalification, and contact enrichment require operator approval and never touch outreach.
 
 ## Lead status pipeline region
@@ -12957,6 +12960,22 @@ Verification caveat:
 - The cron route runs every 15 minutes. The feature is not visually verified
   in a browser in this pass.
 
+## 2026-09-06: Outreach campaign personalization hardening
+
+- Deterministic merge fields now preserve audience snapshot fields for first
+  touches and load the office and list scoped research row for legacy
+  campaigns.
+- AI introductions are evidence grounded, guarded by deterministic claims and
+  persisted on each send so reconciliation renders the same body.
+- Follow-up claims now re-read the locked campaign definition before creating
+  rows, so edits between planning and claiming cause a fresh plan.
+- Skip persistence uses the same lock and freshness fence, so stale plans write
+  neither SKIPPED rows nor sends.
+- Ops copy normalizes variants and refreshes the revision hash for DRAFT
+  campaigns while preserving the hash for ACTIVE and PAUSED campaigns.
+- The send test still reaches an existing local PostgreSQL TLS limitation in
+  its database-backed email-touch path.
+
 ## Pooled supplier answers close their thread (this pass)
 
 - Fixed the loop where a supplier reply answered from a pooled mailbox stayed
@@ -13012,6 +13031,39 @@ Verification caveat:
 - Free-mail and disposable domains now fall back to vendor identity, preventing
   unrelated website-less suppliers from collapsing into one company.
 
+## 2026-09-06: Outreach personalization copy review
+
+- Snapshot merge fields preserve existing `field:` keys and first-touch sends
+  use approved snapshot fields directly when available.
+- Ops copy edits keep the base subject and body aligned with variant zero,
+  recompute revision hashes, and pause active campaigns for approval.
+- Paused campaigns can resume through the existing approval action when the
+  returned revision hash matches.
+
+## 2026-09-06: Outreach personalization grounding and retry safety
+
+- AI introductions now use a fixed common-word whitelist plus evidence tokens,
+  while retaining evidence-key and numeric checks.
+- Stale queued sends with persisted reservations are reclaimed without
+  regenerating their guarded introduction, and legacy research fallbacks keep
+  the approved recipient email in merge fields.
+- Invalid follow-up payloads are rejected before any campaign write.
+- Copy edits clear prior approval identity and timestamps, and supplied
+  follow-ups are rejected after follow-up execution starts.
+- First-touch idempotency excludes generated intro text, and snapshots retain
+  referenced custom fields ahead of the 40-field fill limit.
+- Stale reserved rows are recovered before daily-cap, audience quality, or
+  suppression gates. Their persisted intro and idempotency key are reused, and
+  every remaining ledger row is excluded from fresh-send selection.
+- First-touch ledger rows now persist rendered subject and body snapshots.
+  Unknown reconciliation and stale recovery use those snapshots when present,
+  while follow-ups prefer the original rendered subject for thread continuity.
+- Follow-up edits now share the runner advisory lock, empty copy edits are
+  rejected before writes, and legacy UNKNOWN sends honor their stored variant.
+- Stale reserved rows are recovered before daily-cap, audience quality, or
+  suppression gates. Their persisted intro and idempotency key are reused, and
+  every remaining ledger row is excluded from fresh-send selection.
+
 ## 2026-09-06: Auto-reply delivery and suppression retry safety
 
 - Reclaimed rows with persisted RFC and reservation identifiers move directly
@@ -13035,7 +13087,6 @@ Verification caveat:
 - Initial mail thread links now fetch the access-checked detail endpoint when
   the thread is outside the first page, prepend the returned thread, and open
   its detail without surfacing a fetch error.
-
 ## 2026-09-06: Scheduled sourcing reply loop
 
 - The scheduled sourcing pass now answers replies, sends bounded chases and

@@ -7,6 +7,15 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-06: Outreach personalization review fixes
+
+- Follow-up copy edits now share the campaign runner advisory lock, empty copy
+  edits fail before writes, and legacy UNKNOWN sends reuse a stored variant key.
+- Follow-up claiming now validates the locked campaign definition before
+  creating rows, preventing a stale pre-lock plan from being sent.
+- Skip persistence uses that same lock and freshness check, preventing stale
+  plans from leaving blocking ledger rows.
+
 ## 2026-09-09: Prospecting project screen declutter
 
 - Trigger: the project detail screen stacked a project header, a Lead status
@@ -30,6 +39,12 @@ Context chat now reports and manages existing prospect research through office-s
   inset shadows elsewhere in the module.
 - Verified over CDP at 1440x1000 and 420x860 on the 55-row QA fixture; Chat,
   Logistics and the Messages tab render unchanged after the shell reset change.
+
+## 2026-09-06: Outreach campaign personalization
+
+- Added deterministic aliases, arbitrary `field:` merge fields, bounded snapshots, nested fallbacks, and unknown-field blockers.
+- Added evidence-grounded `ai_intro` generation with a twelve-second timeout and deterministic guardrails.
+- Persisted the final intro on each first-touch send for exact reconciliation rendering.
 
 ## 2026-09-09: Materials stage no longer clips at 700px windows
 
@@ -10524,7 +10539,6 @@ Use this file for chronological implementation notes that future agents should s
   reservations, same-thread persistence, suppression, and cron/Ops wiring.
 - Added campaign summary and Supply OS indicators for auto reply mode,
   answered counts, needs-you counts, and escalation summaries.
-
 ## 2026-09-06: Auto-reply retry safety follow-up
 
 - Stale CLAIMED rows carrying both delivery identifiers are reclaimed into
@@ -10547,3 +10561,42 @@ Use this file for chronological implementation notes that future agents should s
   endpoint instead of searching only the first 25 loaded rows.
 - Successful detail responses are prepended and opened directly, while
   request-id fencing prevents stale responses from changing the panel.
+
+## 2026-09-06: Outreach campaign personalization review fixes
+
+- First-touch rendering now uses deterministic snapshot merge fields while
+  preserving the approved recipient address, with office and list scoped
+  legacy row fallback.
+- Intro generation now requires non-empty evidence keys, rejects unsupported
+  claims, and persists the guarded intro through uncertain delivery
+  reconciliation.
+- Copy edits normalize variants and recompute DRAFT revision hashes using the
+  same audience inputs as activation.
+
+## 2026-09-06: Outreach campaign copy and snapshot follow-up
+
+- Existing `field:` snapshot keys are kept stable instead of receiving a
+  second prefix.
+- Copy edits derive base copy from normalized variant zero, or rewrite stored
+  variant zero for subject and body-only edits. Active edits become paused and
+  all editable statuses receive a fresh revision hash.
+- Approval now accepts paused campaigns, preserving compare-and-set revision
+  protection while resuming them to active.
+
+## 2026-09-06: Outreach personalization review hardening
+
+- Intro grounding now uses a centralized token whitelist, campaign pitch, and
+  evidence values rather than a claim blacklist.
+- Copy updates clear approval state and protect queued follow-up steps from
+  replacement.
+- Request hashes use deterministic rendered templates without generated intro
+  text, and referenced custom fields are prioritized in snapshots.
+- Reclaimed queued sends reuse persisted introductions, and malformed or empty
+  follow-up payloads are rejected before campaign persistence.
+- Reserved queued rows are settled in a dedicated recovery pass before fresh
+  capacity and recipient filters, including rows now suppressed.
+- Persisted rendered subject and body snapshots now make unknown reconciliation
+  and stale recovery deterministic across campaign copy edits. Follow-up
+  subjects prefer the first-touch rendered subject or original variant.
+- Reserved queued rows are settled in a dedicated recovery pass before fresh
+  capacity and recipient filters, including rows now suppressed.

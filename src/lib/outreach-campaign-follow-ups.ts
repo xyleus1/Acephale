@@ -8,6 +8,7 @@ import {
   normalizeCampaignFollowUps,
   planCampaignFollowUps,
   renderCampaignEmail,
+  campaignMergeFields,
   selectCampaignVariant,
   storedCampaignVariants,
   type CampaignFollowUpCandidate,
@@ -50,6 +51,21 @@ type CapacityCampaign = { id: string; officeId: string; dailyCap: number };
 
 export { humanReplyMessageFilter };
 
+export function outreachCampaignFollowUpLockKey(officeId: string, campaignId: string) {
+  return `outreach-campaign-follow-ups:${officeId}:${campaignId}`;
+}
+
+export async function lockOutreachCampaignFollowUps(
+  tx: FollowUpTx,
+  officeId: string,
+  campaignId: string,
+) {
+  await tx.$executeRaw`
+    SELECT 1
+    FROM pg_advisory_xact_lock(hashtextextended(${outreachCampaignFollowUpLockKey(officeId, campaignId)}, 0))
+  `;
+}
+
 // Serializes first-touch and follow-up claims for one campaign inside the
 // claiming transaction.
 export async function lockOutreachCampaignClaims(tx: FollowUpTx, campaignId: string) {
@@ -63,7 +79,12 @@ export async function lockOutreachCampaignClaims(tx: FollowUpTx, campaignId: str
 // first-touch and follow-up ledgers, including live QUEUED claims and
 // deliveries the provider may have accepted but the ledger has not settled
 // (UNKNOWN rows whose reservation is still RESERVED against today).
-export async function outreachCampaignRemainingCapacity(tx: FollowUpTx, campaign: CapacityCampaign, now: Date) {
+export async function outreachCampaignRemainingCapacity(
+  tx: FollowUpTx,
+  campaign: CapacityCampaign,
+  now: Date,
+  options: { reclaimableQueuedSends?: number } = {},
+) {
   const { start, end } = utcDayBounds(now);
   const scope = { officeId: campaign.officeId, campaignId: campaign.id };
   const sentToday = await tx.outreachCampaignSend.count({
@@ -75,7 +96,9 @@ export async function outreachCampaignRemainingCapacity(tx: FollowUpTx, campaign
   const queuedSends = await tx.outreachCampaignSend.count({ where: { ...scope, status: "QUEUED" } });
   const queuedFollowUps = await tx.outreachCampaignFollowUp.count({ where: { ...scope, status: "QUEUED" } });
   const unresolvedToday = await unresolvedOutreachCampaignDeliveries(tx, campaign, start);
-  return Math.max(0, campaign.dailyCap - sentToday - followUpsToday - queuedSends - queuedFollowUps - unresolvedToday);
+  const reclaimableQueuedSends = Math.max(0, options.reclaimableQueuedSends ?? 0);
+  const effectiveQueuedSends = Math.max(0, queuedSends - reclaimableQueuedSends);
+  return Math.max(0, campaign.dailyCap - sentToday - followUpsToday - effectiveQueuedSends - queuedFollowUps - unresolvedToday);
 }
 
 export function outreachUnknownDeliveryExpired(createdAt: Date, now: Date) {
@@ -145,16 +168,27 @@ export type FollowUpCampaign = {
   variants?: Prisma.JsonValue | null;
   // List column holding the recipient address; defaults to `email`.
   emailField?: string | null;
+  listId?: string | null;
   audiencePersonalization: Record<string, CampaignPersonalization>;
 };
 
 // Follow-ups reply in the recipient's own thread, so the implied "Re:" subject
 // must come from the variant that recipient actually received.
-export function followUpInitialSubject(campaign: FollowUpCampaign, recordId: string) {
+export function followUpInitialSubject(
+  campaign: FollowUpCampaign,
+  recordId: string,
+  sentSubject?: { renderedSubject: string | null; variantKey: string | null },
+) {
+  if (sentSubject?.renderedSubject) return sentSubject.renderedSubject;
+  const variants = storedCampaignVariants(campaign.variants ?? null);
+  const pinnedVariant = sentSubject?.variantKey
+    ? variants.find((variant) => variant.key === sentSubject.variantKey)
+    : null;
+  if (pinnedVariant) return pinnedVariant.subject;
   const variant = selectCampaignVariant({
     campaignId: campaign.id,
     recordId,
-    variants: storedCampaignVariants(campaign.variants ?? null),
+    variants,
   });
   return variant?.subject ?? campaign.subject;
 }
@@ -243,16 +277,19 @@ export function renderFollowUpEmail(input: {
   step: CampaignFollowUpStep;
   campaignSubject: string;
   personalization: CampaignPersonalization;
+  fields?: Record<string, string>;
 }) {
   const initial = renderCampaignEmail({
     subject: input.campaignSubject,
     bodyTemplate: "",
     row: input.personalization,
+    fields: input.fields ?? input.personalization.fields,
   });
   const rendered = renderCampaignEmail({
     subject: input.step.subject ?? "",
     bodyTemplate: input.step.bodyTemplate,
     row: input.personalization,
+    fields: input.fields ?? input.personalization.fields,
   });
   return {
     subject: campaignFollowUpSubject({ ...input.step, subject: rendered.subject || null }, initial.subject),
@@ -276,7 +313,21 @@ async function threadReplied(db: FollowUpDb, officeId: string, threadId: string 
   return replied.has(threadId);
 }
 
-async function loadSequenceState(db: FollowUpDb, campaign: FollowUpCampaign, now: Date) {
+async function loadSequenceState(
+  db: FollowUpDb,
+  campaign: FollowUpCampaign,
+  now: Date,
+  sentRows?: Array<{
+    recordId: string;
+    recipient: string;
+    sentAt: Date | null;
+    senderEmail: string | null;
+    localThreadId: string | null;
+    providerThreadId: string | null;
+    renderedSubject: string | null;
+    variantKey: string | null;
+  }>,
+) {
   await db.outreachCampaignFollowUp.deleteMany({
     where: {
       officeId: campaign.officeId,
@@ -285,9 +336,18 @@ async function loadSequenceState(db: FollowUpDb, campaign: FollowUpCampaign, now
       createdAt: { lt: outreachFollowUpReclaimBefore(now) },
     },
   });
-  const sends = await db.outreachCampaignSend.findMany({
+  const sends = sentRows ?? await db.outreachCampaignSend.findMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id, status: "SENT", sentAt: { not: null } },
-    select: { recordId: true, recipient: true, sentAt: true, senderEmail: true, localThreadId: true, providerThreadId: true },
+    select: {
+      recordId: true,
+      recipient: true,
+      sentAt: true,
+      senderEmail: true,
+      localThreadId: true,
+      providerThreadId: true,
+      renderedSubject: true,
+      variantKey: true,
+    },
   });
   const followUps = await db.outreachCampaignFollowUp.findMany({
     where: { officeId: campaign.officeId, campaignId: campaign.id },
@@ -365,7 +425,7 @@ export async function followUpSenderAccounts(
 // recipient and is left out.
 export async function loadFollowUpResearchData(
   db: FollowUpDb,
-  campaign: Pick<FollowUpCampaign, "officeId" | "emailField">,
+  campaign: Pick<FollowUpCampaign, "officeId" | "emailField" | "listId">,
   candidates: readonly { recordId: string; recipient: string }[],
 ) {
   const data = new Map<string, Record<string, unknown>>();
@@ -373,7 +433,11 @@ export async function loadFollowUpResearchData(
   const ids = [...recipients.keys()];
   if (!ids.length) return data;
   const records = await db.researchRecord.findMany({
-    where: { officeId: campaign.officeId, id: { in: ids } },
+    where: {
+      officeId: campaign.officeId,
+      id: { in: ids },
+      ...(campaign.listId ? { listId: campaign.listId } : {}),
+    },
     select: { id: true, data: true },
   });
   for (const record of records) {
@@ -413,25 +477,48 @@ export async function outstandingCampaignFollowUps(
   }).outstanding;
 }
 
+async function campaignFollowUpPlanIsFresh(
+  tx: FollowUpDb | FollowUpTx,
+  campaign: FollowUpCampaign,
+  statusAllowsSend: (status: string | null | undefined) => boolean,
+) {
+  const freshCampaign = await tx.outreachCampaign.findFirst({
+    where: { id: campaign.id, officeId: campaign.officeId },
+    select: { followUps: true, status: true },
+  });
+  return Boolean(
+    freshCampaign
+    && statusAllowsSend(freshCampaign.status)
+    && JSON.stringify(normalizeCampaignFollowUps(freshCampaign.followUps))
+      === JSON.stringify(normalizeCampaignFollowUps(campaign.followUps)),
+  );
+}
+
 async function recordSkips(
   db: FollowUpDb,
   campaign: FollowUpCampaign,
   skips: readonly { recordId: string; recipient: string; step: number; reason: CampaignFollowUpSkipReason }[],
   now: Date,
+  statusAllowsSend: (status: string | null | undefined) => boolean,
 ) {
-  if (!skips.length) return;
-  await db.outreachCampaignFollowUp.createMany({
-    data: skips.map((skip) => ({
-      officeId: campaign.officeId,
-      campaignId: campaign.id,
-      recordId: skip.recordId,
-      step: skip.step,
-      recipient: skip.recipient,
-      status: "SKIPPED",
-      skipReason: skip.reason,
-      dueAt: now,
-    })),
-    skipDuplicates: true,
+  if (!skips.length) return true;
+  return db.$transaction(async (tx) => {
+    await lockOutreachCampaignFollowUps(tx, campaign.officeId, campaign.id);
+    if (!await campaignFollowUpPlanIsFresh(tx, campaign, statusAllowsSend)) return false;
+    await tx.outreachCampaignFollowUp.createMany({
+      data: skips.map((skip) => ({
+        officeId: campaign.officeId,
+        campaignId: campaign.id,
+        recordId: skip.recordId,
+        step: skip.step,
+        recipient: skip.recipient,
+        status: "SKIPPED",
+        skipReason: skip.reason,
+        dueAt: now,
+      })),
+      skipDuplicates: true,
+    });
+    return true;
   });
 }
 
@@ -443,11 +530,14 @@ async function claimFollowUps(
   candidates: readonly CampaignFollowUpCandidate[],
   limit: number | undefined,
   now: Date,
+  statusAllowsSend: (status: string | null | undefined) => boolean,
 ) {
   if (!candidates.length) return [];
   try {
     return await db.$transaction(async (tx) => {
+      await lockOutreachCampaignFollowUps(tx, campaign.officeId, campaign.id);
       await lockOutreachCampaignClaims(tx, campaign.id);
+      if (!await campaignFollowUpPlanIsFresh(tx, campaign, statusAllowsSend)) return [];
       const remaining = await outreachCampaignRemainingCapacity(tx, campaign, now);
       const existing = await tx.outreachCampaignFollowUp.findMany({
         where: {
@@ -588,6 +678,11 @@ async function reconcileUnknownFollowUps(
   db: FollowUpDb,
   campaign: FollowUpCampaign,
   steps: readonly CampaignFollowUpStep[],
+  firstTouchSends: ReadonlyArray<{
+    recordId: string;
+    renderedSubject: string | null;
+    variantKey: string | null;
+  }>,
   provider: SupplierEmailProvider,
   now: Date,
   release: typeof releaseEmailSenderReservation,
@@ -624,7 +719,11 @@ async function reconcileUnknownFollowUps(
     const step = steps[row.step - 1];
     const personalization = campaign.audiencePersonalization[row.recordId];
     if (!step || !personalization) continue;
-    const email = renderFollowUpEmail({ step, campaignSubject: followUpInitialSubject(campaign, row.recordId), personalization });
+    const email = renderFollowUpEmail({
+      step,
+      campaignSubject: followUpInitialSubject(campaign, row.recordId, firstTouchSends.find((send) => send.recordId === row.recordId)),
+      personalization,
+    });
     try {
       await recordFollowUpSent(db, {
         campaign,
@@ -682,8 +781,29 @@ export async function runOutreachCampaignFollowUps(input: {
     select: { status: true },
   }))?.status;
   if (!input.statusAllowsSend(await stepStatus())) return output;
-  await reconcileUnknownFollowUps(db, campaign, steps, input.provider, now, input.release ?? releaseEmailSenderReservation);
-  const state = await loadSequenceState(db, campaign, now);
+  const firstTouchSends = await db.outreachCampaignSend.findMany({
+    where: { officeId: campaign.officeId, campaignId: campaign.id, status: "SENT", sentAt: { not: null } },
+    select: {
+      recordId: true,
+      recipient: true,
+      sentAt: true,
+      senderEmail: true,
+      localThreadId: true,
+      providerThreadId: true,
+      renderedSubject: true,
+      variantKey: true,
+    },
+  });
+  await reconcileUnknownFollowUps(
+    db,
+    campaign,
+    steps,
+    firstTouchSends,
+    input.provider,
+    now,
+    input.release ?? releaseEmailSenderReservation,
+  );
+  const state = await loadSequenceState(db, campaign, now, firstTouchSends);
   const plan = planCampaignFollowUps({
     steps,
     sends: state.sends,
@@ -693,7 +813,8 @@ export async function runOutreachCampaignFollowUps(input: {
     bouncedRecipients: state.bounced,
     now,
   });
-  await recordSkips(db, campaign, plan.skips, now);
+  const skipsFresh = await recordSkips(db, campaign, plan.skips, now, input.statusAllowsSend);
+  if (!skipsFresh) return output;
   output.skipped = plan.skips.length;
   output.outstanding = plan.outstanding;
   for (const skip of plan.skips) {
@@ -708,7 +829,7 @@ export async function runOutreachCampaignFollowUps(input: {
       error: null,
     });
   }
-  const claimed = await claimFollowUps(db, campaign, plan.due, input.limit, now);
+  const claimed = await claimFollowUps(db, campaign, plan.due, input.limit, now, input.statusAllowsSend);
   if (!claimed.length) return output;
   const senderAccounts = await followUpSenderAccounts(db, campaign, state.sends);
   const reserveSender = input.reserve ?? reserveEmailSender;
@@ -760,7 +881,7 @@ export async function runOutreachCampaignFollowUps(input: {
       const nextAccount = senderAccounts.get(next.recordId);
       return !nextAccount || !blockedAccounts.has(nextAccount.accountId);
     });
-    const [next] = await claimFollowUps(db, campaign, pending, 1, now);
+    const [next] = await claimFollowUps(db, campaign, pending, 1, now, input.statusAllowsSend);
     if (!next) {
       backfill = false;
       return;
@@ -807,7 +928,27 @@ export async function runOutreachCampaignFollowUps(input: {
       await dropQueued(candidate);
       continue;
     }
-    const email = renderFollowUpEmail({ step, campaignSubject: followUpInitialSubject(campaign, candidate.recordId), personalization });
+    const fields = personalization.fields ?? (
+      researchData.has(candidate.recordId)
+        ? {
+          ...campaignMergeFields({
+            data: researchData.get(candidate.recordId) ?? {},
+            emailField: campaign.emailField ?? "email",
+          }),
+          email: personalization.email,
+        }
+        : undefined
+    );
+    const email = renderFollowUpEmail({
+      step,
+      campaignSubject: followUpInitialSubject(
+        campaign,
+        candidate.recordId,
+        firstTouchSends.find((send) => send.recordId === candidate.recordId),
+      ),
+      personalization,
+      fields,
+    });
     const base: FollowUpOutcomeBase = {
       campaignId: campaign.id,
       recordId: candidate.recordId,

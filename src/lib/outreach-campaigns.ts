@@ -19,6 +19,8 @@ import {
   campaignPersonalization,
   campaignActivationTransitionWhere,
   campaignPersonalizationMap,
+  mergeFieldsAvailable,
+  type CampaignPersonalization,
   campaignRevisionHash,
   campaignRevisionMatches,
   campaignSampleRecipients,
@@ -44,6 +46,7 @@ import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import { tallyKeptRecipientCaveats, type RecipientQualityPruneCounts } from "@/lib/outreach-recipient-quality";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 import {
+  lockOutreachCampaignFollowUps,
   outstandingCampaignFollowUps,
   unresolvedOutreachCampaignDeliveries,
 } from "@/lib/outreach-campaign-follow-ups";
@@ -228,6 +231,7 @@ function renderRow(
   input: { emailField: string; companyField?: string | null; countryField?: string | null },
 ) {
   return {
+    ...data,
     company: input.companyField ? data[input.companyField] : data.company,
     country: input.countryField ? data[input.countryField] : data.country,
     email: data[input.emailField],
@@ -352,6 +356,47 @@ async function eligibleRecords(campaign: CampaignWithList, useSnapshot = false) 
         .filter((record): record is typeof selected[number] => Boolean(record))
       : selected,
   };
+}
+
+export async function campaignRevisionHashForEdit(input: {
+  officeId: string;
+  campaignId: string;
+  subject: string;
+  bodyTemplate: string;
+  variants: CampaignVariant[] | null;
+  followUps: CampaignFollowUpStep[] | null;
+}) {
+  const campaign = await loadCampaign(input.officeId, input.campaignId);
+  const { records, filters } = await eligibleRecords(campaign, true);
+  const audiencePersonalization = campaignPersonalizationMap({
+    rows: records.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
+    emailField: campaign.emailField,
+    companyField: campaign.companyField ?? undefined,
+    countryField: campaign.countryField ?? undefined,
+    templates: [
+      input.subject,
+      input.bodyTemplate,
+      ...(input.variants ?? []).flatMap((variant) => [variant.subject, variant.bodyTemplate]),
+      ...(input.followUps ?? []).flatMap((step) => [step.subject ?? "", step.bodyTemplate]),
+    ],
+  });
+  return campaignRevisionHash({
+    subject: input.subject,
+    bodyTemplate: input.bodyTemplate,
+    emailField: campaign.emailField,
+    rowStatuses: jsonStrings(campaign.rowStatuses),
+    filters,
+    dailyCap: campaign.dailyCap,
+    senderAccountId: campaign.senderAccountId,
+    senderRotation: campaign.senderRotation,
+    senderDisplayName: campaign.senderDisplayName,
+    variants: input.variants,
+    audienceRecordIds: records.map((record) => record.id),
+    audiencePersonalization,
+    followUps: input.followUps,
+    replyMode: campaign.replyMode,
+    replyContext: campaign.replyContext,
+  });
 }
 
 async function senderDetails(senderAccountId: string | null, requestedDisplayName: string | null) {
@@ -486,6 +531,12 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
       emailField,
       companyField: input.companyField,
       countryField: input.countryField,
+      templates: [
+        campaignSubject,
+        campaignBodyTemplate,
+        ...(variants ?? []).flatMap((variant) => [variant.subject, variant.bodyTemplate]),
+        ...followUps.flatMap((step) => [step.subject ?? "", step.bodyTemplate]),
+      ],
     }),
     followUps,
   });
@@ -572,6 +623,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
         replyContext: input.replyContext,
         enforceReplyContext: false,
         variants,
+        followUps,
       }),
       ...campaignFollowUpBlockers(followUps),
     ],
@@ -642,6 +694,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     suppressed: new Set(suppressedAtSave.keys()),
     contacted: new Set(contactedElsewhere.map((send) => send.recipient)),
   }).eligible.map((record) => record.id);
+  const followUps = normalizeCampaignFollowUps(input.followUps);
   const audiencePersonalization = campaignPersonalizationMap({
     rows: records
       .filter((record) => audienceRecordIds.includes(record.id))
@@ -649,9 +702,14 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     emailField,
     companyField: input.companyField,
     countryField: input.countryField,
+    templates: [
+      campaignSubject,
+      campaignBodyTemplate,
+      ...(variants ?? []).flatMap((variant) => [variant.subject, variant.bodyTemplate]),
+      ...followUps.flatMap((step) => [step.subject ?? "", step.bodyTemplate]),
+    ],
   });
   const audienceTotal = audienceRecordIds.length;
-  const followUps = normalizeCampaignFollowUps(input.followUps);
   const revisionHash = campaignRevisionHash({
     subject: campaignSubject,
     bodyTemplate: campaignBodyTemplate,
@@ -718,8 +776,8 @@ export const CAMPAIGN_CLAIM_LOST_BLOCKER =
 class ClaimLostError extends Error {}
 
 /**
- * Starts a DRAFT campaign. When `finalize` is given it runs in the same transaction as the
- * DRAFT to ACTIVE write and must confirm the caller still owns the approval (returning false
+ * Starts a DRAFT campaign or resumes a PAUSED campaign. When `finalize` is given it runs in
+ * the same transaction as the status write and must confirm the caller still owns the approval (returning false
  * rolls the activation back), so a released or expired claim can never start a campaign.
  */
 export async function activateCampaign(input: {
@@ -730,20 +788,26 @@ export async function activateCampaign(input: {
   finalize?: (tx: Prisma.TransactionClient) => Promise<boolean>;
 }) {
   const campaign = await loadCampaign(input.officeId, input.campaignId);
-  const statusBlocker = campaignStatusBlocker(campaign.status);
+  const statusBlocker = campaign.status === "PAUSED" ? null : campaignStatusBlocker(campaign.status);
   if (statusBlocker) return { activated: false, blockers: [statusBlocker] };
   // Activate from the approved snapshot: recomputing would rerun office-wide dedupe
   // and spuriously invalidate the approved revision. Send-time status checks and
   // personalization in the revision hash still protect delivery.
   const { records, filters } = await eligibleRecords(campaign, true);
   const variants = normalizeCampaignVariants(campaign.variants);
+  const followUps = normalizeCampaignFollowUps(campaign.followUps);
   const audiencePersonalization = campaignPersonalizationMap({
     rows: records.map((record) => ({ id: record.id, data: record.data as Record<string, unknown> })),
     emailField: campaign.emailField,
     companyField: campaign.companyField ?? undefined,
     countryField: campaign.countryField ?? undefined,
+    templates: [
+      campaign.subject,
+      campaign.bodyTemplate,
+      ...(variants ?? []).flatMap((variant) => [variant.subject, variant.bodyTemplate]),
+      ...followUps.flatMap((step) => [step.subject ?? "", step.bodyTemplate]),
+    ],
   });
-  const followUps = normalizeCampaignFollowUps(campaign.followUps);
   const currentRevisionHash = campaignRevisionHash({
     subject: campaign.subject,
     bodyTemplate: campaign.bodyTemplate,
@@ -785,6 +849,7 @@ export async function activateCampaign(input: {
       replyContext: campaign.replyContext,
       enforceReplyContext: false,
       variants,
+      followUps,
     }),
     ...campaignFollowUpBlockers(followUps),
   ];
@@ -798,6 +863,7 @@ export async function activateCampaign(input: {
           officeId: input.officeId,
           campaignId: campaign.id,
           revisionHash: campaign.revisionHash,
+          status: campaign.status === "PAUSED" ? "PAUSED" : "DRAFT",
         }),
         data: {
           status: "ACTIVE",
@@ -845,6 +911,12 @@ export async function setCampaignFollowUps(input: {
     emailField: campaign.emailField,
     companyField: campaign.companyField ?? undefined,
     countryField: campaign.countryField ?? undefined,
+    templates: [
+      campaign.subject,
+      campaign.bodyTemplate,
+      ...(variants ?? []).flatMap((variant) => [variant.subject, variant.bodyTemplate]),
+      ...followUps.flatMap((step) => [step.subject ?? "", step.bodyTemplate]),
+    ],
   });
   const revisionHash = campaignRevisionHash({
     subject: campaign.subject,
@@ -864,6 +936,7 @@ export async function setCampaignFollowUps(input: {
     replyContext: campaign.replyContext,
   });
   const update = () => prisma.$transaction(async (tx) => {
+    await lockOutreachCampaignFollowUps(tx, input.officeId, input.campaignId);
     const existingFollowUp = await tx.outreachCampaignFollowUp.findFirst({
       where: { officeId: input.officeId, campaignId: input.campaignId },
       select: { id: true },
@@ -972,6 +1045,7 @@ export type CampaignSummary = {
     reason: string | null;
     draft: string | null;
   }>;
+  mergeFieldsAvailable: string[];
   lastRunAt: Date | null;
 };
 
@@ -995,6 +1069,7 @@ export async function listCampaignSummaries(
         variants: true,
         lastRunAt: true,
         followUps: true,
+        audiencePersonalization: true,
         list: { select: { name: true, slug: true, projectId: true, project: { select: { companyId: true } } } },
       },
       orderBy: { createdAt: "asc" },
@@ -1091,6 +1166,7 @@ export async function listCampaignSummaries(
       const escalations = autoReplyEscalations
         .filter((row) => row.campaignId === campaign.id)
         .map(({ threadId, intent, reason, draft }) => ({ threadId, intent, reason, draft }));
+      const personalizationRows = jsonObject(campaign.audiencePersonalization);
       return {
         id: campaign.id,
         listId: campaign.listId,
@@ -1135,6 +1211,7 @@ export async function listCampaignSummaries(
           failed: autoReplies.get("FAILED") ?? 0,
         },
         autoReplyEscalations: escalations,
+        mergeFieldsAvailable: mergeFieldsAvailable(personalizationRows as Record<string, CampaignPersonalization>),
         lastRunAt: campaign.lastRunAt,
       };
     });

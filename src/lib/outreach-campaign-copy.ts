@@ -215,6 +215,7 @@ export type CampaignPersonalization = {
   email: string;
   company: string | null;
   country: string | null;
+  fields?: Record<string, string>;
 };
 
 function rowData(row: CampaignRow) {
@@ -225,18 +226,219 @@ function textValue(value: unknown) {
   return value === null || value === undefined ? "" : String(value).trim();
 }
 
+const CAMPAIGN_MERGE_ALIASES = new Set([
+  "company",
+  "country",
+  "email",
+  "first_name",
+  "name",
+  "town",
+  "county",
+  "postcode",
+  "location",
+  "website",
+  "segment",
+  "segment_label",
+  "rating",
+  "reviews",
+  "ai_intro",
+]);
+export const CAMPAIGN_SNAPSHOT_MAX_FIELDS = 40;
+
+export function campaignReferencedFieldKeys(templates: readonly string[]) {
+  const referenced = new Set<string>();
+  let remaining = templates.join("\n");
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (const match of remaining.matchAll(/\{\{([^{}]*)\}\}/g)) {
+      const key = match[1].split("|")[0]?.trim() ?? "";
+      if (key.startsWith("field:")) referenced.add(key);
+    }
+    const next = remaining.replace(/\{\{([^{}]*)\}\}/g, "");
+    if (next === remaining) break;
+    remaining = next;
+  }
+  return [...referenced].sort();
+}
+
+export function campaignMergeFieldCapBlocker(templates: readonly string[]) {
+  return campaignReferencedFieldKeys(templates).length > CAMPAIGN_SNAPSHOT_MAX_FIELDS
+    ? "Campaign references more than 40 custom merge fields."
+    : null;
+}
+
+export function campaignMergeFieldBlockers(template: string): string[] {
+  const blockers: string[] = [];
+  const seen = new Set<string>();
+  let remaining = template;
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (const match of remaining.matchAll(/\{\{([^{}]*)\}\}/g)) {
+      const [rawKey] = match[1].split("|");
+      const key = rawKey.trim();
+      if (key && !CAMPAIGN_MERGE_ALIASES.has(key) && !key.startsWith("field:") && !seen.has(key)) {
+        seen.add(key);
+        blockers.push(`Unknown merge field {{${key}}}`);
+      }
+    }
+    const next = remaining.replace(/\{\{([^{}]*)\}\}/g, "");
+    if (next === remaining) break;
+    remaining = next;
+  }
+  return blockers;
+}
+
+function firstText(data: Record<string, unknown>, keys: readonly string[]) {
+  for (const key of keys) {
+    const value = textValue(data[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function websiteHost(value: string) {
+  if (!value) return "";
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    return url.hostname.replace(/^www\./i, "");
+  } catch {
+    return value.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].trim();
+  }
+}
+
+export function campaignMergeFields(input: {
+  data: Record<string, unknown>;
+  emailField: string;
+  companyField?: string | null;
+  countryField?: string | null;
+}): Record<string, string> {
+  const data = input.data;
+  const company = firstText(data, [input.companyField ?? "", "company", "company_name", "business_name"]);
+  const country = firstText(data, [input.countryField ?? "", "country", "country_name"]);
+  const contact = firstText(data, ["contact_name", "contact", "first_name", "owner", "owner_name", "decision_maker"]);
+  const firstName = contact.split(/\s+/)[0] ?? "";
+  const town = firstText(data, ["town", "city", "locality"]);
+  const county = firstText(data, ["county", "region", "state"]);
+  const segment = firstText(data, ["segment", "segment_name"]);
+  const fields: Record<string, string> = {
+    company,
+    country,
+    email: firstText(data, [input.emailField, "email"]),
+    first_name: firstName,
+    name: contact,
+    town,
+    county,
+    postcode: firstText(data, ["postcode", "postal_code", "zip"]),
+    location: town && county ? `${town}, ${county}` : town,
+    website: websiteHost(firstText(data, ["website", "url", "domain"])),
+    segment,
+    segment_label: segment.replace(/_/g, " ").trim(),
+    rating: firstText(data, ["google_rating"]),
+    reviews: firstText(data, ["google_reviews"]),
+    ai_intro: "",
+  };
+  for (const [key, value] of Object.entries(data)) {
+    const fieldKey = key.startsWith("field:") ? key : `field:${key}`;
+    if (key && !(fieldKey in fields)) fields[fieldKey] = textValue(value);
+  }
+  return fields;
+}
+
+export function applyCampaignCopyEdit(input: {
+  subject: string;
+  bodyTemplate: string;
+  storedVariants: readonly CampaignVariant[];
+  suppliedSubject?: string;
+  suppliedBodyTemplate?: string;
+  suppliedVariants?: readonly CampaignVariant[] | null;
+  variantsProvided: boolean;
+}) {
+  if (input.variantsProvided) {
+    const variants = input.suppliedVariants ? [...input.suppliedVariants] : null;
+    const base = variants?.[0];
+    return {
+      subject: base?.subject ?? input.subject,
+      bodyTemplate: base?.bodyTemplate ?? input.bodyTemplate,
+      variants,
+    };
+  }
+  const subject = input.suppliedSubject ?? input.subject;
+  const bodyTemplate = input.suppliedBodyTemplate ?? input.bodyTemplate;
+  const copyChanged = input.suppliedSubject !== undefined || input.suppliedBodyTemplate !== undefined;
+  const variants = copyChanged && input.storedVariants.length > 0
+    ? [{ ...input.storedVariants[0], subject, bodyTemplate }, ...input.storedVariants.slice(1)]
+    : [...input.storedVariants];
+  return { subject, bodyTemplate, variants };
+}
+
+export function snapshotMergeFields(
+  fields: Record<string, string>,
+  referencedFields: readonly string[] = [],
+) {
+  const aliases = [...CAMPAIGN_MERGE_ALIASES];
+  const referenced = new Set(referencedFields);
+  const seen = new Set<string>();
+  const snapshot: Record<string, string> = {};
+  for (const key of aliases) {
+    const value = textValue(fields[key]).slice(0, 200);
+    if (!value) continue;
+    snapshot[key] = value;
+    seen.add(key);
+  }
+  const customKeys = [
+    ...referencedFields.filter((key) => key.startsWith("field:")),
+    ...Object.keys(fields).filter((key) => key.startsWith("field:") && !referenced.has(key)),
+  ];
+  let customFieldCount = 0;
+  for (const key of customKeys) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const value = textValue(fields[key]).slice(0, 200);
+    if (!value) continue;
+    snapshot[key] = value;
+    customFieldCount += 1;
+    if (customFieldCount >= CAMPAIGN_SNAPSHOT_MAX_FIELDS) break;
+  }
+  return snapshot;
+}
+
+function renderMergeFields(template: string, fields: Record<string, string>) {
+  let rendered = template;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = rendered.replace(/\{\{([^{}]*)\}\}/g, (token, expression: string) => {
+      const [rawKey, ...fallbackParts] = expression.split("|");
+      const key = rawKey.trim();
+      const value = key === "ai_intro" && fields.ai_intro === undefined
+        ? ""
+        : fields[key] ?? "";
+      if (value) return value;
+      return fallbackParts.join("|");
+    });
+    if (next === rendered) break;
+    rendered = next;
+  }
+  return rendered;
+}
+
 export function renderCampaignEmail(input: {
   subject: string;
   bodyTemplate: string;
   row: CampaignRow;
+  fields?: Record<string, string>;
+  intro?: string;
 }) {
   const data = rowData(input.row);
-  const replacements: Record<string, string> = {
-    company: textValue(data.company),
-    country: textValue(data.country),
-    email: textValue(data.email),
+  const replacements = {
+    ...campaignMergeFields({
+      data,
+      emailField: "email",
+      companyField: "company",
+      countryField: "country",
+    }),
+    ...(input.fields ?? {}),
+    ...(input.intro === undefined ? {} : { ai_intro: input.intro }),
   };
-  const render = (value: string) => stripEmDashes(value.replace(/\{\{(company|country|email)\}\}/g, (_, key: string) => replacements[key] ?? ""));
+  const render = (value: string) => stripEmDashes(renderMergeFields(value, replacements))
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+,/g, ",");
   return {
     subject: render(input.subject).replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim(),
     body: render(input.bodyTemplate),
@@ -380,15 +582,14 @@ export function campaignPersonalization(input: {
   emailField: string;
   companyField?: string;
   countryField?: string;
+  referencedFields?: readonly string[];
 }): CampaignPersonalization {
-  const value = (key: string | undefined) => {
-    const text = key ? String(input.data[key] ?? "").trim() : "";
-    return text || null;
-  };
+  const fields = campaignMergeFields(input);
   return {
-    email: value(input.emailField) ?? "",
-    company: value(input.companyField ?? "company"),
-    country: value(input.countryField ?? "country"),
+    email: fields.email,
+    company: fields.company || null,
+    country: fields.country || null,
+    fields: snapshotMergeFields(fields, input.referencedFields),
   };
 }
 
@@ -397,7 +598,9 @@ export function campaignPersonalizationMap(input: {
   emailField: string;
   companyField?: string;
   countryField?: string;
+  templates?: readonly string[];
 }) {
+  const referencedFields = campaignReferencedFieldKeys(input.templates ?? []);
   return Object.fromEntries(
     input.rows
       .map((row) => [row.id, campaignPersonalization({
@@ -405,9 +608,30 @@ export function campaignPersonalizationMap(input: {
         emailField: input.emailField,
         companyField: input.companyField,
         countryField: input.countryField,
+        referencedFields,
       })] as const)
       .sort(([left], [right]) => left.localeCompare(right)),
   );
+}
+
+export function mergeFieldsAvailable(
+  personalization: Record<string, CampaignPersonalization>,
+) {
+  const counts = new Map<string, number>();
+  const audienceSize = Object.keys(personalization).length;
+  for (const value of Object.values(personalization)) {
+    const fields = value.fields ?? {
+      email: value.email,
+      company: value.company ?? "",
+      country: value.country ?? "",
+    };
+    for (const [key, raw] of Object.entries(fields)) {
+      if (typeof raw === "string" && raw.trim()) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count * 2 >= audienceSize)
+    .map(([key]) => key);
 }
 
 export function campaignSnapshotRowSendable(input: {
@@ -495,6 +719,7 @@ export function campaignFollowUpBlockers(steps: readonly CampaignFollowUpStep[])
     if (!/reply\s+(stop|no)|unsubscrib|opt out|opt-out/i.test(step.bodyTemplate)) {
       blockers.push(`${label} body must contain an opt-out line.`);
     }
+    blockers.push(...campaignMergeFieldBlockers(step.bodyTemplate));
   });
   return blockers;
 }
@@ -669,11 +894,12 @@ export function campaignActivationTransitionWhere(input: {
   officeId: string;
   campaignId: string;
   revisionHash: string | null;
+  status?: "DRAFT" | "PAUSED";
 }) {
   return {
     id: input.campaignId,
     officeId: input.officeId,
-    status: "DRAFT" as const,
+    status: input.status ?? "DRAFT",
     revisionHash: input.revisionHash,
   };
 }
@@ -721,6 +947,7 @@ export function campaignBlockers(input: {
   bodyTemplate: string;
   dailyCap: number;
   variants?: readonly CampaignVariant[] | null;
+  followUps?: readonly CampaignFollowUpStep[];
   replyMode?: string;
   replyContext?: unknown;
   enforceReplyContext?: boolean;
@@ -735,11 +962,20 @@ export function campaignBlockers(input: {
     if (!/reply\s+(stop|no)|unsubscrib|opt out|opt-out/i.test(bodyTemplate)) {
       blockers.push(`${prefix}${bodyLabel} must contain an opt-out line.`);
     }
+    blockers.push(...campaignMergeFieldBlockers(subject));
+    blockers.push(...campaignMergeFieldBlockers(bodyTemplate));
   };
   copyBlockers(input.subject, input.bodyTemplate);
   for (const variant of input.variants?.slice(1) ?? []) {
     copyBlockers(variant.subject, variant.bodyTemplate, variant.key);
   }
+  const mergeFieldCapBlocker = campaignMergeFieldCapBlocker([
+    input.subject,
+    input.bodyTemplate,
+    ...(input.variants ?? []).flatMap((variant) => [variant.subject, variant.bodyTemplate]),
+    ...(input.followUps ?? []).flatMap((step) => [step.subject ?? "", step.bodyTemplate]),
+  ]);
+  if (mergeFieldCapBlocker) blockers.push(mergeFieldCapBlocker);
   if (input.senderRotation && input.senderPinned) {
     blockers.push("Pick either a sender mailbox or rotation, not both.");
   } else if (input.senderRotation && (input.mailboxesAvailable === 0 || input.poolCapacityToday <= 0)) {
