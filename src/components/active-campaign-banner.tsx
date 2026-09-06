@@ -1,13 +1,25 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { listCampaignSummaries } from "@/lib/outreach-campaigns";
+import { isSchemaNotReadyError, OUTREACH_SCHEMA_NOT_READY_MESSAGE } from "@/lib/outreach-readiness";
 import { ActiveCampaignControls } from "@/components/active-campaign-controls";
 import styles from "./active-campaign-banner.module.css";
 
 export async function ActiveCampaignBanner() {
   const session = await requireSession();
   if (session.accessKind === "customer" || session.role === "EMPLOYEE") return null;
-  const campaigns = await listCampaignSummaries(session.officeId, ["ACTIVE", "PAUSED"]);
+  let campaigns;
+  try {
+    campaigns = await listCampaignSummaries(session.officeId, ["ACTIVE", "PAUSED"]);
+  } catch (error) {
+    if (!isSchemaNotReadyError(error)) throw error;
+    return (
+      <section className={styles.banner} aria-label="Outreach campaigns">
+        <div className={styles.heading}>Outreach campaigns</div>
+        <div className={styles.value}>{OUTREACH_SCHEMA_NOT_READY_MESSAGE}</div>
+      </section>
+    );
+  }
   if (campaigns.length === 0) return null;
 
   return (

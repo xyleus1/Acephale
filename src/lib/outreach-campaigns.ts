@@ -45,6 +45,7 @@ import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import { tallyKeptRecipientCaveats, type RecipientQualityPruneCounts } from "@/lib/outreach-recipient-quality";
 import { utcDayBounds } from "@/lib/email-sender-pool-policy";
+import { replyContextBlocker as sharedReplyContextBlocker } from "@/lib/outreach-reply-context";
 import {
   lockOutreachCampaignFollowUps,
   outstandingCampaignFollowUps,
@@ -205,6 +206,8 @@ function jsonObject(value: Prisma.JsonValue | null): Record<string, unknown> {
     ? value as Record<string, unknown>
     : {};
 }
+
+export const replyContextBlocker = sharedReplyContextBlocker;
 
 function jsonStrings(value: Prisma.JsonValue): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -574,11 +577,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     return { ...recipient, position: pick.position, pick: pick.pick, subject: rendered.subject, body: rendered.body };
   });
   const audienceQuality = summarizeRecipientQuality(eligibleRows.map(recipientOf));
-  const replyContext = input.replyContext && typeof input.replyContext === "object" && !Array.isArray(input.replyContext)
-    ? input.replyContext as Record<string, unknown>
-    : null;
-  const warnings = input.replyMode !== "OFF"
-    && (typeof replyContext?.pitch !== "string" || !replyContext.pitch.trim())
+  const warnings = replyContextBlocker(input.replyMode ?? "AUTO", input.replyContext)
     ? ["Auto-reply is on but the campaign has no reply context (pitch, offer, FAQs)."]
     : [];
   return {
@@ -710,6 +709,22 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     ],
   });
   const audienceTotal = audienceRecordIds.length;
+  const replyMode = input.replyMode ?? "AUTO";
+  let replyContext = input.replyContext;
+  let replyContextInheritedFrom: string | null = null;
+  if (replyContext === undefined && replyMode !== "OFF") {
+    const previousCampaigns = await prisma.outreachCampaign.findMany({
+      where: { officeId: input.officeId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: { id: true, replyContext: true },
+    });
+    const inherited = previousCampaigns.find((candidate) => !replyContextBlocker(replyMode, candidate.replyContext));
+    if (inherited) {
+      replyContext = inherited.replyContext;
+      replyContextInheritedFrom = inherited.id;
+    }
+  }
   const revisionHash = campaignRevisionHash({
     subject: campaignSubject,
     bodyTemplate: campaignBodyTemplate,
@@ -724,8 +739,8 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     audienceRecordIds,
     audiencePersonalization,
     followUps,
-    replyMode: input.replyMode ?? "AUTO",
-    replyContext: input.replyContext ?? null,
+    replyMode,
+    replyContext: replyContext ?? null,
   });
   const data = {
     name,
@@ -745,8 +760,8 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
     senderRotation: input.senderRotation === true,
-    replyMode: input.replyMode ?? "AUTO",
-    replyContext: input.replyContext === undefined ? Prisma.DbNull : input.replyContext as Prisma.InputJsonValue,
+    replyMode,
+    replyContext: replyContext === undefined ? Prisma.DbNull : replyContext as Prisma.InputJsonValue,
     variants: variants ? variants as Prisma.InputJsonValue : Prisma.DbNull,
     createdByUserId: input.createdByUserId ?? null,
   };
@@ -767,7 +782,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
       select: { id: true },
     });
   }
-  return { id: campaign.id, revisionHash };
+  return { id: campaign.id, revisionHash, replyContextInheritedFrom };
 }
 
 export const CAMPAIGN_CLAIM_LOST_BLOCKER =
@@ -836,6 +851,9 @@ export async function activateCampaign(input: {
     campaign.senderDisplayName,
   );
   const blockers = [
+    ...(replyContextBlocker(campaign.replyMode, campaign.replyContext)
+      ? [replyContextBlocker(campaign.replyMode, campaign.replyContext) as string]
+      : []),
     ...campaignBlockers({
       eligible: records.length,
       mailboxesAvailable: sender.mailboxesAvailable,
@@ -984,10 +1002,25 @@ export async function pauseCampaign(input: { officeId: string; campaignId: strin
 }
 
 export async function resumeCampaign(input: { officeId: string; campaignId: string }) {
-  return prisma.outreachCampaign.updateMany({
+  const campaign = await prisma.outreachCampaign.findFirst({
+    where: { id: input.campaignId, officeId: input.officeId },
+    select: { id: true, status: true, approvedAt: true, replyMode: true, replyContext: true },
+  });
+  if (!campaign) return { count: 0, resumed: false, blockers: ["This campaign no longer exists."] };
+  const replyBlocker = replyContextBlocker(campaign.replyMode, campaign.replyContext);
+  if (replyBlocker) return { count: 0, resumed: false, blockers: [replyBlocker] };
+  if (campaign.status !== "PAUSED" || !campaign.approvedAt) {
+    return { count: 0, resumed: false, blockers: [campaignStatusBlocker(campaign.status) ?? "This campaign cannot be resumed."] };
+  }
+  const updated = await prisma.outreachCampaign.updateMany({
     where: { id: input.campaignId, officeId: input.officeId, status: "PAUSED", approvedAt: { not: null } },
     data: { status: "ACTIVE", pausedAt: null },
   });
+  return {
+    count: updated.count,
+    resumed: updated.count > 0,
+    blockers: updated.count > 0 ? [] : ["This campaign changed before it could be resumed."],
+  };
 }
 
 export async function cancelCampaign(input: { officeId: string; campaignId: string }) {
@@ -1053,8 +1086,7 @@ export async function listCampaignSummaries(
   officeId: string,
   statuses: readonly CampaignStatus[] = ["ACTIVE", "PAUSED"],
 ): Promise<CampaignSummary[]> {
-  try {
-    const campaigns = await prisma.outreachCampaign.findMany({
+  const campaigns = await prisma.outreachCampaign.findMany({
       where: { officeId, status: { in: [...statuses] } },
       select: {
         id: true,
@@ -1214,15 +1246,7 @@ export async function listCampaignSummaries(
         mergeFieldsAvailable: mergeFieldsAvailable(personalizationRows as Record<string, CampaignPersonalization>),
         lastRunAt: campaign.lastRunAt,
       };
-    });
-  } catch (error) {
-    const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : "";
-    if (code === "P2021" || code === "P2022") {
-      console.error("Outreach campaign summary unavailable: campaign schema is not ready.");
-      return [];
-    }
-    throw error;
-  }
+  });
 }
 
 export const CAMPAIGN_STATUSES_ALL = ["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"] as const;

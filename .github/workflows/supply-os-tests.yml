@@ -17,6 +17,13 @@ on:
       - "src/lib/outreach-campaign-*.ts"
       - "src/lib/supply-os/**"
       - "src/app/api/cron/outreach-campaigns/**"
+      - "src/app/api/cron/outreach-replies/**"
+      - "src/app/api/health/**"
+      - "src/app/api/ops/outreach/**"
+      - "src/lib/outreach-readiness.ts"
+      - "src/lib/migration-manifest.ts"
+      - "scripts/migration-manifest*"
+      - "scripts/outreach-readiness*"
   push:
     branches: [main]
     paths:
@@ -34,6 +41,13 @@ on:
       - "src/lib/outreach-campaign-*.ts"
       - "src/lib/supply-os/**"
       - "src/app/api/cron/outreach-campaigns/**"
+      - "src/app/api/cron/outreach-replies/**"
+      - "src/app/api/health/**"
+      - "src/app/api/ops/outreach/**"
+      - "src/lib/outreach-readiness.ts"
+      - "src/lib/migration-manifest.ts"
+      - "scripts/migration-manifest*"
+      - "scripts/outreach-readiness*"
 
 permissions:
   contents: read
@@ -123,6 +137,10 @@ jobs:
           npm run test:batch-review
           npm run test:outreach-campaign-send
           npm run test:outreach-campaign-follow-ups
+          npm run test:migration-manifest
+          npm run test:outreach-readiness
+          npm run test:outreach-campaign-planning-db
+          npm run test:outreach-campaign-readiness-db
           npm run test:email-delivery-feedback
           npm run test:supply-os-supplier-research-failures
           npm run test:supply-os-supply-intelligence

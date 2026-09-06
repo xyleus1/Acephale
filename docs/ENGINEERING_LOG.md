@@ -7,6 +7,12 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-10: Outreach readiness fails loudly and gates auto-reply activation
+
+- Health now probes the committed migration set and outreach schema, while warning checks expose stale campaign runs, missing reply context, and unanswered inbound messages.
+- Campaign summaries return a schema-not-ready error instead of an empty list, and AUTO campaigns cannot activate or resume without a usable pitch. New campaigns inherit the latest valid office-scoped context.
+- Ops fleet reporting and cron error responses make cross-office delivery and reply handling visible.
+
 ## 2026-09-09: A protection pause is capacity, and one dead address is not a pattern
 
 - Production reported four answered PCBA threads as failed conversations with

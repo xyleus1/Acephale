@@ -24,6 +24,7 @@ import {
   campaignRevisionHashForEdit,
   listCampaignSummaries,
   planOutreachCampaign,
+  replyContextBlocker,
   saveDraftCampaign,
   setCampaignFollowUps,
 } from "@/lib/outreach-campaigns";
@@ -39,6 +40,8 @@ import { mailboxVerifierCreditsFromEnv } from "@/lib/leadgen/verify";
 import { runOutreachCampaignAutoReplies } from "@/lib/outreach-campaign-auto-reply";
 import { replyContextInput, replyModeInput } from "@/lib/outreach-campaign-reply-settings";
 import { campaignIntroEvidence, generateCampaignIntro } from "@/lib/outreach-campaign-intro";
+import { isSchemaNotReadyError, OUTREACH_SCHEMA_NOT_READY_MESSAGE, outreachPipelineChecks, outreachSchemaChecks, pendingMigrationsCheck, outreachReplyBacklog } from "@/lib/outreach-readiness";
+import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -178,11 +181,71 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   const action = boundedText(body?.action, 30);
-  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run", "reply-settings", "auto-replies", "copy"].includes(action)) {
-    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, run, reply-settings, auto-replies, or copy." }, { status: 400 });
+  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run", "reply-settings", "auto-replies", "copy", "fleet"].includes(action)) {
+    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, run, reply-settings, auto-replies, copy, or fleet." }, { status: 400 });
   }
 
   try {
+    if (action === "fleet") {
+      const now = new Date();
+      const [offices, campaigns, checks] = await Promise.all([
+        prisma.office.findMany({ select: { id: true, name: true }, orderBy: { id: "asc" } }),
+        prisma.outreachCampaign.findMany({
+          where: { status: { in: ["ACTIVE", "PAUSED"] } },
+          select: {
+            id: true,
+            officeId: true,
+            name: true,
+            status: true,
+            replyMode: true,
+            replyContext: true,
+            lastRunAt: true,
+          },
+          orderBy: { createdAt: "asc" },
+        }),
+        Promise.all([
+          outreachSchemaChecks(prisma),
+          pendingMigrationsCheck(prisma),
+          outreachPipelineChecks(prisma, now),
+        ]),
+      ]);
+      const officeNames = new Map(offices.map((office) => [office.id, office.name]));
+      const campaignIds = campaigns.map((campaign) => campaign.id);
+      const { start, end } = utcDayBounds(now);
+      const [sentToday, sentTotal, backlog] = await Promise.all([
+        prisma.outreachCampaignSend.groupBy({
+          by: ["campaignId"],
+          where: { campaignId: { in: campaignIds }, status: "SENT", sentAt: { gte: start, lt: end } },
+          _count: { _all: true },
+        }),
+        prisma.outreachCampaignSend.groupBy({
+          by: ["campaignId"],
+          where: { campaignId: { in: campaignIds }, status: "SENT" },
+          _count: { _all: true },
+        }),
+        outreachReplyBacklog(prisma, now),
+      ]);
+      const todayByCampaign = new Map(sentToday.map((row) => [row.campaignId, row._count._all]));
+      const totalByCampaign = new Map(sentTotal.map((row) => [row.campaignId, row._count._all]));
+      const fleetCampaigns = campaigns.map((campaign) => ({
+        officeId: campaign.officeId,
+        officeName: officeNames.get(campaign.officeId) ?? campaign.officeId,
+        campaignId: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        replyMode: campaign.replyMode,
+        hasReplyContext: !Boolean(replyContextBlocker(campaign.replyMode, campaign.replyContext)),
+        lastRunAt: campaign.lastRunAt,
+        sentToday: todayByCampaign.get(campaign.id) ?? 0,
+        sentTotal: totalByCampaign.get(campaign.id) ?? 0,
+        repliesUnanswered: backlog.byCampaign.get(campaign.id) ?? 0,
+      }));
+      return NextResponse.json({
+        ranAt: now.toISOString(),
+        checks: checks.flat(),
+        campaigns: fleetCampaigns,
+      });
+    }
     if (action === "mailboxes") {
       const mailboxes = await listEmailSenderPoolAccounts();
       const pausedAccounts = await prisma.emailAccount.findMany({
@@ -472,7 +535,12 @@ export async function POST(request: NextRequest) {
       };
       const plan = await planOutreachCampaign(campaignInput);
       const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
-      return NextResponse.json({ plan, campaignId: campaign.id, revisionHash: campaign.revisionHash });
+      return NextResponse.json({
+        plan,
+        campaignId: campaign.id,
+        revisionHash: campaign.revisionHash,
+        replyContextInheritedFrom: campaign.replyContextInheritedFrom,
+      });
     }
 
     const campaignId = boundedText(body?.campaignId, 100);
@@ -596,6 +664,9 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ...result, limit: effectiveLimit });
   } catch (error) {
+    if (isSchemaNotReadyError(error)) {
+      return NextResponse.json({ error: OUTREACH_SCHEMA_NOT_READY_MESSAGE }, { status: 503 });
+    }
     if (error instanceof Error && !isPrismaError(error)) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }

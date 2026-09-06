@@ -4409,7 +4409,9 @@ export async function dispatchTool(
       case "resume_outreach_campaign": {
         const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";
         if (!campaignId) return { ok: false, error: "campaign_id required" };
-        return { ok: true, result: await resumeCampaign({ officeId: ctx.officeId, campaignId }) };
+        const resumed = await resumeCampaign({ officeId: ctx.officeId, campaignId });
+        if (!resumed.resumed) return { ok: false, error: resumed.blockers.join(" ") };
+        return { ok: true, result: resumed };
       }
       case "cancel_outreach_campaign": {
         const campaignId = typeof input.campaign_id === "string" ? input.campaign_id.trim() : "";

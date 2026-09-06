@@ -3,6 +3,11 @@ import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizeGoogleRedirectUri } from "@/lib/gmail-oauth";
 import { classifyHealthChecks, type HealthCheck } from "@/lib/health-status";
+import {
+  outreachPipelineChecks,
+  outreachSchemaChecks,
+  pendingMigrationsCheck,
+} from "@/lib/outreach-readiness";
 
 // Health check. The DETAILED diagnostic (env inventory, model names, queue
 // telemetry) is a pre-auth recon risk (F2), so it is gated behind CRON_SECRET.
@@ -105,6 +110,10 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     checks.push({ name: "backgroundJob_backlog", ok: false, severity: "warning", detail: msg(e) });
   }
+
+  checks.push(...await outreachSchemaChecks(prisma));
+  checks.push(await pendingMigrationsCheck(prisma));
+  checks.push(...await outreachPipelineChecks(prisma, new Date()));
 
   const health = classifyHealthChecks(checks);
   // Unauthenticated callers get only liveness; the detailed diagnostic (env

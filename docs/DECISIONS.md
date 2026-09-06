@@ -1,3 +1,9 @@
+## Outreach readiness and reply context
+
+- Status: accepted
+- Decision: Deployed code ahead of the database must fail health and API calls loudly, never return empty data.
+- Decision: AUTO reply mode requires a reply context to activate or resume; new campaigns inherit the office's latest reply context.
+
 ## Request-derived sourcing categories
 
 Sourcing categories are derived from the request; curated categories are overrides; the model only enriches phrases and its output is persisted with provenance in request_context.sourcingProfile.

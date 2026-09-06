@@ -20,6 +20,11 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-10: Outreach readiness guards
+
+- Production health now detects unapplied committed migrations and outreach schema drift, with API and UI errors that direct operators to the migration workflow instead of returning empty campaign data.
+- AUTO reply campaigns require reply context to activate or resume, and new campaigns inherit the latest valid context in the same office. The Ops fleet view reports campaign delivery and unanswered replies across offices.
+
 ## 2026-09-09: A sender protection pause queues a supplier conversation
 
 - A paused thread mailbox is capacity, not a supplier failure:

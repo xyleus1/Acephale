@@ -29,28 +29,34 @@ export async function GET(request: Request) {
       { status: 401, headers: responseHeaders },
     );
   }
-  const campaigns = await prisma.outreachCampaign.findMany({
-    where: { status: "ACTIVE" },
-    orderBy: [{ lastRunAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
-    take: 5,
-    select: { id: true, officeId: true, dailyCap: true },
-  });
-  const results = [];
-  const startedAt = Date.now();
-  for (const campaign of campaigns) {
-    if (Date.now() - startedAt >= 240_000) break;
-    results.push({
-      ...campaign,
-      result: await runOutreachCampaignBatch({
-        officeId: campaign.officeId,
-        campaignId: campaign.id,
-        limit: Math.min(campaign.dailyCap, 50),
-        pauseMs: 250,
-      }),
+  try {
+    const campaigns = await prisma.outreachCampaign.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: [{ lastRunAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
+      take: 5,
+      select: { id: true, officeId: true, dailyCap: true },
     });
+    const results = [];
+    const startedAt = Date.now();
+    for (const campaign of campaigns) {
+      if (Date.now() - startedAt >= 240_000) break;
+      results.push({
+        ...campaign,
+        result: await runOutreachCampaignBatch({
+          officeId: campaign.officeId,
+          campaignId: campaign.id,
+          limit: Math.min(campaign.dailyCap, 50),
+          pauseMs: 250,
+        }),
+      });
+    }
+    return NextResponse.json(
+      { ranAt: new Date().toISOString(), campaigns: results },
+      { status: 200, headers: responseHeaders },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown outreach cron failure.";
+    console.error("outreach cron failed", { route: "outreach-campaigns", message });
+    return NextResponse.json({ error: message }, { status: 500, headers: responseHeaders });
   }
-  return NextResponse.json(
-    { ranAt: new Date().toISOString(), campaigns: results },
-    { status: 200, headers: responseHeaders },
-  );
 }
