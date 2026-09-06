@@ -154,6 +154,13 @@ description: How to bring up derya-crm locally (app DB, workflow DB, login allow
   before calling a mismatch a bug.
 - The queue row's Source state `title` tooltip can still read "0 supplier candidates are ready for review"
   for a request whose detail loads hundreds of candidates: the queue list payload has no supplier counts.
+- Short-window layout checks on the Supply OS materials stage: resize Chrome with
+  `WID=$(xdotool getactivewindow); xdotool windowsize $WID 1024 700` (the inner viewport is about 992x571
+  after window chrome). Scroll the project panel with the mouse over the Lead status area, not over the 60vh
+  prospects table, which has its own scroll. Measure `[class*="inventoryWorkspace"]` against its
+  `[class*="commandMapStage"]` parent (overflow hidden at widths up to 1040px) and the
+  `[class*="inventoryTabPanel"][data-state="active"]` scroll metrics to prove the approvals footer is
+  reachable. Set a `window.__marker` before in-app navigation to prove no full reload happened.
 - Do not judge run-on numbers from the DOM dump: JSX whitespace is stripped in the annotated DOM, so
   `100units` in the DOM renders as `100 units`. Zoom on the screenshot before reporting spacing bugs.
 
