@@ -47,7 +47,7 @@ DECLARE
     'TruckloadQuote', 'ShipmentRecord', 'Job', 'AgentProposal',
     'StrategyAssessment', 'RouteOption', 'PriceRecommendation', 'RiskAssessment',
     'ResearchProject', 'ResearchList', 'ResearchRecord', 'OutreachCampaign', 'OutreachCampaignSend',
-    'OutreachCampaignFollowUp',
+    'OutreachCampaignFollowUp', 'OutreachCampaignReply',
     'StrategyAction', 'JobDocument', 'JobMilestone', 'EmailAccount',
     'EmailThread', 'EmailMessage', 'EmailSenderReservation', 'EmailDeliveryEvent', 'EmailSuppression',
     'LoginCode', 'CustomerPortalUser',

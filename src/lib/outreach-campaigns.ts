@@ -91,6 +91,8 @@ type CampaignWithList = {
   senderAccountId: string | null;
   senderDisplayName: string | null;
   senderRotation: boolean;
+  replyMode: string;
+  replyContext: Prisma.JsonValue | null;
   variants: Prisma.JsonValue | null;
   dailyCap: number;
   audienceTotal: number;
@@ -170,6 +172,8 @@ export type PlanOutreachCampaignInput = {
   senderDisplayName?: string | null;
   senderRotation?: boolean;
   variants?: readonly CampaignVariant[] | null;
+  replyMode?: string;
+  replyContext?: unknown;
   companyField?: string;
   createdByUserId?: string;
   followUps?: unknown;
@@ -296,6 +300,8 @@ async function loadCampaign(officeId: string, campaignId: string): Promise<Campa
       senderAccountId: true,
       senderDisplayName: true,
       senderRotation: true,
+      replyMode: true,
+      replyContext: true,
       variants: true,
       dailyCap: true,
       audienceTotal: true,
@@ -470,6 +476,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
     senderRotation: input.senderRotation === true,
     senderDisplayName,
+    replyMode: input.replyMode ?? "AUTO",
+    replyContext: input.replyContext ?? null,
     variants,
     audienceRecordIds: eligibleWithoutContacted.map((record) => record.id),
     audiencePersonalization: campaignPersonalizationMap({
@@ -552,6 +560,9 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
         subject: campaignSubject,
         bodyTemplate: campaignBodyTemplate,
         dailyCap,
+        replyMode: input.replyMode ?? "AUTO",
+        replyContext: input.replyContext,
+        enforceReplyContext: true,
         variants,
       }),
       ...campaignFollowUpBlockers(followUps),
@@ -646,6 +657,8 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     audienceRecordIds,
     audiencePersonalization,
     followUps,
+    replyMode: input.replyMode ?? "AUTO",
+    replyContext: input.replyContext ?? null,
   });
   const data = {
     name,
@@ -665,6 +678,8 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
     senderRotation: input.senderRotation === true,
+    replyMode: input.replyMode ?? "AUTO",
+    replyContext: input.replyContext === undefined ? Prisma.DbNull : input.replyContext as Prisma.InputJsonValue,
     variants: variants ? variants as Prisma.InputJsonValue : Prisma.DbNull,
     createdByUserId: input.createdByUserId ?? null,
   };
@@ -734,6 +749,8 @@ export async function activateCampaign(input: {
     audienceRecordIds: records.map((record) => record.id),
     audiencePersonalization,
     followUps,
+    replyMode: campaign.replyMode,
+    replyContext: campaign.replyContext,
   });
   if (
     !campaignRevisionMatches(input.expectedRevisionHash, campaign.revisionHash)
@@ -755,6 +772,9 @@ export async function activateCampaign(input: {
       subject: campaign.subject,
       bodyTemplate: campaign.bodyTemplate,
       dailyCap: campaign.dailyCap,
+      replyMode: campaign.replyMode,
+      replyContext: campaign.replyContext,
+      enforceReplyContext: true,
       variants,
     }),
     ...campaignFollowUpBlockers(followUps),
@@ -831,6 +851,8 @@ export async function setCampaignFollowUps(input: {
     audienceRecordIds: records.map((record) => record.id),
     audiencePersonalization,
     followUps,
+    replyMode: campaign.replyMode,
+    replyContext: campaign.replyContext,
   });
   const update = () => prisma.$transaction(async (tx) => {
     const existingFollowUp = await tx.outreachCampaignFollowUp.findFirst({
@@ -924,9 +946,23 @@ export type CampaignSummary = {
   dailyCap: number;
   senderEmail: string | null;
   senderRotation: boolean;
+  replyMode: string;
   mailboxesAvailable: number;
   poolCapacityToday: number;
   variants: Array<{ key: string; sent: number; replies: number }>;
+  autoReplies: {
+    sent: number;
+    escalated: number;
+    suppressed: number;
+    skipped: number;
+    failed: number;
+  };
+  autoReplyEscalations: Array<{
+    threadId: string;
+    intent: string;
+    reason: string | null;
+    draft: string | null;
+  }>;
   lastRunAt: Date | null;
 };
 
@@ -946,6 +982,7 @@ export async function listCampaignSummaries(
         dailyCap: true,
         senderAccountId: true,
         senderRotation: true,
+        replyMode: true,
         variants: true,
         lastRunAt: true,
         followUps: true,
@@ -998,6 +1035,17 @@ export async function listCampaignSummaries(
       replies: replies.map((reply) => ({ threadId: reply.threadId, count: reply._count._all })),
       threadToCampaign,
     });
+    const autoReplyCounts = await prisma.outreachCampaignReply.groupBy({
+      by: ["campaignId", "action"],
+      where: { officeId, campaignId: { in: campaignIds } },
+      _count: { _all: true },
+    });
+    const autoReplyEscalations = await prisma.outreachCampaignReply.findMany({
+      where: { officeId, campaignId: { in: campaignIds }, action: "ESCALATED" },
+      select: { campaignId: true, threadId: true, intent: true, reason: true, draft: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
     const mailboxes = await listEmailSenderPoolAccounts();
     const senderEmails = new Map(mailboxes.map((mailbox) => [mailbox.id, mailbox.email]));
     const poolCapacityToday = mailboxes.reduce(
@@ -1012,6 +1060,14 @@ export async function listCampaignSummaries(
       }
       const variants = storedCampaignVariants(campaign.variants);
       const followUps = new Map(followUpCounts.filter((row) => row.campaignId === campaign.id).map((row) => [row.status, row._count._all]));
+      const autoReplies = new Map(
+        autoReplyCounts
+          .filter((row) => row.campaignId === campaign.id)
+          .map((row) => [row.action, row._count._all]),
+      );
+      const escalations = autoReplyEscalations
+        .filter((row) => row.campaignId === campaign.id)
+        .map(({ threadId, intent, reason, draft }) => ({ threadId, intent, reason, draft }));
       return {
         id: campaign.id,
         listId: campaign.listId,
@@ -1035,6 +1091,7 @@ export async function listCampaignSummaries(
         dailyCap: campaign.dailyCap,
         senderEmail: campaign.senderAccountId ? senderEmails.get(campaign.senderAccountId) ?? null : null,
         senderRotation: campaign.senderRotation,
+        replyMode: campaign.replyMode,
         mailboxesAvailable: mailboxes.length,
         poolCapacityToday,
         variants: variants.map((variant) => ({
@@ -1044,6 +1101,14 @@ export async function listCampaignSummaries(
             .reduce((sum, row) => sum + row._count._all, 0),
           replies: replyCounts.variants.get(`${campaign.id}:${variant.key}`) ?? 0,
         })),
+        autoReplies: {
+          sent: autoReplies.get("SENT") ?? 0,
+          escalated: autoReplies.get("ESCALATED") ?? 0,
+          suppressed: autoReplies.get("SUPPRESSED") ?? 0,
+          skipped: autoReplies.get("SKIPPED") ?? 0,
+          failed: autoReplies.get("FAILED") ?? 0,
+        },
+        autoReplyEscalations: escalations,
         lastRunAt: campaign.lastRunAt,
       };
     });
@@ -1163,6 +1228,22 @@ export async function campaignReplyDigest(input: {
       select: { threadId: true, sentAt: true },
     }),
   ]);
+  const escalatedAutoReplies = await prisma.outreachCampaignReply.findMany({
+    where: {
+      officeId: input.officeId,
+      campaignId: { in: [...input.campaignIds] },
+      action: "ESCALATED",
+    },
+    select: {
+      campaignId: true,
+      threadId: true,
+      intent: true,
+      reason: true,
+      draft: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
   const inboundByThread = new Map<string, typeof inbound>();
   for (const message of inbound) {
     const threadMessages = inboundByThread.get(message.threadId) ?? [];
@@ -1217,6 +1298,26 @@ export async function campaignReplyDigest(input: {
       answered,
       answeredAt: replyAnsweredAt,
       snippet: (latestInbound.bodyText ?? "").replace(/\s+/g, " ").trim().slice(0, 600),
+    });
+  }
+  for (const reply of escalatedAutoReplies) {
+    const campaign = threadToCampaign.get(reply.threadId);
+    if (!campaign || !counts.has(reply.campaignId)) continue;
+    replies.push({
+      campaignId: reply.campaignId,
+      threadId: reply.threadId,
+      recipient: campaign.recipient,
+      fromEmail: null,
+      fromName: null,
+      subject: null,
+      variantKey: campaign.variantKey,
+      receivedAt: reply.createdAt,
+      answered: false,
+      answeredAt: null,
+      snippet: reply.draft ?? "",
+      intent: reply.intent,
+      reason: reply.reason,
+      draft: reply.draft,
     });
   }
   replies.sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime());

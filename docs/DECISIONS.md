@@ -5418,3 +5418,15 @@ Use this log for durable product and engineering decisions. Do not put every imp
 ## 2026-09-04: Entity-qualified Context prospecting
 
 Context prospecting persists only entity-qualified targets: deterministic non-company rules first, then model classification against the draft brief; model failure degrades to persisting with a fallback flag, never to dropping rows silently.
+
+## 2026-09-06: Outreach campaign replies use campaign-grounded AUTO mode
+
+- Status: accepted
+- Owner: engineering
+- Decision: Outreach campaign replies are auto-answered by default (AUTO),
+  grounded only in campaign `replyContext`; unsubscribe, complaint,
+  negotiation, and low-confidence cases escalate; max 3 auto replies per
+  thread; mailbox never switches mid-thread.
+- DRAFT mode creates an escalation with the suggested reply, while OFF skips
+  the worker. Every inbound message is claimed by its unique message id
+  before processing.

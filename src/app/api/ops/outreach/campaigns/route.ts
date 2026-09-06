@@ -28,6 +28,8 @@ import { listEmailSenderPoolAccounts } from "@/lib/email-sender-pool";
 import { SHARED_MAILBOX_POOL_FILTER } from "@/lib/email-account-pool";
 import { senderProtectionWindow } from "@/lib/email-delivery-events";
 import { mailboxVerifierCreditsFromEnv } from "@/lib/leadgen/verify";
+import { runOutreachCampaignAutoReplies } from "@/lib/outreach-campaign-auto-reply";
+import { replyContextInput, replyModeInput } from "@/lib/outreach-campaign-reply-settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -61,6 +63,8 @@ type CampaignOpsBody = {
   approvedByEmail?: unknown;
   confirm?: unknown;
   limit?: unknown;
+  replyMode?: unknown;
+  replyContext?: unknown;
 };
 
 function isPrismaError(error: unknown): boolean {
@@ -165,8 +169,8 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   const action = boundedText(body?.action, 30);
-  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run"].includes(action)) {
-    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, or run." }, { status: 400 });
+  if (!action || !["mailboxes", "status", "replies", "plan", "approve", "followups", "run", "reply-settings", "auto-replies"].includes(action)) {
+    return NextResponse.json({ error: "action must be mailboxes, status, replies, plan, approve, followups, run, reply-settings, or auto-replies." }, { status: 400 });
   }
 
   try {
@@ -295,6 +299,8 @@ export async function POST(request: NextRequest) {
         bodyTemplate: typeof body?.body === "string" ? body.body : "",
         variants: variantsInput(body?.variants),
         followUps: followUpsInput(body?.followUps, true),
+        replyMode: replyModeInput(body?.replyMode, true) ?? "AUTO",
+        replyContext: replyContextInput(body?.replyContext, true),
       };
       const plan = await planOutreachCampaign(campaignInput);
       const campaign = await saveDraftCampaign({ ...campaignInput, emailField: plan.emailField });
@@ -303,6 +309,35 @@ export async function POST(request: NextRequest) {
 
     const campaignId = boundedText(body?.campaignId, 100);
     if (!campaignId) return NextResponse.json({ error: "campaignId is required." }, { status: 400 });
+    if (action === "reply-settings") {
+      const existing = await prisma.outreachCampaign.findFirst({
+        where: { id: campaignId, officeId: office.id },
+        select: { id: true, replyMode: true, replyContext: true },
+      });
+      if (!existing) return NextResponse.json({ error: "Outreach campaign not found." }, { status: 404 });
+      const replyMode = replyModeInput(body?.replyMode, true) ?? existing.replyMode;
+      const replyContext = body?.replyContext === undefined
+        ? existing.replyContext
+        : replyContextInput(body.replyContext);
+      const updated = await prisma.outreachCampaign.update({
+        where: { id: existing.id },
+        data: {
+          replyMode,
+          replyContext: replyContext === null || replyContext === undefined
+            ? Prisma.DbNull
+            : replyContext as Prisma.InputJsonValue,
+        },
+        select: { id: true, replyMode: true, replyContext: true },
+      });
+      return NextResponse.json(updated);
+    }
+    if (action === "auto-replies") {
+      const result = await runOutreachCampaignAutoReplies({
+        campaignId,
+        limit: typeof body?.limit === "number" ? body.limit : 25,
+      });
+      return NextResponse.json(result);
+    }
     if (action === "approve") {
       if (body?.confirm !== "send outreach campaign") {
         return NextResponse.json({ error: "confirm must be exactly \"send outreach campaign\"." }, { status: 400 });

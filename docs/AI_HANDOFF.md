@@ -12923,6 +12923,17 @@ Verification caveat:
 - Bouncer credits are shown in connected-email settings and the outreach
   mailbox ops response; zero credits explicitly marks sends as MX-only.
 
+## 2026-09-06: Outreach campaign auto replies
+
+- Outreach campaigns now default to `AUTO` replies, with campaign-scoped
+  reply context and deterministic escalation for opt-outs, complaints,
+  negotiation, uncertainty, missing context, and unavailable senders.
+- The reply worker claims each inbound message idempotently, preserves the
+  original mailbox and thread, and records sent, escalated, suppressed,
+  skipped, and failed outcomes for the Outreach desk.
+- The cron route runs every 15 minutes. The feature is not visually verified
+  in a browser in this pass.
+
 ## Pooled supplier answers close their thread (this pass)
 
 - Fixed the loop where a supplier reply answered from a pooled mailbox stayed

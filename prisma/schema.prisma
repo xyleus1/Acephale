@@ -184,6 +184,7 @@ model Office {
   outreachCampaigns         OutreachCampaign[]
   outreachCampaignSends     OutreachCampaignSend[]
   outreachCampaignFollowUps OutreachCampaignFollowUp[]
+  outreachCampaignReplies   OutreachCampaignReply[]
   emailDeliveryEvents  EmailDeliveryEvent[]
   emailSuppressions    EmailSuppression[]
   procurementConversationTasks ProcurementConversationTask[]
@@ -3445,6 +3446,8 @@ model OutreachCampaign {
   senderAccountId  String?
   senderDisplayName String?
   senderRotation   Boolean  @default(false)
+  replyMode        String   @default("AUTO")
+  replyContext     Json?
   variants         Json?
   audienceTotal    Int      @default(0)
   audienceRecordIds Json?
@@ -3466,6 +3469,7 @@ model OutreachCampaign {
   list   ResearchList           @relation(fields: [listId, officeId], references: [id, officeId], onDelete: Cascade)
   sends  OutreachCampaignSend[]
   followUpSends OutreachCampaignFollowUp[]
+  replies OutreachCampaignReply[]
 
   @@unique([officeId, name])
   @@unique([id, officeId])
@@ -3524,4 +3528,27 @@ model OutreachCampaignFollowUp {
   @@unique([campaignId, recordId, step])
   @@index([officeId, campaignId, status])
   @@index([officeId, sentAt])
+}
+
+model OutreachCampaignReply {
+  id                String   @id @default(cuid())
+  officeId          String
+  campaignId        String
+  threadId          String
+  inboundMessageId  String   @unique
+  intent            String
+  confidence        Float
+  action            String
+  reason            String?
+  draft             String?
+  sentMessageId     String?
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  office   Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  campaign OutreachCampaign @relation(fields: [campaignId, officeId], references: [id, officeId], onDelete: Cascade)
+
+  @@index([officeId, campaignId, action])
+  @@index([officeId, createdAt])
 }

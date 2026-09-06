@@ -56,6 +56,25 @@ export async function ActiveCampaignBanner() {
             </div>
           </div>
           <div>
+            <div className={styles.label}>Auto-reply</div>
+            <div className={styles.value}>
+              {campaign.replyMode.toLowerCase()}, answered {campaign.autoReplies.sent}, needs you {campaign.autoReplies.escalated}
+            </div>
+            {campaign.autoReplyEscalations.length > 0 ? (
+              <div className={styles.value}>
+                {campaign.autoReplyEscalations.slice(0, 3).map((reply) => (
+                  <div key={reply.threadId}>
+                    {reply.intent.toLowerCase()} · {reply.reason ?? "needs review"}{reply.draft ? ` · ${reply.draft.slice(0, 120)}` : ""}
+                    {" "}
+                    <Link href={`/dashboard/supply-os?materialsView=mail${campaign.list.projectId ? `&project=prospecting:${campaign.list.projectId}` : ""}&threadId=${encodeURIComponent(reply.threadId)}`}>
+                      Open thread
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <div>
             <div className={styles.label}>Delivery</div>
             <div className={`${styles.value} ${styles.count}`}>
               {campaign.sent} / {campaign.total}, today {campaign.sentToday} / {campaign.dailyCap}

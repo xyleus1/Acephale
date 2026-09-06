@@ -10465,3 +10465,13 @@ Use this file for chronological implementation notes that future agents should s
   and covered a 15-contact company plan.
 - Shared company-key logic now preserves separate identities for free-mail and
   disposable-provider contacts while merging website variants.
+
+## 2026-09-06: Outreach campaign auto-reply engine
+
+- Added campaign `replyMode` and `replyContext`, plus tenant-scoped
+  `OutreachCampaignReply` outcome records and production verification SQL.
+- Added deterministic prechecks, idempotent inbound claims, strict
+  `gpt-5.6` classification using the authored prompt, sender-capacity
+  reservations, same-thread persistence, suppression, and cron/Ops wiring.
+- Added campaign summary and Supply OS indicators for auto reply mode,
+  answered counts, needs-you counts, and escalation summaries.

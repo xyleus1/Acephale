@@ -37,6 +37,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/outreach-replies",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/market-intelligence",
       "schedule": "0 11 * * *"
     },

@@ -616,6 +616,8 @@ export function campaignRevisionHash(input: {
   audienceRecordIds: readonly string[];
   audiencePersonalization?: Record<string, CampaignPersonalization> | null;
   followUps?: readonly CampaignFollowUpStep[] | null;
+  replyMode?: string;
+  replyContext?: unknown;
 }) {
   const personalization = input.audiencePersonalization
     && typeof input.audiencePersonalization === "object"
@@ -637,6 +639,8 @@ export function campaignRevisionHash(input: {
     senderAccountId: input.senderAccountId,
     senderRotation: input.senderRotation,
     senderDisplayName: input.senderDisplayName,
+    replyMode: input.replyMode ?? "AUTO",
+    replyContext: input.replyContext ?? null,
     variants,
     audienceRecordIds: [...input.audienceRecordIds].sort(),
     audiencePersonalization: sortedPersonalization,
@@ -717,6 +721,9 @@ export function campaignBlockers(input: {
   bodyTemplate: string;
   dailyCap: number;
   variants?: readonly CampaignVariant[] | null;
+  replyMode?: string;
+  replyContext?: unknown;
+  enforceReplyContext?: boolean;
 }) {
   const blockers: string[] = [];
   const copyBlockers = (subject: string, bodyTemplate: string, variantKey?: string) => {
@@ -746,6 +753,14 @@ export function campaignBlockers(input: {
   const maxDailyCap = input.senderRotation ? 500 : 200;
   if (!Number.isInteger(input.dailyCap) || input.dailyCap < 1 || input.dailyCap > maxDailyCap) {
     blockers.push(`Daily cap must be between 1 and ${maxDailyCap}.`);
+  }
+  const replyContext = input.replyContext && typeof input.replyContext === "object" && !Array.isArray(input.replyContext)
+    ? input.replyContext as Record<string, unknown>
+    : null;
+  if (input.enforceReplyContext === true
+    && input.replyMode !== "OFF" && (input.replyMode ?? "AUTO") === "AUTO"
+    && (typeof replyContext?.pitch !== "string" || !replyContext.pitch.trim())) {
+    blockers.push("Auto-reply is on but the campaign has no reply context (pitch, offer, FAQs).");
   }
   return blockers;
 }

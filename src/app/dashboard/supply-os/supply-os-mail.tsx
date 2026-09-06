@@ -55,6 +55,10 @@ function timestamp(value: string) {
 }
 
 export function SupplyOsMail({ researchProjectId }: { researchProjectId: string }) {
+  const [initialThreadId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("threadId");
+  });
   const [threads, setThreads] = useState<MailThread[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -134,7 +138,7 @@ export function SupplyOsMail({ researchProjectId }: { researchProjectId: string 
     void loadThreads("");
   }, [loadThreads]);
 
-  async function openThread(thread: MailThread) {
+  const openThread = useCallback(async (thread: MailThread) => {
     if (expandedId === thread.id) {
       detailRequestIdRef.current += 1;
       setExpandedId(null);
@@ -161,7 +165,13 @@ export function SupplyOsMail({ researchProjectId }: { researchProjectId: string 
       setDetailError(loadError instanceof Error ? loadError.message : "Mail thread is unavailable.");
       setDetailState("error");
     }
-  }
+  }, [expandedId, researchProjectId]);
+
+  useEffect(() => {
+    if (!initialThreadId || state !== "ready" || expandedId || !threads.length) return;
+    const thread = threads.find((candidate) => candidate.id === initialThreadId);
+    if (thread) void openThread(thread);
+  }, [expandedId, initialThreadId, openThread, state, threads]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
