@@ -59,7 +59,8 @@ assert.equal(
 );
 assert.equal(
   planAutopilotVendorAction(state({ inboundKind: "WRONG_RECIPIENT", triageDecision: "NEEDS_HUMAN" }), sending).kind,
-  "ESCALATE",
+  "RESOURCE_CONTACT",
+  "A wrong contact is re-sourced by the loop instead of being handed to a person.",
 );
 assert.equal(
   planAutopilotVendorAction(state({ triageDecision: "NEEDS_HUMAN" }), sending).kind,
@@ -70,6 +71,26 @@ assert.equal(
   planAutopilotVendorAction(state({ hasDraft: true, triageDecision: "NEEDS_HUMAN" }), sending).kind,
   "ESCALATE",
   "A saved draft never overrides an escalation.",
+);
+// An escalation an operator has to answer carries what the supplier asked, so
+// the answer does not start with a search through the mailbox.
+const askedPlan = planAutopilotVendorAction(
+  state({ triageDecision: "NEEDS_HUMAN", unansweredQuestions: ["What is your target price?", "  "] }),
+  sending,
+);
+assert.deepEqual(
+  askedPlan.kind === "ESCALATE" ? askedPlan.questions : null,
+  ["What is your target price?"],
+  "Blank question text is left out of an escalation.",
+);
+assert.deepEqual(
+  autopilotEscalations([{ vendorId: "v1", vendorName: "FlashPCB", action: askedPlan }]),
+  [{
+    vendorId: "v1",
+    vendorName: "FlashPCB",
+    reason: "The reply asks something the stored request facts do not answer.",
+    questions: ["What is your target price?"],
+  }],
 );
 assert.equal(
   planAutopilotVendorAction(state({ hasQuote: true, hasDraft: true }), sending).kind,
@@ -232,8 +253,9 @@ assert.ok(
   "The loop passes quote capture outcomes into its failure report.",
 );
 assert.ok(
-  /quoteRun\?\.failed \?\? 0/.test(autopilotSource),
-  "A failed quote write counts toward the failure total of the pass.",
+  /quotesRecorded: quoteRun\?\.recorded \?\? 0,/.test(autopilotSource)
+    && /failed: failures\.length,/.test(autopilotSource),
+  "A failed quote write is named among the failures the pass total counts.",
 );
 
 // The scheduled pass answers the replies it finds and stops before the
@@ -381,12 +403,31 @@ assert.deepEqual(
   [{ vendorId: "v1", vendorName: "Arctic Circuits", error: "The supplier reply draft failed." }],
   "A reply that could not be drafted reaches the operator.",
 );
-// A count that disagrees with the named failures reads as a clean pass, so
-// every path that can fail feeds the same total.
+// A count that disagrees with the named failures reads as a clean pass, so the
+// total is the named failures themselves, which every path that can fail feeds.
 assert.ok(
-  /\(draftRun\?\.failed \?\? 0\)/.test(autopilotSource)
-    && /\+ chaseRun\.failures\.length/.test(autopilotSource),
-  "The failure count covers the drafts a reply needs before it can be delivered.",
+  /failed: failures\.length,/.test(autopilotSource),
+  "The failure count is the failures the pass names, so the two cannot disagree.",
+);
+// A thread stopped by sender capacity is queued work, not a failure: the loop
+// keeps it due and it resumes by itself, so reporting it as failed sent an
+// operator after a conversation nobody had to touch. Both are still named.
+assert.ok(
+  /const queuedByCapacity = attempted\.filter\(\(failure\) => conversationFailureIsCapacity\(failure\.error\)\)/
+    .test(autopilotSource)
+    && /const failures = attempted\.filter\(\(failure\) => !conversationFailureIsCapacity\(failure\.error\)\)/
+      .test(autopilotSource),
+  "Capacity blocked work is reported apart from a genuine failure.",
+);
+// The stored task still sees a capacity failure, which is what keeps it due
+// without consuming a retry attempt.
+assert.ok(
+  /failures: new Map\(attempted\.map/.test(autopilotSource),
+  "The durable task records why a thread waited, including a missing sender.",
+);
+assert.ok(
+  /queued: run\.queued,/.test(cronSource),
+  "The scheduled response names the queued backlog a capacity shortage creates.",
 );
 {
   // One pass consumes the whole remaining budget: the units it did not begin

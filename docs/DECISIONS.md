@@ -5,6 +5,22 @@ Sourcing categories are derived from the request; curated categories are overrid
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## An unsettled supplier conversation is owned until it is quoted or durably faded
+Date: 2026-09-09
+
+- Status: accepted
+- Owner: engineering
+- Decision: only a recorded quote settles a supplier conversation. Every other
+  state is retryable work owned by a `ProcurementConversationTask` scoped to
+  office, request and supplier.
+- A wrong contact reply is worked by the loop, not by an operator: another
+  address on the supplier's own domain, or a durable fade to `excluded` with the
+  reason and retired addresses recorded. Rows are never deleted, and an operator
+  can put a shop back by changing its status.
+- A failure caused by sender capacity is queued, not counted: the task stays due
+  and keeps its attempt count, so it resumes when capacity returns.
+- An escalation must name the supplier's exact unanswered question.
+
 ## Supplier delivery suppression is the autopilot bounce source of truth
 Date: 2026-09-08
 - Status: accepted

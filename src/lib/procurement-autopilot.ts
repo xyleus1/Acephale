@@ -22,7 +22,10 @@ import {
   type ConversationFunnel,
 } from "@/lib/procurement-conversation-stage";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { conversationTaskEntries } from "@/lib/procurement-conversation-task";
+import {
+  conversationFailureIsCapacity,
+  conversationTaskEntries,
+} from "@/lib/procurement-conversation-task";
 import {
   conversationTaskBacklog,
   EMPTY_CONVERSATION_TASK_BACKLOG,
@@ -44,6 +47,10 @@ import {
   runProcurementSupplierNudges,
 } from "@/lib/procurement-supplier-nudge";
 import { sweepSupplierQuoteCapture } from "@/lib/procurement-supplier-quote";
+import {
+  recoverProcurementWrongContact,
+  type WrongContactRecoveryOutcome,
+} from "@/lib/procurement-wrong-contact";
 import type { SupplierQuoteMissingFact } from "@/lib/procurement-supplier-quote-reading";
 import { runProcurementFileDraftBatch } from "@/lib/procurement-file-draft-batch";
 import { runProcurementFileDraftSendBatch } from "@/lib/procurement-file-draft-send";
@@ -86,7 +93,14 @@ export async function listAutopilotOrderIds(limit = AUTOPILOT_MAX_QUEUE): Promis
     FROM orders
     JOIN order_vendors
       ON order_vendors.order_id = orders.id
-      AND ${VENDOR_SENT_MESSAGE_ID_SQL} IS NOT NULL
+      AND (
+        ${VENDOR_SENT_MESSAGE_ID_SQL} IS NOT NULL
+        -- A supplier a wrong contact reply moved to another address has had its
+        -- send receipt cleared on purpose, so the request would otherwise drop
+        -- out of the queue and stop being reported while it still owes that
+        -- supplier its first contact at the replacement address.
+        OR to_jsonb(order_vendors)->'research'->'wrongContact'->>'state' = 'RESOURCED'
+      )
     WHERE orders.status NOT IN ('ordered', 'cancelled')
     ORDER BY orders.created_at ASC, orders.id ASC
     LIMIT ${bounded}
@@ -136,6 +150,11 @@ export type AutopilotRunResult = {
   superseded: number;
   failed: number;
   failures: Array<{ vendorId: string; vendorName: string; error: string }>;
+  // Work no mailbox was free for. The loop keeps it queued and due, so it is
+  // not a failure an operator has to act on, and it is counted apart from one
+  // rather than being reported as both.
+  queued: number;
+  queuedByCapacity: Array<{ vendorId: string; vendorName: string; error: string }>;
   autoSend: boolean;
   quoteGoal: number | null;
   quoteGoalReadFailed: boolean;
@@ -149,6 +168,10 @@ export type AutopilotRunResult = {
   // the function limit reports nothing and answers nothing.
   stoppedAtDeadline: boolean;
   escalations: Array<{ vendorId: string; vendorName: string; reason: string }>;
+  // Wrong contact replies this pass worked: moved to another address at the
+  // same supplier, or faded out of the funnel. Reported so a shop leaving the
+  // request is a recorded decision rather than a silent disappearance.
+  wrongContacts: WrongContactRecoveryOutcome[];
   // Where every supplier thread this pass read stands, and how many still owe
   // an action. A pass reports one slice of a request, so this is what makes a
   // thread that stalled visible without somebody sweeping the request by hand.
@@ -197,7 +220,12 @@ async function vendorStates(args: {
   // instead of retrying a thread whose sender pool or mailbox has not had time
   // to recover.
   skipVendorIds?: ReadonlySet<string>;
-}): Promise<{ states: AutopilotVendorState[]; anchors: Map<string, ChaseAnchor>; stopped: boolean }> {
+}): Promise<{
+  states: AutopilotVendorState[];
+  anchors: Map<string, ChaseAnchor>;
+  recoveries: WrongContactRecoveryOutcome[];
+  stopped: boolean;
+}> {
   const facts = procurementReplyFacts({
     material: args.order.material,
     quantity: args.order.quantity,
@@ -208,6 +236,7 @@ async function vendorStates(args: {
   });
   const states: AutopilotVendorState[] = [];
   const anchors = new Map<string, ChaseAnchor>();
+  const recoveries: WrongContactRecoveryOutcome[] = [];
   const storedContactEmails = args.order.vendors
     .map((vendor) => vendor.contact?.email?.trim().toLowerCase() ?? "")
     .filter(Boolean);
@@ -274,6 +303,24 @@ async function vendorStates(args: {
         bestEffort: args.bestEffort,
       })
       : null;
+    // A shop that says it is the wrong contact is worked here rather than
+    // reported: the request moves to another address the supplier named, or on
+    // its own domain, and fades the row when there is none. Nothing is mailed by
+    // this, so it runs in a draft only pass too, and the RFQ to the replacement
+    // address stays behind the same send rules as any other first contact.
+    const wrongContact = triage?.kind === "WRONG_RECIPIENT" && inbound
+      ? await recoverProcurementWrongContact({
+        orderId: args.order.id,
+        vendorId: vendor.id,
+        vendorName: vendor.name,
+        replyBody: inbound.body,
+        sourceMessageId: inbound.id,
+        mailedEmails: written
+          .filter((message) => message.direction === "OUTBOUND")
+          .flatMap((message) => message.toEmails),
+      })
+      : null;
+    if (wrongContact) recoveries.push(wrongContact);
     const draft = await getProcurementFileDeliveryDraft({
       officeId: args.officeId,
       order: args.order,
@@ -296,6 +343,8 @@ async function vendorStates(args: {
         answeredReply: newestReply !== null,
       }),
       missingQuoteFacts: args.missingQuoteFacts?.get(vendor.id) ?? null,
+      unansweredQuestions: triage?.unanswered.map((entry) => entry.question) ?? null,
+      wrongContactRecovery: wrongContact?.resolved ?? null,
     });
   }
   const allVendors = args.order.vendors;
@@ -315,7 +364,7 @@ async function vendorStates(args: {
       suppressed: suppression,
     });
   }
-  return { states, anchors, stopped };
+  return { states, anchors, recoveries, stopped };
 }
 
 // A supplier that answered once and then went quiet gets the same files again
@@ -449,7 +498,7 @@ export async function runProcurementAutopilot(args: {
   if (!draftRun && !outOfScanTime()) return null;
   const order = await getProcurementRequest(summary.customerId, args.orderId);
   if (!order) return null;
-  const { states, anchors, stopped: scanStopped } = await vendorStates({
+  const { states, anchors, recoveries, stopped: scanStopped } = await vendorStates({
     officeId: summary.officeId,
     customerId: summary.customerId,
     order,
@@ -583,13 +632,31 @@ export async function runProcurementAutopilot(args: {
       // history of a thread this pass never reached.
       .map((vendor) => ({ input: unreadConversationInput(vendor), attempted: false })),
   ];
-  const failures = autopilotFailures({
-    chase: chaseRun.failures,
+  const attempted = autopilotFailures({
+    // A wrong contact the loop could not re-source or fade is owed work, not a
+    // finished thread, so it keeps its task and is tried again.
+    chase: [
+      ...chaseRun.failures,
+      ...recoveries
+        .filter((outcome) => outcome.state === "FAILED")
+        .map((outcome) => ({
+          vendorId: outcome.vendorId,
+          vendorName: outcome.vendorName,
+          error: outcome.error ?? outcome.reason,
+        })),
+    ],
     draft: draftRun?.outcomes,
     nudge: nudgeRun?.outcomes,
     send: sendRun?.outcomes,
     quote: quoteRun?.outcomes,
   });
+  // A thread stopped by sender capacity is queued rather than failed: the work
+  // is ready and only a mailbox is missing, so it stays due and resumes by
+  // itself. Counting it as a failure told an operator to act on a thread the
+  // loop was already carrying, so the two are reported apart. The stored task
+  // still records why it waited, so nothing is lost.
+  const queuedByCapacity = attempted.filter((failure) => conversationFailureIsCapacity(failure.error));
+  const failures = attempted.filter((failure) => !conversationFailureIsCapacity(failure.error));
   // Every thread the pass covered is written back as a task, whether it moved,
   // failed or simply waits, so the loop owns the whole request between passes
   // and nothing depends on an operator sweeping it.
@@ -601,9 +668,14 @@ export async function runProcurementAutopilot(args: {
     orderId: args.orderId,
     entries: conversationTaskEntries({
       entries: funnelEntries,
-      failures: new Map(failures.map((failure) => [failure.vendorId, failure.error])),
+      failures: new Map(attempted.map((failure) => [failure.vendorId, failure.error])),
       progressed: new Set([
         ...chaseRun.drafted,
+        // Moving a wrong contact to another address at the same supplier, or
+        // fading a shop that named none, is this thread moving forward.
+        ...recoveries
+          .filter((outcome) => outcome.state === "RESOURCED" || outcome.state === "FADED")
+          .map((outcome) => outcome.vendorId),
         ...(draftRun?.outcomes ?? [])
           .filter((outcome) => outcome.state === "DRAFTED")
           .map((outcome) => outcome.vendorId),
@@ -663,15 +735,13 @@ export async function runProcurementAutopilot(args: {
     // Every path that can fail counts toward one total, including the drafts
     // and chase drafts a reply needs before it can be delivered at all, so a
     // pass cannot report zero failures while naming failures.
-    failed: (sendRun?.failed ?? 0)
-      + (nudgeRun?.failed ?? 0)
-      + (quoteRun?.failed ?? 0)
-      + (draftRun?.failed ?? 0)
-      + chaseRun.failures.length,
+    failed: failures.length,
     // A delivery that fails needs an operator, so it is reported next to the
     // escalations instead of being reduced to a count. A quote that cannot be
     // written counts too, since it leaves a priced reply invisible.
     failures,
+    queued: queuedByCapacity.length,
+    queuedByCapacity,
     autoSend,
     quoteGoal,
     quoteGoalReadFailed: goalLookup.failed,
@@ -679,6 +749,7 @@ export async function runProcurementAutopilot(args: {
     sendFollowUps: followUps,
     stoppedAtDeadline: scanStopped || chaseRun.stopped || outOfTime(),
     escalations: autopilotEscalations(plan),
+    wrongContacts: recoveries,
     funnel: conversationFunnel(funnelEntries),
     backlog: backlog ?? EMPTY_CONVERSATION_TASK_BACKLOG,
     // False when the durable record of this pass could not be written or read,

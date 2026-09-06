@@ -5,6 +5,7 @@ process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/test?sslmode
 async function main() {
   const {
     BULK_RFQ_MAX_PER_RUN,
+    bulkRfqIdempotencyKey,
     buildBulkRfqBody,
     buildBulkRfqSubject,
     partitionSuppressedRfqTargets,
@@ -287,7 +288,11 @@ async function main() {
   assert.equal(gated.candidates, 3);
   assert.equal(gated.pruned, 1, "the live gate prunes the supplier whose domain takes no mail");
   assert.equal(gated.poolExhausted, true, "the qualified supplier reached the sender reservation");
-  assert.deepEqual(reservations, [`procurement-bulk-rfq:${gateOrder.orderId}:vendor-live`], "refused suppliers never reserve a mailbox slot");
+  assert.deepEqual(
+    reservations,
+    [bulkRfqIdempotencyKey({ orderId: gateOrder.orderId, vendorId: "vendor-live", contactEmail: "rfq@live.eu" })],
+    "refused suppliers never reserve a mailbox slot",
+  );
   assert.deepEqual(mxLookups, ["nullmx.eu", "live.eu"], "static blocks never reach DNS; each domain is looked up once");
   assert.deepEqual(
     gated.outcomes.map((outcome) => [outcome.vendorId, outcome.state]),

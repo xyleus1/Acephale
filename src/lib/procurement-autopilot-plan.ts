@@ -38,6 +38,14 @@ export type AutopilotVendorState = {
   // without dating (or dated without pricing) is one question away from a
   // purchase order, so the follow up asks for exactly that.
   missingQuoteFacts?: readonly SupplierQuoteMissingFact[] | null;
+  // What the supplier asked that the stored request facts do not answer. An
+  // escalation saying only that a question went unanswered sends an operator
+  // into the mailbox to find out which one, so the question travels with it.
+  unansweredQuestions?: readonly string[] | null;
+  // What this pass did with a wrong contact reply, so the plan reports the
+  // recovery rather than the notice, and only a recovery that could not be
+  // written reaches a person.
+  wrongContactRecovery?: "RESOURCED" | "FADED" | "FAILED" | null;
 };
 
 export type AutopilotAction =
@@ -46,7 +54,8 @@ export type AutopilotAction =
   | { kind: "DRAFT_REPLY"; reason: string }
   | { kind: "CHASE"; reason: string }
   | { kind: "AWAIT_APPROVAL"; reason: string }
-  | { kind: "ESCALATE"; reason: string }
+  | { kind: "RESOURCE_CONTACT"; reason: string }
+  | { kind: "ESCALATE"; reason: string; questions?: string[] }
   | { kind: "NONE"; reason: string };
 
 export function planAutopilotVendorAction(
@@ -65,10 +74,29 @@ export function planAutopilotVendorAction(
   }
 
   if (state.inboundKind === "WRONG_RECIPIENT") {
-    return { kind: "ESCALATE", reason: "The supplier says this is the wrong contact." };
+    // A shop that read the RFQ and named somebody else is not work for a person:
+    // the request moves to another address at the same supplier, and fades the
+    // row when the supplier offers none, so it neither sits escalated nor holds
+    // the request open.
+    if (state.wrongContactRecovery === "FAILED") {
+      return { kind: "ESCALATE", reason: "The supplier says this is the wrong contact and no other address could be recorded." };
+    }
+    return {
+      kind: "RESOURCE_CONTACT",
+      reason: state.wrongContactRecovery === "RESOURCED"
+        ? "The supplier named another address, so the RFQ goes there."
+        : state.wrongContactRecovery === "FADED"
+          ? "The supplier says this is the wrong contact and offers no other address, so it leaves the funnel."
+          : "The supplier says this is the wrong contact, so another address at the same supplier is tried.",
+    };
   }
   if (state.triageDecision === "NEEDS_HUMAN") {
-    return { kind: "ESCALATE", reason: "The reply asks something the stored request facts do not answer." };
+    const questions = [...(state.unansweredQuestions ?? [])].filter((question) => question.trim());
+    return {
+      kind: "ESCALATE",
+      reason: "The reply asks something the stored request facts do not answer.",
+      ...(questions.length ? { questions } : {}),
+    };
   }
   if (state.hasDraft) {
     return policy.autoSend
@@ -135,7 +163,12 @@ export function autopilotEscalations(
 ) {
   return plan
     .filter((entry) => entry.action.kind === "ESCALATE")
-    .map((entry) => ({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason: entry.action.reason }));
+    .map((entry) => ({
+      vendorId: entry.vendorId,
+      vendorName: entry.vendorName,
+      reason: entry.action.reason,
+      questions: entry.action.kind === "ESCALATE" ? entry.action.questions ?? [] : [],
+    }));
 }
 
 export type AutopilotFailure = {

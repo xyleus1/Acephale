@@ -271,7 +271,7 @@ assert.ok(
   "A supplier the pass only projected is written as unattempted.",
 );
 assert.ok(
-  /AND \$\{VENDOR_SENT_MESSAGE_ID_SQL\} IS NOT NULL/.test(autopilotSource),
+  /\$\{VENDOR_SENT_MESSAGE_ID_SQL\} IS NOT NULL/.test(autopilotSource),
   "Scheduled eligibility reads the same current or legacy contacted stamp as the rest of the loop.",
 );
 const taskStoreSource = readFileSync(

@@ -65,6 +65,22 @@ export const CONVERSATION_TASK_BACKOFF_MS: readonly number[] = [
   24 * 60 * 60_000,
 ];
 
+// A failure that says nothing about this conversation: every mailbox in the
+// sender pool is at its daily cap, paused, or the pool read empty. The thread
+// is ready, the request has the answer written, and only a sender is missing,
+// so it is queued rather than backed off: capacity returns on its own (a daily
+// cap resets, a protection pause expires) and the next pass should try it
+// again instead of pushing it hours out and calling it stuck. This is the
+// difference between a thread that refuses to work and one nobody could send
+// for.
+// A pinned thread mailbox that is disconnected or disabled is not in this
+// class: that one needs an operator to reconnect it, so it keeps its backoff.
+const CAPACITY_FAILURE = /daily pooled-send limit|no connected email account is enabled in the sender pool|no mailbox in the shared sender pool is currently able|sender pool (is )?(empty|exhausted)|paused or (has|have) sending turned off|mailboxes? in the sender pool (is|are) paused/i;
+
+export function conversationFailureIsCapacity(failure: string | null | undefined): boolean {
+  return CAPACITY_FAILURE.test(failure ?? "");
+}
+
 export function conversationTaskBackoffMs(attempts: number) {
   const index = Math.max(0, Math.trunc(attempts) - 1);
   return CONVERSATION_TASK_BACKOFF_MS[Math.min(index, CONVERSATION_TASK_BACKOFF_MS.length - 1)];
@@ -98,16 +114,25 @@ export function nextConversationTaskState(
       settledAt: settled ? now : null,
     };
   }
+  // A thread nobody had a mailbox for is queued: it keeps whatever attempt
+  // count it already had, so a capacity shortage cannot back a ready thread off
+  // to a daily retry or make it read as stuck, and it stays due so the next
+  // pass sends it the moment a mailbox is free again. The failure is still
+  // recorded, so why it waited is not lost.
+  const queued = !settled && !attempt.progressed && conversationFailureIsCapacity(failure);
   // Attempts count failures only. A settled thread, a thread that moved forward
   // and a thread simply waiting on its supplier are all at zero, so the count
   // means "how many times this has refused to work" and an operator reading a
   // high count is reading a real blockage.
   const attempts = settled || attempt.progressed || !failure
     ? 0
-    : Math.max(0, Math.trunc(current?.attempts ?? 0)) + 1;
-  const nextAttemptAt = attempts === 0
+    : queued
+      ? Math.max(0, Math.trunc(current?.attempts ?? 0))
+      : Math.max(0, Math.trunc(current?.attempts ?? 0)) + 1;
+  const nextAttemptAt = attempts === 0 || queued
     // Without a failure the thread is simply waiting on the next pass, which is
-    // scheduled work rather than a retry, so it stays due.
+    // scheduled work rather than a retry, so it stays due. A queued thread is
+    // due for the same reason: the work is ready and only a sender is missing.
     ? now
     : new Date(now.getTime() + conversationTaskBackoffMs(attempts));
   return {

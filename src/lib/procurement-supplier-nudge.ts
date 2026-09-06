@@ -11,6 +11,9 @@ import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
 import {
   BULK_RFQ_VENDOR_EMAIL_SQL,
+  BULK_RFQ_VENDOR_RETIRED_EMAILS_SQL,
+  bulkRfqAddressHash,
+  bulkRfqIdempotencyKey,
   loadBulkRfqOrder,
   type BulkRfqOrder,
 } from "@/lib/procurement-bulk-rfq";
@@ -128,12 +131,48 @@ function quantityText(order: BulkRfqOrder) {
   return `${quantity} ${order.unit}`.trim();
 }
 
-export function nudgeIdempotencyKey(args: { orderId: string; vendorId: string; round: number }) {
-  return `procurement-rfq-nudge:${args.orderId}:${args.round}:${args.vendorId}`;
+// A follow up carries the address it was sent to, the same way an RFQ does. A
+// supplier re-sourced after a wrong contact has one thread per address, and a
+// follow up left uncertain has to be settled on the thread it rode, not on
+// whichever thread the supplier has now.
+export function nudgeIdempotencyKey(args: {
+  orderId: string;
+  vendorId: string;
+  round: number;
+  contactEmail?: string | null;
+}) {
+  const address = args.contactEmail ? bulkRfqAddressHash(args.contactEmail) : null;
+  const identity = address ? `${address}:${args.vendorId}` : args.vendorId;
+  return `procurement-rfq-nudge:${args.orderId}:${args.round}:${identity}`;
 }
 
-export function nudgeRfcMessageId(args: { orderId: string; vendorId: string; round: number }) {
-  return `<procurement-rfq-nudge-${args.orderId.slice(0, 8)}-${args.round}-${args.vendorId}@derya.ai>`;
+export function nudgeRfcMessageId(args: {
+  orderId: string;
+  vendorId: string;
+  round: number;
+  contactEmail?: string | null;
+  addressHash?: string | null;
+}) {
+  const address = args.addressHash
+    ?? (args.contactEmail ? bulkRfqAddressHash(args.contactEmail) : null);
+  const identity = address ? `${address}-${args.vendorId}` : args.vendorId;
+  return `<procurement-rfq-nudge-${args.orderId.slice(0, 8)}-${args.round}-${identity}@derya.ai>`;
+}
+
+// The supplier, round and address a reserved follow up belongs to, read back
+// off its key. A key written before addresses were part of the identity holds
+// the round where the address now sits, and a round is always digits, so the
+// two shapes are told apart without guessing.
+export function nudgeKeyIdentity(key: string) {
+  const parts = key.split(":");
+  const vendorId = parts.at(-1) ?? "";
+  const beforeVendor = parts.at(-2) ?? "";
+  const addressless = /^\d+$/.test(beforeVendor);
+  return {
+    vendorId,
+    round: Number(addressless ? beforeVendor : parts.at(-3)),
+    addressHash: addressless ? null : beforeVendor,
+  };
 }
 
 // The plan is read once and the run then mails one supplier at a time, so a
@@ -266,6 +305,11 @@ export async function listSupplierNudgeTargets(args: {
         { idempotencyKey: { startsWith: `procurement-rfq-nudge:${args.order.orderId}:` } },
       ],
     },
+    // A supplier a wrong contact reply moved to another address has one RFQ send
+    // per address, so the follow up takes the send to the address the supplier
+    // is reachable at now, and the newest send otherwise, never whichever row
+    // the database happened to return last.
+    orderBy: { createdAt: "asc" },
     select: {
       idempotencyKey: true,
       accountId: true,
@@ -276,6 +320,7 @@ export async function listSupplierNudgeTargets(args: {
     },
   });
   const rfqByVendor = new Map<string, typeof reservations[number]>();
+  const rfqByKey = new Map<string, typeof reservations[number]>();
   const nudgesByVendor = new Map<string, number>();
   // A follow up whose delivery came back unknown stays RESERVED on purpose. That
   // supplier is left alone until reconciliation decides, because advancing to
@@ -285,6 +330,7 @@ export async function listSupplierNudgeTargets(args: {
     const vendorId = reservation.idempotencyKey.split(":").at(-1) ?? "";
     if (reservation.idempotencyKey.startsWith("procurement-bulk-rfq:")) {
       rfqByVendor.set(vendorId, reservation);
+      rfqByKey.set(reservation.idempotencyKey, reservation);
       continue;
     }
     nudgesByVendor.set(vendorId, (nudgesByVendor.get(vendorId) ?? 0) + 1);
@@ -321,7 +367,11 @@ export async function listSupplierNudgeTargets(args: {
   const skipped: SupplierNudgeRunResult["skipped"] = [];
   for (const row of contacted) {
     if (targets.length >= args.limit) break;
-    const rfq = rfqByVendor.get(row.vendorId);
+    const rfq = rfqByKey.get(bulkRfqIdempotencyKey({
+      orderId: args.order.orderId,
+      vendorId: row.vendorId,
+      contactEmail: row.contactEmail,
+    })) ?? rfqByVendor.get(row.vendorId);
     const state = rfq?.localThreadId ? threadState.get(rfq.localThreadId) : undefined;
     if (unconfirmedNudges.has(row.vendorId)) {
       skipped.push({
@@ -527,15 +577,13 @@ export async function reconcileProcurementSupplierNudges(input: {
     // A provider check can spend its whole timeout, so the pass gives up its
     // remaining work rather than being killed by the route deadline.
     if (Date.now() >= deadline) break;
-    const parts = reservation.idempotencyKey.split(":");
-    const vendorId = parts.at(-1) ?? "";
-    const round = Number(parts.at(-2));
+    const { vendorId, round, addressHash } = nudgeKeyIdentity(reservation.idempotencyKey);
     if (!vendorId || !Number.isFinite(round)) {
       await touchReservation(order.officeId, reservation.id);
       outcomes.push({ vendorId, round: 0, state: "UNKNOWN", error: "The reservation key is unreadable." });
       continue;
     }
-    const rfcMessageId = nudgeRfcMessageId({ orderId: order.orderId, vendorId, round });
+    const rfcMessageId = nudgeRfcMessageId({ orderId: order.orderId, vendorId, round, addressHash });
     const receipt = await provider.reconcile({
       officeId: order.officeId,
       accountId: reservation.accountId,
@@ -552,14 +600,24 @@ export async function reconcileProcurementSupplierNudges(input: {
       outcomes.push({ vendorId, round, state: "UNKNOWN", error: receipt.error ?? null });
       continue;
     }
-    // The follow up rode the RFQ thread, so the first send's reservation is
-    // where the thread it belongs to is recorded.
+    // The follow up rode the RFQ thread of the address it was sent to, so that
+    // address names the RFQ send whose thread it belongs to. An older follow up
+    // carries no address, and it went out before any re-sourcing, so it belongs
+    // to the supplier's first RFQ thread and never to a replacement one.
     const rfq = await prisma.emailSenderReservation.findFirst({
       where: {
         officeId: order.officeId,
-        idempotencyKey: `procurement-bulk-rfq:${order.orderId}:${vendorId}`,
+        ...(addressHash
+          ? { idempotencyKey: `procurement-bulk-rfq:${order.orderId}:${addressHash}:${vendorId}` }
+          : {
+            idempotencyKey: {
+              startsWith: `procurement-bulk-rfq:${order.orderId}:`,
+              endsWith: `:${vendorId}`,
+            },
+          }),
         localThreadId: { not: null },
       },
+      orderBy: { createdAt: "asc" },
       select: { localThreadId: true },
     });
     const localThreadId = rfq?.localThreadId ?? null;
@@ -571,15 +629,41 @@ export async function reconcileProcurementSupplierNudges(input: {
     const vendors = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{
       name: string;
       contactEmail: string | null;
+      retiredEmails: string[] | null;
     }>>(`
-      SELECT order_vendors.name AS "name", ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail"
+      SELECT
+        order_vendors.name AS "name",
+        ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail",
+        ${BULK_RFQ_VENDOR_RETIRED_EMAILS_SQL} AS "retiredEmails"
       FROM order_vendors
       WHERE order_vendors.id = $1::uuid AND order_vendors.order_id = $2::uuid
     `, vendorId, order.orderId);
     const vendor = vendors.at(0);
-    if (!vendor?.contactEmail) {
+    if (!vendor) {
       await touchReservation(order.officeId, reservation.id);
-      outcomes.push({ vendorId, round, state: "UNKNOWN", error: "The supplier recipient is missing." });
+      outcomes.push({ vendorId, round, state: "UNKNOWN", error: "The supplier row was not found." });
+      continue;
+    }
+    // The delivery is recorded against the address it was reserved for, found
+    // among the addresses the row holds and the ones a wrong contact reply took
+    // off it, so a follow up to a retired address is never filed as mail the
+    // replacement address received.
+    const current = vendor.contactEmail?.trim().toLowerCase() ?? null;
+    const retired = (vendor.retiredEmails ?? [])
+      .map((email) => email.trim().toLowerCase())
+      .filter((email) => email.includes("@"));
+    const known = [...(current ? [current] : []), ...retired];
+    const recipient = addressHash
+      ? known.find((email) => bulkRfqAddressHash(email) === addressHash)
+      : retired.at(0) ?? current ?? undefined;
+    if (!recipient) {
+      await touchReservation(order.officeId, reservation.id);
+      outcomes.push({
+        vendorId,
+        round,
+        state: "UNKNOWN",
+        error: "The address this follow up was reserved for is no longer on the supplier.",
+      });
       continue;
     }
     const firstOutbound = await prisma.emailMessage.findFirst({
@@ -593,7 +677,7 @@ export async function reconcileProcurementSupplierNudges(input: {
       accountId: reservation.accountId,
       reservationId: reservation.id,
       senderEmail: reservation.account.email,
-      recipient: vendor.contactEmail.trim().toLowerCase(),
+      recipient,
       subject: buildSupplierNudgeSubject({ threadSubject: firstOutbound?.subject ?? null, order }),
       body: buildSupplierNudgeBody({ order, vendorName: vendor.name, round, files }),
       rfcMessageId,
@@ -665,6 +749,7 @@ export async function runProcurementSupplierNudges(args: {
       orderId: order.orderId,
       vendorId: target.vendorId,
       round: target.round,
+      contactEmail: target.recipient,
     });
     if (!await nudgeStillEligible({
       orderId: order.orderId,
@@ -739,6 +824,7 @@ export async function runProcurementSupplierNudges(args: {
       orderId: order.orderId,
       vendorId: target.vendorId,
       round: target.round,
+      contactEmail: target.recipient,
     });
     const receipt = await provider.send({
       officeId: order.officeId,

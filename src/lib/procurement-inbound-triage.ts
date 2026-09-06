@@ -60,7 +60,60 @@ const BOUNCE_REPORT = /mail delivery (sub)?system|delivery status notification|u
 // head of a report line.
 const BOUNCE_HEADLINE = /^(re: |fwd?: )*(delivery (failure|failed|incomplete|delayed)|address not found|recipient (address )?rejected|delivery has failed|returned to sender)/i;
 const AUTO_REPLY = /out of (the )?office|automatic reply|auto[- ]?reply|on vacation|annual leave|currently away/i;
-const WRONG_RECIPIENT = /wrong (email|address|person|department)|not the right (person|contact|address)|no longer (with|at)|please (contact|redirect|forward) (our|the)/i;
+// A shop stating that the RFQ reached the wrong desk, which is the evidence the
+// loop needs before it moves a supplier to another address or fades the row.
+// "We do not handle" only says that when it is unqualified, about the writer's
+// own desk. Any qualifier under it ("we do not handle RFQs below 500 units",
+// "... with quantities below 500", "... for aluminium", "... outside the EU") is
+// a capability or commercial refusal from the right contact, so the clause is
+// read only where the statement ends there, names the desk, or names the writer,
+// rather than by listing the qualifiers a shop might use, and moving or fading a
+// shop that is answering us is avoided. A line break does not end the refusal,
+// since mail wraps a qualifier onto its own line as readily as anything else,
+// and reading a wrapped refusal as unqualified is what would move or fade the
+// shop.
+const WRONG_RECIPIENT_DESK = /here\b|at all\b|any ?more\b|any longer\b|myself\b|personally\b|in (?:this|our) (?:office|department|team|role|position)\b/i;
+const WRONG_RECIPIENT_STATEMENT = new RegExp(
+  [
+    "wrong (email|address|person|department|contact)",
+    "not the right (person|contact|address|department)",
+    "no longer (with|at)",
+    "(i am|i'm|we are|we're) not the (right|correct) (person|contact|department)",
+    "(i|we) (do not|don't) handle"
+    + " (rfqs?|requests? for quotation|quote requests?|quotes?|quoting|pricing|purchasing|procurement|sourcing)"
+    + `\\b(?=[ \\t]*(?:[.,;:!?)]|$|${WRONG_RECIPIENT_DESK.source}))`,
+  ].join("|"),
+  "i",
+);
+// Redirect wording is ordinary supplier prose too ("please contact our sales
+// team for pricing", "please forward the Gerbers to our engineering team"), so
+// on its own it says nothing about the recipient being wrong.
+const WRONG_RECIPIENT_REDIRECT = /please (contact|redirect|forward|send (it|this|the rfq)|write|reach out) (to )?(our|the|him|her|them|[A-Za-z0-9._%+-]+@)/i;
+// What turns a redirect into a wrong recipient: the same sentence sends the
+// request away from whoever received it, either by saying so or by naming the
+// address it belongs at.
+const REDIRECT_EXCLUDES_RECIPIENT = /\binstead\b|rather than (me|us)|not (me|us|myself|my department)|no longer|(i am|i'm) not/i;
+const NAMED_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+
+// One rule for whether the supplier said the RFQ reached the wrong desk, shared
+// by classification and by anything that acts on it. The loop now re-sources or
+// fades a wrong recipient by itself, so ambiguous redirect wording must not
+// reach it: such a message stays an ordinary question or statement and is
+// answered at the address that wrote it.
+export function supplierWrongRecipientText(subject: string, body: string) {
+  const written = `${subject}\n${supplierReplyText(body)}`;
+  if (WRONG_RECIPIENT_STATEMENT.test(written)) return true;
+  // A newline ends a sentence, so the address in a signature cannot stand in
+  // for the address a redirect names. An address the redirect line introduces
+  // with a colon is that address though, wrapped onto its own line, so such a
+  // line is read together with the one under it.
+  const lines = written.split(/\n|(?<=[.!?])\s+/);
+  return lines.some((line, index) => {
+    const sentence = /:\s*$/.test(line) ? `${line} ${lines.at(index + 1) ?? ""}` : line;
+    return WRONG_RECIPIENT_REDIRECT.test(sentence)
+      && (REDIRECT_EXCLUDES_RECIPIENT.test(sentence) || NAMED_ADDRESS.test(sentence));
+  });
+}
 
 // Delivery reporting is the mail system speaking, so callers that only need to
 // know whether a message is the supplier answering share this one rule.
@@ -124,7 +177,7 @@ export function supplierInboundKind(subject: string, body: string): SupplierInbo
   const text = `${subject}\n${body}`;
   if (supplierBounceText(subject, body)) return "BOUNCE";
   if (AUTO_REPLY.test(text)) return "AUTO_REPLY";
-  if (WRONG_RECIPIENT.test(text)) return "WRONG_RECIPIENT";
+  if (supplierWrongRecipientText(subject, body)) return "WRONG_RECIPIENT";
   return supplierQuestions(body).length > 0 ? "QUESTION" : "STATEMENT";
 }
 

@@ -29,8 +29,11 @@ export type SupplierConversationStage =
   | "QUOTE_INCOMPLETE"
   // A price and a lead time are recorded.
   | "QUOTED"
-  // Only a human can move this thread: a bounce, a wrong contact, or a
-  // question the request cannot answer.
+  // The supplier told us to stop writing to it and named nowhere else, so the
+  // request is no longer pursuing it. The row and its thread are kept.
+  | "SUPPLIER_FADED"
+  // Only a human can move this thread: a bounce, or a question the request
+  // cannot answer.
   | "NEEDS_OPERATOR";
 
 export type SupplierConversationInput = AutopilotVendorState & {
@@ -63,6 +66,10 @@ export const CONVERSATION_SETTLED_STAGES: readonly SupplierConversationStage[] =
 // the gap stays visible instead of disappearing into the contacted count.
 export const CONVERSATION_UNREACHABLE_STAGES: readonly SupplierConversationStage[] = [
   "NO_CONTACT_METHOD",
+  // A shop that says it is the wrong place and names no other address is not a
+  // thread anybody can move, so it owes nothing and is not reported as work
+  // waiting on a person either.
+  "SUPPLIER_FADED",
 ];
 
 export function supplierConversationStage(
@@ -73,7 +80,15 @@ export function supplierConversationStage(
     return "NEEDS_OPERATOR";
   }
   if (input.suppressed) return "NO_CONTACT_METHOD";
-  if (input.inboundKind === "BOUNCE" || input.inboundKind === "WRONG_RECIPIENT") return "NEEDS_OPERATOR";
+  if (input.inboundKind === "BOUNCE") return "NEEDS_OPERATOR";
+  if (input.inboundKind === "WRONG_RECIPIENT") {
+    // A wrong contact is worked by the loop: it either moves to another address
+    // at the same supplier, which puts the thread back at a first contact, or it
+    // fades. Only a recovery that could not be written needs a person.
+    if (input.wrongContactRecovery === "RESOURCED") return "NOT_CONTACTED";
+    if (input.wrongContactRecovery === "FADED") return "SUPPLIER_FADED";
+    return "NEEDS_OPERATOR";
+  }
   if (input.triageDecision === "NEEDS_HUMAN") return "NEEDS_OPERATOR";
   if (input.hasDraft) return "ANSWER_READY";
   // An automatic out of office notice is not an answer, so a thread holding one
@@ -146,7 +161,14 @@ export type ConversationFunnel = {
   owed: number;
   // Threads no pass can move, so they are the only ones a person has to look
   // at, and a request whose funnel stalls says so instead of looking finished.
-  needsOperator: Array<{ vendorId: string; vendorName: string; reason: string }>;
+  needsOperator: Array<{
+    vendorId: string;
+    vendorName: string;
+    reason: string;
+    // The supplier's own words where the thread stalled on a question, so the
+    // person who has to answer it reads it here instead of in the mailbox.
+    questions: string[];
+  }>;
   // Threads that stated some commercial facts and are short of a purchase
   // order, with what is still missing.
   quoteIncomplete: Array<{
@@ -165,6 +187,7 @@ const EMPTY_STAGES: Record<SupplierConversationStage, number> = {
   AWAITING_QUOTE: 0,
   QUOTE_INCOMPLETE: 0,
   QUOTED: 0,
+  SUPPLIER_FADED: 0,
   NEEDS_OPERATOR: 0,
 };
 
@@ -184,6 +207,9 @@ export function conversationFunnel(
         vendorId: entry.input.vendorId,
         vendorName: entry.input.vendorName,
         reason: entry.action?.reason ?? "This thread cannot be moved without an operator.",
+        questions: entry.action?.kind === "ESCALATE"
+          ? [...(entry.action.questions ?? [])]
+          : [...(entry.input.unansweredQuestions ?? [])],
       });
       continue;
     }

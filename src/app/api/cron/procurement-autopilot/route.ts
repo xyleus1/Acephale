@@ -136,6 +136,10 @@ export async function GET(request: Request) {
             nudgeCandidates: run.nudgeCandidates,
             quoteFactAsks: run.quoteFactAsks,
             failed: run.failed,
+            // Work no mailbox was free for, which the loop keeps queued and
+            // due. Reported apart from a failure so a capacity shortage is not
+            // read as threads an operator has to repair.
+            queued: run.queued,
             stoppedAtDeadline: run.stoppedAtDeadline,
             escalations: run.escalations.length,
             // Where the threads this pass read stand, so a request whose

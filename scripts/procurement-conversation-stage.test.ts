@@ -125,7 +125,44 @@ assert.deepEqual(funnel.needsOperator, [{
   vendorId: "e",
   vendorName: "Dallas Foam",
   reason: "The RFQ bounced, so the address needs replacing.",
+  questions: [],
 }]);
+
+// A thread stalled on a question an operator has to answer names the question,
+// so answering it does not start with a hunt through the mailbox.
+assert.deepEqual(
+  conversationFunnel([{
+    input: input({
+      vendorId: "f",
+      vendorName: "FlashPCB",
+      triageDecision: "NEEDS_HUMAN",
+      unansweredQuestions: ["What surface finish do you need?"],
+    }),
+    action: {
+      kind: "ESCALATE",
+      reason: "The reply asks something the stored request facts do not answer.",
+      questions: ["What surface finish do you need?"],
+    },
+  }]).needsOperator,
+  [{
+    vendorId: "f",
+    vendorName: "FlashPCB",
+    reason: "The reply asks something the stored request facts do not answer.",
+    questions: ["What surface finish do you need?"],
+  }],
+);
+// A funnel entry for a thread no pass planned an action for still carries what
+// the supplier asked, since the question is what the operator needs.
+assert.deepEqual(
+  conversationFunnel([{
+    input: input({
+      vendorId: "g",
+      triageDecision: "NEEDS_HUMAN",
+      unansweredQuestions: ["Can you share the panel size?"],
+    }),
+  }]).needsOperator[0].questions,
+  ["Can you share the panel size?"],
+);
 assert.deepEqual(funnel.quoteIncomplete, [{ vendorId: "d", vendorName: "Semipcb", missing: ["LEAD_TIME"] }]);
 assert.equal(
   conversationFunnel([{ input: input({ inboundKind: "BOUNCE", triageDecision: "NEEDS_HUMAN" }) }])

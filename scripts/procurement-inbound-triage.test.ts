@@ -30,6 +30,120 @@ function classification() {
     supplierInboundKind("Re: RFQ", "You have the wrong department, please contact our sales team."),
     "WRONG_RECIPIENT",
   );
+  // The loop re-sources or fades a wrong recipient by itself, so redirect
+  // wording an ordinary answer also carries must not classify as one: a shop
+  // pointing at its own sales desk while asking for the data pack is answered
+  // where it wrote from, not moved off its address or excluded.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Happy to quote. Please contact our sales team for the pricing sheet. Could you send the Gerbers?"),
+    "QUESTION",
+    "a redirect that does not send the request away from the recipient is an ordinary reply",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Please contact our engineering team with the placement file."),
+    "STATEMENT",
+    "a redirect naming a team and nothing else never fades a supplier",
+  );
+  // A redirect that does send the request away is worked: it either says so, or
+  // it names the address the RFQ belongs at.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Please contact our quoting desk instead."),
+    "WRONG_RECIPIENT",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Please write to rfq@shop.com for this one."),
+    "WRONG_RECIPIENT",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "I do not handle quoting. Thanks."),
+    "WRONG_RECIPIENT",
+  );
+  // A shop declining the work is not a shop saying the mail reached the wrong
+  // desk, so a capability refusal keeps the supplier where it is.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle orders below 500 units, so we must pass on this one."),
+    "STATEMENT",
+    "a capability refusal is not a wrong contact",
+  );
+  // Named with the word the loop reads as its own work, a threshold under it
+  // still makes it a refusal by the right desk, not a misdelivered mail.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle RFQs below 500 units."),
+    "STATEMENT",
+    "a quantity threshold is a capability refusal from the right contact",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle quoting under $5,000, sorry."),
+    "STATEMENT",
+    "a value threshold is a capability refusal from the right contact",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle RFQs for orders of this size."),
+    "STATEMENT",
+    "an order size qualifier is a capability refusal from the right contact",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle RFQs with quantities below 500 pieces."),
+    "STATEMENT",
+    "a quantity qualifier is a capability refusal from the right contact",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle quoting for aluminium housings."),
+    "STATEMENT",
+    "a material qualifier is a capability refusal from the right contact",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle procurement outside the EU."),
+    "STATEMENT",
+    "a geography qualifier is a capability refusal from the right contact",
+  );
+  // Mail wraps a qualifier onto its own line as readily as anything else, so a
+  // line break is not the end of the refusal.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle RFQs\nbelow 500 units, sorry."),
+    "STATEMENT",
+    "a qualifier wrapped onto the next line is still a capability refusal",
+  );
+  // The plain statement about the writer's own desk still moves the supplier.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "We do not handle RFQs here."),
+    "WRONG_RECIPIENT",
+    "a desk that does not handle RFQs at all is still a wrong contact",
+  );
+  for (const ending of ["myself", "personally", "in this office", "any more", "at all"]) {
+    assert.equal(
+      supplierInboundKind("Re: RFQ", `I do not handle RFQs ${ending}.`),
+      "WRONG_RECIPIENT",
+      `a definitive statement about the writer's own desk is a wrong contact: ${ending}`,
+    );
+  }
+  // A redirect naming the desk it belongs at is read on its own evidence, so a
+  // refusal that runs into the next line is not needed to move that supplier.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "I do not handle quoting.\nPlease write to rfq@shop.com instead."),
+    "WRONG_RECIPIENT",
+    "a refusal followed by a redirect is a wrong contact",
+  );
+  // A signature sits on its own line, so its address cannot be read as the
+  // address a redirect sentence names.
+  assert.equal(
+    supplierInboundKind(
+      "Re: RFQ",
+      "Please contact our billing team about the credit application\n\nDana Reyes\nsales@shop.com",
+    ),
+    "STATEMENT",
+    "an address in a signature does not turn a redirect into a wrong contact",
+  );
+  // A redirect that introduces its address with a colon still names it, even
+  // wrapped onto the next line, so that supplier is re-sourced there.
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "Please contact the following address:\nrfq@shop.com"),
+    "WRONG_RECIPIENT",
+  );
+  assert.equal(
+    supplierInboundKind("Re: RFQ", "I do not handle requests for quotation."),
+    "WRONG_RECIPIENT",
+  );
   assert.equal(supplierInboundKind("Re: RFQ", "What quantity do you need?"), "QUESTION");
   assert.equal(supplierInboundKind("Re: RFQ", "Thanks, we will review and revert."), "STATEMENT");
   assert.equal(supplierInboundKind("Delivery failure", "Address not found"), "BOUNCE");

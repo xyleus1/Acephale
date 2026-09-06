@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
+  conversationFailureIsCapacity,
   conversationTaskDue,
   nextConversationTaskState,
   type ConversationTaskAttempt,
@@ -22,6 +23,10 @@ export type ConversationTaskBacklog = {
   // pick up. The rest are waiting out a backoff after a failure.
   due: number;
   backingOff: number;
+  // Threads held only by sending capacity: the answer is ready and every
+  // mailbox was at its cap or paused when the pass ran. They stay due, so this
+  // says how much of the due work is waiting on mailboxes rather than on us.
+  queued: number;
   // Threads that have failed repeatedly without progress, reported by name
   // because a supplier stuck behind the same failure needs a person, and this
   // is the number that used to be invisible.
@@ -35,6 +40,7 @@ export const EMPTY_CONVERSATION_TASK_BACKLOG: ConversationTaskBacklog = {
   owed: 0,
   due: 0,
   backingOff: 0,
+  queued: 0,
   stuck: [],
 };
 
@@ -217,6 +223,7 @@ export async function conversationTaskBacklog(args: {
     owed: tasks.length,
     due: due.length,
     backingOff: tasks.length - due.length,
+    queued: tasks.filter((task) => conversationFailureIsCapacity(task.lastError)).length,
     stuck: tasks
       .filter((task) => task.attempts >= CONVERSATION_TASK_STUCK_ATTEMPTS)
       .slice(0, 20)

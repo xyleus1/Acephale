@@ -51,6 +51,7 @@
     "test:procurement-conversation-stage": "tsx scripts/procurement-conversation-stage.test.ts",
     "test:procurement-draft-currency": "tsx scripts/procurement-draft-currency.test.ts",
     "test:procurement-conversation-task": "tsx scripts/procurement-conversation-task.test.ts",
+    "test:procurement-wrong-contact": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-wrong-contact.test.ts",
     "test:procurement-supplier-quote-reading": "tsx scripts/procurement-supplier-quote-reading.test.ts",
     "test:procurement-campaign-class": "tsx scripts/procurement-campaign-class.test.ts",
     "test:procurement-order-status": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-order-status.test.ts",

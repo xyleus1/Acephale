@@ -53,6 +53,100 @@ export const BULK_RFQ_VENDOR_EMAIL_SQL = `COALESCE(
     to_jsonb(order_vendors)->'research'->'identity'->>'email'
   )`;
 
+// The addresses a wrong contact reply took off this supplier, oldest first, so
+// a send reserved before the recovery can still be attributed to the address it
+// actually went to.
+export const BULK_RFQ_VENDOR_RETIRED_EMAILS_SQL = `CASE
+    WHEN jsonb_typeof(to_jsonb(order_vendors)->'research'->'wrongContact'->'retired') = 'array'
+      THEN ARRAY(
+        SELECT jsonb_array_elements_text(to_jsonb(order_vendors)->'research'->'wrongContact'->'retired')
+      )
+    ELSE NULL
+  END`;
+
+// One send identity per supplier address, not per supplier. A supplier that
+// says "wrong contact" is re-sourced to another address on its own domain, and
+// keying the RFQ by the supplier alone would have kept that supplier out of
+// every later batch forever: the reservation of the address that turned us away
+// is RECORDED, so the replacement address would never be mailed. Keying by the
+// address keeps each send idempotent (the same address is never mailed twice)
+// while a new address is a new send.
+//
+// The vendor id stays last, because callers read it back off the key.
+export function bulkRfqIdempotencyKey(args: {
+  orderId: string;
+  vendorId: string;
+  contactEmail: string;
+}) {
+  return `procurement-bulk-rfq:${args.orderId}:${bulkRfqAddressHash(args.contactEmail)}:${args.vendorId}`;
+}
+
+export function bulkRfqAddressHash(contactEmail: string) {
+  return createHash("sha256")
+    .update(contactEmail.trim().toLowerCase())
+    .digest("hex")
+    .slice(0, 12);
+}
+
+// Keys written before addresses were part of the identity, which name the
+// supplier and nothing else. They still say the supplier was mailed, at
+// whatever address it held then.
+function bulkRfqKeyIsAddressless(key: string) {
+  return key.split(":").length < 4;
+}
+
+// The Message-ID of an RFQ, which is how a send is found again when the
+// provider left the outcome uncertain, and what the stored copy of the mail is
+// filed under. It carries the same address identity as the send key, so the
+// RFQ to a replacement address is its own message and its own thread instead of
+// being filed on, or reconciled against, the send to the address that turned us
+// away. An older send has no address in its key, so it keeps the id it was sent
+// with and stays reconcilable.
+export function bulkRfqRfcMessageId(args: {
+  orderId: string;
+  vendorId: string;
+  contactEmail?: string | null;
+  addressHash?: string | null;
+}) {
+  const address = args.addressHash
+    ?? (args.contactEmail ? bulkRfqAddressHash(args.contactEmail) : null);
+  const identity = address ? `${address}-${args.vendorId}` : args.vendorId;
+  return `<procurement-rfq-${args.orderId.slice(0, 8)}-${identity}@derya.ai>`;
+}
+
+// The supplier and the address a recorded send belongs to, read back off its
+// key so a reconciliation pass works from what was reserved rather than from
+// what the supplier row says now, which a wrong contact recovery may have moved.
+export function bulkRfqKeyIdentity(key: string) {
+  const parts = key.split(":");
+  return {
+    vendorId: parts.at(-1) ?? "",
+    addressHash: bulkRfqKeyIsAddressless(key) ? null : parts.at(-2) ?? null,
+  };
+}
+
+// Whether the request has already mailed this supplier at this address, decided
+// only from the send keys it holds, so the rule is the same for the preview,
+// the send and the tests.
+export function bulkRfqSupplierAlreadyMailed(args: {
+  orderId: string;
+  vendorId: string;
+  contactEmail: string;
+  // The address a wrong contact reply moved this supplier to, if any.
+  resourcedEmail?: string | null;
+  mailedKeys: readonly string[];
+}) {
+  const address = args.contactEmail.trim().toLowerCase();
+  const key = bulkRfqIdempotencyKey({ orderId: args.orderId, vendorId: args.vendorId, contactEmail: address });
+  if (args.mailedKeys.includes(key)) return true;
+  // An addressless key covers the address the supplier held when it was mailed,
+  // so it stops covering a supplier a wrong contact reply has since moved to a
+  // different address.
+  const resourced = args.resourcedEmail?.trim().toLowerCase() ?? "";
+  return resourced !== address
+    && args.mailedKeys.some((mailed) => bulkRfqKeyIsAddressless(mailed) && mailed.split(":").at(-1) === args.vendorId);
+}
+
 export type BulkRfqOrder = {
   orderId: string;
   customerId: string;
@@ -151,6 +245,8 @@ type VendorRow = {
   contactEmail: string | null;
   status: string;
   lastEmailMessageId: string | null;
+  // The address a wrong contact reply moved this supplier to, if any.
+  resourcedEmail: string | null;
 };
 
 function clean(value: string) {
@@ -337,7 +433,8 @@ export async function listUncontactedBulkRfqTargets(
       order_vendors.website AS "website",
       ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail",
       order_vendors.status AS "status",
-      order_vendors.last_email_message_id AS "lastEmailMessageId"
+      order_vendors.last_email_message_id AS "lastEmailMessageId",
+      to_jsonb(order_vendors)->'research'->'wrongContact'->>'contactEmail' AS "resourcedEmail"
     FROM order_vendors
     WHERE order_vendors.order_id = $1::uuid
       AND order_vendors.status IN ('researched', 'shortlisted', 'approved')
@@ -353,12 +450,19 @@ export async function listUncontactedBulkRfqTargets(
     },
     select: { idempotencyKey: true },
   });
-  const alreadyHandled = new Set(contacted.map((entry) => entry.idempotencyKey.split(":").at(-1)));
+  const mailedKeys = contacted.map((entry) => entry.idempotencyKey);
+  const mailedAlready = (row: VendorRow & { contactEmail: string }) => bulkRfqSupplierAlreadyMailed({
+    orderId: order.orderId,
+    vendorId: row.vendorId,
+    contactEmail: row.contactEmail,
+    resourcedEmail: row.resourcedEmail,
+    mailedKeys,
+  });
   return rows
     .filter((row): row is VendorRow & { contactEmail: string } => Boolean(row.contactEmail?.includes("@")))
     .filter((row) => !only || only.has(row.vendorId))
     .filter((row) => !excluded.has(row.vendorId.toLowerCase()))
-    .filter((row) => !alreadyHandled.has(row.vendorId))
+    .filter((row) => !mailedAlready(row))
     .map((row) => ({
       vendorId: row.vendorId,
       name: row.name,
@@ -432,6 +536,12 @@ async function recordSentRfq(args: {
   rfcMessageId: string;
   providerMessageId: string;
   providerThreadId: string;
+  // Whether this delivery is the supplier's current outreach. A send to an
+  // address a wrong contact reply has since retired is still recorded, so the
+  // thread and the reservation are settled, but it must not stamp the supplier
+  // row as contacted: that receipt is what holds the replacement address out of
+  // the next RFQ batch, and the supplier was never written to there.
+  markContacted?: boolean;
 }) {
   await prisma.$transaction(async (tx) => {
     const now = new Date();
@@ -492,7 +602,14 @@ async function recordSentRfq(args: {
       },
     });
   });
-  await markSupplierContacted(args.orderId, args.vendorId, args.rfcMessageId, args.providerThreadId);
+  if (args.markContacted === false) return;
+  await markSupplierContacted(
+    args.orderId,
+    args.vendorId,
+    args.rfcMessageId,
+    args.providerThreadId,
+    args.recipient,
+  );
 }
 
 // The workflow tables are owned by Bourne, so a restricted role can read but not always write them.
@@ -502,9 +619,10 @@ async function markSupplierContacted(
   vendorId: string,
   rfcMessageId: string,
   providerThreadId: string,
+  recipient: string,
 ) {
   try {
-    await workflowSupplierContactedUpdate(orderId, vendorId, rfcMessageId, providerThreadId);
+    await workflowSupplierContactedUpdate(orderId, vendorId, rfcMessageId, providerThreadId, recipient);
   } catch (error) {
     console.error("bulk rfq supplier write back failed", {
       orderId,
@@ -519,6 +637,7 @@ async function workflowSupplierContactedUpdate(
   vendorId: string,
   rfcMessageId: string,
   providerThreadId: string,
+  recipient: string,
 ) {
   await procurementWorkflowDatabase().$executeRawUnsafe(
     `
@@ -528,11 +647,17 @@ async function workflowSupplierContactedUpdate(
           email_thread_id = COALESCE(email_thread_id, $4)
       WHERE id = $2::uuid
         AND order_id = $1::uuid
+        -- The receipt belongs to the address the mail went to. A wrong contact
+        -- reply landing between the send and this write back moves the row to
+        -- another address, and stamping it contacted would hold that address
+        -- out of every later batch for mail it never received.
+        AND lower(trim(COALESCE(${BULK_RFQ_VENDOR_EMAIL_SQL}, ''))) = $5
     `,
     orderId,
     vendorId,
     rfcMessageId,
     providerThreadId,
+    recipient.trim().toLowerCase(),
   );
 }
 
@@ -572,8 +697,8 @@ export async function reconcileProcurementBulkRfq(input: {
   });
   const outcomes: Array<{ vendorId: string; state: "SENT" | "NOT_FOUND" | "UNKNOWN"; error: string | null }> = [];
   for (const reservation of pending) {
-    const vendorId = reservation.idempotencyKey.split(":").at(-1) ?? "";
-    const rfcMessageId = `<procurement-rfq-${order.orderId.slice(0, 8)}-${vendorId}@derya.ai>`;
+    const { vendorId, addressHash } = bulkRfqKeyIdentity(reservation.idempotencyKey);
+    const rfcMessageId = bulkRfqRfcMessageId({ orderId: order.orderId, vendorId, addressHash });
     const receipt = await provider.reconcile({
       officeId: order.officeId,
       accountId: reservation.accountId,
@@ -581,30 +706,64 @@ export async function reconcileProcurementBulkRfq(input: {
       rfcMessageId,
     });
     if (receipt.state === "SENT") {
-      const targets = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{ name: string; contactEmail: string | null }>>(`
-        SELECT order_vendors.name AS "name", ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail"
+      const targets = await procurementWorkflowDatabase().$queryRawUnsafe<Array<{
+        name: string;
+        contactEmail: string | null;
+        retiredEmails: string[] | null;
+      }>>(`
+        SELECT
+          order_vendors.name AS "name",
+          ${BULK_RFQ_VENDOR_EMAIL_SQL} AS "contactEmail",
+          ${BULK_RFQ_VENDOR_RETIRED_EMAILS_SQL} AS "retiredEmails"
         FROM order_vendors
         WHERE order_vendors.id = $1::uuid AND order_vendors.order_id = $2::uuid
       `, vendorId, order.orderId);
       const target = targets.at(0);
-      if (!target?.contactEmail) {
-        outcomes.push({ vendorId, state: "UNKNOWN", error: "The supplier recipient is missing." });
+      if (!target) {
+        outcomes.push({ vendorId, state: "UNKNOWN", error: "The supplier row was not found." });
+        continue;
+      }
+      // A wrong contact reply can move or fade the supplier while its first send
+      // is still uncertain, so the delivery is recorded against the address it
+      // was reserved for, found by the same hash the key carries among the
+      // addresses the row holds and the ones it retired, and never against
+      // whatever address the row happens to carry now. A faded supplier has no
+      // current address at all, and its send is still settled here.
+      // An older send names no address, so its recipient is the address the row
+      // held when it was reserved: the address it still holds while no wrong
+      // contact moved it, and otherwise the first address it retired, which is
+      // where that send went and is not the replacement it must not stamp.
+      const current = target.contactEmail?.trim().toLowerCase() ?? null;
+      const retired = (target.retiredEmails ?? [])
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email.includes("@"));
+      const known = [...(current ? [current] : []), ...retired];
+      const recipient = addressHash
+        ? known.find((email) => bulkRfqAddressHash(email) === addressHash)
+        : retired.at(0) ?? current ?? undefined;
+      if (!recipient) {
+        outcomes.push({
+          vendorId,
+          state: "UNKNOWN",
+          error: "The address this send was reserved for is no longer on the supplier.",
+        });
         continue;
       }
       await recordSentRfq({
+        markContacted: recipient === current,
         officeId: order.officeId,
         orderId: order.orderId,
         vendorId,
         accountId: reservation.accountId,
         reservationId: reservation.id,
         senderEmail: reservation.account.email,
-        recipient: target.contactEmail.trim().toLowerCase(),
+        recipient,
         subject: buildBulkRfqSubject(order),
         body: buildBulkRfqBody(order, {
           vendorId,
           name: target.name,
           website: null,
-          contactEmail: target.contactEmail.trim().toLowerCase(),
+          contactEmail: recipient,
         }, files),
         rfcMessageId,
         providerMessageId: receipt.providerMessageId,
@@ -747,7 +906,11 @@ export async function runProcurementBulkRfq(input: {
     const hash = requestHash({ orderId: order.orderId, vendorId: target.vendorId, recipient: target.contactEmail, subject, body });
     const reservation = await (input.reserveSender ?? reserveEmailSender)({
       officeId: order.officeId,
-      idempotencyKey: `procurement-bulk-rfq:${order.orderId}:${target.vendorId}`,
+      idempotencyKey: bulkRfqIdempotencyKey({
+        orderId: order.orderId,
+        vendorId: target.vendorId,
+        contactEmail: target.contactEmail,
+      }),
       requestHash: hash,
     });
     if (!("ok" in reservation)) {
@@ -803,7 +966,11 @@ export async function runProcurementBulkRfq(input: {
       continue;
     }
 
-    const rfcMessageId = `<procurement-rfq-${order.orderId.slice(0, 8)}-${target.vendorId}@derya.ai>`;
+    const rfcMessageId = bulkRfqRfcMessageId({
+      orderId: order.orderId,
+      vendorId: target.vendorId,
+      contactEmail: target.contactEmail,
+    });
     const receipt = await provider.send({
       officeId: order.officeId,
       accountId: reservation.accountId,

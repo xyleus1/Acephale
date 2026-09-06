@@ -134,8 +134,13 @@ const route = readFileSync(resolve(root, "src/app/api/admin/procurement-supplier
 
 assert.match(
   module,
-  /procurement-rfq-nudge:\$\{args\.orderId\}:\$\{args\.round\}:\$\{args\.vendorId\}/,
-  "One reservation key per order, vendor, and round is what stops a repeat run from mailing twice.",
+  /procurement-rfq-nudge:\$\{args\.orderId\}:\$\{args\.round\}:\$\{identity\}/,
+  "One reservation key per order, vendor, round and address is what stops a repeat run from mailing twice.",
+);
+assert.match(
+  module,
+  /contactEmail: target\.recipient,\s*\}\);\s*if \(!await nudgeStillEligible/,
+  "A follow up's reservation names the address it is being sent to.",
 );
 assert.match(
   module,
@@ -266,8 +271,13 @@ assert.match(
 const autopilot = readFileSync(resolve(root, "src/lib/procurement-autopilot.ts"), "utf8");
 assert.match(
   autopilot,
-  /failed: \(sendRun\?\.failed \?\? 0\)\s*\+ \(nudgeRun\?\.failed \?\? 0\)/,
-  "Failed follow ups count toward the autopilot failure total.",
+  /nudge: nudgeRun\?\.outcomes,/,
+  "A failed follow up is named among the failures of the pass.",
+);
+assert.match(
+  autopilot,
+  /failed: failures\.length,/,
+  "Failed follow ups count toward the autopilot failure total, which is the failures it names.",
 );
 
 // An unknown delivery must not park a supplier forever: every run settles the
@@ -290,8 +300,27 @@ assert.match(
 );
 assert.match(
   module,
-  /nudgeRfcMessageId\(\{ orderId: order\.orderId, vendorId, round \}\)/,
-  "Reconcile asks the provider about the exact message the round would have sent.",
+  /nudgeRfcMessageId\(\{ orderId: order\.orderId, vendorId, round, addressHash \}\)/,
+  "Reconcile asks the provider about the exact message the round sent to that address.",
+);
+// A follow up left uncertain has to be settled on the thread it actually rode.
+// A supplier re-sourced after a wrong contact has one RFQ thread per address, so
+// picking the newest one would have filed the old delivery on the replacement
+// conversation and shown the supplier an outbound message it never received.
+assert.match(
+  module,
+  /idempotencyKey: `procurement-bulk-rfq:\$\{order\.orderId\}:\$\{addressHash\}:\$\{vendorId\}`/,
+  "A reserved follow up is settled on the RFQ thread of the address it was sent to.",
+);
+assert.match(
+  module,
+  /orderBy: \{ createdAt: "asc" \},\s*select: \{ localThreadId: true \}/,
+  "An older addressless follow up predates re-sourcing, so it belongs to the first RFQ thread.",
+);
+assert.match(
+  module,
+  /const recipient = addressHash\s*\? known\.find\(\(email\) => bulkRfqAddressHash\(email\) === addressHash\)\s*: retired\.at\(0\) \?\? current \?\? undefined;/,
+  "A settled follow up names the address it was reserved for, retired or not.",
 );
 
 // Eligibility is re-read immediately before each send, so a request cancelled

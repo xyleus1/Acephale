@@ -43,6 +43,12 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const orderId = req.nextUrl.searchParams.get("orderId")?.trim() ?? "";
   if (!orderId) return NextResponse.json({ error: "orderId is required." }, { status: 400 });
+  // A supplier question is often longer than a preview, and answering it means
+  // reading all of it, so an operator can ask for more of the body.
+  const requestedChars = Number.parseInt(req.nextUrl.searchParams.get("chars") ?? "", 10);
+  const previewChars = Number.isFinite(requestedChars)
+    ? Math.min(Math.max(requestedChars, 400), 6000)
+    : 400;
   try {
     const order = await loadBulkRfqOrder(orderId);
     if (!order) return NextResponse.json({ error: "The sourcing request was not found." }, { status: 404 });
@@ -72,7 +78,7 @@ export async function GET(req: NextRequest) {
         subject: message.subject ?? "",
         kind: replyKind(message.subject ?? "", message.bodyText ?? ""),
         receivedAt: message.sentAt,
-        preview: (message.bodyText ?? "").replace(/\s+/g, " ").trim().slice(0, 400),
+        preview: (message.bodyText ?? "").replace(/\s+/g, " ").trim().slice(0, previewChars),
       })));
     const counts = inbound.reduce<Record<string, number>>((totals, entry) => {
       totals[entry.kind] = (totals[entry.kind] ?? 0) + 1;
