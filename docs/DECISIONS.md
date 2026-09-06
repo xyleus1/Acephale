@@ -5596,3 +5596,9 @@ Context prospecting persists only entity-qualified targets: deterministic non-co
 - Scheduled autopilot sends follow ups unattended and stops them at the campaign
   quote goal; answers to replies never stop; commercial questions still
   escalate.
+
+## 2026-09-06: Context prospecting post-batch cleanup
+
+- Post-batch cleanup auto-deletes only deterministic findings (duplicates,
+  rule-based non-companies); model or score based deletions stay behind a Run
+  card.

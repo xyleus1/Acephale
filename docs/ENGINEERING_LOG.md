@@ -10902,6 +10902,11 @@ Use this file for chronological implementation notes that future agents should s
 - Approval now accepts paused campaigns, preserving compare-and-set revision
   protection while resuming them to active.
 
+## 2026-09-06: Context prospecting post-batch cleanup
+
+- Added resilient per-batch cleanup counters to prospecting jobs and the Lead
+  status report, with deterministic deletion and approval-gated review cards.
+
 ## 2026-09-06: Outreach personalization review hardening
 
 - Intro grounding now uses a centralized token whitelist, campaign pitch, and

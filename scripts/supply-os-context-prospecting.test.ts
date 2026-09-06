@@ -19,6 +19,7 @@ import {
   candidateRows,
   createCompanyContextProspectingActions,
   dismissCompanyContextProspectingAction,
+  effectiveRowsCreated,
   groupProspectingResearchRows,
   leadSourceLabel,
   hideCompanyContextProspectingAction,
@@ -103,6 +104,38 @@ assert.equal(shouldContinueProspectingInBackground({
   ...backgroundAction,
   stats: { ...backgroundAction.stats, rowsCreated: draft.rowTarget },
 }, { now: backgroundNow }), false);
+const cleanupProgressStats = {
+  ...backgroundAction.stats,
+  rowsCreated: draft.rowTarget,
+  cleanup: {
+    deletedDuplicates: 10,
+    deletedNonCompanies: 0,
+    protectedRows: 0,
+    listRows: draft.rowTarget - 10,
+    screened: 0,
+    enriched: 0,
+    flaggedForReview: 0,
+    flaggedCardCreated: false,
+    errors: [],
+  },
+};
+assert.equal(effectiveRowsCreated(cleanupProgressStats), draft.rowTarget - 10);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  stats: cleanupProgressStats,
+}, { now: backgroundNow }), true);
+assert.equal(effectiveRowsCreated({
+  ...cleanupProgressStats,
+  cleanup: { ...cleanupProgressStats.cleanup, listRows: draft.rowTarget + 10 },
+}), draft.rowTarget);
+assert.equal(shouldContinueProspectingInBackground({
+  ...backgroundAction,
+  stats: { ...cleanupProgressStats, cleanup: { ...cleanupProgressStats.cleanup, listRows: draft.rowTarget + 10 } },
+}, { now: backgroundNow }), false);
+assert.equal(effectiveRowsCreated({
+  ...cleanupProgressStats,
+  cleanup: { ...cleanupProgressStats.cleanup, listRows: null },
+}), draft.rowTarget);
 assert.equal(shouldContinueProspectingInBackground(backgroundAction, { now: backgroundNow }), true);
 assert.equal(shouldContinueProspectingInBackground({
   ...backgroundAction,
@@ -1372,6 +1405,7 @@ async function main() {
       autoContinue: true,
       exhausted: false,
       workspaceId: workspace.id,
+      draft: { ...lifecycleDraft, cleanupPolicy: "off" },
       stats: { ...backgroundAction.stats, rowsCreated: lifecycleDraft.rowTarget },
     }, "COMPLETED");
     const targetCompleted = await runCompanyContextProspectingAction({

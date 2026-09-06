@@ -52,6 +52,9 @@ import type { VerifyOptions } from "@/lib/leadgen/verify";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
 import { lockCompanyContextAction, type CompanyContextCitation } from "@/lib/company-context";
 import { QUERY_PLAN_VERSION } from "@/lib/leadgen/query-plan";
+import { runPostBatchCleanup, type PostBatchCleanup } from "@/lib/supply-os/context-research-ops";
+import { effectiveRowsCreated } from "@/lib/supply-os/context-prospecting-progress";
+export { effectiveRowsCreated };
 import {
   EMPTY_PAID_USAGE,
   PROSPECTING_PAID_BUDGET,
@@ -68,6 +71,7 @@ const MAX_ACTION_SCAN_ROWS = 500;
 const ACTION_TYPE = "PROSPECTING";
 const MAX_BACKGROUND_ATTEMPTS = 3;
 const BACKGROUND_SCAN_CAP = 500;
+const CLEANUP_GRACE_MS = 40_000;
 const LOST_CLAIM_MESSAGE = "This prospecting run is already in progress. Retry shortly.";
 /** Matches the leadgen persist default: only tier A/B candidates reach the list. */
 export { PROSPECTING_MIN_FIT_SCORE } from "@/lib/supply-os/context-prospecting-constants";
@@ -113,7 +117,7 @@ export function leadSourceLabel(
 
 type ProspectingStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
 
-type ProspectingStats = {
+export type ProspectingStats = {
   queriesUsed: number;
   pagesFetched: number;
   candidatesFound: number;
@@ -127,6 +131,7 @@ type ProspectingStats = {
   };
   /** Paid enrichment and verification calls made so far, across all batches of the run. */
   paidUsage: ProspectingPaidUsage;
+  cleanup?: PostBatchCleanup;
 };
 
 export type StoredProspectingAction = {
@@ -178,7 +183,8 @@ export function normalizeProspectingDraft(value: unknown): ProspectingDraft | nu
     ? Math.min(5_000, Math.max(50, Math.floor(input.rowTarget)))
     : 500;
   if (!objective || !segments.length || !regions.length || !productFocus || !listSlug) return null;
-  return { objective, segments, regions, productFocus, projectName, listSlug, notes, rowTarget };
+  const cleanupPolicy = input.cleanupPolicy === "off" ? "off" : "auto";
+  return { objective, segments, regions, productFocus, projectName, listSlug, notes, rowTarget, cleanupPolicy };
 }
 
 export function briefFromProspectingDraft(draft: ProspectingDraft): QualificationBrief {
@@ -234,6 +240,9 @@ function decodeAction(payload: unknown) {
   const rejectedValue = qualificationValue.rejected && typeof qualificationValue.rejected === "object" && !Array.isArray(qualificationValue.rejected)
     ? qualificationValue.rejected as Record<string, unknown>
     : {};
+  const cleanupValue = statsValue.cleanup && typeof statsValue.cleanup === "object" && !Array.isArray(statsValue.cleanup)
+    ? statsValue.cleanup as Record<string, unknown>
+    : {};
   const citations = Array.isArray(value.citations) ? value.citations.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
     const citation = entry as Record<string, unknown>;
@@ -280,6 +289,21 @@ function decodeAction(payload: unknown) {
         enrichmentCalls: number(paidUsageValue.enrichmentCalls),
         enrichmentBillable: number(paidUsageValue.enrichmentBillable),
         verificationCalls: number(paidUsageValue.verificationCalls),
+      },
+      cleanup: {
+        deletedDuplicates: number(cleanupValue.deletedDuplicates),
+        deletedNonCompanies: number(cleanupValue.deletedNonCompanies),
+        protectedRows: number(cleanupValue.protectedRows),
+        listRows: typeof cleanupValue.listRows === "number" && Number.isFinite(cleanupValue.listRows)
+          ? number(cleanupValue.listRows)
+          : null,
+        screened: number(cleanupValue.screened),
+        enriched: number(cleanupValue.enriched),
+        flaggedForReview: number(cleanupValue.flaggedForReview),
+        flaggedCardCreated: cleanupValue.flaggedCardCreated === true,
+        errors: Array.isArray(cleanupValue.errors)
+          ? cleanupValue.errors.filter((item): item is string => typeof item === "string").slice(-20)
+          : [],
       },
     },
     planVersion: number(value.planVersion),
@@ -353,7 +377,7 @@ export async function createCompanyContextProspectingActions(args: {
     schemaVersion: 1 as const,
     type: ACTION_TYPE,
     status: "PENDING" as const,
-    draft: item.draft,
+    draft: { ...item.draft, cleanupPolicy: item.draft.cleanupPolicy ?? "auto" },
     citations: item.citations.slice(0, 20),
     requestMessageId: args.requestMessageId,
     requestBody: args.requestBody.slice(0, 4_000),
@@ -369,6 +393,16 @@ export async function createCompanyContextProspectingActions(args: {
       rowsUpdated: 0,
       qualification: { evaluated: 0, accepted: 0, rejected: {}, fallback: 0 },
       paidUsage: { ...EMPTY_PAID_USAGE },
+      cleanup: {
+        deletedDuplicates: 0,
+        deletedNonCompanies: 0,
+        protectedRows: 0,
+        screened: 0,
+        enriched: 0,
+        flaggedForReview: 0,
+        flaggedCardCreated: false,
+        errors: [],
+      },
     },
     planVersion: QUERY_PLAN_VERSION,
     nextQueryOffset: 0,
@@ -640,6 +674,7 @@ async function persistCandidates(
   ]);
   let created = 0;
   let updated = 0;
+  const recordIds = new Set<string>();
   const persistedRecordIndexes = new Set<number>();
   for (const [field, allRows] of groups) {
     // Rows written before company-keyed dedupe carry an email-derived (or no)
@@ -670,6 +705,7 @@ async function persistCandidates(
       });
       created += result.created;
       updated += result.updated;
+      result.recordIds.forEach((id) => recordIds.add(id));
       const errors = new Set((result.errorRows ?? result.errors).map((error) => error.row));
       for (const input of rows.slice(index, index + RESEARCH_MAX_ROWS)) {
         const sourceRow = "sourceRow" in input && typeof input.sourceRow === "number" ? input.sourceRow : 0;
@@ -681,6 +717,7 @@ async function persistCandidates(
     created,
     updated,
     contactsCreated: 0,
+    recordIds: [...recordIds],
     persistedRecordIndexes,
     skipped: records.length - persistedRecordIndexes.size,
   };
@@ -856,6 +893,34 @@ async function executeProspectingAction(args: {
       { deadlineAt: startedAt + batchBudgetMs },
     );
     const persisted = await persistCandidates(args.context.officeId, draft.listSlug, result.candidates, qualification);
+    const previousCleanup = args.action.stats.cleanup ?? {
+      deletedDuplicates: 0,
+      deletedNonCompanies: 0,
+      protectedRows: 0,
+      listRows: null,
+      screened: 0,
+      enriched: 0,
+      flaggedForReview: 0,
+      flaggedCardCreated: false,
+      errors: [],
+    };
+    const cleanup = draft.cleanupPolicy === "off"
+      ? previousCleanup
+      : await runPostBatchCleanup({
+          officeId: args.context.officeId,
+          listId: list.id,
+          listSlug: list.slug,
+          context: args.context,
+          workspaceId: args.workspaceId,
+          companyId: args.workspace.companyId,
+          projectId: list.projectId ?? null,
+          projectName: draft.projectName,
+          newRecordIds: persisted.recordIds,
+          createdByUserId: "userId" in args.context ? args.context.userId : null,
+          brief: briefFromProspectingDraft(draft),
+          profile,
+          deadlineAt: startedAt + batchBudgetMs + CLEANUP_GRACE_MS,
+        });
     const currentRow = await prisma.companyContext.findFirst({
       where: {
         id: args.action.id,
@@ -872,20 +937,35 @@ async function executeProspectingAction(args: {
       && typeof (currentRow.payload as Record<string, unknown>).autoContinue === "boolean"
       ? (currentRow.payload as Record<string, unknown>).autoContinue as boolean
       : args.action.autoContinue;
+    const cumulativeCleanup = draft.cleanupPolicy === "off"
+      ? previousCleanup
+      : {
+          deletedDuplicates: previousCleanup.deletedDuplicates + cleanup.deletedDuplicates,
+          deletedNonCompanies: previousCleanup.deletedNonCompanies + cleanup.deletedNonCompanies,
+          protectedRows: previousCleanup.protectedRows + cleanup.protectedRows,
+          listRows: cleanup.listRows,
+          screened: previousCleanup.screened + cleanup.screened,
+          enriched: previousCleanup.enriched + cleanup.enriched,
+          flaggedForReview: previousCleanup.flaggedForReview + cleanup.flaggedForReview,
+          flaggedCardCreated: previousCleanup.flaggedCardCreated || cleanup.flaggedCardCreated,
+          errors: [...new Set([...previousCleanup.errors, ...cleanup.errors].reverse())].reverse().slice(-20),
+        };
+    const completedStats = {
+      queriesUsed: args.action.stats.queriesUsed + result.stats.queriesUsed,
+      pagesFetched: args.action.stats.pagesFetched + result.stats.pagesFetched,
+      candidatesFound: args.action.stats.candidatesFound + result.stats.candidatesFound,
+      rowsCreated: args.action.stats.rowsCreated + persisted.created,
+      rowsUpdated: args.action.stats.rowsUpdated + persisted.updated,
+      qualification: mergeQualificationStats(args.action.stats.qualification, qualificationInputsForBatch, qualification),
+      paidUsage: addPaidUsage(args.action.stats.paidUsage, result.stats),
+      cleanup: cumulativeCleanup,
+    };
     const completed: StoredProspectingAction = {
       ...args.action,
       draft,
       status: "COMPLETED",
       runningStartedAt: null,
-      stats: {
-        queriesUsed: args.action.stats.queriesUsed + result.stats.queriesUsed,
-        pagesFetched: args.action.stats.pagesFetched + result.stats.pagesFetched,
-        candidatesFound: args.action.stats.candidatesFound + result.stats.candidatesFound,
-        rowsCreated: args.action.stats.rowsCreated + persisted.created,
-        rowsUpdated: args.action.stats.rowsUpdated + persisted.updated,
-        qualification: mergeQualificationStats(args.action.stats.qualification, qualificationInputsForBatch, qualification),
-        paidUsage: addPaidUsage(args.action.stats.paidUsage, result.stats),
-      },
+      stats: completedStats,
       planVersion: QUERY_PLAN_VERSION,
       nextQueryOffset: result.nextQueryOffset,
       exhausted: result.exhausted,
@@ -895,7 +975,7 @@ async function executeProspectingAction(args: {
         ? args.action.lastBackgroundRunAt
         : new Date(args.backgroundNow).toISOString(),
       autoContinue: result.exhausted ||
-        args.action.stats.rowsCreated + persisted.created >= draft.rowTarget
+        effectiveRowsCreated(completedStats) >= draft.rowTarget
         ? false
         : currentAutoContinue,
     };
@@ -1010,7 +1090,7 @@ export function shouldContinueProspectingInBackground(
   action: StoredProspectingAction,
   options: { now: number; maxAttempts?: number },
 ) {
-  if (!action.autoContinue || action.exhausted || action.stats.rowsCreated >= action.draft.rowTarget) return false;
+  if (!action.autoContinue || action.exhausted || effectiveRowsCreated(action.stats) >= action.draft.rowTarget) return false;
   if (action.status === "COMPLETED") return true;
   if (action.status === "FAILED") {
     const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 3));

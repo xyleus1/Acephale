@@ -20,6 +20,12 @@ export type LeadPipelineReport = {
     lastBatchAt: string | null;
     rejectedBeforePersist: number;
     pendingOperations: number;
+    cleanup: {
+      deletedDuplicates: number;
+      deletedNonCompanies: number;
+      screened: number;
+      enriched: number;
+    } | null;
   };
   funnel: {
     found: number;
@@ -89,6 +95,13 @@ export type PipelineJob = {
   lastBackgroundRunAt: string | null;
   updatedAt: string;
   rejectedBeforePersist: number;
+  cleanup: {
+    deletedDuplicates: number;
+    deletedNonCompanies: number;
+    protectedRows: number;
+    screened: number;
+    enriched: number;
+  };
 };
 
 export type PipelineReply = {
@@ -328,6 +341,12 @@ export function derivePipeline(
   const actionInput = details.actionInput ?? {
     purgeable: { duplicate: 0, non_company: 0, not_target: 0, below_floor: 0 },
   };
+  const cleanupTotals = activeStateJobs.reduce((total, job) => ({
+    deletedDuplicates: total.deletedDuplicates + (job.cleanup?.deletedDuplicates ?? 0),
+    deletedNonCompanies: total.deletedNonCompanies + (job.cleanup?.deletedNonCompanies ?? 0),
+    screened: total.screened + (job.cleanup?.screened ?? 0),
+    enriched: total.enriched + (job.cleanup?.enriched ?? 0),
+  }), { deletedDuplicates: 0, deletedNonCompanies: 0, screened: 0, enriched: 0 });
   return {
     live: {
       activeJobs,
@@ -337,6 +356,7 @@ export function derivePipeline(
       lastBatchAt: dates[0] ?? null,
       rejectedBeforePersist: activeStateJobs.reduce((total, job) => total + job.rejectedBeforePersist, 0),
       pendingOperations: 0,
+      cleanup: Object.values(cleanupTotals).some((value) => value > 0) ? cleanupTotals : null,
     },
     funnel,
     stages,
@@ -387,6 +407,9 @@ function decodeJob(payload: Prisma.JsonValue | null, updatedAt: Date): PipelineJ
   const qualification = stats.qualification && typeof stats.qualification === "object" && !Array.isArray(stats.qualification)
     ? stats.qualification as Record<string, unknown>
     : {};
+  const cleanup = stats.cleanup && typeof stats.cleanup === "object" && !Array.isArray(stats.cleanup)
+    ? stats.cleanup as Record<string, unknown>
+    : {};
   if (value.type !== "PROSPECTING") return null;
   const status = text(value.status);
   if (!["PENDING", "RUNNING", "COMPLETED", "FAILED", "DISMISSED"].includes(status)) return null;
@@ -402,6 +425,13 @@ function decodeJob(payload: Prisma.JsonValue | null, updatedAt: Date): PipelineJ
       (total, current) => total + (typeof current === "number" && Number.isFinite(current) ? current : 0),
       0,
     ),
+    cleanup: {
+      deletedDuplicates: typeof cleanup.deletedDuplicates === "number" && Number.isFinite(cleanup.deletedDuplicates) ? cleanup.deletedDuplicates : 0,
+      deletedNonCompanies: typeof cleanup.deletedNonCompanies === "number" && Number.isFinite(cleanup.deletedNonCompanies) ? cleanup.deletedNonCompanies : 0,
+      protectedRows: typeof cleanup.protectedRows === "number" && Number.isFinite(cleanup.protectedRows) ? cleanup.protectedRows : 0,
+      screened: typeof cleanup.screened === "number" && Number.isFinite(cleanup.screened) ? cleanup.screened : 0,
+      enriched: typeof cleanup.enriched === "number" && Number.isFinite(cleanup.enriched) ? cleanup.enriched : 0,
+    },
   };
 }
 
@@ -546,6 +576,8 @@ export async function buildLeadPipelineReport(args: {
   const operationSummary = selectPipelineOperations(allOperations);
   const purgeable = selectPurgeRows(rows.map((row) => ({
     ...row,
+    officeId: args.officeId,
+    listId: "",
     sourceRefs: null,
     status: "new",
     createdAt: new Date(),

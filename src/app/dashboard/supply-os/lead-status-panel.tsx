@@ -141,12 +141,24 @@ export function LeadStatusPanel({
   const totalPurgeable = report ? Object.values(report.actions.purgeable).reduce((sum, value) => sum + value, 0) : 0;
   const emptyActive = Boolean(report && report.funnel.found === 0 && report.live.activeJobs > 0);
   const researchIdle = Boolean(report && report.live.activeJobs === 0 && report.live.pausedJobs === 0);
+  const cleanupLine = report?.live.cleanup ? (() => {
+    const removed = [
+      report.live.cleanup.deletedDuplicates ? `${report.live.cleanup.deletedDuplicates.toLocaleString()} duplicates` : "",
+      report.live.cleanup.deletedNonCompanies ? `${report.live.cleanup.deletedNonCompanies.toLocaleString()} non-companies` : "",
+    ].filter(Boolean).join(" and ");
+    return [
+      removed ? `removed ${removed}` : "",
+      report.live.cleanup.screened ? `screened ${report.live.cleanup.screened.toLocaleString()}` : "",
+      report.live.cleanup.enriched ? `found contacts for ${report.live.cleanup.enriched.toLocaleString()}` : "",
+    ].filter(Boolean).join(", ");
+  })() : "";
   const liveLines = report ? [
     report.live.activeJobs > 0
       ? <>Research running: <b>{report.funnel.found.toLocaleString()}</b> of <b>{report.live.target?.toLocaleString() ?? report.funnel.found.toLocaleString()}</b> rows, last batch <b>{timeAgo(report.live.lastBatchAt)}</b></>
       : report.live.pausedJobs > 0 ? <>Paused: <b>{report.live.pausedJobs}</b> jobs</> : null,
     !emptyActive && report.live.rejectedBeforePersist > 0 ? <>{report.live.rejectedBeforePersist.toLocaleString()} candidates screened out before the list</> : null,
     !emptyActive && report.live.pendingOperations > 0 ? <>{report.live.pendingOperations} operation{report.live.pendingOperations === 1 ? "" : "s"} waiting for approval</> : null,
+    cleanupLine ? <>Cleanup {cleanupLine}.</> : null,
   ].filter((line) => line !== null) : [];
 
   return <section className={styles.leadStatusPanel} aria-label="Lead status">

@@ -5,6 +5,7 @@ import {
   normalizeResearchOperation,
   operationFromRow,
   orderRequalificationRows,
+  partitionCleanupRows,
   remainingRequalificationRows,
   rowsCreatedAfterPurge,
   renderResearchAudit,
@@ -16,6 +17,8 @@ import {
 
 const row = (id: string, data: Record<string, unknown>, createdAt = new Date(`2025-01-${String(Number(id) + 1).padStart(2, "0")}T00:00:00.000Z`)) => ({
   id,
+  officeId: "office",
+  listId: "list",
   data,
   sourceRefs: null,
   status: "new",
@@ -92,6 +95,32 @@ assert.equal(audit.duplicates.length, 1);
 assert.equal(audit.duplicates[0]?.keepId, "2");
 assert.ok(audit.nameArtifacts >= 1);
 const selectedPurgeRows = selectPurgeRows(rows);
+const splitRows = [
+  row("split-keep", { company_name: "Company A", website: "https://split.example", fit_score: 80, fit_verdict: "target" }),
+  row("split-duplicate", { company_name: "Company B", website: "https://split.example", fit_score: 80, fit_verdict: "target" }),
+  row("split-non-company", { company_name: "TradeIndia", website: "https://tradeindia.com", fit_score: 80, fit_verdict: "target" }),
+  row("split-not-target", { company_name: "Company C", website: "https://c.example", fit_score: 80, fit_verdict: "not_target" }),
+  row("split-below-floor", { company_name: "Company D", website: "https://d.example", fit_score: 40, fit_verdict: "target" }),
+];
+const splitSelection = selectPurgeRows(splitRows);
+assert.deepEqual(
+  new Set(splitSelection.filter((entry) => entry.reason === "duplicate" || entry.reason === "non_company").map((entry) => entry.reason)),
+  new Set(["duplicate", "non_company"]),
+);
+assert.deepEqual(
+  new Set(splitSelection.filter((entry) => entry.reason === "not_target" || entry.reason === "below_floor").map((entry) => entry.reason)),
+  new Set(["not_target", "below_floor"]),
+);
+const protectedPartition = partitionCleanupRows(splitSelection, new Set(["split-keep"]));
+assert.deepEqual(protectedPartition.protected.map((entry) => entry.id), ["split-keep"]);
+assert.deepEqual(
+  new Set(protectedPartition.deterministic.map((entry) => entry.reason)),
+  new Set(["non_company"]),
+);
+assert.deepEqual(
+  new Set(protectedPartition.flagged.map((entry) => entry.reason)),
+  new Set(["not_target", "below_floor"]),
+);
 const approvedPurge = intersectApprovedPurge(selectedPurgeRows, [selectedPurgeRows[0]!.id, "added-after-preview"]);
 assert.deepEqual(approvedPurge.rows, [selectedPurgeRows[0]]);
 assert.equal(approvedPurge.skipped, selectedPurgeRows.length);

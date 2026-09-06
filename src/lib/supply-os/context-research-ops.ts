@@ -2,8 +2,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { registrableDomain, htmlToText } from "@/lib/leadgen/extract";
 import { profileFromProspectingDraft } from "@/lib/leadgen/run";
-import { classifyByRule, cleanCompanyName, qualifyCandidates, createOpenAiQualifier, type QualificationInput } from "@/lib/leadgen/qualify";
+import { classifyByRule, cleanCompanyName, qualifyCandidates, createOpenAiQualifier, type QualificationBrief, type QualificationInput } from "@/lib/leadgen/qualify";
 import { defaultFetcher, harvestSite } from "@/lib/leadgen/harvest";
+import { effectiveRowsCreated } from "@/lib/supply-os/context-prospecting-progress";
 import type { ContextProspectingAction } from "@/lib/supply-os/context-prospecting";
 import type { CompanyContextAccess } from "@/lib/customer-context-access";
 import { PROSPECTING_MIN_FIT_SCORE } from "@/lib/supply-os/context-prospecting-constants";
@@ -14,6 +15,7 @@ const serverModules = async () => ({
   prospecting: await import("@/lib/supply-os/context-prospecting"),
   access: await import("@/lib/customer-context-access"),
   persistence: await import("@/lib/supply-os/persistence"),
+  researchLists: await import("@/lib/research-lists"),
 });
 
 export type ResearchOperationKind = "status" | "audit" | "pause" | "resume" | "purge" | "expand_regions" | "requalify" | "enrich";
@@ -50,8 +52,10 @@ export type StoredResearchOperation = {
 };
 
 export type ContextResearchOperation = StoredResearchOperation & { id: string; createdAt: Date; stale: boolean };
-type ResearchRow = {
+export type ResearchRow = {
   id: string;
+  officeId: string;
+  listId: string;
   data: ResearchRecordData;
   sourceRefs: Prisma.JsonValue | null;
   status: string;
@@ -107,7 +111,7 @@ async function loadRows(officeId: string, listId: string): Promise<ResearchRow[]
   while (true) {
     const page = await prisma.researchRecord.findMany({
       where: { officeId, listId },
-      select: { id: true, data: true, sourceRefs: true, status: true, createdAt: true },
+      select: { id: true, officeId: true, listId: true, data: true, sourceRefs: true, status: true, createdAt: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: 500,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -270,6 +274,161 @@ export function selectPurgeRows(rows: ResearchRow[]) {
   return [...reasons.entries()].map(([id, reason]) => ({ id, reason }));
 }
 
+export function partitionCleanupRows(
+  selected: ReturnType<typeof selectPurgeRows>,
+  protectedIds: ReadonlySet<string>,
+) {
+  const deterministicReasons = new Set<PurgeReason>(["duplicate", "non_company"]);
+  return {
+    deterministic: selected.filter((row) => deterministicReasons.has(row.reason) && !protectedIds.has(row.id)),
+    protected: selected.filter((row) => deterministicReasons.has(row.reason) && protectedIds.has(row.id)),
+    flagged: selected.filter((row) => row.reason === "not_target" || row.reason === "below_floor"),
+  };
+}
+
+export type ResearchScreeningCounts = {
+  target: number;
+  notTarget: number;
+  unverified: number;
+};
+
+export async function screenResearchRows(
+  rows: ResearchRow[],
+  limit: number,
+  brief?: QualificationBrief,
+  deadlineAt?: number,
+): Promise<ResearchScreeningCounts> {
+  const selected = orderRequalificationRows(rows, false).slice(0, Math.max(0, limit));
+  const qualificationBrief = brief ?? {
+    objective: "Research company fit",
+    segments: [],
+    regions: [],
+    productFocus: "company research",
+    notes: "",
+  };
+  const inputs: QualificationInput[] = [];
+  const screenedRows: ResearchRow[] = [];
+  const effectiveDeadline = deadlineAt ?? Date.now() + 200_000;
+  const { researchLists } = await serverModules();
+  for (const row of selected) {
+    if (Date.now() > effectiveDeadline - 10_000) break;
+    let pageExcerpt = "";
+    if (row.data.website) {
+      const page = await defaultFetcher(String(row.data.website));
+      pageExcerpt = page?.body ? htmlToText(page.body).replace(/\s+/g, " ").slice(0, 2_000) : "";
+    }
+    inputs.push({
+      id: row.id,
+      companyName: String(row.data.company_name ?? ""),
+      domain: rowDomain(row.data),
+      website: String(row.data.website ?? ""),
+      country: String(row.data.country ?? "") || null,
+      pageExcerpt,
+      evidenceUrls: rowEvidenceUrls(row.data, row.sourceRefs),
+    });
+    screenedRows.push(row);
+  }
+  if (!inputs.length) return { target: 0, notTarget: 0, unverified: 0 };
+  const results = await qualifyCandidates(qualificationBrief, inputs, createOpenAiQualifier(), { deadlineAt: effectiveDeadline });
+  let target = 0;
+  let notTarget = 0;
+  let unverified = 0;
+  for (const row of screenedRows) {
+    const result = results.get(row.id);
+    if (!result) continue;
+    const data: ResearchRecordData = {
+      ...row.data,
+      company_name: result.displayName || row.data.company_name,
+      entity_type: result.entityType,
+      fit_reason: result.reason,
+      fit_verdict: result.source === "fallback" ? "unverified" : result.isTarget ? "target" : "not_target",
+      fit_screened_at: new Date().toISOString(),
+    };
+    await prisma.researchRecord.updateMany({
+      where: {
+        id: row.id,
+        officeId: row.officeId,
+        listId: row.listId,
+      },
+      data: { data: data as Prisma.InputJsonValue, searchText: researchLists.buildResearchSearchText(data) },
+    });
+    if (result.source === "fallback") unverified += 1;
+    else if (result.isTarget) target += 1;
+    else notTarget += 1;
+  }
+  return { target, notTarget, unverified };
+}
+
+export type ResearchEnrichmentCounts = {
+  emails: number;
+  phones: number;
+  checked: number;
+  nothing: number;
+};
+
+export async function enrichResearchRows(
+  rows: ResearchRow[],
+  limit: number,
+  profile?: ReturnType<typeof profileFromProspectingDraft>,
+  deadlineAt?: number,
+): Promise<ResearchEnrichmentCounts> {
+  const selected = rows.filter((row) => row.data.website && (!rowHasEmail(row.data) || !rowHasPhone(row.data))).slice(0, Math.max(0, limit));
+  const enrichmentProfile = profile ?? profileFromProspectingDraft({
+    objective: "Research company fit",
+    segments: ["companies"],
+    regions: ["global"],
+    productFocus: "freight forwarding",
+    projectName: "",
+    listSlug: "research-enrichment",
+    notes: "",
+    rowTarget: 50,
+    cleanupPolicy: "auto",
+  });
+  let emails = 0;
+  let phones = 0;
+  let nothing = 0;
+  let checked = 0;
+  const effectiveDeadline = deadlineAt ?? Date.now() + 200_000;
+  const { researchLists } = await serverModules();
+  for (const row of selected) {
+    if (Date.now() > effectiveDeadline - 10_000) break;
+    checked += 1;
+    const harvested = await harvestSite(enrichmentProfile, String(row.data.website), { fetcher: defaultFetcher });
+    if (!harvested || Array.isArray(harvested)) {
+      nothing += 1;
+      continue;
+    }
+    const data = { ...row.data };
+    if (!rowHasEmail(data) && harvested.emails[0]) {
+      data.email = harvested.emails[0];
+      emails += 1;
+    }
+    if (!rowHasPhone(data) && harvested.phones[0]) {
+      data.phone = harvested.phones[0];
+      phones += 1;
+    }
+    const urls = [...new Set([...rowEvidenceUrls(data, row.sourceRefs), ...harvested.evidence.map((item) => item.url)])];
+    data.evidence_urls = urls.join("\n");
+    if (!harvested.emails.length && !harvested.phones.length) nothing += 1;
+    const existingRefs = row.sourceRefs && typeof row.sourceRefs === "object" && !Array.isArray(row.sourceRefs)
+      ? row.sourceRefs as Record<string, unknown>
+      : {};
+    await prisma.researchRecord.updateMany({
+      where: {
+        id: row.id,
+        officeId: row.officeId,
+        listId: row.listId,
+      },
+      data: {
+        data: data as Prisma.InputJsonValue,
+        searchText: researchLists.buildResearchSearchText(data),
+        sourceRefs: { ...existingRefs, evidenceUrls: urls } as Prisma.InputJsonValue,
+      },
+    });
+  }
+  return { emails, phones, checked, nothing };
+}
+
 export function intersectApprovedPurge(
   selected: ReturnType<typeof selectPurgeRows>,
   approvedIds: string[],
@@ -325,12 +484,12 @@ export function renderResearchStatus(args: { projectName: string; list: { name: 
     if (job.status === "PENDING") state = "pending confirmation";
     else if (job.status === "FAILED") state = `failed: ${job.lastError ?? "unknown error"}`;
     else if (job.exhausted) state = "exhausted (current regions used up)";
-    else if (job.status === "COMPLETED" && job.stats.rowsCreated >= job.draft.rowTarget) state = "finished (target reached)";
-    else if (job.status === "RUNNING" || (job.status === "COMPLETED" && job.autoContinue && job.stats.rowsCreated < job.draft.rowTarget)) state = "running in background";
+    else if (job.status === "COMPLETED" && effectiveRowsCreated(job.stats) >= job.draft.rowTarget) state = "finished (target reached)";
+    else if (job.status === "RUNNING" || (job.status === "COMPLETED" && job.autoContinue && effectiveRowsCreated(job.stats) < job.draft.rowTarget)) state = "running in background";
     return [
       `${args.projectName}: ${args.list.recordCount} rows in list, job ${index + 1} of ${args.jobs.length}`,
       `  State: ${state}`,
-      `  Progress: ${job.stats.rowsCreated} / ${job.draft.rowTarget} target, ${job.stats.queriesUsed} queries, ${job.stats.pagesFetched.toLocaleString()} pages, screened ${job.stats.qualification.evaluated}: ${job.stats.qualification.accepted} kept, ${Object.values(job.stats.qualification.rejected).reduce((a, b) => a + b, 0)} rejected (${Object.entries(job.stats.qualification.rejected).map(([key, value]) => `${key} ${value}`).join(", ") || "none"}), ${job.stats.qualification.fallback} unscreened fallbacks`,
+      `  Progress: ${effectiveRowsCreated(job.stats)} / ${job.draft.rowTarget} target, ${job.stats.queriesUsed} queries, ${job.stats.pagesFetched.toLocaleString()} pages, screened ${job.stats.qualification.evaluated}: ${job.stats.qualification.accepted} kept, ${Object.values(job.stats.qualification.rejected).reduce((a, b) => a + b, 0)} rejected (${Object.entries(job.stats.qualification.rejected).map(([key, value]) => `${key} ${value}`).join(", ") || "none"}), ${job.stats.qualification.fallback} unscreened fallbacks`,
       `  Regions: ${job.draft.regions.join(", ")}. Last batch: ${ageText(job.lastBackgroundRunAt)}.`,
     ];
   });
@@ -360,6 +519,47 @@ function storedOperation(operation: ContextResearchOperation): StoredResearchOpe
   return Object.fromEntries(
     Object.entries(operation).filter(([key]) => key !== "id" && key !== "createdAt" && key !== "stale"),
   ) as unknown as StoredResearchOperation;
+}
+
+function buildStoredResearchOperation(args: {
+  request: ResearchOperationRequest;
+  projectId: string;
+  projectName: string;
+  listId: string;
+  listSlug: string;
+  preview: string[];
+  requestMessageId: string;
+  requestBody: string;
+  requestCreatedAt: Date;
+  threadId?: string | null;
+  workspaceId: string | null;
+  approvedIds?: string[];
+  approvedReasons?: Record<string, PurgeReason>;
+  force?: boolean;
+}): StoredResearchOperation {
+  return {
+    schemaVersion: 1,
+    type: "research_operation",
+    status: "PENDING",
+    kind: args.request.kind as Exclude<ResearchOperationKind, "status" | "audit">,
+    projectId: args.projectId,
+    projectName: args.projectName,
+    listId: args.listId,
+    listSlug: args.listSlug,
+    regions: args.request.regions,
+    note: args.request.note,
+    preview: args.preview,
+    result: [],
+    requestMessageId: args.requestMessageId,
+    requestBody: text(args.requestBody, 4_000),
+    requestCreatedAt: args.requestCreatedAt.toISOString(),
+    threadId: args.threadId ?? null,
+    runningStartedAt: null,
+    lastError: null,
+    workspaceId: args.workspaceId,
+    ...(args.force !== undefined ? { force: args.force } : {}),
+    ...(args.approvedIds ? { approvedIds: args.approvedIds, approvedReasons: args.approvedReasons } : {}),
+  };
 }
 
 export async function listCompanyContextResearchOperations(context: CompanyContextAccess, workspaceId: string) {
@@ -467,35 +667,28 @@ export async function createCompanyContextResearchOperations(args: {
       : kind === "expand_regions"
         ? [`Starts a new research job for ${current.jobs[0]?.draft.segments.join(", ") || item.projectName} in ${item.request.regions.join(", ")} toward the remaining ${Math.max(0, (current.jobs[0]?.draft.rowTarget ?? 0) - current.rows.length)} rows, into the same list.`]
         : kind === "pause"
-          ? [`Pauses ${current.jobs.filter((job) => job.status !== "DISMISSED" && !job.exhausted && !(job.status === "COMPLETED" && job.stats.rowsCreated >= job.draft.rowTarget)).length} jobs.`]
+          ? [`Pauses ${current.jobs.filter((job) => job.status !== "DISMISSED" && !job.exhausted && !(job.status === "COMPLETED" && effectiveRowsCreated(job.stats) >= job.draft.rowTarget)).length} jobs.`]
           : kind === "resume"
             ? ["Continues paused, failed, or finished research jobs."]
             : kind === "requalify"
               ? [`Screens ${orderRequalificationRows(current.rows, forceRequalification).length} rows without deleting them.`]
               : [`Checks up to 25 sites for missing email and phone without paid enrichment.`];
-    storedItems.push({
-      schemaVersion: 1,
-      type: "research_operation",
-      status: "PENDING",
-      kind: kind as Exclude<ResearchOperationKind, "status" | "audit">,
+    storedItems.push(buildStoredResearchOperation({
+      request: item.request,
       projectId: item.projectId,
       projectName: item.projectName,
       listId: current.list.id,
       listSlug: current.list.slug,
-      regions: item.request.regions,
-      note: item.request.note,
       preview,
-      result: [],
       requestMessageId: args.requestMessageId,
-      requestBody: text(args.requestBody, 4_000),
-      requestCreatedAt: args.requestCreatedAt.toISOString(),
-      threadId: args.threadId ?? null,
-      runningStartedAt: null,
-      lastError: null,
+      requestBody: args.requestBody,
+      requestCreatedAt: args.requestCreatedAt,
+      threadId: args.threadId,
       workspaceId: workspace.id,
       force: forceRequalification,
-      ...(approvedIds ? { approvedIds, approvedReasons } : {}),
-    });
+      approvedIds,
+      approvedReasons,
+    }));
   }
   const rows = await prisma.$transaction(storedItems.map((stored) => prisma.companyContext.create({
     data: { officeId: args.context.officeId, companyId: workspace.companyId, kind: "ACTION", name: `${stored.kind}: ${stored.projectName}`, payload: stored, processingState: stored.status, ...access.companyContextActorData(args.context) },
@@ -505,6 +698,231 @@ export async function createCompanyContextResearchOperations(args: {
     const operation = operationFromRow(row);
     return operation ? [operation] : [];
   });
+}
+
+export type PostBatchCleanup = {
+  deletedDuplicates: number;
+  deletedNonCompanies: number;
+  protectedRows: number;
+  listRows: number | null;
+  screened: number;
+  enriched: number;
+  flaggedForReview: number;
+  flaggedCardCreated: boolean;
+  errors: string[];
+};
+
+export async function runPostBatchCleanup(args: {
+  officeId: string;
+  listId: string;
+  listSlug: string;
+  context: CompanyContextAccess | null;
+  workspaceId: string | null;
+  companyId: string;
+  projectId: string | null;
+  projectName: string;
+  newRecordIds: string[];
+  createdByUserId?: string | null;
+  brief?: QualificationBrief;
+  profile?: ReturnType<typeof profileFromProspectingDraft>;
+  deadlineAt: number;
+}): Promise<PostBatchCleanup> {
+  const result: PostBatchCleanup = {
+    deletedDuplicates: 0,
+    deletedNonCompanies: 0,
+    protectedRows: 0,
+    listRows: null,
+    screened: 0,
+    enriched: 0,
+    flaggedForReview: 0,
+    flaggedCardCreated: false,
+    errors: [],
+  };
+  let rows: ResearchRow[] = [];
+  const protectedIds = new Set<string>();
+  try {
+    rows = await loadRows(args.officeId, args.listId);
+    const selected = selectPurgeRows(rows);
+    const [campaigns, sends] = await Promise.all([
+      prisma.outreachCampaign.findMany({
+        where: { officeId: args.officeId, listId: args.listId },
+        select: { audienceRecordIds: true },
+      }),
+      prisma.outreachCampaignSend.findMany({
+        where: { officeId: args.officeId, campaign: { officeId: args.officeId, listId: args.listId } },
+        select: { recordId: true },
+      }),
+    ]);
+    for (const campaign of campaigns) {
+      if (!Array.isArray(campaign.audienceRecordIds)) continue;
+      for (const id of campaign.audienceRecordIds) if (typeof id === "string") protectedIds.add(id);
+    }
+    for (const send of sends) protectedIds.add(send.recordId);
+    const partition = partitionCleanupRows(selected, protectedIds);
+    result.protectedRows = partition.protected.length;
+    for (let index = 0; index < partition.deterministic.length; index += 200) {
+      const batch = partition.deterministic.slice(index, index + 200);
+      await prisma.researchRecord.deleteMany({
+        where: {
+          officeId: args.officeId,
+          listId: args.listId,
+          id: { in: batch.map((row) => row.id) },
+        },
+      });
+      result.deletedDuplicates += batch.filter((row) => row.reason === "duplicate").length;
+      result.deletedNonCompanies += batch.filter((row) => row.reason === "non_company").length;
+    }
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "Deterministic cleanup failed.");
+  }
+  if (args.newRecordIds.length && Date.now() <= args.deadlineAt - 15_000) {
+    let screenedRows: ResearchRow[] = [];
+    try {
+      const currentRows = await loadRows(args.officeId, args.listId);
+      const newRows = currentRows.filter((row) => args.newRecordIds.includes(row.id));
+      if (process.env.OPENAI_API_KEY) {
+        const counts = await screenResearchRows(newRows, 20, args.brief, args.deadlineAt);
+        result.screened = counts.target + counts.notTarget + counts.unverified;
+        screenedRows = await loadRows(args.officeId, args.listId);
+        screenedRows = screenedRows.filter((row) => args.newRecordIds.includes(row.id));
+      } else {
+        screenedRows = newRows;
+      }
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : "New-row screening failed.");
+      try {
+        screenedRows = (await loadRows(args.officeId, args.listId)).filter((row) => args.newRecordIds.includes(row.id));
+      } catch (reloadError) {
+        result.errors.push(reloadError instanceof Error ? reloadError.message : "New-row reload failed.");
+      }
+    }
+    try {
+      const enriched = await enrichResearchRows(
+        screenedRows.filter((row) => row.data.website && (!rowHasEmail(row.data) || !rowHasPhone(row.data))),
+        15,
+        args.profile,
+        args.deadlineAt,
+      );
+      result.enriched = enriched.emails + enriched.phones;
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : "New-row enrichment failed.");
+    }
+  }
+  try {
+    rows = await loadRows(args.officeId, args.listId);
+    const finalPartition = partitionCleanupRows(selectPurgeRows(rows), protectedIds);
+    result.protectedRows = Math.max(result.protectedRows, finalPartition.protected.length);
+    const flagged = finalPartition.flagged;
+    result.flaggedForReview = flagged.length;
+    if (flagged.length) {
+      const projectId = args.projectId?.trim() || (await prisma.researchList.findFirst({
+        where: { id: args.listId, officeId: args.officeId },
+        select: { projectId: true },
+      }))?.projectId?.trim() || null;
+      if (!projectId) {
+        result.errors.push(`No project on list ${args.listSlug}; review card skipped.`);
+      } else {
+        const notTarget = flagged.filter((row) => row.reason === "not_target").length;
+        const belowFloor = flagged.filter((row) => row.reason === "below_floor").length;
+        const preview = [
+          `Research found ${flagged.length} rows that do not fit ${args.projectName}: ${notTarget} screened as non-targets, ${belowFloor} below the fit floor. Run to delete them.`,
+          ...flagged.slice(0, 8).map((row) => {
+            const fixture = rows.find((entry) => entry.id === row.id);
+            return `${fixture?.data.company_name ?? "Unnamed"} (${fixture ? rowDomain(fixture.data) || "no domain" : "no domain"}): ${row.reason}`;
+          }),
+        ];
+        const existing = await prisma.companyContext.findFirst({
+          where: {
+            officeId: args.officeId,
+            companyId: args.companyId,
+            kind: "ACTION",
+            processingState: { in: ["PENDING", "RUNNING"] },
+            payload: {
+              path: ["type"],
+              equals: "research_operation",
+            },
+            AND: [{ payload: { path: ["listId"], equals: args.listId } }, { payload: { path: ["kind"], equals: "purge" } }],
+          },
+          select: { id: true, payload: true, processingState: true },
+        });
+        const request: ResearchOperationRequest = {
+          kind: "purge",
+          projectName: args.projectName,
+          regions: [],
+          note: "auto",
+        };
+        const approvedIds = flagged.map((row) => row.id);
+        const approvedReasons = Object.fromEntries(flagged.map((row) => [row.id, row.reason]));
+        if (existing?.processingState === "PENDING") {
+          const storedPayload = existing.payload && typeof existing.payload === "object" && !Array.isArray(existing.payload)
+            ? existing.payload as Record<string, unknown>
+            : {};
+          await prisma.companyContext.updateMany({
+            where: {
+              id: existing.id,
+              officeId: args.officeId,
+              companyId: args.companyId,
+              kind: "ACTION",
+              processingState: "PENDING",
+            },
+            data: {
+              payload: {
+                ...storedPayload,
+                approvedIds,
+                approvedReasons,
+                preview,
+              },
+            },
+          });
+        } else if (!existing) {
+          const stored = buildStoredResearchOperation({
+            request,
+            projectId,
+            projectName: args.projectName,
+            listId: args.listId,
+            listSlug: args.listSlug,
+            preview,
+            requestMessageId: "auto-cleanup",
+            requestBody: "Automatic post-batch cleanup",
+            requestCreatedAt: new Date(),
+            workspaceId: args.workspaceId,
+            approvedIds,
+            approvedReasons,
+          });
+          const { access } = await serverModules();
+          const actorData = args.context
+            ? access.companyContextActorData(args.context)
+            : {
+                createdByUserId: args.createdByUserId ?? null,
+                createdByPortalUserId: null,
+                customerVisible: false,
+              };
+          await prisma.companyContext.create({
+            data: {
+              officeId: args.officeId,
+              companyId: args.companyId,
+              kind: "ACTION",
+              name: `purge: ${args.projectName}`,
+              payload: stored,
+              processingState: "PENDING",
+              ...actorData,
+            },
+          });
+          result.flaggedCardCreated = true;
+        }
+      }
+    }
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "Review card creation failed.");
+  }
+  try {
+    result.listRows = await prisma.researchRecord.count({
+      where: { officeId: args.officeId, listId: args.listId },
+    });
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "Cleanup row count failed.");
+  }
+  return result;
 }
 
 async function updateProspectingJob(context: CompanyContextAccess, companyId: string, job: ContextProspectingAction, patch: Partial<ContextProspectingAction>) {
@@ -540,14 +958,14 @@ async function executeResearchOperation(args: { operation: ContextResearchOperat
   if (args.operation.kind === "pause") {
     let affected = 0;
     for (const job of jobs) {
-      if (job.status === "DISMISSED" || job.exhausted || (job.status === "COMPLETED" && job.stats.rowsCreated >= job.draft.rowTarget)) continue;
+      if (job.status === "DISMISSED" || job.exhausted || (job.status === "COMPLETED" && effectiveRowsCreated(job.stats) >= job.draft.rowTarget)) continue;
       if (await updateProspectingJob(args.context, companyId, job, { autoContinue: false })) affected += 1;
     }
     return [`Paused ${affected} job${affected === 1 ? "" : "s"}. Rows already found stay in the list.`];
   }
   if (args.operation.kind === "resume") {
     if (jobs.length && jobs.every((job) => job.exhausted)) return [`All jobs used up their queries for ${jobs[0]!.draft.regions.join(", ")}. Use expand_regions with new countries.`];
-    if (jobs.length && jobs.every((job) => job.stats.rowsCreated >= job.draft.rowTarget)) return ["Target reached; raise the target or expand regions."];
+    if (jobs.length && jobs.every((job) => effectiveRowsCreated(job.stats) >= job.draft.rowTarget)) return ["Target reached; raise the target or expand regions."];
     let resumed = 0;
     for (const job of jobs) {
       if (job.status === "DISMISSED") continue;
@@ -571,7 +989,7 @@ async function executeResearchOperation(args: { operation: ContextResearchOperat
         stats: { ...job.stats, rowsCreated: rowsCreatedAfterPurge(job.stats.rowsCreated, remaining) },
       });
     }
-    const backgroundJob = jobs.find((job) => job.status === "RUNNING" || (job.status === "COMPLETED" && job.autoContinue && job.stats.rowsCreated < job.draft.rowTarget));
+    const backgroundJob = jobs.find((job) => job.status === "RUNNING" || (job.status === "COMPLETED" && job.autoContinue && effectiveRowsCreated(job.stats) < job.draft.rowTarget));
     const targetJob = jobs[0];
     return [
       `Deleted ${selected.length} rows: ${selected.filter((row) => row.reason === "non_company").length} non-companies, ${selected.filter((row) => row.reason === "not_target").length} model non-targets, ${selected.filter((row) => row.reason === "below_floor").length} below fit floor, ${selected.filter((row) => row.reason === "duplicate").length} duplicates.`,
@@ -605,80 +1023,23 @@ async function executeResearchOperation(args: { operation: ContextResearchOperat
   }
   if (!latest) return ["No existing research job contains the project brief needed for screening."];
   const { prospecting } = await serverModules();
-  const { buildResearchSearchText } = await import("@/lib/research-lists");
   const brief = prospecting.briefFromProspectingDraft(latest.draft);
-  const deadlineAt = Date.now() + 200_000;
   const candidates = args.operation.kind === "requalify"
     ? orderRequalificationRows(rows, Boolean(args.operation.force)).slice(0, 40)
     : rows.filter((row) => (!rowHasEmail(row.data) || !rowHasPhone(row.data)) && row.data.website).slice(0, 25);
   if (args.operation.kind === "requalify") {
-    const inputs: QualificationInput[] = [];
-    let truncatedByTime = 0;
-    for (const row of candidates) {
-      if (Date.now() > deadlineAt - 60_000) {
-        truncatedByTime = candidates.length - inputs.length;
-        break;
-      }
-      let pageExcerpt = "";
-      if (row.data.website) {
-        const page = await defaultFetcher(String(row.data.website));
-        pageExcerpt = page?.body ? htmlToText(page.body).replace(/\s+/g, " ").slice(0, 2_000) : "";
-      }
-      inputs.push({ id: row.id, companyName: String(row.data.company_name ?? ""), domain: rowDomain(row.data), website: String(row.data.website ?? ""), country: String(row.data.country ?? "") || null, pageExcerpt, evidenceUrls: rowEvidenceUrls(row.data, row.sourceRefs) });
-    }
-    const results = await qualifyCandidates(brief, inputs, createOpenAiQualifier(), { deadlineAt });
-    const counts = new Map<string, number>();
-    let target = 0;
-    let fallback = 0;
-    for (const row of candidates) {
-      const result = results.get(row.id);
-      if (!result) continue;
-      const data: ResearchRecordData = { ...row.data, company_name: result.displayName || row.data.company_name, entity_type: result.entityType, fit_reason: result.reason, fit_verdict: result.source === "fallback" ? "unverified" : result.isTarget ? "target" : "not_target" };
-      data.fit_screened_at = new Date().toISOString();
-      await prisma.researchRecord.updateMany({
-        where: { id: row.id, officeId: args.context.officeId, listId: current.list.id },
-        data: {
-          data: data as Prisma.InputJsonValue,
-          searchText: buildResearchSearchText(data),
-        },
-      });
-      if (result.isTarget) target += 1; else counts.set(result.entityType, (counts.get(result.entityType) ?? 0) + 1);
-      if (result.source === "fallback") fallback += 1;
-    }
-    const remaining = remainingRequalificationRows(rows, Boolean(args.operation.force), args.operation.force ? inputs.length : inputs.length - fallback);
+    const counts = await screenResearchRows(candidates, 40, brief);
+    const screened = counts.target + counts.notTarget + counts.unverified;
+    const remaining = remainingRequalificationRows(rows, Boolean(args.operation.force), args.operation.force ? screened : screened - counts.unverified);
     return [
-      `Screened ${inputs.length} of ${rows.length}: ${target} targets, ${inputs.length - target - fallback} not targets${counts.size ? ` (${[...counts.entries()].map(([key, value]) => `${key} ${value}`).join(", ")})` : ""}, ${fallback} unverified.`,
+      `Screened ${screened} of ${rows.length}: ${counts.target} targets, ${counts.notTarget} not targets, ${counts.unverified} unverified.`,
       `${remaining} left; ask to requalify again to continue.`,
-      ...(truncatedByTime ? [`Stopped homepage fetching with ${truncatedByTime} selected rows not screened due to the time limit.`] : []),
     ];
   }
-  let newEmails = 0;
-  let newPhones = 0;
-  let nothing = 0;
   const profile = profileFromProspectingDraft(latest.draft);
-  for (const row of candidates) {
-    const harvested = await harvestSite(profile, String(row.data.website), { fetcher: defaultFetcher });
-    if (!harvested || Array.isArray(harvested)) { nothing += 1; continue; }
-    const data = { ...row.data };
-    if (!rowHasEmail(data) && harvested.emails[0]) { data.email = harvested.emails[0]; newEmails += 1; }
-    if (!rowHasPhone(data) && harvested.phones[0]) { data.phone = harvested.phones[0]; newPhones += 1; }
-    const urls = [...new Set([...rowEvidenceUrls(data, row.sourceRefs), ...harvested.evidence.map((item) => item.url)])];
-    data.evidence_urls = urls.join("\n");
-    if (!harvested.emails.length && !harvested.phones.length) nothing += 1;
-    const existingRefs = row.sourceRefs && typeof row.sourceRefs === "object" && !Array.isArray(row.sourceRefs)
-      ? row.sourceRefs as Record<string, unknown>
-      : {};
-    await prisma.researchRecord.updateMany({
-      where: { id: row.id, officeId: args.context.officeId, listId: current.list.id },
-      data: {
-        data: data as Prisma.InputJsonValue,
-        searchText: buildResearchSearchText(data),
-        sourceRefs: { ...existingRefs, evidenceUrls: urls } as Prisma.InputJsonValue,
-      },
-    });
-  }
+  const enriched = await enrichResearchRows(candidates, 25, profile);
   const remainingMissing = rows.filter((row) => !rowHasEmail(row.data) || !rowHasPhone(row.data)).length;
-  return [`Checked ${candidates.length} sites: ${newEmails} new emails, ${newPhones} new phones, ${nothing} nothing found.`, `${remainingMissing} rows still missing contacts.`];
+  return [`Checked ${enriched.checked} sites: ${enriched.emails} new emails, ${enriched.phones} new phones, ${enriched.nothing} nothing found.`, `${remainingMissing} rows still missing contacts.`];
 }
 
 export async function runCompanyContextResearchOperation(args: { context: CompanyContextAccess; workspaceId: string; actionId: string }) {

@@ -55,6 +55,7 @@ export type ProspectingDraft = {
   listSlug: string;
   notes: string;
   rowTarget: number;
+  cleanupPolicy?: "auto" | "off";
 };
 
 export type ProspectingSearchResult = {

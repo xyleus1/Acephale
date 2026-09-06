@@ -13294,6 +13294,12 @@ Verification caveat:
 - Initial mail thread links now fetch the access-checked detail endpoint when
   the thread is outside the first page, prepend the returned thread, and open
   its detail without surfacing a fetch error.
+
+## 2026-09-06: Context prospecting cleanup review fixes
+
+- Cleanup now protects campaign audience rows, screens before creating the
+  review card, and bases continuation on surviving rows.
+
 ## 2026-09-06: Scheduled sourcing reply loop
 
 - The scheduled sourcing pass now answers replies, sends bounded chases and
@@ -13305,3 +13311,9 @@ Verification caveat:
 - This branch uses one per-request send budget with replies first, and a failed
   quote-goal lookup blocks unsolicited follow ups while preserving reply answers.
 - Permanent, recipient-specific delivery suppressions use the actual reply recipient when available, recheck immediately before sends, and stop complaint or opt-out addresses without relying on dropped thread notices.
+
+## 2026-09-06: Context prospecting post-batch cleanup
+
+- Context prospecting now cleans deterministic duplicate and non-company rows
+  after each batch, screens and enriches surviving new rows, and leaves
+  model-based purge findings behind an approval-gated Run card.

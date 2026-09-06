@@ -478,6 +478,7 @@ export async function upsertResearchRecords(
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  const recordIds: string[] = [];
   const errors: Array<{ row: number; error: string }> = [];
   const prepared: Array<{
     row: number;
@@ -553,6 +554,7 @@ export async function upsertResearchRecords(
     results.forEach((result, index) => {
       const item = operations[index]!;
       if (result.status === "fulfilled") {
+        recordIds.push(result.value.id);
         if (item.wasExisting) updated += 1;
         else created += 1;
       } else {
@@ -566,43 +568,31 @@ export async function upsertResearchRecords(
   }
 
   for (const batch of chunks(withoutDedupe, 100)) {
-    const data = batch.map((item) => ({
-      officeId,
-      listId: list.id,
-      dedupeKey: null,
-      status: "new",
-      data: item.data as Prisma.InputJsonValue,
-      searchText: item.searchText,
-    }));
-    try {
-      const result = await client.researchRecord.createMany({ data });
-      created += result.count;
-    } catch {
-      const results = await Promise.allSettled(batch.map((item) => client.researchRecord.create({
-        data: {
-          officeId,
-          listId: list.id,
-          dedupeKey: null,
-          status: "new",
-          data: item.data as Prisma.InputJsonValue,
-          searchText: item.searchText,
-        },
-      })));
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          created += 1;
-        } else {
-          skipped += 1;
-          errors.push({
-            row: batch[index]!.row,
-            error: result.reason instanceof Error ? result.reason.message : "Row could not be saved.",
-          });
-        }
-      });
-    }
+    const results = await Promise.allSettled(batch.map((item) => client.researchRecord.create({
+      data: {
+        officeId,
+        listId: list.id,
+        dedupeKey: null,
+        status: "new",
+        data: item.data as Prisma.InputJsonValue,
+        searchText: item.searchText,
+      },
+    })));
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        recordIds.push(result.value.id);
+        created += 1;
+      } else {
+        skipped += 1;
+        errors.push({
+          row: batch[index]!.row,
+          error: result.reason instanceof Error ? result.reason.message : "Row could not be saved.",
+        });
+      }
+    });
   }
 
-  return { created, updated, skipped, errors: errors.slice(0, 50), errorRows: errors };
+  return { created, updated, skipped, recordIds, errors: errors.slice(0, 50), errorRows: errors };
 }
 
 function parseCsv(text: string): Array<{ values: string[]; sourceRow: number }> {
