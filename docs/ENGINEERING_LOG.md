@@ -129,6 +129,8 @@ Context chat now reports and manages existing prospect research through office-s
 - The world merge now selects each pending batch's first and last source-record
   ids once, then bounds matching, insertion, and the second matching pass to
   that id window while advancing an `afterId` cursor.
+- A partial pending-row index now makes the first and last id boundary lookup
+  selective without indexing already merged source records.
 - This avoids rescanning already merged rows from the beginning of the source
   primary key without adding a schema index. The world database integration
   test covers five out-of-order ids with a batch size of two.

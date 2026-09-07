@@ -71,6 +71,7 @@ Date: 2026-09-08
 
 - The office-less world company spine lives in its own Postgres database through `WORLD_DATABASE_URL`, never in the office-scoped `Company` table.
 - Source rows retain provenance and are deduplicated in priority order: LEI, domain, then country plus normalized name.
+- World merge windows use a hand-written partial index on pending source rows because Prisma does not model partial indexes. The migration is a single `CREATE INDEX CONCURRENTLY` statement without `IF NOT EXISTS`: Prisma runs multi-statement files in one transaction, which `CONCURRENTLY` forbids, and `IF NOT EXISTS` would silently keep an invalid index left by a failed build. If the build fails, drop the invalid index, mark the migration rolled back with `prisma migrate resolve`, and deploy again.
 - Promotion into an office is a later explicit action that links a world company instead of copying the global spine into tenant data.
 
 ## OpenAI web search is the leadgen backbone
