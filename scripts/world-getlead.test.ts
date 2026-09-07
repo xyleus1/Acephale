@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createGetleadClient, deliverCompaniesGuarded, deliverContactsGuarded, GetleadApiError, type GetleadClient } from "../src/lib/world/getlead/client";
+import {
+  createGetleadClient,
+  deliverCompaniesGuarded,
+  deliverContactsGuarded,
+  GetleadApiError,
+  type GetleadClient,
+} from "../src/lib/world/getlead/client";
 import { classifyMailbox } from "../src/lib/world/getlead/contacts";
 import { normalizeGetleadCompany, normalizeGetleadContactCompany } from "../src/lib/world/sources/getlead";
 import { getGetleadContactRows, getGetleadJobId } from "../src/lib/world/getlead/raw";
-import { buildCompanyPromotion } from "../src/lib/world/promote";
+import { resolveOfficeSelection } from "../src/lib/world/getlead/office";
+import { buildCompanyPromotion, promoteToOffice } from "../src/lib/world/promote";
+import type { PrismaClient } from "@prisma/client";
 
 async function main() {
   const fixture = JSON.parse(await readFile("scripts/fixtures/getlead.json", "utf8")) as {
@@ -18,6 +26,16 @@ async function main() {
   const fakeFetch = async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push(url);
+    if (url.endsWith("/data/usage")) {
+      return new Response(JSON.stringify({
+        balance_cents: 1000,
+        prices: {
+          people_cents_per_1k: 700,
+          company_cents_per_1k: 100,
+          verify_cents_per_1k: 200,
+        },
+      }), { status: 200 });
+    }
     if (url.endsWith("/search/count")) {
       return new Response(JSON.stringify({
         people: 2,
@@ -99,6 +117,13 @@ async function main() {
   const companyDelivery = await client.companiesDeliver({}, 2);
   assert.equal(companyDelivery.delivered, 2);
   assert.ok(calls.every((call) => !call.includes("test-key")));
+  const guardedDelivery = await deliverContactsGuarded({
+    client,
+    filters: {},
+    limit: 2,
+    maxCents: 10,
+  });
+  assert.equal(guardedDelivery.estimated_cents, 2);
 
   let deliverCalls = 0;
   const guardedClient = {
@@ -117,6 +142,7 @@ async function main() {
 
   const budgetClient = {
     ...client,
+    usage: async () => ({ prices: { people_cents_per_1k: 2_000 } }),
     searchCount: async () => ({ with_email: 10, unsupported: [] }),
     searchDeliver: async () => {
       deliverCalls += 1;
@@ -128,6 +154,25 @@ async function main() {
     /exceeds the configured budget/,
   );
   assert.equal(deliverCalls, 0);
+
+  const plainTextApi = createGetleadClient({
+    apiKey: "test-key",
+    fetch: async () => new Response("upstream failure", { status: 500 }),
+  });
+  await assert.rejects(plainTextApi.usage(), (error: unknown) => (
+    error instanceof GetleadApiError
+      && error.status === 500
+      && error.body === "upstream failure"
+  ));
+  const malformedJsonApi = createGetleadClient({
+    apiKey: "test-key",
+    fetch: async () => new Response("{not-json", { status: 400 }),
+  });
+  await assert.rejects(malformedJsonApi.usage(), (error: unknown) => (
+    error instanceof GetleadApiError
+      && error.status === 400
+      && error.body === "{not-json"
+  ));
 
   const companyBudgetClient = {
     ...client,
@@ -164,8 +209,15 @@ async function main() {
   );
   assert.equal(service?.isManufacturer, false);
   assert.equal(contactCompany?.domain, "bluefinrobotics.com");
+  assert.equal(contactCompany?.name, "bluefin robotics");
   assert.equal(contactCompany?.country, "US");
   assert.equal(contactCompany?.isManufacturer, true);
+  const blankContactCompany = normalizeGetleadContactCompany({
+    ...fixture.contactCompany,
+    company_name: "",
+    company: "acme",
+  });
+  assert.equal(blankContactCompany?.name, "acme");
   assert.equal(normalizeGetleadCompany(fixture.steelSignsCompany)?.isManufacturer, false);
   assert.equal(normalizeGetleadContactCompany(fixture.industrialAutomationCompany)?.isManufacturer, true);
   assert.equal(classifyMailbox("a@gmail.com", "example.com"), "freemail");
@@ -180,6 +232,25 @@ async function main() {
   };
   assert.deepEqual(getGetleadContactRows(harnessRaw), harnessRaw.job.rows);
   assert.equal(getGetleadJobId(harnessRaw), "harness-job");
+  assert.throws(
+    () => resolveOfficeSelection([], "Missing"),
+    /Office "Missing" was not found/,
+  );
+  assert.deepEqual(
+    resolveOfficeSelection([{ id: "office-1", name: "Dreamz" }], "Dreamz"),
+    { id: "office-1", name: "Dreamz" },
+  );
+  assert.deepEqual(
+    resolveOfficeSelection([{ id: "office-1", name: "Other" }], "office-1"),
+    { id: "office-1", name: "Other" },
+  );
+  assert.throws(
+    () => resolveOfficeSelection([
+      { id: "office-1", name: "Dreamz" },
+      { id: "office-2", name: "Dreamz" },
+    ], "Dreamz"),
+    /ambiguous/,
+  );
 
   const promotion = buildCompanyPromotion({
     id: "world-1",
@@ -206,6 +277,103 @@ async function main() {
     updatedAt: new Date(),
   });
   assert.deepEqual(promotion.sourceRefs.sources, ["getlead"]);
+
+  const existingCompany = {
+    id: "company-1",
+    domain: "existing.test",
+    website: null,
+    linkedinUrl: null,
+    crmSource: "manual",
+    crmCategory: "customer",
+    sourceRefs: { legacy: "company", sources: ["leadgen"] },
+    crmTags: ["existing"],
+  };
+  const existingContact = {
+    id: "contact-1",
+    fullName: "Existing Person",
+    title: "Existing title",
+    phone: null,
+    location: "US",
+    sourceRefs: { legacy: "contact" },
+    tags: ["prior"],
+  };
+  let companyUpdate: Record<string, unknown> | undefined;
+  let contactUpdate: Record<string, unknown> | undefined;
+  const additiveResult = await promoteToOffice({
+    appClient: {
+      company: {
+        findFirst: async () => existingCompany,
+        update: async ({ data }: { data: Record<string, unknown> }) => {
+          companyUpdate = data;
+          return existingCompany;
+        },
+        create: async () => existingCompany,
+      },
+      contact: {
+        findFirst: async () => existingContact,
+        update: async ({ data }: { data: Record<string, unknown> }) => {
+          contactUpdate = data;
+          return existingContact;
+        },
+        create: async () => existingContact,
+      },
+    } as unknown as PrismaClient,
+    worldClient: {
+      worldCompany: {
+        findUnique: async () => ({
+          id: "world-existing",
+          canonicalName: "Acme",
+          nameNormalized: "acme",
+          domain: "acme.test",
+          website: "https://acme.test",
+          linkedinUrl: "https://linkedin.com/company/acme",
+          legalIds: { getlead: "acme.test" },
+        }),
+      },
+      worldContact: {
+        findMany: async () => [{
+          id: "world-contact-1",
+          email: "person@example.com",
+          fullName: "New Person",
+          title: "New title",
+          phone: "+1 555 0100",
+          countryCode: "CA",
+          source: "getlead",
+          verifiedAt: new Date("2026-09-06"),
+        }],
+      },
+    } as never,
+    officeId: "office-1",
+    worldCompanyId: "world-existing",
+    campaignTag: "campaign",
+  });
+  assert.equal(additiveResult.contactsUpdated, 1);
+  assert.equal("crmSource" in (companyUpdate ?? {}), false);
+  assert.equal("crmCategory" in (companyUpdate ?? {}), false);
+  assert.equal("domain" in (companyUpdate ?? {}), false);
+  assert.equal(companyUpdate?.website, "https://acme.test");
+  assert.equal(companyUpdate?.linkedinUrl, "https://linkedin.com/company/acme");
+  assert.deepEqual(companyUpdate?.crmTags, ["existing", "campaign"]);
+  assert.deepEqual(companyUpdate?.sourceRefs, {
+    legacy: "company",
+    worldCompanyId: "world-existing",
+    sources: ["leadgen", "getlead"],
+    promotedAt: companyUpdate?.sourceRefs
+      && (companyUpdate.sourceRefs as { promotedAt?: string }).promotedAt,
+  });
+  assert.equal("fullName" in (contactUpdate ?? {}), false);
+  assert.equal("title" in (contactUpdate ?? {}), false);
+  assert.equal(contactUpdate?.phone, "+1 555 0100");
+  assert.equal("location" in (contactUpdate ?? {}), false);
+  assert.equal("relationshipType" in (contactUpdate ?? {}), false);
+  assert.deepEqual(contactUpdate?.tags, ["prior", "campaign"]);
+  assert.deepEqual(contactUpdate?.sourceRefs, {
+    legacy: "contact",
+    worldContactId: "world-contact-1",
+    source: "getlead",
+    emailVerifiedAt: "2026-09-06T00:00:00.000Z",
+    mailboxClass: "other_domain",
+  });
   console.log("world getlead unit tests passed");
 }
 

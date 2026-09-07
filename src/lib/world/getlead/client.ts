@@ -19,6 +19,11 @@ export type GetleadFilters = {
 
 export type GetleadUsage = {
   balance_cents?: number;
+  prices?: {
+    people_cents_per_1k?: number;
+    company_cents_per_1k?: number;
+    verify_cents_per_1k?: number;
+  };
   [key: string]: unknown;
 };
 
@@ -137,7 +142,9 @@ export class GetleadApiError extends Error {
   readonly body: unknown;
 
   constructor(status: number, body: unknown) {
-    const message = typeof body === "object" && body !== null && "message" in body
+    const message = typeof body === "string" && body
+      ? body
+      : typeof body === "object" && body !== null && "message" in body
       ? String((body as { message?: unknown }).message)
       : `Getlead API request failed with HTTP ${status}`;
     super(message);
@@ -189,13 +196,6 @@ function ensureLimit(limit: number) {
   }
 }
 
-function bodyMessage(body: unknown) {
-  if (typeof body === "object" && body !== null && "message" in body) {
-    return String((body as { message?: unknown }).message);
-  }
-  return "Getlead request failed";
-}
-
 export function createGetleadClient(args: {
   apiKey: string;
   fetch?: FetchLike;
@@ -215,11 +215,12 @@ export function createGetleadClient(args: {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    let payload: unknown;
+    const responseBody = await response.text();
+    let payload: unknown = responseBody;
     try {
-      payload = await response.json();
+      payload = responseBody ? JSON.parse(responseBody) : null;
     } catch {
-      payload = await response.text();
+      payload = responseBody;
     }
     if (!response.ok) throw new GetleadApiError(response.status, payload);
     return payload as T;
@@ -303,7 +304,11 @@ export async function deliverContactsGuarded(args: {
       estimatedCents: 0,
     });
   }
-  const estimatedCents = Math.ceil(Math.min(args.limit, count.with_email) * 0.7);
+  const usage = await args.client.usage();
+  const priceCentsPerRow = typeof usage.prices?.people_cents_per_1k === "number"
+    ? usage.prices.people_cents_per_1k / 1_000
+    : 0.7;
+  const estimatedCents = Math.ceil(Math.min(args.limit, count.with_email) * priceCentsPerRow);
   if (estimatedCents > args.maxCents) {
     throw new GetleadBudgetError("Getlead contact delivery exceeds the configured budget", {
       maxCents: args.maxCents,
@@ -311,17 +316,7 @@ export async function deliverContactsGuarded(args: {
     });
   }
   const delivery = await args.client.searchDeliver(args.filters, args.limit);
-  if (delivery.estimated_cents > args.maxCents) {
-    throw new GetleadBudgetError(
-      `Getlead contact delivery estimate exceeds the configured budget: ${bodyMessage(delivery)}`,
-      {
-        maxCents: args.maxCents,
-        estimatedCents: delivery.estimated_cents,
-        jobId: delivery.job_id,
-      },
-    );
-  }
-  return { count, delivery };
+  return { count, delivery, estimated_cents: delivery.estimated_cents };
 }
 
 export async function deliverCompaniesGuarded(args: {
@@ -343,7 +338,11 @@ export async function deliverCompaniesGuarded(args: {
       estimatedCents: 0,
     });
   }
-  const estimatedCents = Math.ceil(Math.min(args.limit, count.companies ?? 0) * 0.1);
+  const usage = await args.client.usage();
+  const priceCentsPerRow = typeof usage.prices?.company_cents_per_1k === "number"
+    ? usage.prices.company_cents_per_1k / 1_000
+    : 0.1;
+  const estimatedCents = Math.ceil(Math.min(args.limit, count.companies ?? 0) * priceCentsPerRow);
   if (estimatedCents > args.maxCents) {
     throw new GetleadBudgetError("Getlead company delivery exceeds the configured budget", {
       maxCents: args.maxCents,
@@ -351,17 +350,7 @@ export async function deliverCompaniesGuarded(args: {
     });
   }
   const delivery = await args.client.companiesDeliver(args.filters, args.limit);
-  if (delivery.charged_cents > args.maxCents) {
-    throw new GetleadBudgetError(
-      `Getlead company delivery charge exceeds the configured budget: ${bodyMessage(delivery)}`,
-      {
-        maxCents: args.maxCents,
-        estimatedCents: delivery.charged_cents,
-        jobId: delivery.job_id,
-      },
-    );
-  }
-  return { count, delivery };
+  return { count, delivery, charged_cents: delivery.charged_cents };
 }
 
 export type { GetleadClient };

@@ -136,7 +136,7 @@ export function normalizeGetleadCompany(row: GetleadCompanyRow): NormalizedSourc
 
 export function normalizeGetleadContactCompany(row: GetleadContactRow): NormalizedSourceRecord | null {
   return normalizeCompany({
-    name: row.company ?? row.company_name,
+    name: text(row.company_name) ?? row.company,
     domain: row.domain,
     country: row.country_code,
     city: row.locality,

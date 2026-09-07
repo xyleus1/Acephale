@@ -1,5 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
-import type { PrismaClient as WorldPrismaClient, WorldCompany } from "../../generated/world-client";
+import type {
+  PrismaClient as WorldPrismaClient,
+  WorldCompany,
+} from "../../generated/world-client";
 import { classifyMailbox } from "./getlead/contacts";
 
 export type CompanyPromotion = {
@@ -72,44 +75,59 @@ export async function promoteToOffice(args: {
     },
     select: {
       id: true,
+      domain: true,
+      website: true,
+      linkedinUrl: true,
+      crmSource: true,
+      crmCategory: true,
       sourceRefs: true,
       crmTags: true,
     },
   });
   const promotedAt = new Date().toISOString();
+  const existingSourceRefs = objectValue(existingCompany?.sourceRefs);
+  const sourceRefsSources = [
+    ...stringArray(existingSourceRefs.sources),
+    ...sourceNames,
+  ].filter((source, index, sources) => sources.indexOf(source) === index);
   const sourceRefs = {
-    ...objectValue(existingCompany?.sourceRefs),
+    ...existingSourceRefs,
     worldCompanyId: world.id,
-    sources: sourceNames,
+    sources: sourceRefsSources,
     promotedAt,
   };
   const crmTags = [...stringArray(existingCompany?.crmTags), args.campaignTag]
     .filter((tag, index, tags) => tags.indexOf(tag) === index);
-  const companyData = {
-    name: companyPromotion.name,
-    officeId: args.officeId,
-    domain: companyPromotion.domain,
-    website: companyPromotion.website,
-    linkedinUrl: companyPromotion.linkedinUrl,
-    crmSource: "world",
-    crmCategory: args.crmCategory ?? "prospect",
-    sourceRefs,
-    crmTags,
-  };
   const company = existingCompany
     ? await args.appClient.company.update({
       where: { id: existingCompany.id },
       data: {
-        domain: companyData.domain,
-        website: companyData.website,
-        linkedinUrl: companyData.linkedinUrl,
-        crmSource: companyData.crmSource,
-        crmCategory: companyData.crmCategory,
-        sourceRefs: companyData.sourceRefs,
-        crmTags: companyData.crmTags,
+        ...(existingCompany.domain === null && companyPromotion.domain !== null
+          ? { domain: companyPromotion.domain }
+          : {}),
+        ...(existingCompany.website === null && companyPromotion.website !== null
+          ? { website: companyPromotion.website }
+          : {}),
+        ...(existingCompany.linkedinUrl === null && companyPromotion.linkedinUrl !== null
+          ? { linkedinUrl: companyPromotion.linkedinUrl }
+          : {}),
+        sourceRefs,
+        crmTags,
       },
     })
-    : await args.appClient.company.create({ data: companyData });
+    : await args.appClient.company.create({
+      data: {
+        name: companyPromotion.name,
+        officeId: args.officeId,
+        domain: companyPromotion.domain,
+        website: companyPromotion.website,
+        linkedinUrl: companyPromotion.linkedinUrl,
+        crmSource: "world",
+        crmCategory: args.crmCategory ?? "prospect",
+        sourceRefs,
+        crmTags,
+      },
+    });
 
   const contacts = await args.worldClient.worldContact.findMany({
     where: {
@@ -136,7 +154,15 @@ export async function promoteToOffice(args: {
           mode: "insensitive",
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        fullName: true,
+        title: true,
+        phone: true,
+        location: true,
+        sourceRefs: true,
+        tags: true,
+      },
     });
     const contactData = {
       companyId: company.id,
@@ -153,14 +179,26 @@ export async function promoteToOffice(args: {
       await args.appClient.contact.update({
         where: { id: existingContact.id },
         data: {
-          fullName: contactData.fullName,
-          title: contactData.title,
-          email: contactData.email,
-          phone: contactData.phone,
-          location: contactData.location,
-          relationshipType: contactData.relationshipType,
-          sourceRefs: contactData.sourceRefs,
-          tags: contactData.tags,
+          ...(existingContact.fullName === null && contactData.fullName
+            ? { fullName: contactData.fullName }
+            : {}),
+          ...(existingContact.title === null && contactData.title
+            ? { title: contactData.title }
+            : {}),
+          ...(existingContact.phone === null && contactData.phone
+            ? { phone: contactData.phone }
+            : {}),
+          ...(existingContact.location === null && contactData.location
+            ? { location: contactData.location }
+            : {}),
+          sourceRefs: {
+            ...objectValue(existingContact.sourceRefs),
+            ...contactData.sourceRefs,
+          },
+          tags: [
+            ...stringArray(existingContact.tags),
+            ...contactData.tags,
+          ].filter((tag, index, tags) => tags.indexOf(tag) === index),
         },
       });
       contactsUpdated += 1;

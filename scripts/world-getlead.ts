@@ -5,6 +5,7 @@ import { prisma } from "../src/lib/prisma";
 import { loadSourceFile } from "../src/lib/world/load";
 import { promoteToOffice } from "../src/lib/world/promote";
 import { ingestGetleadContacts } from "../src/lib/world/getlead/contacts";
+import { resolveOfficeSelection } from "../src/lib/world/getlead/office";
 import {
   createGetleadClient,
   deliverCompaniesGuarded,
@@ -150,11 +151,17 @@ async function main() {
   }
   if (command === "promote") {
     const officeArg = stringArg(args, "office");
-    const office = await prisma.office.findFirst({
-      where: { OR: [{ id: officeArg }, { name: officeArg }] },
+    const exactOffice = await prisma.office.findUnique({
+      where: { id: officeArg },
       select: { id: true },
     });
-    if (!office) throw new Error(`Office ${officeArg} was not found`);
+    const office = exactOffice ?? resolveOfficeSelection(
+      await prisma.office.findMany({
+        where: { name: officeArg },
+        select: { id: true, name: true },
+      }),
+      officeArg,
+    );
     const emails = (await readFile(stringArg(args, "emails"), "utf8"))
       .split(/\r?\n/u)
       .map((email) => email.trim().toLowerCase())
