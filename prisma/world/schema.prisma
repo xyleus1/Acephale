@@ -85,21 +85,27 @@ model WorldSourceRecord {
 }
 
 model WorldContact {
-  id           String       @id @default(cuid())
-  companyId    String
-  email        String       @unique
-  emailStatus  String?
-  fullName     String?
-  title        String?
-  role         String?
-  source       String
-  verifiedAt   DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  companyId       String
+  email           String       @unique
+  emailStatus     String?
+  fullName        String?
+  title           String?
+  role            String?
+  source          String
+  verifiedAt      DateTime?
+  phone           String?
+  sourceUpdatedAt DateTime?
+  countryCode     String?
+  mailboxDomain   String?
+  payload         Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   company WorldCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+  @@index([source, verifiedAt])
   @@map("world_contact")
 }
 

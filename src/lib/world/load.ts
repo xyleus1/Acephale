@@ -11,10 +11,11 @@ import {
   parseEuIndustrialEmissionsRow,
 } from "./sources/eu-industrial-emissions";
 import { parseGleifRow } from "./sources/gleif";
+import { normalizeGetleadCompany } from "./sources/getlead";
 import { parsePdlFreeRow } from "./sources/pdl-free";
 import type { NormalizedSourceRecord } from "./records";
 
-type Source = "gleif" | "companies_house" | "pdl_free" | "epa_frs" | "eu_industrial_emissions";
+export type Source = "gleif" | "companies_house" | "pdl_free" | "epa_frs" | "eu_industrial_emissions" | "getlead";
 
 const parsers: Record<Source, (row: Record<string, unknown>) => NormalizedSourceRecord | null> = {
   gleif: (row) => parseGleifRow(row as Record<string, string>),
@@ -22,6 +23,7 @@ const parsers: Record<Source, (row: Record<string, unknown>) => NormalizedSource
   pdl_free: parsePdlFreeRow,
   epa_frs: (row) => parseEpaFrsRow(row as Record<string, string>),
   eu_industrial_emissions: (row) => parseEuIndustrialEmissionsRow(row as Record<string, string>),
+  getlead: normalizeGetleadCompany,
 };
 
 function parseSource(value: string): Source {
@@ -265,7 +267,7 @@ async function* sourceRows(filePath: string, source: Source): AsyncGenerator<Rec
     throw new Error("ZIP input is not supported directly. Unzip the file first, then pass the CSV path.");
   }
   const stream = inputStream(filePath);
-  if (source === "pdl_free" && /\.(jsonl|json)(\.gz)?$/i.test(filePath)) {
+  if ((source === "pdl_free" || source === "getlead") && /\.(jsonl|json)(\.gz)?$/i.test(filePath)) {
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
     for await (const line of lines) {
       if (line.trim()) yield JSON.parse(line) as Record<string, unknown>;

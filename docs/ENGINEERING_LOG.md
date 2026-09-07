@@ -7,6 +7,10 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-11: Getlead world source foundation
+
+- Added a server-side, count-first budget-guarded Getlead client, source normalization, JSONL loading, contact ingestion, mailbox classification, and explicit office-scoped promotion plumbing.
+
 ## 2026-09-11: Outreach readiness follow-up consistency
 
 - Planning and saving now resolve office-scoped reply context identically, resume blockers reach the dashboard, backlog scans latest human replies, fleet send totals include follow-ups, and migration health reports permission failures with a repair path.

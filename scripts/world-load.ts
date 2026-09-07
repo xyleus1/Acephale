@@ -8,6 +8,7 @@ import { downloadHint as companiesHouseHint } from "../src/lib/world/sources/com
 import { downloadHint as epaFrsHint } from "../src/lib/world/sources/epa-frs";
 import { downloadHint as euIndustrialEmissionsHint } from "../src/lib/world/sources/eu-industrial-emissions";
 import { downloadHint as gleifHint } from "../src/lib/world/sources/gleif";
+import { downloadHint as getleadHint } from "../src/lib/world/sources/getlead";
 import { downloadHint as pdlHint } from "../src/lib/world/sources/pdl-free";
 
 type Args = Record<string, string | boolean>;
@@ -46,7 +47,7 @@ function numberArg(args: Args, key: string, fallback: number) {
 function printHelp() {
   console.log(`World company spine CLI
 
-  load --source gleif|companies_house|pdl_free|epa_frs|eu_industrial_emissions --file <path> [--limit N] [--batch N]
+  load --source gleif|companies_house|pdl_free|epa_frs|eu_industrial_emissions|getlead --file <path> [--limit N] [--batch N]
   merge [--source X] [--max-runs N]
   stats
   urls
@@ -94,6 +95,7 @@ async function main() {
       pdl_free: pdlHint,
       epa_frs: epaFrsHint,
       eu_industrial_emissions: euIndustrialEmissionsHint,
+      getlead: getleadHint,
     }, null, 2));
     return;
   }
@@ -101,7 +103,7 @@ async function main() {
   if (command === "load") {
     const result = await loadSourceFile({
       client,
-      source: stringArg(args, "source") as "gleif" | "companies_house" | "pdl_free" | "epa_frs" | "eu_industrial_emissions",
+      source: stringArg(args, "source") as "gleif" | "companies_house" | "pdl_free" | "epa_frs" | "eu_industrial_emissions" | "getlead",
       filePath: stringArg(args, "file"),
       limit: typeof args.limit === "string" ? numberArg(args, "limit", 1) : undefined,
       batchSize: numberArg(args, "batch", 2000),

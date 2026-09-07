@@ -11,6 +11,12 @@ Sourcing categories are derived from the request; curated categories are overrid
 Research management from Context chat: read-only reports run inline; every mutation (pause, resume, purge, expand, requalify, enrich) is an approval card; purge and screening rules are deterministic first, model second; none of it touches outreach.
 # Decisions
 
+## 2026-09-11: Getlead is a paid, office-promoted world source
+
+- Status: accepted
+- Owner: engineering
+- Decision: Getlead remains in the separate world database. Every paid delivery goes through count-first budget guards. Contacts retain `email_verified_at` as the honesty date and `mailboxDomain` for freemail filtering. Promotion into office CRM is explicit and requires `officeId`.
+
 ## An unsettled supplier conversation is owned until it is quoted or durably faded
 Date: 2026-09-09
 

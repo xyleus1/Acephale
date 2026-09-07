@@ -245,7 +245,10 @@
     "cleanup:bad-cbp-market-reviews": "tsx scripts/cleanup-bad-cbp-market-reviews.ts",
     "db:seed": "prisma db seed",
     "world:load": "tsx scripts/world-load.ts",
+    "world:getlead": "tsx scripts/world-getlead.ts",
     "test:world": "tsx scripts/world.test.ts",
+    "test:world-getlead": "tsx scripts/world-getlead.test.ts",
+    "test:world-getlead-db": "tsx scripts/world-getlead-database.test.ts",
     "test:world-db": "tsx scripts/world-database.test.ts",
     "test:supply-os-connectors": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-connectors.test.ts",
     "test:integrations-surface": "node --import tsx scripts/integrations-surface.test.ts"

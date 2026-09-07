@@ -20,6 +20,10 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-11: Getlead world source foundation
+
+- Getlead integration now has typed server-side API and budget guard helpers, normalized company rows, JSONL source registration, contact ingestion with provenance, mailbox classification, and an explicit office-scoped promotion API. The world contact schema migration is applied locally and the focused unit and database tests pass.
+
 ## 2026-09-11: Outreach readiness follow-ups
 
 - Follow-up work keeps plan and save revision hashes aligned, surfaces resume blockers, scans only latest human replies, counts first-touch plus follow-up sends in fleet totals, and grants health checks read-only migration metadata access.
