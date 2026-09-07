@@ -21,7 +21,15 @@ export async function pauseOutreachCampaign(campaignId: string) {
 }
 
 export async function resumeOutreachCampaign(campaignId: string) {
-  return officeCampaignAction(resumeCampaign, campaignId);
+  const session = await requireSession();
+  if (session.accessKind === "customer" || session.role === "EMPLOYEE") {
+    throw new Error("Only operator accounts can manage outreach campaigns.");
+  }
+  const result = await resumeCampaign({ officeId: session.officeId, campaignId });
+  if (!result.resumed) {
+    throw new Error(result.blockers.join(" "));
+  }
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function cancelOutreachCampaign(campaignId: string) {

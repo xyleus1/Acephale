@@ -103,6 +103,7 @@ async function main() {
       senderAccountId: sender.id,
       subject: "Wens test",
       bodyTemplate: "Hello {{company}}. Reply STOP to opt out.",
+      replyContext: { pitch: "Test pitch for automated replies." },
     };
     const plan = await planOutreachCampaign(baseInput);
     assert.equal(plan.emailField, "primary_email");
@@ -520,6 +521,7 @@ async function main() {
       senderAccountId: sender.id,
       subject: "Duplicate test",
       bodyTemplate: "Hello {{company}}. Reply STOP to opt out.",
+      replyContext: { pitch: "Test pitch for automated replies." },
     };
     const duplicatePlan = await planOutreachCampaign(duplicateInput);
     assert.equal(duplicatePlan.eligible, 1);

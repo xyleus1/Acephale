@@ -96,11 +96,19 @@ async function main() {
     });
     const { replyContext, ...withoutReplyContext } = blockedInput;
     void replyContext;
-    const inherited = await saveDraftCampaign({
+    const inheritedPlan = await planOutreachCampaign({
       ...withoutReplyContext,
       list: inheritedList.slug,
       campaignName: `Inherited ${suffix}`,
     });
+    const inherited = await saveDraftCampaign({
+      ...withoutReplyContext,
+      list: inheritedList.slug,
+      campaignName: `Inherited ${suffix}`,
+      emailField: inheritedPlan.emailField,
+    });
+    assert.equal(inheritedPlan.revisionHash, inherited.revisionHash);
+    assert.equal(inheritedPlan.replyContextInheritedFrom, inherited.replyContextInheritedFrom);
     assert.equal(inherited.replyContextInheritedFrom, validDraft.id);
     const inheritedCampaign = await prisma.outreachCampaign.findUniqueOrThrow({ where: { id: inherited.id } });
     assert.equal(inheritedCampaign.replyContext && typeof inheritedCampaign.replyContext === "object", true);

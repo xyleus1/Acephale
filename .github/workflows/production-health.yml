@@ -24,12 +24,14 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          response="$(curl -fsS https://app.derya.ai/api/health -H "x-cron-secret: ${CRON_SECRET}")"
+          http_code="$(curl -sS -o /tmp/health.json -w '%{http_code}' https://app.derya.ai/api/health -H "x-cron-secret: ${CRON_SECRET}")"
+          response="$(cat /tmp/health.json)"
           status="$(jq -r '.status // "unknown"' <<<"${response}")"
           ok="$(jq -r '.ok // false' <<<"${response}")"
+          echo "http_code=${http_code}"
           echo "status=${status}"
           jq -r '.checks[]? | select(.ok != true) | "failed=\(.name): \(.detail // "no detail")"' <<<"${response}"
-          if [ "${ok}" != "true" ]; then
+          if [ "${http_code}" != "200" ] || [ "${ok}" != "true" ]; then
             echo "Production health is not ready."
             exit 1
           fi

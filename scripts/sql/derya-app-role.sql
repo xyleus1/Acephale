@@ -27,9 +27,17 @@ REVOKE CREATE ON SCHEMA public FROM derya_app;
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM derya_app;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM derya_app;
 
+DO $$
+BEGIN
+  IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
+    GRANT SELECT ON TABLE public._prisma_migrations TO derya_app;
+  END IF;
+END $$;
+
 -- Keep this list explicit. A naming convention is not a security boundary.
 -- Every entry is a Prisma model table used by the application runtime. Lowercase
--- workflow tables and _prisma_migrations are deliberately excluded.
+-- workflow tables stay excluded. _prisma_migrations gets read-only SELECT so
+-- the health endpoint can verify applied migrations.
 DO $$
 DECLARE
   app_table text;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   cancelOutreachCampaign,
   pauseOutreachCampaign,
@@ -17,13 +17,18 @@ export function ActiveCampaignControls({
   className?: string;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const run = (action: (campaignId: string) => Promise<void>) => {
+    setError(null);
     startTransition(() => {
-      void action(campaignId);
+      void action(campaignId).catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "Campaign action failed.");
+      });
     });
   };
   return (
     <div className={className}>
+      {error ? <div role="alert">{error}</div> : null}
       {status === "ACTIVE" ? (
         <button type="button" disabled={pending} onClick={() => run(pauseOutreachCampaign)}>
           Pause

@@ -1063,8 +1063,12 @@ async function main() {
   // consume the same daily cap as first touches.
   const summarySource = readFileSync(path.join(process.cwd(), "src/lib/outreach-campaigns.ts"), "utf8");
   const summaryBody = summarySource.slice(summarySource.indexOf("export async function listCampaignSummaries"));
-  assert.match(summaryBody, /prisma\.outreachCampaignSend\.groupBy\(\{ by: \["campaignId"\], where: todayScope/);
-  assert.match(summaryBody, /prisma\.outreachCampaignFollowUp\.groupBy\(\{ by: \["campaignId"\], where: todayScope/);
+  assert.match(summaryBody, /campaignSentCounts\(/);
+  const sentCountsStart = summarySource.indexOf("export async function campaignSentCounts");
+  const sentCountsBody = summarySource.slice(sentCountsStart, summarySource.indexOf("export async function listCampaignSummaries", sentCountsStart));
+  assert.match(sentCountsBody, /prisma\.outreachCampaignSend\.groupBy\(\{/);
+  assert.match(sentCountsBody, /prisma\.outreachCampaignFollowUp\.groupBy\(\{/);
+  assert.match(sentCountsBody, /sentAt: \{ gte: start, lt: end \}/);
   assert.match(summaryBody, /sentToday: sentToday\.get\(campaign\.id\) \?\? 0/);
 
   // A rotated campaign has no pinned sender. Each follow-up leaves from the

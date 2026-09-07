@@ -20,6 +20,10 @@ Live list selection now survives section remounts, and deep-linked projects
 apply once so Back to projects clears the URL state.
 # AI Handoff
 
+## 2026-09-11: Outreach readiness follow-ups
+
+- Follow-up work keeps plan and save revision hashes aligned, surfaces resume blockers, scans only latest human replies, counts first-touch plus follow-up sends in fleet totals, and grants health checks read-only migration metadata access.
+
 ## 2026-09-10: Outreach readiness guards
 
 - Production health now detects unapplied committed migrations and outreach schema drift, with API and UI errors that direct operators to the migration workflow instead of returning empty campaign data.

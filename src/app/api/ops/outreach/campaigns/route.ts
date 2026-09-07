@@ -22,6 +22,7 @@ import {
   campaignRecipientFeedback,
   campaignReplyDigest,
   campaignRevisionHashForEdit,
+  campaignSentCounts,
   listCampaignSummaries,
   planOutreachCampaign,
   replyContextBlocker,
@@ -41,7 +42,6 @@ import { runOutreachCampaignAutoReplies } from "@/lib/outreach-campaign-auto-rep
 import { replyContextInput, replyModeInput } from "@/lib/outreach-campaign-reply-settings";
 import { campaignIntroEvidence, generateCampaignIntro } from "@/lib/outreach-campaign-intro";
 import { isSchemaNotReadyError, OUTREACH_SCHEMA_NOT_READY_MESSAGE, outreachPipelineChecks, outreachSchemaChecks, pendingMigrationsCheck, outreachReplyBacklog } from "@/lib/outreach-readiness";
-import { utcDayBounds } from "@/lib/email-sender-pool-policy";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -211,22 +211,10 @@ export async function POST(request: NextRequest) {
       ]);
       const officeNames = new Map(offices.map((office) => [office.id, office.name]));
       const campaignIds = campaigns.map((campaign) => campaign.id);
-      const { start, end } = utcDayBounds(now);
-      const [sentToday, sentTotal, backlog] = await Promise.all([
-        prisma.outreachCampaignSend.groupBy({
-          by: ["campaignId"],
-          where: { campaignId: { in: campaignIds }, status: "SENT", sentAt: { gte: start, lt: end } },
-          _count: { _all: true },
-        }),
-        prisma.outreachCampaignSend.groupBy({
-          by: ["campaignId"],
-          where: { campaignId: { in: campaignIds }, status: "SENT" },
-          _count: { _all: true },
-        }),
+      const [{ sentToday, sentTotal }, backlog] = await Promise.all([
+        campaignSentCounts(campaignIds, { now }),
         outreachReplyBacklog(prisma, now),
       ]);
-      const todayByCampaign = new Map(sentToday.map((row) => [row.campaignId, row._count._all]));
-      const totalByCampaign = new Map(sentTotal.map((row) => [row.campaignId, row._count._all]));
       const fleetCampaigns = campaigns.map((campaign) => ({
         officeId: campaign.officeId,
         officeName: officeNames.get(campaign.officeId) ?? campaign.officeId,
@@ -236,8 +224,8 @@ export async function POST(request: NextRequest) {
         replyMode: campaign.replyMode,
         hasReplyContext: !Boolean(replyContextBlocker(campaign.replyMode, campaign.replyContext)),
         lastRunAt: campaign.lastRunAt,
-        sentToday: todayByCampaign.get(campaign.id) ?? 0,
-        sentTotal: totalByCampaign.get(campaign.id) ?? 0,
+        sentToday: sentToday.get(campaign.id) ?? 0,
+        sentTotal: sentTotal.get(campaign.id) ?? 0,
         repliesUnanswered: backlog.byCampaign.get(campaign.id) ?? 0,
       }));
       return NextResponse.json({

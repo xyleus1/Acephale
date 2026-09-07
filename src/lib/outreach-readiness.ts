@@ -1,5 +1,11 @@
 import type { HealthCheck } from "@/lib/health-status";
+import {
+  classifyDeliveryFeedback,
+  DELIVERY_FEEDBACK_CLASSIFICATION,
+} from "@/lib/email-delivery-feedback";
 import { COMMITTED_MIGRATIONS } from "@/lib/migration-manifest";
+import { AUTO_REPLY_CLAIM_TIMEOUT_MS } from "@/lib/outreach-campaign-auto-reply";
+import { isHumanReplyMessage } from "@/lib/outreach-campaign-copy";
 import { replyContextBlocker } from "@/lib/outreach-reply-context";
 
 type ReadinessDb = {
@@ -16,7 +22,7 @@ type ReadinessDb = {
     findFirst(args: unknown): Promise<unknown>;
     findMany(args: unknown): Promise<unknown[]>;
   };
-  emailMessage: {
+  emailThread: {
     findMany(args: unknown): Promise<unknown[]>;
   };
   emailAccount: {
@@ -92,11 +98,14 @@ export async function pendingMigrationsCheck(db: ReadinessDb): Promise<HealthChe
         : {}),
     };
   } catch (error) {
+    const message = errorDetail(error);
     return {
       name: "prisma_migrations_applied",
       ok: false,
       severity: "critical",
-      detail: errorDetail(error),
+      detail: message.toLowerCase().includes("permission denied")
+        ? "app role cannot read _prisma_migrations, apply migration 20260907000100_grant_prisma_migrations_read via the production migration workflow"
+        : message,
     };
   }
 }
@@ -105,40 +114,140 @@ export async function outreachReplyBacklog(
   db: ReadinessDb,
   now = new Date(),
 ) {
-  const sends = await db.outreachCampaignSend.findMany({
-    where: { status: "SENT", localThreadId: { not: null } },
-    select: { campaignId: true, localThreadId: true },
-    orderBy: { sentAt: "desc" },
-    take: 2000,
-  }) as Array<{ campaignId: string; localThreadId: string | null }>;
-  const threadToCampaign = new Map(
-    sends
-      .filter((send) => send.localThreadId)
-      .map((send) => [send.localThreadId as string, send.campaignId]),
-  );
+  const sends: Array<{ id: string; campaignId: string; localThreadId: string | null; senderEmail: string | null }> = [];
+  let cursor: string | undefined;
+  while (true) {
+    const batch = await db.outreachCampaignSend.findMany({
+      where: { status: "SENT", localThreadId: { not: null } },
+      select: { id: true, campaignId: true, localThreadId: true, senderEmail: true },
+      orderBy: { id: "asc" },
+      take: 2000,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    }) as Array<{ id: string; campaignId: string; localThreadId: string | null; senderEmail: string | null }>;
+    sends.push(...batch);
+    if (batch.length < 2000) break;
+    cursor = batch[batch.length - 1]?.id;
+    if (!cursor) break;
+  }
+  const threadToCampaign = new Map<string, { campaignId: string; senderEmails: string[] }>();
+  for (const send of sends) {
+    if (!send.localThreadId) continue;
+    const existing = threadToCampaign.get(send.localThreadId);
+    if (existing) {
+      if (send.senderEmail) existing.senderEmails.push(send.senderEmail);
+    } else {
+      threadToCampaign.set(send.localThreadId, {
+        campaignId: send.campaignId,
+        senderEmails: send.senderEmail ? [send.senderEmail] : [],
+      });
+    }
+  }
   if (!threadToCampaign.size) return { count: 0, byCampaign: new Map<string, number>() };
   const accounts = await db.emailAccount.findMany({ select: { email: true } }) as Array<{ email: string }>;
   const ownEmails = new Set(accounts.map((account) => account.email.trim().toLowerCase()));
-  const inbound = await db.emailMessage.findMany({
-    where: {
-      direction: "INBOUND",
-      sentAt: { lt: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
-      threadId: { in: [...threadToCampaign.keys()] },
-    },
-    select: { id: true, threadId: true, fromEmail: true },
-  }) as Array<{ id: string; threadId: string; fromEmail: string }>;
-  const candidateInbound = inbound.filter((message) => !ownEmails.has(message.fromEmail.trim().toLowerCase()));
-  if (!candidateInbound.length) return { count: 0, byCampaign: new Map<string, number>() };
-  const replies = await db.outreachCampaignReply.findMany({
-    where: { inboundMessageId: { in: candidateInbound.map((message) => message.id) } },
-    select: { inboundMessageId: true },
-  }) as Array<{ inboundMessageId: string }>;
-  const answered = new Set(replies.map((reply) => reply.inboundMessageId));
+  const threadIds = [...threadToCampaign.keys()];
   const byCampaign = new Map<string, number>();
-  for (const message of candidateInbound) {
-    if (answered.has(message.id)) continue;
-    const campaignId = threadToCampaign.get(message.threadId);
-    if (campaignId) byCampaign.set(campaignId, (byCampaign.get(campaignId) ?? 0) + 1);
+  const cutoff = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  for (let index = 0; index < threadIds.length; index += 500) {
+    const chunk = threadIds.slice(index, index + 500);
+    const threads = await db.emailThread.findMany({
+      where: { id: { in: chunk } },
+      select: {
+        id: true,
+        subject: true,
+        messages: {
+          orderBy: { sentAt: "desc" },
+          take: 10,
+          where: {
+            deliveryKind: null,
+            OR: [
+              { classification: null },
+              { classification: { not: DELIVERY_FEEDBACK_CLASSIFICATION } },
+            ],
+          },
+          select: {
+            id: true,
+            direction: true,
+            fromEmail: true,
+            subject: true,
+            bodyText: true,
+            sentAt: true,
+            deliveryKind: true,
+            classification: true,
+          },
+        },
+      },
+    }) as Array<{
+      id: string;
+      subject: string;
+      messages: Array<{
+        id: string;
+        direction: string;
+        fromEmail: string;
+        subject: string | null;
+        bodyText: string | null;
+        sentAt: Date;
+        deliveryKind: string | null;
+        classification: string | null;
+      }>;
+    }>;
+    const candidates = threads.flatMap((thread) => {
+      const sendInfo = threadToCampaign.get(thread.id);
+      if (!sendInfo) return [];
+      const ownAddresses = [...ownEmails, ...sendInfo.senderEmails.map((email) => email.trim().toLowerCase())];
+      const decisive = thread.messages.find((message) => {
+        if (message.direction === "OUTBOUND") return true;
+        if (
+          message.direction !== "INBOUND"
+          || ownAddresses.includes(message.fromEmail.trim().toLowerCase())
+          || !isHumanReplyMessage(message)
+        ) {
+          return false;
+        }
+        const feedback = classifyDeliveryFeedback({
+          subject: message.subject ?? thread.subject,
+          fromEmail: message.fromEmail,
+          bodyText: message.bodyText ?? "",
+          headers: [],
+          ownAddresses,
+        });
+        return !feedback || feedback.kind === "OPT_OUT";
+      });
+      if (!decisive || decisive.direction === "OUTBOUND" || decisive.sentAt >= cutoff) return [];
+      return [{ id: decisive.id, campaignId: sendInfo.campaignId }];
+    });
+    if (!candidates.length) continue;
+    const replies = await db.outreachCampaignReply.findMany({
+      where: { inboundMessageId: { in: candidates.map((candidate) => candidate.id) } },
+      select: { inboundMessageId: true, action: true, claimedAt: true, pendingAt: true },
+    }) as Array<{
+      inboundMessageId: string;
+      action: string;
+      claimedAt: Date | null;
+      pendingAt: Date | null;
+    }>;
+    const repliesByInbound = new Map(replies.map((reply) => [reply.inboundMessageId, reply]));
+    for (const candidate of candidates) {
+      const reply = repliesByInbound.get(candidate.id);
+      const handled = reply && (
+        reply.action === "SENT"
+        || reply.action === "SUPPRESSED"
+        || (
+          reply.action === "CLAIMED"
+          || reply.action === "PENDING"
+          || reply.action === "RECONCILING"
+        ) && (() => {
+          const timestamp = reply.action === "PENDING"
+            ? reply.pendingAt
+            : reply.claimedAt ?? reply.pendingAt;
+          return Boolean(timestamp)
+            && now.getTime() - (timestamp as Date).getTime() < AUTO_REPLY_CLAIM_TIMEOUT_MS;
+        })()
+      );
+      if (!handled) {
+        byCampaign.set(candidate.campaignId, (byCampaign.get(candidate.campaignId) ?? 0) + 1);
+      }
+    }
   }
   return {
     count: [...byCampaign.values()].reduce((total, count) => total + count, 0),

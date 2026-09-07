@@ -28,9 +28,9 @@ export const AUTO_REPLY_DEFAULT_LIMIT = 25;
 export const AUTO_REPLY_MIN_CONFIDENCE = 0.7;
 export const AUTO_REPLY_MAX_DRAFT_LENGTH = 1500;
 export const AUTO_REPLY_MAX_THREAD_REPLIES = 3;
+export const AUTO_REPLY_CLAIM_TIMEOUT_MS = 30 * 60 * 1000;
 
 export type AutoReplyAction = "SENT" | "ESCALATED" | "SUPPRESSED" | "SKIPPED" | "FAILED";
-const AUTO_REPLY_CLAIM_TIMEOUT_MS = 30 * 60 * 1000;
 const AUTO_REPLY_PENDING_TIMEOUT_MS = 30 * 60 * 1000;
 export type ReplyMode = "AUTO" | "DRAFT" | "OFF";
 

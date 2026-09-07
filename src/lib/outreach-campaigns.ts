@@ -123,6 +123,7 @@ export type CampaignPlan = {
   dailyCap: number;
   audienceTotal: number;
   revisionHash: string;
+  replyContextInheritedFrom: string | null;
   mailboxesAvailable: number;
   emailField: string;
   sampleRecipients: Array<{
@@ -199,6 +200,26 @@ function campaignFilters(input: {
     segmentField: input.segmentField,
     ...(excludeEmails.length ? { excludeEmails } : {}),
   };
+}
+
+async function resolveReplyContext(
+  officeId: string,
+  replyMode: string,
+  replyContext: unknown,
+): Promise<{ replyContext: unknown; inheritedFrom: string | null }> {
+  if (replyContext !== undefined || replyMode === "OFF") {
+    return { replyContext, inheritedFrom: null };
+  }
+  const previousCampaigns = await prisma.outreachCampaign.findMany({
+    where: { officeId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: { id: true, replyContext: true },
+  });
+  const inherited = previousCampaigns.find((candidate) => !replyContextBlocker(replyMode, candidate.replyContext));
+  return inherited
+    ? { replyContext: inherited.replyContext, inheritedFrom: inherited.id }
+    : { replyContext: undefined, inheritedFrom: null };
 }
 
 function jsonObject(value: Prisma.JsonValue | null): Record<string, unknown> {
@@ -514,6 +535,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
   const dailyCap = input.dailyCap ?? 40;
   const senderDisplayName = normalizeCampaignSenderDisplayName(input.senderDisplayName);
   const followUps = normalizeCampaignFollowUps(input.followUps);
+  const replyMode = input.replyMode ?? "AUTO";
+  const resolvedReplyContext = await resolveReplyContext(input.officeId, replyMode, input.replyContext);
   const sender = await senderDetails(input.senderRotation ? null : input.senderAccountId ?? null, senderDisplayName);
   const revisionHash = campaignRevisionHash({
     subject: campaignSubject,
@@ -525,8 +548,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     senderAccountId: input.senderRotation ? null : input.senderAccountId ?? null,
     senderRotation: input.senderRotation === true,
     senderDisplayName,
-    replyMode: input.replyMode ?? "AUTO",
-    replyContext: input.replyContext ?? null,
+    replyMode,
+    replyContext: resolvedReplyContext.replyContext ?? null,
     variants,
     audienceRecordIds: eligibleWithoutContacted.map((record) => record.id),
     audiencePersonalization: campaignPersonalizationMap({
@@ -577,7 +600,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     return { ...recipient, position: pick.position, pick: pick.pick, subject: rendered.subject, body: rendered.body };
   });
   const audienceQuality = summarizeRecipientQuality(eligibleRows.map(recipientOf));
-  const warnings = replyContextBlocker(input.replyMode ?? "AUTO", input.replyContext)
+  const warnings = replyContextBlocker(replyMode, resolvedReplyContext.replyContext)
     ? ["Auto-reply is on but the campaign has no reply context (pitch, offer, FAQs)."]
     : [];
   return {
@@ -588,6 +611,7 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
     missingEmail,
     audienceTotal: eligibleWithoutContacted.length,
     revisionHash,
+    replyContextInheritedFrom: resolvedReplyContext.inheritedFrom,
     filters,
     dailyCap,
     subject: eligibleWithoutContacted[0] ? renderedSample.subject : campaignSubject,
@@ -618,8 +642,8 @@ export async function planOutreachCampaign(input: PlanOutreachCampaignInput): Pr
         subject: campaignSubject,
         bodyTemplate: campaignBodyTemplate,
         dailyCap,
-        replyMode: input.replyMode ?? "AUTO",
-        replyContext: input.replyContext,
+        replyMode,
+        replyContext: resolvedReplyContext.replyContext,
         enforceReplyContext: false,
         variants,
         followUps,
@@ -710,21 +734,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
   });
   const audienceTotal = audienceRecordIds.length;
   const replyMode = input.replyMode ?? "AUTO";
-  let replyContext = input.replyContext;
-  let replyContextInheritedFrom: string | null = null;
-  if (replyContext === undefined && replyMode !== "OFF") {
-    const previousCampaigns = await prisma.outreachCampaign.findMany({
-      where: { officeId: input.officeId },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      select: { id: true, replyContext: true },
-    });
-    const inherited = previousCampaigns.find((candidate) => !replyContextBlocker(replyMode, candidate.replyContext));
-    if (inherited) {
-      replyContext = inherited.replyContext;
-      replyContextInheritedFrom = inherited.id;
-    }
-  }
+  const resolvedReplyContext = await resolveReplyContext(input.officeId, replyMode, input.replyContext);
   const revisionHash = campaignRevisionHash({
     subject: campaignSubject,
     bodyTemplate: campaignBodyTemplate,
@@ -740,7 +750,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     audiencePersonalization,
     followUps,
     replyMode,
-    replyContext: replyContext ?? null,
+    replyContext: resolvedReplyContext.replyContext ?? null,
   });
   const data = {
     name,
@@ -761,7 +771,9 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
     senderDisplayName: normalizeCampaignSenderDisplayName(input.senderDisplayName),
     senderRotation: input.senderRotation === true,
     replyMode,
-    replyContext: replyContext === undefined ? Prisma.DbNull : replyContext as Prisma.InputJsonValue,
+    replyContext: resolvedReplyContext.replyContext === undefined
+      ? Prisma.DbNull
+      : resolvedReplyContext.replyContext as Prisma.InputJsonValue,
     variants: variants ? variants as Prisma.InputJsonValue : Prisma.DbNull,
     createdByUserId: input.createdByUserId ?? null,
   };
@@ -782,7 +794,7 @@ export async function saveDraftCampaign(input: PlanOutreachCampaignInput & {
       select: { id: true },
     });
   }
-  return { id: campaign.id, revisionHash, replyContextInheritedFrom };
+  return { id: campaign.id, revisionHash, replyContextInheritedFrom: resolvedReplyContext.inheritedFrom };
 }
 
 export const CAMPAIGN_CLAIM_LOST_BLOCKER =
@@ -1082,6 +1094,50 @@ export type CampaignSummary = {
   lastRunAt: Date | null;
 };
 
+export async function campaignSentCounts(
+  campaignIds: readonly string[],
+  options: { officeId?: string; now?: Date } = {},
+) {
+  const sentToday = new Map<string, number>();
+  const sentTotal = new Map<string, number>();
+  if (campaignIds.length === 0) return { sentToday, sentTotal };
+  const whereBase = {
+    ...(options.officeId ? { officeId: options.officeId } : {}),
+    campaignId: { in: [...campaignIds] },
+    status: "SENT",
+  };
+  const { start, end } = utcDayBounds(options.now ?? new Date());
+  const [firstToday, followUpToday, firstTotal, followUpTotal] = await Promise.all([
+    prisma.outreachCampaignSend.groupBy({
+      by: ["campaignId"],
+      where: { ...whereBase, sentAt: { gte: start, lt: end } },
+      _count: { _all: true },
+    }),
+    prisma.outreachCampaignFollowUp.groupBy({
+      by: ["campaignId"],
+      where: { ...whereBase, sentAt: { gte: start, lt: end } },
+      _count: { _all: true },
+    }),
+    prisma.outreachCampaignSend.groupBy({
+      by: ["campaignId"],
+      where: whereBase,
+      _count: { _all: true },
+    }),
+    prisma.outreachCampaignFollowUp.groupBy({
+      by: ["campaignId"],
+      where: whereBase,
+      _count: { _all: true },
+    }),
+  ]);
+  for (const row of [...firstToday, ...followUpToday]) {
+    sentToday.set(row.campaignId, (sentToday.get(row.campaignId) ?? 0) + row._count._all);
+  }
+  for (const row of [...firstTotal, ...followUpTotal]) {
+    sentTotal.set(row.campaignId, (sentTotal.get(row.campaignId) ?? 0) + row._count._all);
+  }
+  return { sentToday, sentTotal };
+}
+
 export async function listCampaignSummaries(
   officeId: string,
   statuses: readonly CampaignStatus[] = ["ACTIVE", "PAUSED"],
@@ -1132,18 +1188,7 @@ export async function listCampaignSummaries(
       where: { officeId, campaignId: { in: campaignIds } },
       _count: { _all: true },
     });
-    const { start, end } = utcDayBounds(new Date());
-    // sentToday reports everything that consumed the campaign daily cap today:
-    // first touches and follow-ups share the same cap.
-    const todayScope = { officeId, campaignId: { in: campaignIds }, status: "SENT", sentAt: { gte: start, lt: end } };
-    const [firstTouchesToday, followUpsToday] = await Promise.all([
-      prisma.outreachCampaignSend.groupBy({ by: ["campaignId"], where: todayScope, _count: { _all: true } }),
-      prisma.outreachCampaignFollowUp.groupBy({ by: ["campaignId"], where: todayScope, _count: { _all: true } }),
-    ]);
-    const sentToday = new Map<string, number>();
-    for (const row of [...firstTouchesToday, ...followUpsToday]) {
-      sentToday.set(row.campaignId, (sentToday.get(row.campaignId) ?? 0) + row._count._all);
-    }
+    const { sentToday } = await campaignSentCounts(campaignIds, { officeId });
     const localThreads = await prisma.outreachCampaignSend.findMany({
       where: { officeId, campaignId: { in: campaignIds }, status: "SENT", localThreadId: { not: null } },
       select: { campaignId: true, localThreadId: true, variantKey: true },
