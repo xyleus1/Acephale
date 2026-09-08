@@ -7,6 +7,10 @@ Context chat now reports and manages existing prospect research through office-s
 - Research operations now scope projects to the active company, pin purge reasons, and prioritize older or unscreened rows during forced requalification.
 # Engineering Log
 
+## 2026-09-11: Ops portfolio report
+
+- Added a read-only, office-scoped portfolio endpoint that combines CRM, research, outreach, email, and procurement visibility.
+
 ## 2026-09-11: Getlead world source foundation
 
 - Added a server-side, count-first budget-guarded Getlead client, source normalization, JSONL loading, contact ingestion, mailbox classification, and explicit office-scoped promotion plumbing.

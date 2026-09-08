@@ -70,6 +70,18 @@ type OrderListRow = Omit<OrderDetailRow, "approvalRequestedAt" | "decisionSnapsh
   responseCount: number | string;
 };
 
+type ProcurementSummaryAggregateRow = {
+  orders: number | string;
+  suppliers: number | string;
+  contacted: number | string;
+  responses: number | string;
+};
+
+type ProcurementSummaryStatusRow = {
+  status: string;
+  orders: number | string;
+};
+
 type CommunicationLedgerRow = {
   provider: string;
   accountEmail: string;
@@ -1090,6 +1102,61 @@ export async function listProcurementRequests(
   filters: ProcurementListFilters = {},
 ) {
   return listProcurementRequestsFromDatabase(externalDatabase(), customerId, limit, sourceCampaign, filters);
+}
+
+export type ProcurementRequestSummary = {
+  orders: number;
+  suppliers: number;
+  contacted: number;
+  responses: number;
+  byStatus: Record<string, number>;
+};
+
+export async function summarizeProcurementRequestsFromDatabase(
+  database: RawDatabase,
+  customerId: string,
+): Promise<ProcurementRequestSummary> {
+  try {
+    const ledgerAvailable = await procurementCommunicationLedgerAvailable(database);
+    const [aggregateRows, statusRows] = await Promise.all([
+      database.$queryRawUnsafe<ProcurementSummaryAggregateRow[]>(`
+        SELECT
+          COUNT(*)::int AS orders,
+          COALESCE(SUM(COALESCE(supplier_metrics."supplierCount", 0)), 0)::int AS suppliers,
+          COALESCE(SUM(COALESCE(supplier_metrics."contactedCount", 0)), 0)::int AS contacted,
+          COALESCE(SUM(COALESCE(supplier_metrics."responseCount", 0)), 0)::int AS responses
+        FROM orders
+        LEFT JOIN LATERAL (${supplierMetricsSql(ledgerAvailable)}) AS supplier_metrics
+          ON true
+        WHERE orders.customer_id = $1::uuid
+      `, customerId),
+      database.$queryRawUnsafe<ProcurementSummaryStatusRow[]>(`
+        SELECT status, COUNT(*)::int AS orders
+        FROM orders
+        WHERE customer_id = $1::uuid
+        GROUP BY status
+      `, customerId),
+    ]);
+    const aggregate = aggregateRows[0];
+    const byStatus: Record<string, number> = {};
+    for (const row of statusRows) {
+      byStatus[row.status] = numberValue(row.orders);
+    }
+    return {
+      orders: numberValue(aggregate?.orders ?? 0),
+      suppliers: numberValue(aggregate?.suppliers ?? 0),
+      contacted: numberValue(aggregate?.contacted ?? 0),
+      responses: numberValue(aggregate?.responses ?? 0),
+      byStatus,
+    };
+  } catch (error) {
+    if (error instanceof ProcurementWorkflowError) throw error;
+    throw new ProcurementWorkflowError("The procurement workflow database is unavailable.", "unavailable");
+  }
+}
+
+export async function summarizeProcurementRequests(customerId: string) {
+  return summarizeProcurementRequestsFromDatabase(externalDatabase(), customerId);
 }
 
 export async function requestBourneWorkflowWake(

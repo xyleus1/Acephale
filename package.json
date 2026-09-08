@@ -31,6 +31,7 @@
     "test:office-provisioning": "tsx scripts/office-provisioning.test.ts",
     "test:ops-secret": "tsx scripts/ops-secret.test.ts",
     "test:ops-input": "tsx scripts/ops-input.test.ts",
+    "test:ops-portfolio": "tsx scripts/ops-portfolio.test.ts",
     "test:outreach-campaign-copy": "tsx scripts/outreach-campaign-copy.test.ts",
     "test:migration-manifest": "tsx scripts/migration-manifest.test.ts",
     "test:outreach-readiness": "NODE_OPTIONS='--conditions=react-server' tsx scripts/outreach-readiness.test.ts",
