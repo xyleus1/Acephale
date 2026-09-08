@@ -27,7 +27,7 @@ const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 const migration = readFileSync(
   join(root, "prisma/migrations/20260812000100_supply_intelligence_profiles/migration.sql"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")) as {
   buildCommand?: string;
   crons?: Array<{ path?: string; schedule?: string }>;

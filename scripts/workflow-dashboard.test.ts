@@ -605,6 +605,8 @@ assert(provisioningSql.includes("rolreplication"));
 assert(provisioningSql.includes("rolbypassrls"));
 assert(provisioningSql.includes("pg_auth_members"));
 assert(provisioningSql.includes("GRANT SELECT (id) ON customers TO dashboard_api"));
+assert(provisioningSql.includes("GRANT SELECT ON procurement_customer_scope TO dashboard_api"));
+assert(provisioningSql.includes("dashboard_api cannot read procurement customer scope"));
 assert(provisioningSql.includes("GRANT UPDATE (order_id, updated_at) ON procurement_api_idempotency"));
 assert(provisioningSql.includes("\\ir bourne-procurement-communication-ledger.sql"));
 assert(communicationLedgerSql.includes("CREATE TABLE IF NOT EXISTS public.procurement_communication_messages"));
@@ -653,6 +655,7 @@ assert(provisioningSql.includes(
 ));
 assert(provisioningSql.includes("has_column_privilege('dashboard_api', 'order_vendors', 'name', 'UPDATE')"));
 assert(!/GRANT\s+INSERT(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));
+assert(!/GRANT\s+(?:INSERT|UPDATE|DELETE|TRUNCATE)[^;]*ON\s+(?:public\.)?procurement_customer_scope\s+TO\s+dashboard_api/i.test(provisioningSql));
 
 console.log("Procurement workflow contract passed.");
 }

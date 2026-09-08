@@ -48,6 +48,18 @@ async function withSerializableRetry<T>(operation: () => Promise<T>) {
   throw new SupplyPersistenceError("Connected supplier replies could not be saved.", "conflict");
 }
 
+async function invalidateConnectedReplyState(officeId: string, workspaceId: string) {
+  try {
+    const { invalidateWorkspaceControlStateProjection } = await import(
+      "./state-runtime/projections/invalidate"
+    );
+    await invalidateWorkspaceControlStateProjection({ officeId, workspaceId });
+  } catch {
+    // Reply and evidence ledgers are canonical. Cache invalidation is best
+    // effort, and read-time dependency validation still rejects stale rows.
+  }
+}
+
 function requiredText(value: unknown, label: string, max: number) {
   if (typeof value !== "string") throw new SupplyPersistenceError(`${label} is required.`, "invalid_input");
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -200,7 +212,7 @@ export async function captureConnectedSupplierReplies(args: {
     throw new SupplyPersistenceError("Connected Gmail did not return the delivered quote-request thread. Retry after checking the sender connection.", "conflict");
   }
 
-  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
+  const capturedReplies = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${cycle.parentTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" IN (${cycle.id}, ${action.id}) AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
     const [currentCase, currentCycle, currentAction] = await Promise.all([
@@ -324,6 +336,8 @@ export async function captureConnectedSupplierReplies(args: {
     await appendEvent({ tx, taskId: currentCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REPLIES_CAPTURED", status: "PLANNED", message: "Connected supplier replies are ready for commercial review.", payload });
     return { captured: captured.length, total: connectedReplies.length, quoteCycle: updatedCycle };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+  await invalidateConnectedReplyState(args.context.officeId, workspace.id);
+  return capturedReplies;
 }
 
 export async function captureConnectedPurchaseOrderReplies(args: {
@@ -416,7 +430,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
     throw new SupplyPersistenceError("Connected Gmail did not return the delivered purchase order thread. Retry after checking the sender connection.", "conflict");
   }
 
-  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
+  const capturedReplies = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseAction.id} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -556,4 +570,6 @@ export async function captureConnectedPurchaseOrderReplies(args: {
     }
     return { captured: captured.length, total: connectedAcknowledgmentReplies.length, purchaseAction: updatedAction };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+  await invalidateConnectedReplyState(accessContext.officeId, workspace.id);
+  return capturedReplies;
 }

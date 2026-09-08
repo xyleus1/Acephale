@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { DEMO_EMAIL_THREAD_MARKER } from "@/lib/email-demo-markers";
+import { UNROUTED_MAIL_THREAD_MARKER } from "@/lib/inbound-mail-routing";
 import { ingestKnowledgeObject, type EntityReference } from "./ingest-object";
 import { recordMemoryEvent } from "./record-event";
 import { assertCanonicalType } from "./canonical-types";
@@ -385,8 +386,17 @@ export async function backfillCompanyBrainMemory(input: BackfillCompanyBrainInpu
     counts.jobs++;
   }
 
+  // tenant-scope:ignore administrative backfill may enumerate offices; every selected thread retains its canonical officeId/companyId for scoped ingestion below.
   const threads = await prisma.emailThread.findMany({
-    where: { ...officeWhere, NOT: { autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER } },
+    where: {
+      ...officeWhere,
+      companyId: { not: null },
+      hiddenAt: null,
+      OR: [
+        { autoLinkSkipReason: null },
+        { autoLinkSkipReason: { notIn: [DEMO_EMAIL_THREAD_MARKER, UNROUTED_MAIL_THREAD_MARKER] } },
+      ],
+    },
     orderBy: { updatedAt: "desc" },
     take: rowTake,
   });
@@ -419,6 +429,8 @@ export async function backfillCompanyBrainMemory(input: BackfillCompanyBrainInpu
       text: [thread.subject, thread.participants, thread.supplierOffer].filter(Boolean).join("\n"),
       entityType: "email_thread",
       entityId: thread.id,
+      companyId: thread.companyId,
+      contactId: thread.contactId,
       inquiryId: thread.inquiryId,
       jobId: thread.jobId,
       emailThreadId: thread.id,
@@ -454,14 +466,29 @@ export async function backfillCompanyBrainMemory(input: BackfillCompanyBrainInpu
     where: {
       thread: {
         ...(input.officeId ? { officeId: input.officeId } : {}),
-        NOT: { autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER },
+        companyId: { not: null },
+        hiddenAt: null,
+        OR: [
+          { autoLinkSkipReason: null },
+          { autoLinkSkipReason: { notIn: [DEMO_EMAIL_THREAD_MARKER, UNROUTED_MAIL_THREAD_MARKER] } },
+        ],
       },
     },
     orderBy: { sentAt: "desc" },
     take: rowTake,
     include: {
       account: { select: { provider: true, email: true } },
-      thread: { select: { officeId: true, jobId: true, inquiryId: true, externalThreadId: true, subject: true } },
+      thread: {
+        select: {
+          officeId: true,
+          companyId: true,
+          contactId: true,
+          jobId: true,
+          inquiryId: true,
+          externalThreadId: true,
+          subject: true,
+        },
+      },
     },
   });
   for (const message of messages) {
@@ -493,6 +520,8 @@ export async function backfillCompanyBrainMemory(input: BackfillCompanyBrainInpu
       text: [message.subject, message.fromEmail, message.fromName, compact(message.bodyText, 8000)].filter(Boolean).join("\n"),
       entityType: "email_message",
       entityId: message.id,
+      companyId: message.thread.companyId,
+      contactId: message.thread.contactId,
       inquiryId: message.thread.inquiryId,
       jobId: message.thread.jobId,
       emailThreadId: message.threadId,

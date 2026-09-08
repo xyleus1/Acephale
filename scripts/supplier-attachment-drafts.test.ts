@@ -37,6 +37,7 @@ const png = Buffer.concat([
 
 const vendor = {
   id: "vendor-1",
+  supplierRegistryId: null,
   name: "Arctic Circuits",
   website: "https://arcticcircuits.example/",
   contact: { name: "Dana Wolfe", email: "dana@arcticcircuits.example", phone: null },

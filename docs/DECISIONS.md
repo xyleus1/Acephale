@@ -1,3 +1,18 @@
+## 2026-09-08: Preserve conversation semantics across the memory port
+
+- Status: accepted for the isolated memory fork branch.
+- State readers and validation share the current-human-message selector. A
+  latest outbound message also binds its inbound CHASE anchor and recipient.
+  Compiler v1.2 prevents reuse of projections built under the old semantics.
+- Recovery reconciles prior deliveries before filtering new send candidates;
+  an empty new-send selection is not permission to abandon pending receipts.
+- Disabled retrieval V2 must preserve original lexical scores, order, and limit.
+- Publish benchmark results under a frozen source fingerprint and the existing
+  declared synthetic contract. Do not equate architecture/scope advantages with
+  equal-input retrieval superiority, repeated cases with independent trials,
+  semantic fencing with atomic provider delivery, or allocation reductions with
+  measured process-memory savings.
+
 ## Outreach readiness and reply context
 
 - Status: accepted
@@ -512,6 +527,139 @@ pending action is dismissed and the replacement takes its place. Actions that
 are already CREATED represent running work with side effects, so they are
 never replaced automatically; the agent must ask whether a genuinely new
 request is wanted.
+## Expose workflow customer scope through a least-privilege view
+
+Date: 2026-08-27
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Runtime code resolves the exact workflow customer, office, and
+  company tuple through the security-barrier `procurement_customer_scope` view.
+  The view is owned by the workflow database boundary and grants `SELECT` only
+  to `dashboard_api`. PUBLIC, `derya_app`, and Bourne are explicitly denied.
+- Reason: The canonical `CompanyWorkflowAccount` table is intentionally hidden
+  from the dashboard role, while state compilation and exact entity retrieval
+  still need a tenant-safe ownership assertion. A three-column view is the
+  smallest least-privilege contract and avoids granting the app role direct
+  access or duplicating workflow ownership in the app database.
+- Consequence: All runtime callers use `getProcurementWorkflowAccount` with the
+  configured office-to-customer mapping. Benchmark bootstrap and production
+  verification install and test the same role boundary. This is a read boundary
+  only and grants no communication-ledger writes.
+
+## Benchmark commercial state in an isolated database without a synthetic platform
+
+Date: 2026-08-27
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Measure the Commercial State Runtime against the extracted keyword
+  baseline, an optional vector baseline, a rank-fused hybrid baseline, live
+  compilation, and valid projections using one external PostgreSQL database.
+  The benchmark uses real Derya code and normal role boundaries. It does not add
+  a graph database, vector service, production UI, or general-purpose data
+  generator.
+- Isolation: All benchmark URLs are mandatory and never fall back to normal
+  runtime URLs. They must identify one benchmark-named database that differs
+  from every configured runtime database. Workflow access remains SSL-required
+  `dashboard_api`; ledger writes remain Bourne-owned. Reset requires the
+  explicit destructive gate and targets only benchmark-prefixed tenant rows.
+- Corpus: Exactly 12 scripted commercial scenario families generate the same
+  200 gold queries and 40 concurrency cases at every profile. Aggregate
+  retrievable records grow from 10K to 50K to 250K only through unrelated
+  distractor history. Exact queries intentionally give keyword search a fair
+  path, while semantic, stale-state, temporal, entity-hop, and routing cases
+  isolate the architecture's other claims.
+- Metadata boundary: Only `benchmark.cases`, `benchmark.runs`, and
+  `benchmark.results` are permitted. Gold facts, evidence, and dependencies are
+  evaluation labels and are never provided to the retrieval system. Production
+  runtime code may not depend on the benchmark schema.
+- Reporting: Recall, MRR, state and temporal accuracy, latency, evidence and
+  fact bandwidth, tenant leakage, and stale-action safety are computed from
+  persisted measured results. The standalone report contains no illustrative
+  results or guaranteed multiplier. Vector-dependent systems and the external
+  multiplier remain unavailable when a real common vector backend is absent.
+
+## Commercial state is compiled over existing operational truth
+
+Date: 2026-08-27
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: Derya's commercial world model is a typed, bounded compilation
+  layer over existing app, workflow, email, and Company Brain sources. It does
+  not create a graph database or another supplier, item, order, quote, message,
+  or inventory source of truth. Company, procurement request, supplier, item,
+  and workspace scopes compile to schema-versioned state packets containing
+  current and derived state, open loops, explicit uncertainties, evidence
+  pointers, semantic dependencies, a source fingerprint, and an exact packet
+  hash.
+- Projection boundary: `SupplyStateProjection` is an office-scoped,
+  compiler-versioned cache only. It records its payload hash, source
+  fingerprint, evidence, dependency manifest, build time, and dirty marker.
+  Relevant local writes invalidate the smallest affected scope. Read-time
+  fingerprints catch workflow changes outside the app transaction. A missing,
+  stale, or failed projection falls back to live compilation.
+- Durable-read boundary: `SupplyStateRead` is immutable and is created only when
+  compiled context leads to durable work. Implemented decision,
+  supplier-draft, and execution-task paths seal the read id, packet hash, and
+  source fingerprint into their approval or input hash. Existing rows with no
+  state read keep the historical behavior. A nullable capability-run relation
+  is schema-ready, but generic capability-run creation is not a V1 binding path.
+  The app role receives read and insert access but no update or delete access.
+  Validation rejects a stored packet whose hash, scope, evidence, dependency
+  manifest, objective, or fingerprint disagrees with its duplicated immutable
+  columns. Persistence and validation also reject a packet that consistently
+  downgrades a registry-owned strict policy.
+- Concurrency boundary: One fact registry defines each semantic dependency,
+  selected fields, canonicalization, evidence, version, and hash. `STRICT`
+  changes or missing authoritative facts invalidate an action; `ADVISORY`
+  changes are recorded and do not automatically block. Strong existing hashes
+  take precedence over timestamps, and unrelated fields or another supplier's
+  state are excluded from strict dependencies. A procurement draft or send must
+  also match the packet's exact selected vendor identity, latest inbound message,
+  and normalized recipient before task persistence or provider claim.
+- Identity boundary: Canonical company identity is a strict fact. `Item.id`
+  remains the public item identity and may map to a snapshot-owned `SupplyItem`
+  only through exact stable identifiers or an active approved alias whose state
+  is also strict. A request vendor may contribute to a supplier relationship
+  only when its `supplier_registry_id` exactly matches the canonical supplier.
+  Validation repeats tenant and scope-ownership checks before rereading facts.
+- Consistency limit: Validation is optimistic semantic concurrency, not
+  distributed serializability. The app database, workflow database, and email
+  provider cannot share one transaction, so a final read can still race an
+  external call. Existing provider idempotency, send claims, reconciliation,
+  snapshot-current assertions, approval scope hashes, roles, self-approval
+  restrictions, and execution event ledgers remain required.
+- Messaging and data boundary: Shared mailboxes remain global connector
+  resources, while routed thread ownership and exact order/vendor linkage
+  determine tenant scope. Ambiguous and unrouted mail is excluded. Workflow
+  runtime reads continue through the SSL-required `dashboard_api` role and
+  explicit customer mapping; owner or Bourne credentials are not app runtime
+  credentials.
+- Retrieval boundary: Memory search keeps its existing lexical retriever as a
+  baseline and adds operational-state, exact-entity, and temporal retrievers.
+  Reciprocal Rank Fusion combines ranks and bounded thread diversification
+  prevents one conversation from dominating. Routed email candidates are
+  rechecked against current office/company thread ownership before admission.
+  Exact entity retrieval traverses tenant-scoped canonical workspace, supplier,
+  fact, price, evidence, item, and app-owned procurement reply-task links
+  directly; an `EntityMention` backfill is optional acceleration rather than a
+  truth or correctness dependency. A reverse lookup for workflow-only provider
+  messages remains deferred.
+  The vector interface is defined but no backend, embedding store, or pgvector
+  requirement ships until a benchmark shows material recall failure. Any future
+  backend must return source-linked identifiers that are rehydrated through the
+  canonical tenant-scoped store before use.
+- Rollout: `SUPPLY_STATE_RUNTIME_ENABLED` and
+  `SUPPLY_STATE_PROJECTIONS_ENABLED` default to false.
+  `SUPPLY_STATE_VALIDATION_MODE` supports `off`, `shadow`, and `enforce` and
+  defaults to `off`. Shadow performs checks without blocking. Enforce blocks
+  strict stale state for confirmed supplier draft sends and linked Supply OS
+  decision, approval, and execution transitions. No browser control may disable
+  validation. These are implemented code paths, not a claim that shadow or
+  enforce is enabled in a deployed environment. The required rollout begins in
+  shadow after the migration and disposable-database matrix are verified.
 
 ## An unsent supplier draft is a PLANNED execution task
 

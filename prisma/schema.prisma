@@ -188,6 +188,8 @@ model Office {
   emailDeliveryEvents  EmailDeliveryEvent[]
   emailSuppressions    EmailSuppression[]
   procurementConversationTasks ProcurementConversationTask[]
+  supplyStateProjections    SupplyStateProjection[]
+  supplyStateReads          SupplyStateRead[]
 
   @@unique([name])
 }
@@ -2324,6 +2326,8 @@ model SupplyWorkspace {
   approvals           SupplyApproval[]
   executionTasks      SupplyExecutionTask[]
   executionEvents     SupplyExecutionEvent[]
+  stateProjections    SupplyStateProjection[]
+  stateReads          SupplyStateRead[]
   connectorInstallations ConnectorInstallation[]
 
   @@unique([officeId, externalKey])
@@ -3055,6 +3059,7 @@ model SupplyCapabilityRun {
   workspaceId       String
   snapshotId        String?
   executionTaskId   String?
+  stateReadId       String?
   invokedByUserId   String?
   parentRunId       String?
   capabilityKey     String
@@ -3080,6 +3085,7 @@ model SupplyCapabilityRun {
   workspace          SupplyWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   snapshot           SupplySnapshot?            @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   executionTask      SupplyExecutionTask?       @relation(fields: [executionTaskId], references: [id], onDelete: Cascade)
+  stateRead          SupplyStateRead?            @relation(fields: [stateReadId], references: [id], onDelete: SetNull)
   invokedBy          User?                      @relation("SupplyCapabilityRunInvokedBy", fields: [invokedByUserId], references: [id], onDelete: SetNull)
   parentRun          SupplyCapabilityRun?       @relation("SupplyCapabilityRunParent", fields: [parentRunId], references: [id], onDelete: Restrict)
   childRuns          SupplyCapabilityRun[]      @relation("SupplyCapabilityRunParent")
@@ -3096,6 +3102,7 @@ model SupplyCapabilityRun {
   @@index([officeId, workspaceId, capabilityKey, status, createdAt])
   @@index([snapshotId, capabilityKey])
   @@index([executionTaskId, status])
+  @@index([stateReadId])
   @@index([parentRunId])
   @@index([traceId])
 }
@@ -3107,6 +3114,7 @@ model SupplyDecision {
   officeId             String
   workspaceId          String
   snapshotId           String
+  stateReadId           String?
   createdByUserId      String?
   createdByRunId       String?
   supersedesDecisionId String?
@@ -3129,6 +3137,7 @@ model SupplyDecision {
   office         Office                     @relation(fields: [officeId], references: [id], onDelete: Cascade)
   workspace      SupplyWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   snapshot       SupplySnapshot             @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  stateRead      SupplyStateRead?            @relation(fields: [stateReadId], references: [id], onDelete: SetNull)
   createdBy      User?                      @relation("SupplyDecisionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdByRun   SupplyCapabilityRun?       @relation(fields: [createdByRunId], references: [id], onDelete: SetNull)
   supersedes     SupplyDecision?            @relation("SupplyDecisionSupersession", fields: [supersedesDecisionId], references: [id], onDelete: Restrict)
@@ -3142,6 +3151,7 @@ model SupplyDecision {
   @@unique([workspaceId, idempotencyKey])
   @@index([officeId, workspaceId, status, createdAt])
   @@index([snapshotId, decisionType])
+  @@index([stateReadId])
   @@index([subjectType, subjectRef])
   @@index([supersedesDecisionId])
 }
@@ -3296,6 +3306,7 @@ model SupplyExecutionTask {
   snapshotId       String?
   decisionId       String?
   scenarioId       String?
+  stateReadId      String?
   createdByUserId  String?
   parentTaskId     String?
   taskKey          String
@@ -3324,6 +3335,7 @@ model SupplyExecutionTask {
   snapshot       SupplySnapshot?        @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   decision       SupplyDecision?        @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   scenario       SupplyScenario?        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  stateRead      SupplyStateRead?        @relation(fields: [stateReadId], references: [id], onDelete: SetNull)
   createdBy      User?                  @relation("SupplyExecutionTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   parentTask     SupplyExecutionTask?   @relation("SupplyExecutionTaskParent", fields: [parentTaskId], references: [id], onDelete: Restrict)
   childTasks     SupplyExecutionTask[]  @relation("SupplyExecutionTaskParent")
@@ -3337,6 +3349,7 @@ model SupplyExecutionTask {
   @@index([officeId, workspaceId, status, scheduledFor])
   @@index([snapshotId, status])
   @@index([decisionId, scenarioId])
+  @@index([stateReadId])
   @@index([parentTaskId])
   @@index([externalSystem, externalRef])
 }
@@ -3387,6 +3400,64 @@ model ResearchProject {
   @@unique([id, officeId])
   @@index([officeId])
   @@index([officeId, companyId])
+}
+
+// Rebuildable state projections are caches over authoritative operational rows.
+// Fingerprints and dependency manifests make every cache hit independently
+// checkable without turning the projection into another source of truth.
+model SupplyStateProjection {
+  id                 String   @id @default(cuid())
+  officeId           String
+  workspaceId        String?
+  scopeType          String
+  scopeRef           String
+  projectionType     String
+  compilerVersion    String
+  sourceFingerprint  String
+  payload            Json
+  payloadHash        String
+  evidenceRefs       Json
+  dependencyManifest Json
+  builtAt            DateTime @default(now())
+  dirtyAt            DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  office    Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([officeId, projectionType, scopeType, scopeRef, compilerVersion])
+  @@index([officeId, projectionType, dirtyAt])
+  @@index([officeId, workspaceId, scopeType, scopeRef])
+}
+
+// State reads are immutable provenance records created only when compiled
+// context leads to durable work. Ordinary read-only hydration is not stored.
+model SupplyStateRead {
+  id                 String   @id @default(cuid())
+  officeId           String
+  workspaceId        String?
+  scopeType          String
+  scopeRef           String
+  objective          String
+  compilerVersion    String
+  sourceFingerprint  String
+  packet             Json
+  packetHash         String
+  evidenceRefs       Json
+  dependencyManifest Json
+  createdAt          DateTime @default(now())
+
+  office    Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  decisions      SupplyDecision[]
+  capabilityRuns SupplyCapabilityRun[]
+  executionTasks SupplyExecutionTask[]
+
+  @@index([officeId, scopeType, scopeRef, createdAt])
+  @@index([officeId, workspaceId, createdAt])
+  @@index([packetHash])
 }
 
 model ResearchList {

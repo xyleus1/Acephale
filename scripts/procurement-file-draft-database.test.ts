@@ -11,6 +11,10 @@ import {
 } from "../src/lib/procurement-file-delivery-draft";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
 import type { SupplyAccessContext } from "../src/lib/supply-os/persistence";
+import {
+  createProcurementActionStateReadFixture,
+  withEnforcedSupplyStateRuntime,
+} from "./supply-state-action-test-fixture";
 
 // The Supply OS execution guard rejects tasks that do not begin in PLANNED and
 // rejects READY tasks without a matching human approval, so the file bearing
@@ -102,6 +106,7 @@ async function main() {
 
     const vendor: ProcurementOrderVendor = {
       id: `vendor-${suffix}`,
+      supplierRegistryId: null,
       name: "Draft Supplier",
       website: "https://example.com",
       contact: { name: "Quotes", email: `supplier-${suffix}@example.com`, phone: null },
@@ -142,6 +147,33 @@ async function main() {
       role: "ADMIN",
       canViewWholeOffice: true,
     };
+
+    const newerMessageStateRead = await createProcurementActionStateReadFixture({
+      officeId: office.id,
+      companyId: company.id,
+      customerId: company.id,
+      workspaceId: workspace.id,
+      order,
+      vendor,
+      latestMessage: {
+        id: `inbound-newer-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: vendor.contact!.email!,
+      },
+    });
+    await withEnforcedSupplyStateRuntime(() => assert.rejects(saveProcurementFileDeliveryDraft({
+      context,
+      customerId: company.id,
+      order,
+      vendor,
+      sourceMessageId: `inbound-before-refresh-${suffix}`,
+      recipient: vendor.contact!.email!,
+      conversationSubject: `Re: RFQ ${suffix}`,
+      stateRead: newerMessageStateRead,
+    }), /not the latest message/i));
+    assert.equal(await prisma.supplyExecutionTask.count({
+      where: { officeId: office.id, taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE },
+    }), 0, "A draft using an older conversation than its state read must stop before task persistence.");
 
     const draft = await saveProcurementFileDeliveryDraft({
       context,
@@ -209,12 +241,43 @@ async function main() {
     });
     assert.equal(foreignOfficeRead, null, "Drafts must not cross office scope.");
 
+    assert.equal(
+      await markProcurementFileDeliveryDraftSent({
+        context,
+        order,
+        vendorId: vendor.id,
+        expectedTaskId: draft.taskId!,
+        expectedInputHash: draft.inputHash!,
+        sourceMessageId: `inbound-${suffix}`,
+        providerMessageId: `provider-stale-${suffix}`,
+      }),
+      false,
+      "Finalization must never select a newer concurrent draft when the delivered task is stale.",
+    );
+    assert.equal(
+      (await getProcurementFileDeliveryDraft({ officeId: office.id, order, vendorId: vendor.id }))?.taskId,
+      redraft.taskId,
+      "A stale finalization attempt must leave the newer exact draft live.",
+    );
+    const staleDeliveredTask = await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: draft.taskId! },
+      include: { approvals: true, events: { orderBy: { sequence: "asc" } } },
+    });
+    assert.equal(staleDeliveredTask.status, "CANCELLED");
+    assert.equal(staleDeliveredTask.approvals.length, 0, "A terminal delivery race must never approve a successor or rewrite the cancelled task.");
+    assert.deepEqual(staleDeliveredTask.events.map((event) => event.eventType), [
+      "PROCUREMENT_SUPPLIER_FILE_REPLY_DRAFTED",
+      "PROCUREMENT_SUPPLIER_FILE_REPLY_DELIVERED_AFTER_TERMINAL",
+    ]);
+
     // A delivered draft stops being offered again, and the send is recorded on
     // the same task so the trail shows who approved it.
     const marked = await markProcurementFileDeliveryDraftSent({
       context,
       order,
       vendorId: vendor.id,
+      expectedTaskId: redraft.taskId!,
+      expectedInputHash: redraft.inputHash!,
       sourceMessageId: `inbound-later-${suffix}`,
       providerMessageId: `provider-${suffix}`,
     });
@@ -240,6 +303,8 @@ async function main() {
         context,
         order,
         vendorId: vendor.id,
+        expectedTaskId: redraft.taskId!,
+        expectedInputHash: redraft.inputHash!,
         sourceMessageId: `inbound-later-${suffix}`,
         providerMessageId: `provider-${suffix}`,
       }),
@@ -309,6 +374,43 @@ async function main() {
       }),
       false,
     );
+    const concurrentDraft = await saveProcurementFileDeliveryDraft({
+      context,
+      customerId: company.id,
+      order,
+      vendor,
+      sourceMessageId: `inbound-concurrent-${suffix}`,
+      recipient: vendor.contact!.email!,
+      conversationSubject: `Re: RFQ ${suffix} concurrent finalization`,
+    });
+    const concurrentMarks = await Promise.all([
+      markProcurementFileDeliveryDraftSent({
+        context,
+        order,
+        vendorId: vendor.id,
+        expectedTaskId: concurrentDraft.taskId!,
+        expectedInputHash: concurrentDraft.inputHash!,
+        sourceMessageId: concurrentDraft.sourceMessageId,
+        providerMessageId: `provider-concurrent-${suffix}`,
+      }),
+      markProcurementFileDeliveryDraftSent({
+        context,
+        order,
+        vendorId: vendor.id,
+        expectedTaskId: concurrentDraft.taskId!,
+        expectedInputHash: concurrentDraft.inputHash!,
+        sourceMessageId: concurrentDraft.sourceMessageId,
+        providerMessageId: `provider-concurrent-${suffix}`,
+      }),
+    ]);
+    assert.deepEqual([...concurrentMarks].sort(), [false, true], "Concurrent exact finalization must be idempotent.");
+    assert.equal(await prisma.supplyApproval.count({ where: { executionTaskId: concurrentDraft.taskId! } }), 1);
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: {
+        executionTaskId: concurrentDraft.taskId!,
+        eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_SENT",
+      },
+    }), 1);
 
     console.log("Procurement file bearing draft database contract passed.");
   } finally {

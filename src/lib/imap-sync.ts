@@ -57,6 +57,11 @@ export type ImapSyncDependencies = {
   ingestMemory: typeof ingestKnowledgeObject;
   recordMemory: typeof recordMemoryEvent;
   logTouch: typeof logEmailTouch;
+  invalidateCompanyProjection?: (args: {
+    officeId: string;
+    companyId: string;
+    threadId?: string;
+  }) => Promise<unknown>;
   enqueueJob: typeof enqueueBackgroundJob;
   revalidate: (path: string) => void;
   now: () => Date;
@@ -73,6 +78,23 @@ const defaultDependencies: ImapSyncDependencies = {
   ingestMemory: ingestKnowledgeObject,
   recordMemory: recordMemoryEvent,
   logTouch: logEmailTouch,
+  invalidateCompanyProjection: async (args) => {
+    const {
+      invalidateCompanyContextStateProjections,
+      invalidateRoutedEmailThreadStateProjections,
+    } = await import(
+      "@/lib/supply-os/state-runtime/projections/invalidate"
+    );
+    const invalidations: Array<Promise<unknown>> = [invalidateCompanyContextStateProjections(args)];
+    if (args.threadId) {
+      invalidations.push(invalidateRoutedEmailThreadStateProjections({
+        officeId: args.officeId,
+        companyId: args.companyId,
+        threadId: args.threadId,
+      }));
+    }
+    return Promise.all(invalidations);
+  },
   enqueueJob: enqueueBackgroundJob,
   revalidate: revalidatePath,
   now: () => new Date(),
@@ -520,6 +542,23 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     };
     // Unrouted mail belongs to no customer, so it never enters office memory.
     if (!demoMessage && !unroutedMessage) {
+      const touch = await dependencies.logTouch({
+        officeId: targetOfficeId,
+        threadId: thread.id,
+        messageId: createdMessage.id,
+        direction,
+        fromEmail,
+        toEmails: to,
+        subject,
+        snippet: body || null,
+        sentAt,
+      });
+      const routedThread = touch.status === "created"
+        ? { companyId: touch.companyId, contactId: touch.contactId }
+        : (await dependencies.db.emailThread.findFirst({
+            where: { id: thread.id, officeId: targetOfficeId },
+            select: { companyId: true, contactId: true },
+          })) ?? null;
       const memoryObject = await dependencies.ingestMemory({
         officeId: targetOfficeId,
         sourceType: "GMAIL",
@@ -531,6 +570,8 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         text: [subject, fromEmail, from?.name, body.slice(0, 8_000)].filter(Boolean).join("\n"),
         entityType: "email_message",
         entityId: createdMessage.id,
+        companyId: routedThread?.companyId ?? null,
+        contactId: routedThread?.contactId ?? null,
         jobId: thread.jobId,
         inquiryId: thread.inquiryId,
         emailThreadId: thread.id,
@@ -569,17 +610,16 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         },
         idempotencyKey: `gmail-imap:message:${createdMessage.id}:ingested`,
       }).catch(() => null);
-      await dependencies.logTouch({
-        officeId: targetOfficeId,
-        threadId: thread.id,
-        messageId: createdMessage.id,
-        direction,
-        fromEmail,
-        toEmails: to,
-        subject,
-        snippet: body || null,
-        sentAt,
-      });
+      if (dependencies.invalidateCompanyProjection) {
+        const companyId = routedThread?.companyId ?? null;
+        if (companyId) {
+          await dependencies.invalidateCompanyProjection({
+            officeId: targetOfficeId,
+            companyId,
+            threadId: thread.id,
+          }).catch(() => null);
+        }
+      }
     }
   }
 

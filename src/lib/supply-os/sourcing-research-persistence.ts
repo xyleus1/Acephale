@@ -11,6 +11,7 @@ import {
   type SupplyAccessContext,
 } from "./persistence";
 import { recordSupplyResearchKnowledge } from "./supply-intelligence-persistence";
+import { invalidateSupplierStateProjections } from "./state-runtime/projections/invalidate";
 import {
   SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW,
   validateSupplierResearchCampaignAncestryWindow,
@@ -186,6 +187,7 @@ export async function listSourcingResearchRuns(context: SupplyAccessContext, inc
     completedAt: true,
     failedAt: true,
   } satisfies Prisma.SupplyCapabilityRunSelect;
+  // tenant-scope:ignore the reusable where clause above contains the caller's officeId and workspaceId.
   const linked = await prisma.supplyCapabilityRun.findMany({
     where: { ...where, id: { in: missingIds } },
     select,
@@ -959,8 +961,9 @@ export async function completeSourcingResearchRun(args: {
   workspaceId: string;
   output: Prisma.InputJsonValue;
 }) {
-  await requireSupplyWorkspace(args.context, args.workspaceId, "edit");
-  return prisma.$transaction(async (tx) => {
+  const workspace = await requireSupplyWorkspace(args.context, args.workspaceId, "edit");
+  let affectedSupplierKeys: string[] = [];
+  const completedRun = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ advisoryLock: string }>>`
       SELECT pg_advisory_xact_lock(hashtextextended(${`supply-research:${args.context.officeId}:${args.workspaceId}`}, 0))::text AS "advisoryLock"
     `;
@@ -976,7 +979,7 @@ export async function completeSourcingResearchRun(args: {
       select: { input: true },
     });
     if (!current) throw new Error("Running sourcing research was not found in this office.");
-    await recordSupplyResearchKnowledge({
+    const recordedKnowledge = await recordSupplyResearchKnowledge({
       tx,
       context: args.context,
       workspaceId: args.workspaceId,
@@ -984,6 +987,7 @@ export async function completeSourcingResearchRun(args: {
       input: current.input,
       output: args.output,
     });
+    affectedSupplierKeys = recordedKnowledge.supplierKeys;
     const completed = await tx.supplyCapabilityRun.updateMany({
       where: { id: args.runId, officeId: args.context.officeId, workspaceId: args.workspaceId, capabilityKey: CAPABILITY_KEY, status: "RUNNING" },
       data: {
@@ -1008,6 +1012,27 @@ export async function completeSourcingResearchRun(args: {
       },
     });
   }, { maxWait: 5_000, timeout: 45_000 });
+  await Promise.all(affectedSupplierKeys.map(async (supplierKey) => {
+    await invalidateSupplierStateProjections({
+      officeId: args.context.officeId,
+      workspaceId: args.workspaceId,
+      supplierKey,
+    }).catch(() => undefined);
+    await import("./state-runtime/projections/worker")
+      .then(({ enqueueSupplyStateProjectionRebuildIfEnabled }) => (
+        enqueueSupplyStateProjectionRebuildIfEnabled({
+          scope: {
+            type: "supplier",
+            officeId: args.context.officeId,
+            companyId: workspace.companyId,
+            workspaceId: args.workspaceId,
+            supplierKey,
+          },
+        })
+      ))
+      .catch(() => undefined);
+  }));
+  return completedRun;
 }
 
 export async function failSourcingResearchRun(args: {

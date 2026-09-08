@@ -1,3 +1,23 @@
+## 2026-09-08: Latest-main memory port and reproducible benchmark checkpoint
+
+- Ported immutable state reads, temporal/entity evidence retrieval, projections,
+  semantic validation, and the benchmark from `f4a2fb96` onto `7080adad`.
+- Kept latest-main task/retry/mailbox behavior and added regression coverage for
+  supplier-reader/registry equality, exact CHASE anchors, empty/filtered send
+  reconciliation, and V2-off lexical compatibility.
+- Reduced unnecessary packet/filter allocations without changing retrieval
+  semantics; batched report loading to avoid oversized database-result strings.
+- Full typecheck, fresh local migrations, restricted-role database tests, and
+  focused state/procurement suites passed. Windows static-contract tests normalize
+  CRLF input without changing historical migration files or assertions.
+- Complete application build passed, including both Prisma clients, type
+  validation, 102 static pages, and tracing. Existing CSS/workspace-root
+  warnings and three existing Gmail/IMAP broad-lint errors are documented.
+- Full three-profile repeated trials and measured findings will be recorded
+  after the frozen-source cohort completes.
+- Only the fork feature branch is eligible for publication. No production
+  deployment, migration, real send, or main-branch update was performed.
+
 ## Request-derived supplier sourcing
 
 Supplier research now supports deterministic request-derived categories, persisted optional phrase enrichment, distinct-company convergence, and bounded multi-contact rows per supplier domain.
@@ -2493,6 +2513,108 @@ Context chat now reports and manages existing prospect research through office-s
   `npm run test:procurement-autopilot-plan`,
   `npm run test:supplier-attachment-drafts`,
   `npm run test:procurement-file-draft-batch`.
+## 2026-08-28: Commercial State Runtime benchmark
+
+- Added the isolated PostgreSQL benchmark lifecycle: strict six-variable URL
+  validation, role-specific connections, migration/bootstrap, deterministic
+  seed, targeted gated reset, doctor, measured runner, persistence, aggregation,
+  and standalone HTML reporting. Benchmark metadata is limited to three tables
+  and production retrieval has no dependency on it.
+- Seeded and measured the fixed 12-family, 200-query, 40-concurrency corpus at
+  10K, 50K, and 250K retrievable records. Final doctor passed exact entity,
+  query, gold, provenance, routing, tenant, role, and profile-size checks for all
+  profiles. The generated report contains all seven required graphs and was
+  visually inspected from a local browser render.
+- Measured hot Recall@20 was 0.8717 versus 0.7133 for keyword at every profile.
+  Hot semantic validation detected 100% of the scripted strict stale cases with
+  zero escapes and zero false conflicts; tenant and unrouted-mail leakage were
+  zero. Results were not uniformly favorable: keyword retained higher
+  Recall@5, MRR, and current-state accuracy, while hot latency and bandwidth
+  regressed at 250K.
+- Vector-only and strong-hybrid systems were recorded as explicit skips because
+  no common vector adapter or embedding model was configured. The external
+  bandwidth multiplier is therefore unavailable, not estimated.
+- Added the least-privilege `procurement_customer_scope` security-barrier view
+  and routed all runtime workflow-account ownership checks through
+  `dashboard_api`. Direct app-Prisma access to the protected mapping table was
+  removed. The view grants no workflow-ledger writes.
+- Final acceptance hardening bumped the compiler to `supply-world-state-v1.1`.
+  Company identity is now strict; canonical `Item.id` resolves to snapshot state
+  only through exact identifiers or an active approved alias; request vendors
+  require an exact canonical supplier-registry link; validation reasserts scope
+  ownership; and packet compaction performs a final serialized-size check after
+  recording truncation uncertainty.
+
+## 2026-08-27: Commercial State Runtime V1
+
+- Added a typed, bounded commercial-state compiler over the existing app,
+  workflow, email, and Company Brain sources. Five rebuildable projection types
+  carry source fingerprints, payload hashes, evidence, dependency manifests,
+  build times, and dirty state; stale or failed projections fall back to live
+  reads. Company, procurement request, supplier, item, and workspace scopes all
+  preserve office and workspace ownership before consulting a cache.
+- Added immutable `SupplyStateRead` provenance for durable supplier drafts,
+  decisions, and execution tasks. The schema also has a nullable capability-run
+  relation, while generic capability-run state binding remains deferred. The
+  migration enforces tenant/workspace scope, insert-only app-role access,
+  immutable reads and references, bounded JSON, manifest/packet consistency,
+  explicit `derya_app` grants, and a paired production verification contract.
+  Persistence and validation reject packet tampering and any consistent attempt
+  to downgrade a registry-owned strict fact.
+- Added semantic `STRICT` and `ADVISORY` fact validation. Sourcing autopilot
+  persists vendor-specific reads, rejects stale confirmed drafts, and validates
+  again immediately before a fresh provider call. Draft and send actions also
+  prove that vendor identity, recipient, and source message exactly match the
+  packet's latest inbound state. Generic Supply OS decision, approval, and
+  execution paths preserve all snapshot, role, self-approval, input-hash,
+  idempotency, and reconciliation boundaries. Scoped dependency keys ensure
+  another supplier or company cannot cause a false strict conflict.
+- Upgraded memory retrieval without replacing its API: lexical baseline,
+  operational, exact-entity, and temporal retrievers; Reciprocal Rank Fusion;
+  bounded email-thread diversification; and evidence pointers on every result.
+  Exact canonical traversal works without an operational mention backfill.
+  Current thread routing and visibility are rechecked before linked email is
+  admitted. The vector interface is present but disabled with no backend.
+- Added content-free runtime instrumentation with bounded p50/p95 summaries,
+  Company Brain source-reader timing, an installable sink, and structured
+  production log fallback. Customer messages, documents, objectives, queries,
+  credentials, and raw packets are not metric fields.
+- Rollout status: implemented code defaults off through
+  `SUPPLY_STATE_RUNTIME_ENABLED=false`,
+  `SUPPLY_STATE_PROJECTIONS_ENABLED=false`, and
+  `SUPPLY_STATE_VALIDATION_MODE=off`. Shadow validates and measures without
+  blocking. Enforce blocks strict stale state for confirmed supplier draft
+  selection, the final provider boundary, and linked Supply OS decision,
+  approval, and execution transitions. Neither shadow nor enforce is claimed as
+  enabled in a deployed environment.
+- Verification passed on migrated PostgreSQL 17 databases with TLS and explicit
+  `derya_app`, `dashboard_api`, and Bourne test roles: Prisma validation and
+  generation, all six focused suites, procurement autopilot/triage/draft/send
+  and workflow database suites, Supply OS context/snapshot/planning/intelligence/
+  execution suites, memory write/search, nonincremental TypeScript, production
+  build, repeat migration deploy, read-only production verification, diff
+  hygiene, and the changed-file U+2014 scan. Direct SQL also proved immutable
+  read guards, office/workspace guards, and cascade cleanup.
+- Focused regressions include routed two-office shared-mailbox isolation,
+  ambiguous/unrouted exclusion, registry policy-downgrade rejection, supplier
+  evidence drift, stale caller conversation versus a newer state read, zero
+  provider calls on that conflict, unrelated-supplier non-conflicts, and exact
+  entity retrieval without a derived index. No required database case was
+  skipped. No supplier mail or production database operation occurred.
+- The strict tenant audit reports only its 31 known baseline query sites (8
+  high, 23 medium), including unchanged query lines in a few otherwise touched
+  modules; this implementation adds zero findings.
+- Repository-wide nonincremental TypeScript and the optimized production build
+  pass. The build retains existing Next workspace-root/cache warnings and two
+  existing CSS autoprefixer warnings.
+- Consistency remains optimistic, not distributed serializability across the app
+  database, workflow database, and provider. A final validation read can still
+  race the provider call, so claims, provider idempotency, reconciliation,
+  snapshot-current checks, approval hashes, and event ledgers remain required.
+  Next, deploy the migration through the protected path and begin staging in
+  shadow before any enforce rollout. Vector retrieval, generic capability-run
+  binding, operational mention backfill, and workflow-only reverse message
+  lookup remain deferred pending measured need.
 
 ## 2026-08-25: Draft tasks stay PLANNED, attachment bytes load after the claim
 

@@ -46,7 +46,24 @@ export type AutopilotVendorState = {
   // recovery rather than the notice, and only a recovery that could not be
   // written reaches a person.
   wrongContactRecovery?: "RESOURCED" | "FADED" | "FAILED" | null;
+  draftBinding?: {
+    taskId: string;
+    inputHash: string;
+  } | null;
 };
+
+export function autopilotDraftBindingMatches(
+  state: AutopilotVendorState,
+  draft: { taskId?: string | null; inputHash?: string | null } | null,
+) {
+  return Boolean(
+    state.draftBinding
+      && draft?.taskId
+      && draft.inputHash
+      && state.draftBinding.taskId === draft.taskId
+      && state.draftBinding.inputHash === draft.inputHash,
+  );
+}
 
 export type AutopilotAction =
   | { kind: "SEND_DRAFT"; reason: string }
@@ -136,6 +153,42 @@ export function planAutopilotVendorAction(
       : { kind: "NONE", reason: chase.reason };
   }
   return { kind: "NONE", reason: "This supplier has no thread yet." };
+}
+
+const AUTOPILOT_ACTION_PAGE_PRIORITY: Record<AutopilotAction["kind"], number> = {
+  SEND_DRAFT: 0,
+  DRAFT_REPLY: 1,
+  ASK_QUOTE_FACTS: 2,
+  CHASE: 3,
+  RESOURCE_CONTACT: 4,
+  ESCALATE: 5,
+  AWAIT_APPROVAL: 6,
+  NONE: 7,
+};
+
+// A runtime packet is intentionally bounded, while a procurement request can
+// contain more suppliers than one packet may carry. Select suppliers whose
+// state can advance first. Once a draft is created or sent, its action changes
+// and the still-actionable suppliers naturally move into the next page.
+export function selectAutopilotVendorPage(
+  states: readonly AutopilotVendorState[],
+  policy: AutopilotPolicy,
+  limit: number,
+) {
+  const bounded = Math.max(1, Math.trunc(limit));
+  return states
+    .map((state, index) => ({
+      state,
+      index,
+      priority: AUTOPILOT_ACTION_PAGE_PRIORITY[planAutopilotVendorAction(state, policy).kind],
+    }))
+    .sort((left, right) => (
+      left.priority - right.priority
+      || left.index - right.index
+      || left.state.vendorId.localeCompare(right.state.vendorId)
+    ))
+    .slice(0, bounded)
+    .map(({ state }) => state);
 }
 
 export type AutopilotStage = "COLLECTING_REPLIES" | "QUOTES_READY_FOR_PO";

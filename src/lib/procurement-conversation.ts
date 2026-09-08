@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getValidAccessToken } from "@/lib/gmail-oauth";
+import { UNROUTED_MAIL_THREAD_MARKER } from "@/lib/inbound-mail-routing";
 import { prisma } from "@/lib/prisma";
 import { localRfqVendorConversation } from "@/lib/procurement-local-outreach";
 import { localRfqConversationFor } from "@/lib/procurement-local-outreach-model";
@@ -8,7 +8,9 @@ import { deliveredSupplierReplyMessages } from "@/lib/procurement-reply-record";
 import {
   getProcurementCommunicationMessages,
   getProcurementVendorConversationRef,
+  getProcurementWorkflowAccount,
   type ProcurementVendorConversationRef,
+  type ProcurementWorkflowAccountLookup,
 } from "@/lib/procurement-workflow";
 import { findProcurementCaseById } from "@/lib/supply-os/procurement-case-persistence";
 import { SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-os/persistence";
@@ -90,26 +92,61 @@ function unavailable(reason: string): ProcurementConversation {
 }
 
 async function localConversation(
-  officeId: string,
+  args: ProcurementVendorConversationArgs,
   reference: ProcurementVendorConversationRef,
+  getWorkflowAccount: ProcurementWorkflowAccountLookup,
 ) {
   if (!reference.gmailMessageId || !reference.contactEmail) return null;
-  const anchor = await prisma.emailMessage.findFirst({
+  const workflowAccount = await getWorkflowAccount({
+    customerId: args.customerId,
+    officeId: args.officeId,
+  });
+  if (!workflowAccount) return null;
+  const anchors = await prisma.emailMessage.findMany({
     where: {
-      thread: { officeId },
+      thread: {
+        officeId: args.officeId,
+        companyId: workflowAccount.companyId,
+        hiddenAt: null,
+        OR: [
+          { autoLinkSkipReason: null },
+          { autoLinkSkipReason: { not: UNROUTED_MAIL_THREAD_MARKER } },
+        ],
+      },
       OR: [
         { gmailMessageId: reference.gmailMessageId },
         { externalId: reference.gmailMessageId },
       ],
     },
-    select: { threadId: true },
+    take: 3,
+    select: { threadId: true, account: { select: { email: true } } },
   });
-  if (!anchor) return null;
+  const routedAnchors = [...new Map(anchors.flatMap((anchor) => {
+    const accountEmail = anchor.account?.email.trim().toLowerCase();
+    return accountEmail
+      ? [[`${anchor.threadId}\u0000${accountEmail}`, { threadId: anchor.threadId, accountEmail }] as const]
+      : [];
+  })).values()];
+  if (routedAnchors.length !== 1) return null;
+  const [anchor] = routedAnchors;
   const thread = await prisma.emailThread.findFirst({
-    where: { id: anchor.threadId, officeId },
+    where: {
+      id: anchor.threadId,
+      officeId: args.officeId,
+      companyId: workflowAccount.companyId,
+      hiddenAt: null,
+      OR: [
+        { autoLinkSkipReason: null },
+        { autoLinkSkipReason: { not: UNROUTED_MAIL_THREAD_MARKER } },
+      ],
+      messages: {
+        some: { account: { email: { equals: anchor.accountEmail, mode: "insensitive" } } },
+      },
+    },
     select: {
       externalThreadId: true,
       messages: {
+        where: { account: { email: { equals: anchor.accountEmail, mode: "insensitive" } } },
         orderBy: [{ sentAt: "desc" }, { id: "desc" }],
         take: MAX_PROCUREMENT_CONVERSATION_MESSAGES,
         select: {
@@ -155,12 +192,31 @@ async function localConversation(
   return localRfqConversationFor(rows, reference.contactEmail);
 }
 
-async function localProviderThreadMessages(officeId: string, externalThreadId: string) {
-  const thread = await prisma.emailThread.findFirst({
-    where: { officeId, externalThreadId },
-    orderBy: { updatedAt: "desc" },
+async function localProviderThreadMessages(args: {
+  officeId: string;
+  companyId: string;
+  accountEmail: string;
+  externalThreadId: string;
+}) {
+  const threads = await prisma.emailThread.findMany({
+    where: {
+      officeId: args.officeId,
+      companyId: args.companyId,
+      externalThreadId: args.externalThreadId,
+      hiddenAt: null,
+      OR: [
+        { autoLinkSkipReason: null },
+        { autoLinkSkipReason: { not: UNROUTED_MAIL_THREAD_MARKER } },
+      ],
+      messages: {
+        some: { account: { email: { equals: args.accountEmail, mode: "insensitive" } } },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: 2,
     select: {
       messages: {
+        where: { account: { email: { equals: args.accountEmail, mode: "insensitive" } } },
         orderBy: [{ sentAt: "asc" }, { id: "asc" }],
         take: MAX_PROCUREMENT_CONVERSATION_MESSAGES,
         select: {
@@ -180,7 +236,8 @@ async function localProviderThreadMessages(officeId: string, externalThreadId: s
       },
     },
   });
-  return (thread?.messages ?? []).map((message) => ({
+  if (threads.length !== 1) return [];
+  return threads[0]!.messages.map((message) => ({
     providerMessageId: message.gmailMessageId,
     rfcMessageId: message.rfcMessageId ?? message.externalId,
     message: {
@@ -206,11 +263,13 @@ type ProcurementVendorConversationDependencies = {
     args: ProcurementVendorConversationArgs,
     reference: ProcurementVendorConversationRef,
   ) => Promise<ProcurementConversation>;
+  getWorkflowAccount?: ProcurementWorkflowAccountLookup;
 };
 
 async function compatibilityConversation(
   args: ProcurementVendorConversationArgs,
   reference: ProcurementVendorConversationRef,
+  getWorkflowAccount: ProcurementWorkflowAccountLookup,
 ) {
   if (!reference.contactEmail) return unavailable("The workflow has no verified supplier email to bind to this thread.");
   if (!reference.gmailMessageId) {
@@ -222,7 +281,7 @@ async function compatibilityConversation(
   const gmailMessageId = reference.gmailMessageId;
   const contactEmail = reference.contactEmail;
 
-  const stored = await localConversation(args.officeId, reference);
+  const stored = await localConversation(args, reference, getWorkflowAccount);
   // An anchored thread holding only our own sends cannot be answered, and the
   // supplier's reply may well sit on another thread of the same request, so the
   // office ledger is still read before settling for a transcript with no
@@ -234,6 +293,8 @@ async function compatibilityConversation(
   if (stored) return stored;
   if (sentByReference) return sentByReference;
 
+  const { getValidAccessToken } = await import("@/lib/gmail-oauth");
+  // tenant-scope:ignore EmailAccount is shared provider provenance, not mailbox tenancy; the routed office/order/vendor reference is proven before this mailbox lookup.
   const accounts = await prisma.emailAccount.findMany({
     where: {
       // Mailboxes are one shared pool, so the sending mailbox can belong to any office.
@@ -280,8 +341,11 @@ async function compatibilityConversation(
       unavailableReason: null,
     } satisfies ProcurementConversation;
   }));
-  const connected = candidates.find((candidate) => candidate !== null);
-  if (connected) return connected;
+  const connected = candidates.flatMap((candidate) => candidate ? [candidate] : []);
+  if (connected.length === 1) return connected[0]!;
+  if (connected.length > 1) {
+    return unavailable("The supplier message reference resolves to more than one shared mailbox and is ambiguous.");
+  }
   return unavailable("Contact is recorded, but the sending Gmail inbox is not connected to this Derya office.");
 }
 
@@ -289,16 +353,18 @@ export async function procurementVendorConversation(
   args: ProcurementVendorConversationArgs,
   dependencies: ProcurementVendorConversationDependencies = {},
 ) {
+  const getWorkflowAccount = dependencies.getWorkflowAccount ?? getProcurementWorkflowAccount;
   const communicationMessages = dependencies.communicationMessages ?? getProcurementCommunicationMessages;
   const ledgerMessages = await communicationMessages(args.customerId, args.orderId, args.vendorId);
   const resolved = await resolveProcurementVendorConversation(args, {
     communicationMessages: async () => ledgerMessages,
     conversationReference:
       dependencies.conversationReference ?? getProcurementVendorConversationRef,
-    compatibilityConversation:
-      dependencies.compatibilityConversation ?? compatibilityConversation,
+    compatibilityConversation: dependencies.compatibilityConversation ?? ((input, reference) => (
+      compatibilityConversation(input, reference, getWorkflowAccount)
+    )),
   });
-  const threaded = await withLedgerThread(args, resolved, ledgerMessages);
+  const threaded = await withLedgerThread(args, resolved, ledgerMessages, getWorkflowAccount);
   return withDeliveredReplies(args, threaded);
 }
 
@@ -306,11 +372,24 @@ async function withLedgerThread(
   args: ProcurementVendorConversationArgs,
   resolved: ProcurementConversation,
   ledgerMessages: Awaited<ReturnType<typeof getProcurementCommunicationMessages>>,
+  getWorkflowAccount: ProcurementWorkflowAccountLookup,
 ) {
   if (resolved.source !== "BOURNE_LEDGER" || !ledgerMessages?.length) return resolved;
-  const providerThreadId = [...ledgerMessages].reverse().find((message) => message.providerThreadId)?.providerThreadId ?? null;
-  if (!providerThreadId) return resolved;
-  const localMessages = await localProviderThreadMessages(args.officeId, providerThreadId);
+  const providerThread = [...ledgerMessages].reverse().find((message) => (
+    message.provider === "GMAIL" && message.accountEmail && message.providerThreadId
+  ));
+  if (!providerThread?.providerThreadId) return resolved;
+  const workflowAccount = await getWorkflowAccount({
+    customerId: args.customerId,
+    officeId: args.officeId,
+  });
+  if (!workflowAccount) return resolved;
+  const localMessages = await localProviderThreadMessages({
+    officeId: args.officeId,
+    companyId: workflowAccount.companyId,
+    accountEmail: providerThread.accountEmail,
+    externalThreadId: providerThread.providerThreadId,
+  });
   if (!localMessages.length) return resolved;
   const ledgerById = new Map(ledgerMessages.map((message) => [message.id, message]));
   const merged = mergeProcurementConversationMessages(resolved.messages.map((message) => {

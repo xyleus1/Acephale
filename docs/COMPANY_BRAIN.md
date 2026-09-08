@@ -5,6 +5,180 @@ It is an append-only-ish substrate for customer memory, operational memory,
 strategy explanations, and future retrieval. It does not add UI, vector search,
 or autonomous workflows.
 
+## Commercial State Runtime V1
+
+The Commercial State Runtime is Derya's bounded world-model compilation layer.
+It answers what is currently true by reading existing operational truth, then
+links that state to Company Brain and ledger evidence that explains why it is
+believed. It does not create a graph database or a parallel supplier, item,
+order, quote, message, or inventory store.
+
+The latest-main port uses compiler `supply-world-state-v1.2`. Procurement and
+supplier scopes share the current-human-message selector, and outbound CHASE
+state binds its prior inbound anchor and recipient. See
+[the port contract](MEMORY_LATEST_MAIN_PORT.md) for verification and coverage.
+
+Authoritative current state remains in:
+
+- `Company`, `CompanyContext`, `Item`, `Supplier`, and `CompanySupplier`
+- `SupplyWorkspace`, published `SupplySnapshot` rows and their owned children
+- `SupplySupplierProfile`, `SupplyProfileFact`, `SupplyPriceObservation`, and
+  `SupplyEvidence`
+- `SupplyPlanningResult`, `SupplyDecision`, `SupplyApproval`,
+  `SupplyExecutionTask`, and `SupplyExecutionEvent`
+- workflow-owned `ProcurementOrder`, request vendor state, quotes, and the
+  procurement communication ledger
+- routed `EmailThread` and `EmailMessage` rows
+- `KnowledgeObject`, `KnowledgeChunk`, and `MemoryEvent`
+
+The runtime compiles company, procurement request, supplier, item, and workspace
+scopes into `SupplyWorldStatePacket` schema version 1. A packet contains a clean
+scope and objective, bounded current and derived state, open loops, explicit
+uncertainties, evidence pointers, semantic dependencies, a source fingerprint,
+an exact packet hash, and content-free diagnostics. The serialized packet is
+bounded to 128 KiB. Full document corpora and full email histories never belong
+in a packet.
+
+`SupplyStateProjection` stores only rebuildable, office-scoped cache entries for
+the five V1 projection types. Each entry carries its compiler version, source
+fingerprint, payload hash, evidence references, dependency manifest, build time,
+and dirty marker. Explicit invalidation targets affected scopes after local
+writes. Read-time fingerprint checks catch workflow changes made outside the app
+database. Missing, dirty, mismatched, or failed projections fall back to live
+compilation and do not block normal reads.
+
+`SupplyStateRead` is an immutable snapshot of a packet used by durable work.
+Normal read-only hydration is not persisted. Implemented decision,
+supplier-draft, and execution-task paths bind the state-read id, packet hash,
+and source fingerprint into sealed scope or input hashes; historical rows with
+no state read retain their existing behavior. The schema also exposes a nullable
+capability-run relation, but generic capability-run creation is not a V1 binding
+path. The app role may insert and read state reads but may not update or delete
+them. Before dependency validation, the runtime verifies that the stored packet,
+dependency manifest, evidence manifest, scope, objective, fingerprint, and hash
+agree. Persistence and validation also enforce the registry's minimum policy, so
+a duplicated packet and manifest cannot downgrade a registry-owned strict fact.
+
+Dependencies are owned by one typed fact registry. Each fact selects only the
+fields relevant to its decision and prefers immutable domain hashes, including
+snapshot source hashes, planning output hashes, decision proposal hashes,
+approval scope hashes, execution input and event hashes, context content hashes,
+profile fact hashes, and price observation hashes. An unrelated UI timestamp or
+a different supplier's update must not invalidate an action.
+
+Identity is explicit rather than name-derived. Company packets include a strict
+canonical `Company` identity fact. Public item scope uses canonical `Item.id`;
+the current `SupplyItem` is admitted only when stable identifiers match or an
+active approved alias proves the mapping, and the alias itself becomes a strict
+dependency. Request-specific supplier state is admitted only when the workflow
+vendor's `supplier_registry_id` matches the selected canonical `Supplier.id`.
+Similar names are never enough to merge items or suppliers.
+
+Validation rereads only the recorded facts. A changed or missing `STRICT` fact
+invalidates the state read; an `ADVISORY` change is recorded without making the
+read invalid. It also reasserts the packet's current office, company, workspace,
+workflow-customer, item, and supplier ownership before fact comparison. This is
+semantic optimistic concurrency, not a transaction across the app database,
+workflow database, and email provider. A final workflow read can still race the
+provider call, so provider idempotency, durable claims, reconciliation,
+snapshot-current checks, approval hashes, and execution events remain mandatory.
+
+Tenant and messaging boundaries do not change. Every app read is office scoped;
+workflow access still uses the SSL-required `dashboard_api` role and explicit
+customer mapping through `PROCUREMENT_CUSTOMER_MAP_JSON`. Exact workflow-account
+ownership is exposed through the read-only, security-barrier
+`procurement_customer_scope` view. Only `dashboard_api` may select that view;
+`derya_app`, Bourne, and PUBLIC remain denied access to the underlying mapping.
+Runtime code does not use owner or Bourne credentials. Shared mailbox account
+ownership is only connector provenance. Only explicitly routed thread and
+order/vendor linkage may enter state or retrieval; ambiguous and unrouted mail
+is excluded. Retrieval rechecks current thread visibility and routing instead
+of trusting a stale memory index entry.
+
+The normal compilation path obtains a fresh projection and query evidence in
+parallel, then merges them into one packet. The projection answers "what is
+currently true" while retrieval answers "why do we believe it" and "what
+historical facts matter". Neither path invokes an LLM or mutates canonical
+commercial state.
+
+Retrieval V2 does not require an operational `EntityMention` backfill for
+correctness. Its entity retriever follows exact, office-scoped canonical links
+from workspaces to companies, supplier profiles, append-only facts, prices,
+evidence, published items, and app-owned procurement reply tasks. Any linked
+email history is admitted only after the existing current routing, company,
+hidden, ambiguous, and unrouted checks. An operational mention index and a
+reverse lookup for workflow-only provider messages remain optional future
+acceleration work.
+
+Runtime metrics carry only bounded identifiers, hashes, counts, labels, and
+timings. Company Brain retrieval has its own source-reader timing. Deployments
+may install a metric sink; otherwise production emits structured content-free
+metric logs. Objectives, search queries, document or message contents,
+credentials, and raw packets are not logged.
+
+### Runtime status and rollout
+
+- Implemented: typed live compilation, rebuildable projections, immutable state
+  reads, semantic validation, sourcing-send and Supply OS enforcement hooks,
+  Retrieval V2, and content-free instrumentation.
+- Tested: deterministic and disposable-database suites cover all five scopes,
+  projection fallback and freshness, strict versus advisory validation,
+  registry policy-downgrade rejection, exact action-to-packet binding,
+  unrelated-supplier isolation, two-office shared-mailbox routing, immutable
+  database guards, app/workflow roles, planning/execution persistence, and
+  Company Brain search compatibility.
+- Shadow only: `SUPPLY_STATE_VALIDATION_MODE=shadow` performs validation and
+  records outcomes but never blocks. Shadow is the required first rollout stage;
+  this document does not claim it is enabled in a deployed environment.
+- Enforced: when deployment configuration selects `enforce`, strict stale state
+  blocks confirmed supplier draft selection, the final supplier reply, CHASE,
+  and file provider boundary, and linked Supply OS decision, approval, and
+  execution transitions. Existing bulk RFQ and supplier-nudge sends retain
+  their original guards without semantic state-read validation.
+  Existing durable rows without a state read preserve historical behavior.
+- Deferred: a vector backend, embedding writes, pgvector, generic capability-run
+  state binding, operational mention backfill, workflow-only reverse message
+  lookup, expansion to additional agent workflows, and any claim of distributed
+  serializability.
+
+All three runtime controls default off:
+
+```text
+SUPPLY_STATE_RUNTIME_ENABLED=false
+SUPPLY_STATE_PROJECTIONS_ENABLED=false
+SUPPLY_STATE_VALIDATION_MODE=off
+```
+
+There is no browser control that can disable validation. Projection enablement
+is independent from validation mode, and a projection remains a cache even when
+enabled. Compiling or retrieving may write only a derived projection; it may not
+mutate orders, quotes, suppliers, messages, snapshots, decisions, approvals, or
+execution state.
+
+Retrieval rollout is controlled separately. `MEMORY_RETRIEVAL_V2_ENABLED`
+defaults off, preserving the extracted lexical implementation as the production
+baseline. `MEMORY_VECTOR_SEARCH_ENABLED` also defaults off. When enabled, a
+vector adapter may return only source-linked candidates that are rehydrated
+through the same office and routing checks; vectors never become commercial
+truth.
+
+### Commercial State benchmark
+
+The minimum viable benchmark runs the state runtime and memory retrievers
+against a separate PostgreSQL database using the normal application,
+`dashboard_api`, and Bourne role boundaries. It adds no production source of
+truth. Its only metadata tables are `benchmark.cases`, `benchmark.runs`, and
+`benchmark.results`, and production runtime modules do not query them.
+
+The fixed evaluation set has 12 scripted scenario families, 200 queries, and 40
+semantic-concurrency cases. The 10K, 50K, and 250K profiles keep the same facts,
+questions, and hard negatives while increasing only unrelated retrievable
+history. Keyword, optional vector, strong hybrid, live Derya, and projected
+Derya paths are compared without passing gold labels into retrieval. Missing
+vector support is reported as unavailable rather than simulated. See
+`docs/COMMERCIAL_STATE_BENCHMARK.md` for isolation checks, metrics, commands,
+and measured-output rules.
+
 ## Canonical Tables
 
 - `KnowledgeSource`: tenant-scoped source registry for CRM, Gmail, WhatsApp,
@@ -217,6 +391,14 @@ src/lib/memory/hybrid-search.ts
 src/lib/memory/relevance.ts
 src/lib/memory/evidence.ts
 src/lib/memory/search-memory.ts
+src/lib/memory/query-plan.ts
+src/lib/memory/fusion.ts
+src/lib/memory/diversify.ts
+src/lib/memory/retrievers/lexical.ts
+src/lib/memory/retrievers/operational-state.ts
+src/lib/memory/retrievers/entity.ts
+src/lib/memory/retrievers/temporal.ts
+src/lib/memory/retrievers/vector.ts
 ```
 
 Inputs:
@@ -227,24 +409,34 @@ Inputs:
 - `jobId`
 - `inquiryId`
 - `entityType` / `entityId`
+- `workspaceId`
+- `procurementOrderId`
+- `procurementVendorId`
+- `supplierKey`
+- `itemId` / `itemKey`
 - `canonicalTypes`
 - `sourceTypes`
 - `dateRange`
 - `limit`
 - `includeEvents`
 - `includeChunks`
+- `includeOperationalState`
 
-Retrieval signals:
+Retrieval V2 preserves the previous lexical behavior as its measurable baseline,
+then combines these heterogeneous ranked lists:
 
-- direct structured filters on `KnowledgeObject`
-- chunk text matches
-- title and source external ID matches
-- entity mention matches
-- direct event matches
-- recency boost
-- canonical type boost
-- source type boost
-- exact entity scope boost
+- lexical matches across objects, chunks, titles, source ids, mentions, and
+  events, including the existing recency and type boosts
+- current structured operational state and matching state projections
+- exact known company, workspace, order, vendor, supplier, item, job, inquiry,
+  thread, and evidence links; ambiguous fuzzy entity linking is forbidden
+- bounded temporal event neighborhoods around evidence-bearing anchors
+- an optional vector retriever interface with no V1 backend
+
+Lists are fused with Reciprocal Rank Fusion. Lexical and future cosine scores
+are never added directly. Bounded diversification caps results from one email
+thread so a single conversation cannot consume the result set. Every admitted
+result must remain office scoped and carry at least one evidence pointer.
 
 Results include:
 
@@ -255,6 +447,12 @@ Results include:
 - `companyId`
 - `jobId`
 - `inquiryId`
+- `emailThreadId`
+- `workspaceId`
+- `procurementOrderId`
+- `procurementVendorId`
+- `supplierKey`
+- `itemId` / `itemKey`
 - `sourceType`
 - `sourceExternalId`
 - `canonicalType`
@@ -268,6 +466,12 @@ Results include:
 Search must be read-only. `npm run test:memory-search` checks that repeated
 searches do not mutate `KnowledgeObject`, `KnowledgeChunk`, `MemoryEvent`, or
 `EntityMention` counts.
+
+V1 defines a feature-flagged vector interface but deliberately ships no vector
+index, embedding write path, or pgvector requirement. Implement a backend only
+after an evidence benchmark demonstrates material semantic recall failure.
+Vectors must remain pointers to source-linked chunks and can never become
+operational truth.
 
 ## Evidence Contract
 

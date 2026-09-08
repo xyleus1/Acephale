@@ -24,6 +24,7 @@ const order = {
 
 const vendor = {
   id: "22222222-2222-4222-8222-222222222222",
+  supplierRegistryId: null,
   name: "Bay Area Circuits",
   website: "https://bacircuits.com/",
   contact: { name: null, email: "support@bacircuits.com", phone: null },

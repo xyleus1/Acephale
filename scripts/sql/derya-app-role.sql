@@ -71,17 +71,23 @@ DECLARE
     'SupplyCapabilityRun', 'SupplyDecision', 'SupplyScenario',
     'SupplyScenarioComparison', 'SupplyDecisionEvidence', 'SupplyScenarioEvidence',
     'SupplyApproval', 'SupplyExecutionTask', 'SupplyExecutionEvent',
-    'ProcurementConversationTask'
+    'ProcurementConversationTask',
+    'SupplyStateProjection', 'SupplyStateRead'
   ];
 BEGIN
   FOREACH app_table IN ARRAY app_tables LOOP
     IF to_regclass(format('public.%I', app_table)) IS NULL THEN
       RAISE EXCEPTION 'required application table public.% is missing', app_table;
     END IF;
-    EXECUTE format(
-      'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO derya_app',
-      app_table
-    );
+    IF app_table = 'SupplyStateRead' THEN
+      EXECUTE 'GRANT SELECT, INSERT ON TABLE public."SupplyStateRead" TO derya_app';
+      EXECUTE 'REVOKE UPDATE, DELETE ON TABLE public."SupplyStateRead" FROM derya_app';
+    ELSE
+      EXECUTE format(
+        'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO derya_app',
+        app_table
+      );
+    END IF;
   END LOOP;
 END
 $$;
@@ -119,7 +125,11 @@ BEGIN
     OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'SELECT')
     OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'INSERT')
     OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'UPDATE')
-    OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'DELETE') THEN
+    OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'DELETE')
+    OR NOT has_table_privilege('derya_app', 'public."SupplyStateRead"', 'SELECT')
+    OR NOT has_table_privilege('derya_app', 'public."SupplyStateRead"', 'INSERT')
+    OR has_table_privilege('derya_app', 'public."SupplyStateRead"', 'UPDATE')
+    OR has_table_privilege('derya_app', 'public."SupplyStateRead"', 'DELETE') THEN
     RAISE EXCEPTION 'derya_app is missing required application table privileges';
   END IF;
 
@@ -131,7 +141,8 @@ BEGIN
     'CompanyWorkflowAccount', 'ProcurementOrder', 'OrderSupplier',
     'ProcurementRequestKey', 'customers', 'bill_of_materials', 'orders',
     'order_vendors', 'procurement_api_idempotency',
-    'procurement_communication_messages', 'procurement_sources', 'supplier_memory'
+    'procurement_communication_messages', 'procurement_customer_scope',
+    'procurement_sources', 'supplier_memory'
   ] LOOP
     CONTINUE WHEN to_regclass(format('public.%I', workflow_table)) IS NULL;
     IF has_table_privilege('derya_app', format('public.%I', workflow_table), 'SELECT')

@@ -75,6 +75,7 @@ export async function recordSupplyResearchKnowledge(args: {
   output: unknown;
 }) {
   const capturedAt = new Date();
+  const affectedSupplierKeys = new Set<string>();
   const input = record(args.input);
   const customerFactValue = {
     componentItemKey: text(input.componentItemKey, 180),
@@ -218,6 +219,7 @@ export async function recordSupplyResearchKnowledge(args: {
       },
       select: { id: true, supplierKey: true },
     });
+    affectedSupplierKeys.add(profile.supplierKey);
 
     const candidateSource = website ?? (Array.isArray(candidate.sourceUrls) ? candidate.sourceUrls.map(url).find(Boolean) ?? null : null);
     const supplierFactValue = {
@@ -294,6 +296,7 @@ export async function recordSupplyResearchKnowledge(args: {
       });
     }
   }
+  return { supplierKeys: [...affectedSupplierKeys].sort() };
 }
 
 export async function supplyIntelligenceProfile(context: SupplyAccessContext, workspaceId: string) {

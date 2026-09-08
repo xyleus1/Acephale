@@ -11,6 +11,7 @@ import {
   type SupplyCsvColumnMappings,
   type SupplyCsvIssue,
 } from "./csv-import";
+import { invalidatePublishedSupplySnapshotStateProjections } from "./state-runtime/projections/invalidate";
 
 export type SupplyAccessContext = {
   officeId: string;
@@ -936,7 +937,7 @@ export async function publishSupplyImportForOffice(officeId: string, importRunId
   }
 
   const publishedAt = new Date();
-  return prisma.$transaction(async (tx) => {
+  const published = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ advisoryLock: string }>>`
       SELECT pg_advisory_xact_lock(hashtextextended(${`supply-import:${officeId}:${importRun.workspaceId}`}, 0))::text AS "advisoryLock"
     `;
@@ -995,6 +996,18 @@ export async function publishSupplyImportForOffice(officeId: string, importRunId
     });
     return published;
   });
+  await invalidatePublishedSupplySnapshotStateProjections({
+    officeId,
+    workspaceId: importRun.workspaceId,
+  }).catch(() => undefined);
+  await import("./state-runtime/projections/worker")
+    .then(({ enqueueSupplyStateProjectionRebuildIfEnabled }) => (
+      enqueueSupplyStateProjectionRebuildIfEnabled({
+        scope: { type: "workspace", officeId, workspaceId: importRun.workspaceId },
+      })
+    ))
+    .catch(() => undefined);
+  return published;
 }
 
 export async function getSupplyWorkspace(context: SupplyAccessContext, workspaceId: string) {

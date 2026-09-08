@@ -11,6 +11,7 @@ import {
   rotateAutopilotOrderIds,
   rotateAutopilotQueue,
   AUTOPILOT_ROTATION_WINDOW_MS,
+  selectAutopilotVendorPage,
   type AutopilotVendorState,
 } from "../src/lib/procurement-autopilot-plan";
 import {
@@ -344,9 +345,9 @@ for (const phase of [
   /const quoteRun = outOfScanTime\(\)/,
   /const draftRun = outOfScanTime\(\) \? null :/,
   /if \(args\.outOfTime\?\.\(\)\) \{\s*stopped = true;\s*break;/,
-  /if \(args\.outOfTime\?\.\(\)\) return \{ drafted, failures, stopped: true \}/,
+  /if \(args\.outOfTime\?\.\(\)\) return \{ drafted, bindings, failures, stopped: true \}/,
   /const nudgeRun = followUps && nudgeLimit > 0 && !outOfScanTime\(\)/,
-  /const sendRun = autoSend && deliverable\.length && !outOfTime\(\)/,
+  /const sendRun = autoSend && !outOfTime\(\)/,
 ]) {
   assert.ok(phase.test(autopilotSource), `Every phase of a pass checks the deadline: ${String(phase)}`);
 }
@@ -488,12 +489,49 @@ assert.ok(
   "A retry is judged by the outcome of the earlier attempt, not by its wording.",
 );
 assert.ok(
-  /accountId: claimed\.reconcileSender\?\.accountId \?\? sender\.id/.test(replySendSource),
+  /accountId: requiredText\(message\.senderAccountId, "Stored sender account", 220\)/.test(replySendSource),
   "An unresolved delivery is reconciled through the mailbox that was handed the message.",
 );
 assert.ok(
   /sendPausedAt: null/.test(replySendSource),
   "A mailbox paused by sender protection is not chosen as the thread sender.",
+);
+
+const waiting = Array.from({ length: 29 }, (_, index) => state({
+  vendorId: `waiting-${String(index + 1).padStart(2, "0")}`,
+  vendorName: `Waiting ${index + 1}`,
+  lastDirection: "OUTBOUND",
+  inboundKind: null,
+  triageDecision: null,
+}));
+const actionableBeyondFirstPage = state({
+  vendorId: "actionable-30",
+  vendorName: "Actionable 30",
+});
+const selectedActionPage = selectAutopilotVendorPage(
+  [...waiting, actionableBeyondFirstPage],
+  draftOnly,
+  25,
+);
+assert(selectedActionPage.some((entry) => entry.vendorId === actionableBeyondFirstPage.vendorId));
+assert.equal(selectedActionPage.length, 25);
+
+const thirtyInbound = Array.from({ length: 30 }, (_, index) => state({
+  vendorId: `inbound-${String(index + 1).padStart(2, "0")}`,
+  vendorName: `Inbound ${index + 1}`,
+}));
+const firstInboundPage = selectAutopilotVendorPage(thirtyInbound, draftOnly, 25);
+const draftedFirstPage = new Set(firstInboundPage.map((entry) => entry.vendorId));
+const secondInboundPage = selectAutopilotVendorPage(
+  thirtyInbound.map((entry) => draftedFirstPage.has(entry.vendorId)
+    ? { ...entry, hasDraft: true }
+    : entry),
+  draftOnly,
+  25,
+);
+assert(
+  thirtyInbound.slice(25).every((entry) => secondInboundPage.some((selected) => selected.vendorId === entry.vendorId)),
+  "Suppliers beyond the first bounded page must advance after the prior page is drafted.",
 );
 
 console.log("procurement autopilot plan checks passed");

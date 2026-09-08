@@ -27,6 +27,10 @@ import { stripEmDashes } from "@/lib/no-em-dash";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
 import { rotateAutopilotQueue } from "@/lib/procurement-autopilot-plan";
 import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
+import {
+  compileProcurementStateForDurableAction,
+  persistProcurementVendorDraftStateRead,
+} from "@/lib/procurement-state-runtime";
 import { getProcurementRequest, type ProcurementOrderDetail } from "@/lib/procurement-workflow";
 import type { SupplyAccessContext } from "@/lib/supply-os/persistence";
 
@@ -43,6 +47,8 @@ export type FileDraftOutcome = {
   state: "DRAFTED" | "FAILED";
   attachments: string[];
   withheld: Array<{ name: string; reason: string }>;
+  taskId: string | null;
+  inputHash: string | null;
   error: string | null;
 };
 
@@ -179,6 +185,7 @@ async function draftTargets(
   // until its next attempt is due instead of holding the batch every pass.
   skipVendorIds?: ReadonlySet<string>,
   retireOvertaken?: boolean,
+  vendorIds?: ReadonlySet<string> | null,
 ) {
   const targets: Array<FileDraftTarget & { answers: string[] }> = [];
   const access = await procurementOperatorAccess(context.summary.officeId);
@@ -193,9 +200,9 @@ async function draftTargets(
   const replied = await procurementRepliedVendors({
     officeId: context.summary.officeId,
     orderId: context.summary.orderId,
-    vendors: skipVendorIds?.size
-      ? context.order.vendors.filter((vendor) => !skipVendorIds.has(vendor.id))
-      : context.order.vendors,
+    vendors: context.order.vendors.filter((vendor) => (
+      !skipVendorIds?.has(vendor.id) && (!vendorIds || vendorIds.has(vendor.id))
+    )),
     outOfTime,
   });
   // The read itself rotates, not only the targets it produced: a scan the
@@ -248,9 +255,16 @@ export async function runProcurementFileDraftBatch(args: {
   rotateFrom?: number;
   // Conversations held back by their own conversation task backoff.
   skipVendorIds?: ReadonlySet<string>;
+  vendorIds?: readonly string[];
+  vendorStateReads?: Readonly<Record<string, {
+    id: string;
+    packetHash: string;
+    sourceFingerprint: string;
+  }>>;
 }): Promise<FileDraftRunResult | null> {
   const context = await loadContext(args.orderId);
   if (!context) return null;
+  const allowed = args.vendorIds ? new Set(args.vendorIds) : null;
   const targets = await draftTargets(
     context,
     args.bestEffort === true,
@@ -258,6 +272,7 @@ export async function runProcurementFileDraftBatch(args: {
     args.rotateFrom,
     args.skipVendorIds,
     true,
+    allowed,
   );
   const access = await procurementOperatorAccess(context.summary.officeId);
   const limit = Math.min(FILE_DRAFT_MAX_PER_RUN, Math.max(1, Math.trunc(args.limit ?? FILE_DRAFT_MAX_PER_RUN)));
@@ -265,14 +280,30 @@ export async function runProcurementFileDraftBatch(args: {
   // eligible targets keep that order: rotating the same window twice would
   // cancel itself out on some queue lengths and leave a replier undrafted for
   // good, which is what a second rotation here used to do.
-  const eligible = eligibleFileDraftTargets(targets, { redraft: args.redraft });
+  const eligible = eligibleFileDraftTargets(targets, { redraft: args.redraft })
+    .filter((target) => !allowed || allowed.has(target.vendorId));
   const batch = eligible.slice(0, limit);
+  const statePacket = batch.some((target) => !args.vendorStateReads?.[target.vendorId])
+    ? await compileProcurementStateForDurableAction({
+        officeId: context.summary.officeId,
+        customerId: context.summary.customerId,
+        order: context.order,
+        objective: `Prepare durable supplier file drafts for procurement request ${context.order.id}.`,
+        vendorIds: batch.map((target) => target.vendorId),
+      })
+    : null;
   const outcomes: FileDraftOutcome[] = [];
   for (const target of batch) {
     if (args.outOfTime?.()) break;
     const vendor = context.order.vendors.find((candidate) => candidate.id === target.vendorId);
     if (!vendor) continue;
     try {
+      const stateRead = args.vendorStateReads?.[target.vendorId]
+        ?? await persistProcurementVendorDraftStateRead({
+          packet: statePacket,
+          vendorId: target.vendorId,
+          objective: `Prepare a durable supplier file draft for vendor ${target.vendorId}.`,
+        });
       const draft = await saveProcurementFileDeliveryDraft({
         context: access,
         customerId: context.summary.customerId,
@@ -282,6 +313,7 @@ export async function runProcurementFileDraftBatch(args: {
         recipient: target.recipient,
         conversationSubject: target.conversationSubject,
         answers: target.answers,
+        stateRead,
       });
       outcomes.push({
         vendorId: target.vendorId,
@@ -290,6 +322,8 @@ export async function runProcurementFileDraftBatch(args: {
         state: "DRAFTED",
         attachments: draft.attachments.map((attachment) => attachment.name),
         withheld: draft.withheld,
+        taskId: draft.taskId ?? null,
+        inputHash: draft.inputHash ?? null,
         error: null,
       });
     } catch (error) {
@@ -300,6 +334,8 @@ export async function runProcurementFileDraftBatch(args: {
         state: "FAILED",
         attachments: [],
         withheld: [],
+        taskId: null,
+        inputHash: null,
         error: error instanceof Error ? error.message : "The supplier file draft failed.",
       });
     }

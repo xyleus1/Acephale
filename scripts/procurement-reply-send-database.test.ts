@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import type { ProcurementConversation } from "../src/lib/procurement-conversation-model";
-import { sendProcurementSupplierReply } from "../src/lib/procurement-reply-send";
+import { reconcilePendingProcurementSupplierReply, sendProcurementSupplierReply } from "../src/lib/procurement-reply-send";
+import { runProcurementFileDraftSendBatch } from "../src/lib/procurement-file-draft-send";
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "../src/lib/procurement-workflow";
 import type { loadRequestDocumentAttachments } from "../src/lib/supply-os/request-document-attachments";
 import type { SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import type { SupplierEmailProvider, SupplierEmailSendInput, SupplierEmailSent } from "../src/lib/supply-os/supplier-email-provider";
+import {
+  createProcurementActionStateReadFixture,
+  withEnforcedSupplyStateRuntime,
+} from "./supply-state-action-test-fixture";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required.");
@@ -48,6 +53,7 @@ function fixture(workspaceId: string, suffix: string, accountEmail = "operator@d
   const inboundSentAt = "2026-08-22T16:00:00.000Z";
   const vendor: ProcurementOrderVendor = {
     id: vendorId,
+    supplierRegistryId: null,
     name: `Supplier ${suffix}`,
     website: "https://example.com",
     contact: { name: null, email: recipient, phone: null },
@@ -133,6 +139,8 @@ async function deliver(args: {
   provider: SupplierEmailProvider;
   requestDocumentAttachments?: typeof loadRequestDocumentAttachments;
   allowPooledSender?: boolean;
+  mode?: "REPLY" | "CHASE";
+  stateRead?: NonNullable<Parameters<typeof sendProcurementSupplierReply>[0]["stateRead"]>;
 }) {
   return sendProcurementSupplierReply({
     context: args.context,
@@ -141,7 +149,9 @@ async function deliver(args: {
     vendor: args.fixture.vendor,
     conversation: args.fixture.conversation,
     input: args.fixture.input,
+    mode: args.mode,
     ...(args.allowPooledSender ? { allowPooledSender: true } : {}),
+    ...(args.stateRead ? { stateRead: args.stateRead } : {}),
     dependencies: {
       communicationMessages: args.fixture.communicationMessages,
       provider: args.provider,
@@ -187,6 +197,17 @@ async function main() {
     });
     const workspace = await prisma.supplyWorkspace.create({
       data: { officeId: office.id, createdByUserId: user.id, name: `Reply workspace ${suffix}` },
+    });
+    const stateCompany = await prisma.company.create({
+      data: { officeId: office.id, name: `State-bound reply company ${suffix}` },
+    });
+    const stateWorkspace = await prisma.supplyWorkspace.create({
+      data: {
+        officeId: office.id,
+        companyId: stateCompany.id,
+        createdByUserId: user.id,
+        name: `State-bound reply workspace ${suffix}`,
+      },
     });
     await prisma.supplyWorkspaceMember.create({
       data: { officeId: office.id, workspaceId: workspace.id, userId: viewer.id, role: "VIEWER" },
@@ -240,6 +261,34 @@ async function main() {
       },
       reconcile: async () => ({ state: "NOT_FOUND" }),
     };
+    const staleAction = fixture(stateWorkspace.id, `state-binding-${suffix}`);
+    const newerMessageStateRead = await createProcurementActionStateReadFixture({
+      officeId: office.id,
+      companyId: stateCompany.id,
+      customerId: "customer-a",
+      workspaceId: stateWorkspace.id,
+      order: staleAction.order,
+      vendor: staleAction.vendor,
+      latestMessage: {
+        id: `inbound-after-refresh-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: staleAction.input.recipient,
+      },
+    });
+    await withEnforcedSupplyStateRuntime(() => assert.rejects(deliver({
+      context,
+      fixture: staleAction,
+      provider: guardProvider,
+      stateRead: newerMessageStateRead,
+    }), /not the latest message/i));
+    assert.equal(rejectedBeforeProvider, 0, "An action older than its state read must stop before the provider.");
+    assert.equal(await prisma.supplyExecutionTask.count({
+      where: {
+        officeId: office.id,
+        workspaceId: stateWorkspace.id,
+        taskType: "PROCUREMENT_SUPPLIER_REPLY_EMAIL",
+      },
+    }), 0, "An action older than its state read must stop before the delivery claim.");
     const stale = fixture(workspace.id, `stale-${suffix}`);
     await assert.rejects(deliver({
       context,
@@ -366,6 +415,12 @@ async function main() {
       provider: unknownProvider,
     });
     assert.equal(reconciled.alreadySent, false);
+    assert.equal(reconciled.matchesExpectedInput, false, "A changed draft cannot be marked sent by an older delivery.");
+    assert.equal(
+      unknownReconcileCount,
+      1,
+      "A changed current draft must still reconcile the immutable uncertain provider attempt before it is rejected.",
+    );
     assert.equal(unknownSendCount, 1, "An unknown delivery must reconcile before another send.");
     assert.equal(unknownReconcileCount, 1);
     const reconciledReplay = await deliver({ context, fixture: unknown, provider: unknownProvider });
@@ -467,6 +522,178 @@ async function main() {
       where: { officeId: office.id, email: "operator@derya.ai" },
       data: { sendPausedAt: null },
     });
+    const vendorWide = fixture(workspace.id, `vendor-wide-${suffix}`);
+    let vendorWideSendCount = 0;
+    let vendorWideReconcileCount = 0;
+    let vendorWideDelivered = false;
+    const vendorWideProvider: SupplierEmailProvider = {
+      send: async () => {
+        vendorWideSendCount += 1;
+        return { state: "UNKNOWN", error: "The test transport timed out." };
+      },
+      reconcile: async (input) => {
+        vendorWideReconcileCount += 1;
+        return vendorWideDelivered
+          ? sentReceipt({
+              ...successfulSends[0]!,
+              accountId: input.accountId,
+              officeId: input.officeId,
+              senderEmail: input.senderEmail,
+              rfcMessageId: input.rfcMessageId,
+            })
+          : { state: "NOT_FOUND" };
+      },
+    };
+    await assert.rejects(deliver({ context, fixture: vendorWide, provider: vendorWideProvider }), /timed out/);
+    const nextSourceMessageId = `${vendorWide.input.sourceMessageId}-newer`;
+    const nextInbound: Fixture = {
+      ...vendorWide,
+      conversation: {
+        ...vendorWide.conversation,
+        messages: [{
+          ...vendorWide.conversation.messages[0]!,
+          id: nextSourceMessageId,
+          sentAt: "2026-08-22T16:05:00.000Z",
+        }],
+      },
+      input: {
+        ...vendorWide.input,
+        sourceMessageId: nextSourceMessageId,
+        body: `${vendorWide.input.body} New inbound context.`,
+      },
+    };
+    await assert.rejects(
+      deliver({ context, fixture: nextInbound, provider: vendorWideProvider }),
+      /human non-delivery review/i,
+    );
+    assert.equal(vendorWideSendCount, 1, "A newer inbound source must not bypass a vendor-wide unresolved send.");
+    assert.equal(vendorWideReconcileCount, 1);
+    vendorWideDelivered = true;
+    await assert.rejects(
+      deliver({ context, fixture: nextInbound, provider: vendorWideProvider }),
+      /previous supplier reply was reconciled as sent/i,
+    );
+    assert.equal(vendorWideSendCount, 1);
+    assert.equal(vendorWideReconcileCount, 2);
+    const vendorWideReplay = await deliver({ context, fixture: vendorWide, provider: vendorWideProvider });
+    assert.equal(vendorWideReplay.alreadySent, true);
+    assert.equal(vendorWideSendCount, 1);
+
+    // A chase uses a different delivery scope from a reply, but its unknown
+    // outcome still blocks every later send to the same supplier.
+    const chase = fixture(workspace.id, `chase-unknown-${suffix}`);
+    chase.conversation.messages.push({
+      ...chase.conversation.messages[0]!,
+      id: `outbound-before-chase-${suffix}`,
+      direction: "OUTBOUND",
+      fromEmail: "operator@derya.ai",
+      toEmails: [chase.input.recipient],
+      body: "Here is the requested technical package.",
+      sentAt: "2026-08-23T16:00:00.000Z",
+    });
+    let chaseSends = 0;
+    let chaseReconciles = 0;
+    const chaseProvider: SupplierEmailProvider = {
+      send: async () => {
+        chaseSends += 1;
+        return { state: "UNKNOWN", error: "Chase transport timed out." };
+      },
+      reconcile: async (input) => {
+        chaseReconciles += 1;
+        return sentReceipt({
+          ...successfulSends[0]!,
+          accountId: input.accountId,
+          officeId: input.officeId,
+          senderEmail: input.senderEmail,
+          rfcMessageId: input.rfcMessageId,
+        });
+      },
+    };
+    await assert.rejects(deliver({ context, fixture: chase, provider: chaseProvider, mode: "CHASE" }), /Chase transport timed out/);
+    const chaseTask = await prisma.supplyExecutionTask.findFirstOrThrow({
+      where: {
+        officeId: office.id,
+        taskType: "PROCUREMENT_SUPPLIER_REPLY_EMAIL",
+        input: { path: ["sourceMessageId"], equals: chase.input.sourceMessageId },
+      },
+      select: { taskKey: true },
+    });
+    assert.ok(chaseTask.taskKey.startsWith(`procurement-chase:${chase.order.id}:${chase.vendor.id}:`));
+    const replyAfterChase: Fixture = {
+      ...chase,
+      input: { ...chase.input, sourceMessageId: `${chase.input.sourceMessageId}-newer` },
+    };
+    await assert.rejects(
+      deliver({ context, fixture: replyAfterChase, provider: chaseProvider }),
+      /previous supplier reply was reconciled as sent/i,
+    );
+    assert.equal(chaseSends, 1, "An unresolved chase must not be bypassed by a new reply scope.");
+    assert.equal(chaseReconciles, 1);
+
+    for (const scope of ["empty", "narrow", "removed"] as const) {
+      const pendingBatch = fixture(workspace.id, `pending-batch-${scope}-${suffix}`);
+      let batchSendCalls = 0;
+      let batchReconcileCalls = 0;
+      const batchProvider: SupplierEmailProvider = {
+        send: async () => {
+          batchSendCalls += 1;
+          return { state: "UNKNOWN", error: "Batch fixture transport timed out." };
+        },
+        reconcile: async (input) => {
+          batchReconcileCalls += 1;
+          return sentReceipt({
+            ...successfulSends[0]!,
+            accountId: input.accountId,
+            officeId: input.officeId,
+            senderEmail: input.senderEmail,
+            rfcMessageId: input.rfcMessageId,
+          });
+        },
+      };
+      await assert.rejects(deliver({ context, fixture: pendingBatch, provider: batchProvider }), /Batch fixture transport timed out/);
+      const visibleOrder = {
+        ...pendingBatch.order,
+        vendors: scope === "removed" ? [] : pendingBatch.order.vendors,
+      };
+      const batchArgs: Parameters<typeof runProcurementFileDraftSendBatch>[0] = {
+        orderId: pendingBatch.order.id,
+        limit: 1,
+        vendorIds: scope === "narrow" ? ["another-selected-supplier"] : [],
+        dependencies: {
+          loadOrder: async () => ({
+            orderId: pendingBatch.order.id,
+            officeId: office.id,
+            customerId: "customer-a",
+            sourceWorkspaceId: workspace.id,
+            companyName: "Batch test customer",
+            material: pendingBatch.order.material,
+            specification: null,
+            quantity: "100",
+            unit: "units",
+            neededBy: null,
+            notes: null,
+          }),
+          getRequest: async () => visibleOrder,
+          operatorAccess: async () => context,
+          // The visible reply scan no longer includes this pending supplier.
+          repliedVendors: async () => ({ vendors: [], complete: true }),
+          reconcile: (args) => reconcilePendingProcurementSupplierReply({ ...args, provider: batchProvider }),
+          send: async () => {
+            assert.fail("Reconciliation-only selection must never start a fresh send.");
+          },
+        },
+      };
+      const expired = await runProcurementFileDraftSendBatch({ ...batchArgs, outOfTime: () => true });
+      assert.equal(expired?.outcomes.length, 0);
+      assert.equal(batchReconcileCalls, 0, "An expired pass leaves reconciliation for the next invocation.");
+      const settled = await runProcurementFileDraftSendBatch(batchArgs);
+      assert.equal(settled?.alreadySent, 1, `The ${scope} allow-list must still reconcile its immutable pending send.`);
+      assert.equal(settled?.outcomes[0]?.vendorId, pendingBatch.vendor.id);
+      assert.equal(settled?.sent, 0);
+      assert.equal(settled?.failed, 0);
+      assert.equal(batchSendCalls, 1, "Only the original uncertain send may contact the fake provider.");
+      assert.equal(batchReconcileCalls, 1);
+    }
 
     // Attachment bytes are only needed by a fresh send, so a storage failure
     // must never block reconciliation of a delivery that is still unresolved.
@@ -667,10 +894,61 @@ async function main() {
       "A rewritten answer to a delivered message is reported as answered, not sent again.",
     );
     assert.equal(pausedSends.length, 2, "A delivered reply must not be sent twice.");
+    assert.equal(pausedRewritten.matchesExpectedInput, false, "The newer wording was never delivered.");
     await prisma.emailAccount.updateMany({
       where: { officeId: office.id, email: "operator@derya.ai" },
       data: { sendPausedAt: null },
     });
+    const staleSuccessor = fixture(workspace.id, `stale-successor-${suffix}`);
+    let staleSuccessorProviderCalls = 0;
+    const staleSuccessorProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        staleSuccessorProviderCalls += 1;
+        return staleSuccessorProviderCalls === 1
+          ? { state: "REJECTED", error: "Synthetic local barrier fixture." }
+          : sentReceipt(input);
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    await assert.rejects(
+      deliver({ context, fixture: staleSuccessor, provider: staleSuccessorProvider }),
+      /Synthetic local barrier fixture/,
+    );
+    const staleTask = await prisma.supplyExecutionTask.findFirstOrThrow({
+      where: {
+        officeId: office.id,
+        taskType: "PROCUREMENT_SUPPLIER_REPLY_EMAIL",
+        input: { path: ["sourceMessageId"], equals: staleSuccessor.input.sourceMessageId },
+      },
+      select: { id: true, result: true },
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyExecutionTask.update({
+        where: { id: staleTask.id },
+        data: {
+          result: {
+            ...(staleTask.result as Record<string, unknown>),
+            state: "COMMERCIAL_STATE_STALE",
+            providerCalled: false,
+          },
+        },
+      });
+    });
+    const replanned: Fixture = {
+      ...staleSuccessor,
+      input: { ...staleSuccessor.input, body: `${staleSuccessor.input.body} Replanned after refresh.` },
+    };
+    const replannedDelivery = await deliver({ context, fixture: replanned, provider: staleSuccessorProvider });
+    assert.equal(replannedDelivery.alreadySent, false);
+    assert.equal(staleSuccessorProviderCalls, 2);
+    assert.equal(await prisma.supplyExecutionTask.count({
+      where: {
+        officeId: office.id,
+        taskType: "PROCUREMENT_SUPPLIER_REPLY_EMAIL",
+        input: { path: ["sourceMessageId"], equals: staleSuccessor.input.sourceMessageId },
+      },
+    }), 2, "A proven local stale block must retain the failed attempt and create an immutable successor.");
 
     const concurrent = fixture(workspace.id, `concurrent-${suffix}`);
     let releaseFirst!: () => void;
@@ -693,7 +971,10 @@ async function main() {
     };
     const first = deliver({ context, fixture: concurrent, provider: concurrentProvider });
     await started;
-    await assert.rejects(deliver({ context, fixture: concurrent, provider: concurrentProvider }), /still unresolved/);
+    await assert.rejects(
+      deliver({ context, fixture: concurrent, provider: concurrentProvider }),
+      /did not find the unresolved supplier reply/,
+    );
     releaseFirst();
     await first;
     assert.equal(concurrentSendCount, 1, "Concurrent confirmation must create one provider send.");
@@ -775,6 +1056,53 @@ async function main() {
     });
     assert.equal(fallbackReplay.alreadySent, true);
     assert.equal(pooledFallbackSends.length, 1, "A pooled fallback replay must not send twice.");
+
+    const restoredMailbox = `restored-${suffix}@derya.ai`;
+    const pooledUnknown = fixture(workspace.id, `orphaned-unknown-${suffix}`, restoredMailbox);
+    let pooledUnknownSend: SupplierEmailSendInput | null = null;
+    let pooledUnknownReconcileCount = 0;
+    const pooledUnknownProvider: SupplierEmailProvider = {
+      send: async (input) => {
+        pooledUnknownSend = input;
+        return { state: "UNKNOWN", error: "The pooled delivery timed out." };
+      },
+      reconcile: async (input) => {
+        pooledUnknownReconcileCount += 1;
+        assert.equal(input.accountId, pooledUnknownSend?.accountId);
+        assert.equal(input.senderEmail, pooledUnknownSend?.senderEmail);
+        return sentReceipt({ ...pooledUnknownSend!, rfcMessageId: input.rfcMessageId });
+      },
+    };
+    await assert.rejects(deliver({
+      context,
+      fixture: pooledUnknown,
+      provider: pooledUnknownProvider,
+      allowPooledSender: true,
+    }), /timed out/);
+    await prisma.emailAccount.create({
+      data: {
+        officeId: foreignOffice.id,
+        email: restoredMailbox,
+        provider: "GMAIL",
+        accessToken: "fixture-token",
+        refreshToken: "fixture-refresh-token",
+        isActive: true,
+        sendEnabled: true,
+      },
+    });
+    const pooledUnknownReconciled = await deliver({
+      context,
+      fixture: pooledUnknown,
+      provider: pooledUnknownProvider,
+      allowPooledSender: true,
+    });
+    assert.equal(pooledUnknownReconciled.alreadySent, false);
+    assert.equal(pooledUnknownReconcileCount, 1);
+    assert.notEqual(
+      pooledUnknownSend?.senderEmail,
+      restoredMailbox,
+      "Reconciliation must retain the immutable pooled sender even after the original mailbox reconnects.",
+    );
 
     // Pool load shifts constantly, so a pooled attempt has to pin its mailbox:
     // re-picking would change the delivery hash and make the reply unretryable.

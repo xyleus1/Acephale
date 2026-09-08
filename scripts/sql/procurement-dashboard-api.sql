@@ -63,7 +63,8 @@ REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM dashboard_api;
 DO $$
 BEGIN
   IF to_regclass('public."ProcurementRequestKey"') IS NULL
-    OR to_regclass('public.procurement_api_idempotency') IS NULL THEN
+    OR to_regclass('public.procurement_api_idempotency') IS NULL
+    OR to_regclass('public.procurement_customer_scope') IS NULL THEN
     RAISE EXCEPTION 'canonical procurement request key schema is missing';
   END IF;
 END
@@ -76,8 +77,10 @@ REVOKE ALL ON bill_of_materials FROM dashboard_api;
 REVOKE ALL ON orders FROM dashboard_api;
 REVOKE ALL ON order_vendors FROM dashboard_api;
 REVOKE ALL ON procurement_api_idempotency FROM dashboard_api;
+REVOKE ALL ON procurement_customer_scope FROM dashboard_api;
 
 GRANT SELECT (id) ON customers TO dashboard_api;
+GRANT SELECT ON procurement_customer_scope TO dashboard_api;
 
 GRANT SELECT ON bill_of_materials TO dashboard_api;
 GRANT INSERT (
@@ -233,12 +236,19 @@ $$;
 REVOKE ALL ON FUNCTION advance_order_status(uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION advance_order_status(uuid, uuid, text) TO dashboard_api;
 
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+ON procurement_customer_scope
+FROM dashboard_api;
+
 REVOKE DELETE, TRUNCATE, REFERENCES, TRIGGER
 ON procurement_api_idempotency
 FROM dashboard_api;
 
 DO $$
 BEGIN
+  IF NOT has_table_privilege('dashboard_api', 'procurement_customer_scope', 'SELECT') THEN
+    RAISE EXCEPTION 'dashboard_api cannot read procurement customer scope';
+  END IF;
   IF has_table_privilege('dashboard_api', 'customers', 'UPDATE')
     OR has_table_privilege('dashboard_api', 'customers', 'DELETE')
     OR has_table_privilege('dashboard_api', 'customers', 'TRUNCATE')
@@ -272,7 +282,11 @@ BEGIN
     OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'INSERT')
     OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'UPDATE')
     OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'DELETE')
-    OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'TRUNCATE') THEN
+    OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'TRUNCATE')
+    OR has_table_privilege('dashboard_api', 'procurement_customer_scope', 'INSERT')
+    OR has_table_privilege('dashboard_api', 'procurement_customer_scope', 'UPDATE')
+    OR has_table_privilege('dashboard_api', 'procurement_customer_scope', 'DELETE')
+    OR has_table_privilege('dashboard_api', 'procurement_customer_scope', 'TRUNCATE') THEN
     RAISE EXCEPTION 'dashboard_api has unsafe workflow privileges';
   END IF;
 END

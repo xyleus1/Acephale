@@ -18,6 +18,10 @@ import {
   validateContextDocumentUpload,
 } from "@/lib/supply-os/context-documents";
 import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
+import {
+  invalidateCompanyContextDocumentStateProjections,
+  invalidateCompanyContextStateProjections,
+} from "@/lib/supply-os/state-runtime/projections/invalidate";
 
 const MAX_MESSAGE_CHARS = 12_000;
 const MAX_AGENT_DOCUMENT_CHARS = 120_000;
@@ -32,6 +36,24 @@ export const CUSTOMER_CONTEXT_UPLOADS_PER_DAY = 40;
 export const CUSTOMER_CONTEXT_DOCUMENTS_MAX = 50;
 export const CUSTOMER_CONTEXT_STORAGE_MAX_BYTES = 50 * 1024 * 1024;
 export const CONTEXT_DOCUMENT_CHUNK_BYTES = 3 * 1024 * 1024;
+
+async function enqueueCompanyContextProjection(args: {
+  officeId: string;
+  companyId: string;
+  workspaceId: string;
+}) {
+  const { enqueueSupplyStateProjectionRebuildIfEnabled } = await import(
+    "@/lib/supply-os/state-runtime/projections/worker"
+  );
+  return enqueueSupplyStateProjectionRebuildIfEnabled({
+    scope: {
+      type: "company",
+      officeId: args.officeId,
+      companyId: args.companyId,
+      workspaceId: args.workspaceId,
+    },
+  });
+}
 
 type ProcessingState = "READY" | "UNSUPPORTED" | "FAILED";
 
@@ -751,6 +773,17 @@ export async function uploadCompanyContextDocument(args: {
 
   const { item: linkedItem, ...safeDocument } = document;
 
+  await invalidateCompanyContextDocumentStateProjections({
+    officeId: args.context.officeId,
+    companyId: workspace.companyId,
+    documentId: document.id,
+  }).catch(() => undefined);
+  await enqueueCompanyContextProjection({
+    officeId: args.context.officeId,
+    companyId: workspace.companyId,
+    workspaceId: workspace.id,
+  }).catch(() => undefined);
+
   return {
     ...safeDocument,
     itemName: linkedItem?.name ?? null,
@@ -999,6 +1032,17 @@ export async function appendCompanyContextMessage(args: {
       select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
     });
   });
+  if (args.role === "OPERATOR") {
+    await invalidateCompanyContextStateProjections({
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+    }).catch(() => undefined);
+    await enqueueCompanyContextProjection({
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      workspaceId: workspace.id,
+    }).catch(() => undefined);
+  }
   return parseMessage(row);
 }
 
@@ -1016,7 +1060,7 @@ export async function appendRateLimitedCustomerContextMessage(args: {
   const windowStart = new Date(Date.now() - args.windowMs);
   const lockKey = `customer-context-message:${args.context.officeId}:${workspace.companyId}:${args.context.portalUserId}`;
   const threadId = typeof args.threadId === "string" && args.threadId ? args.threadId : null;
-  return prisma.$transaction(async (tx) => {
+  const message = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ locked: number }>>`
       SELECT 1::integer AS "locked"
       FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
@@ -1063,6 +1107,16 @@ export async function appendRateLimitedCustomerContextMessage(args: {
     });
     return parseMessage(row);
   });
+  await invalidateCompanyContextStateProjections({
+    officeId: args.context.officeId,
+    companyId: workspace.companyId,
+  }).catch(() => undefined);
+  await enqueueCompanyContextProjection({
+    officeId: args.context.officeId,
+    companyId: workspace.companyId,
+    workspaceId: workspace.id,
+  }).catch(() => undefined);
+  return message;
 }
 
 export async function assembleCompanyContextForAgent(

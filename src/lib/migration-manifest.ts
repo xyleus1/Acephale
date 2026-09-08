@@ -41,6 +41,8 @@ export const COMMITTED_MIGRATIONS: readonly string[] = [
   "20260825000300_shared_mailbox_pool",
   "20260825000400_leadgen_attribution",
   "20260826000100_leadgen_usable_contact",
+  "20260826000100_supply_state_runtime",
+  "20260827000100_procurement_customer_scope",
   "20260901000100_outreach_campaigns",
   "20260901000200_leadgen_outreach_app_grants",
   "20260901000300_outreach_campaign_pinning",

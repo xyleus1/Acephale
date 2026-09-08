@@ -15,6 +15,7 @@ import {
 } from "./fixtures/legacy-supply-os/guild2-procurement";
 import {
   createProcurementRequestInDatabase,
+  getProcurementWorkflowAccount,
   getProcurementCommunicationMessagesFromDatabase,
   getProcurementRequestFromDatabase,
   getProcurementVendorConversationRefFromDatabase,
@@ -111,6 +112,26 @@ async function main() {
       companyB.id,
       "Customer B",
     );
+    const workflowDatabase = dashboard as unknown as import("../src/lib/procurement-workflow").ProcurementDatabase;
+    assert.deepEqual(await getProcurementWorkflowAccount({
+      officeId,
+      customerId: customerA,
+      companyId: companyA.id,
+    }, { database: workflowDatabase }), {
+      id: customerA,
+      officeId,
+      companyId: companyA.id,
+    });
+    assert.equal(await getProcurementWorkflowAccount({
+      officeId,
+      customerId: customerA,
+      companyId: companyB.id,
+    }, { database: workflowDatabase }), null, "Workflow lookup must reject a different company in the same role boundary.");
+    assert.equal(await getProcurementWorkflowAccount({
+      officeId: officeBId,
+      customerId: customerA,
+      companyId: companyA.id,
+    }, { database: workflowDatabase }), null, "Workflow lookup must reject a customer mapped to another office.");
     await owner.$executeRawUnsafe(
       "INSERT INTO bill_of_materials (id, customer_id, material, specification, procurement_preferences) VALUES ($1::uuid, $2::uuid, $3, $4, '{}'::jsonb)",
       foreignBom,
@@ -138,7 +159,6 @@ async function main() {
       idempotencyKey: `db-contract-${suffix}`,
     });
 
-    const workflowDatabase = dashboard as unknown as import("../src/lib/procurement-workflow").ProcurementDatabase;
     const created = await createProcurementRequestInDatabase(workflowDatabase, customerA, input);
     assert.equal(created.status, "new");
     assert.equal(created.created, true);
@@ -411,6 +431,18 @@ async function main() {
     })), [{ supplierCount: 6, companySupplierCount: 6, linkedOrderSupplierCount: 6 }]);
     const detail = await getProcurementRequestFromDatabase(workflowDatabase, customerA, created.orderId);
     assert(detail);
+    const canonicalVendorLinks = await owner.$queryRawUnsafe<Array<{
+      vendorId: string;
+      supplierRegistryId: string;
+    }>>(`
+      SELECT id::text AS "vendorId", supplier_registry_id::text AS "supplierRegistryId"
+      FROM "OrderSupplier"
+      WHERE order_id = $1::uuid
+    `, created.orderId);
+    const canonicalSupplierByVendor = new Map(canonicalVendorLinks.map((row) => [row.vendorId, row.supplierRegistryId]));
+    assert(detail.vendors.every((vendor) => (
+      vendor.supplierRegistryId === canonicalSupplierByVendor.get(vendor.id)
+    )), "The workflow DTO must preserve each OrderSupplier canonical supplier link exactly.");
     const vendorsByName = new Map(detail.vendors.map((vendor) => [vendor.name, vendor]));
     assert.deepEqual(vendorsByName.get("Example supplier")?.contact, {
       name: "Ada Buyer",

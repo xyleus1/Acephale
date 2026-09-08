@@ -1,3 +1,19 @@
+# 2026-09-08: Memory and temporal runtime port onto latest main
+
+The memory branch is integrated with upstream main `7080adad` in the isolated
+fork branch `codex/memory-temporal-main-20260908`. Latest supplier conversation
+tasks, CHASE, retry/reconciliation, notices, and sender protection are retained.
+The runtime and retrieval flags remain off by default. No deployment, main
+branch update, production database operation, or real provider send was made.
+
+See [the port and reproduction contract](MEMORY_LATEST_MAIN_PORT.md) for
+implementation, verification, safety coverage, and benchmark limitations.
+Full TypeScript, the complete application build, and focused state/procurement
+database checks pass. The new publication cohort is pending at this
+source-freeze checkpoint; do not present earlier figures as new measurements.
+The port contract records the three pre-existing broad-lint errors and build
+warnings rather than treating those checks as warning-free.
+
 # Outreach campaign personalization
 
 Campaign copy now supports deterministic aliases and nested merge fallbacks. Audience snapshots retain bounded merge fields for follow-ups and legacy rows can be reloaded by office and list scope. The optional `ai_intro` is generated from row evidence only, guarded deterministically, and persisted per send so reconciliation reproduces the delivered body.
@@ -1871,6 +1887,285 @@ Supplier waves now derive deterministic capability profiles from each request, k
   (hand the wave to the background queue) and `drain: true` (carry one queued
   slice forward without waiting for the schedule). Send authorization is
   unchanged: supplier mail still needs the confirmation phrase.
+## 2026-08-28: Minimum viable commercial-state benchmark
+
+### Implemented
+
+- Added isolated benchmark configuration, role-safe database clients, schema
+  preparation, guarded targeted reset, deterministic corpus generation, doctor,
+  five-system runner, metric aggregation, CSV/JSON output, and a standalone HTML
+  report under `src/lib/supply-os/benchmark/` and `scripts/benchmark-*.ts`.
+- The fixed seed contains exactly 12 scenario families, 2 offices, 12 companies,
+  120 suppliers, 48 procurement requests, 8 golden suppliers, 4 golden
+  companies, 200 evaluation queries in the required distribution, and 40
+  concurrency cases. Profiles contain exactly 10,000, 50,000, and 250,000
+  aggregate retrievable records; only distractor history grows.
+- Benchmark metadata is limited to `benchmark.cases`, `benchmark.runs`, and
+  `benchmark.results`. Runtime retrieval has no benchmark-schema dependency.
+  Reset requires all six benchmark settings, a safe database name, separation
+  from normal URLs, and `ALLOW_BENCHMARK_RESET=1`.
+- Added migration `20260827000100_procurement_customer_scope`. Its
+  security-barrier view exposes only the exact workflow customer, office, and
+  company tuple to `dashboard_api`; PUBLIC, `derya_app`, and Bourne remain
+  denied. Runtime workflow-account lookups now use that role boundary rather
+  than app Prisma.
+- Hardened compiler `supply-world-state-v1.1` identity semantics. Company state
+  now seals canonical id, name, and status; a canonical `Item.id` maps to the
+  current snapshot item only through matching identifiers or an active approved
+  alias; and a request-specific supplier must match the workflow vendor's
+  canonical supplier-registry id. Validation reasserts current tenant and scope
+  ownership before accepting the stored dependencies.
+- Generated `summary.json`, `results.csv`, and `report.html` in
+  `BENCHMARK_OUTPUT_DIR`. The report has all seven required measured graphs and
+  repeats corpus, query, top-K, embedding, run, hardware, and timestamp
+  configuration beneath each graph. A full-height headless browser render was
+  visually inspected after generation.
+
+### Measured results
+
+All three final compiler-v1.1 profiles used seed 42, 200 queries, top-K 20, one run, process
+concurrency 4, and ten warmup cases on PostgreSQL 17 with local TLS. The
+environment label was Windows 10.0.26200, Intel Core i5-1235U, 8 GiB RAM, and 12
+logical CPUs.
+
+| Profile | System | Recall@20 | p50 ms | p95 ms | Evidence/s | Facts/s |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 10K | `CURRENT_KEYWORD` | 0.7133 | 138.3 | 5,290.5 | 1.715 | 3.299 |
+| 10K | `DERYA_COLD` | 0.8433 | 550.5 | 746.5 | 2.433 | 3.944 |
+| 10K | `DERYA_HOT` | 0.8717 | 548.9 | 753.3 | 2.614 | 4.065 |
+| 50K | `CURRENT_KEYWORD` | 0.7133 | 1,553.2 | 4,435.8 | 0.551 | 1.060 |
+| 50K | `DERYA_COLD` | 0.8433 | 1,756.6 | 2,311.0 | 0.759 | 1.314 |
+| 50K | `DERYA_HOT` | 0.8717 | 1,771.0 | 2,259.5 | 0.802 | 1.279 |
+| 250K | `CURRENT_KEYWORD` | 0.7133 | 1,782.1 | 5,112.8 | 0.433 | 0.832 |
+| 250K | `DERYA_COLD` | 0.8433 | 4,110.4 | 5,279.9 | 0.320 | 0.526 |
+| 250K | `DERYA_HOT` | 0.8717 | 5,117.2 | 6,478.0 | 0.275 | 0.441 |
+
+Hot projection hit rate was 0.925. Across the 40 concurrency cases,
+`DERYA_HOT` detected every strict stale state, allowed no stale action to
+escape, and produced no false conflict. All active systems had zero tenant and
+unrouted-mail leaks. These results are deliberately mixed: Derya improved
+Recall@20 and action safety, but keyword retained higher Recall@5, MRR, and
+current-state accuracy, and Derya's latency/bandwidth regressed at 250K.
+
+### Status and limitations
+
+- Implemented: the required five packet scopes, projection and immutable-read
+  paths, supplier-send revalidation, Retrieval V2, isolated corpus, runner,
+  doctor, and report generator are present.
+- Tested: all three profiles seeded and passed doctor; each active system
+  completed 200 cases per profile with no failed case. The three benchmark runs
+  produced 600 measured active-system cases and 400 explicit vector-system
+  skips per profile.
+- Shadow only: `shadow` observes dependency and action-binding changes without
+  blocking and discards mismatched provenance. No deployed shadow enablement is
+  claimed.
+- Enforced: with runtime enabled and mode `enforce`, strict changes block the
+  confirmed supplier-send paths. The default deployment configuration remains
+  off, so no production enablement is claimed.
+- Deferred: no vector adapter, embeddings, or pgvector were installed.
+  `VECTOR_RAG` and `STRONG_HYBRID_RAG` were explicitly skipped, so the required
+  strong-hybrid bandwidth denominator was unavailable and no external
+  multiplier was calculated. Workflow-only reverse provider-message indexing
+  and generic capability-run state binding also remain deferred.
+- Limitation: semantic validation remains optimistic concurrency across the app
+  database, workflow database, and provider call. Immediate revalidation,
+  provider idempotency, sender reservation, and reconciliation remain required.
+
+Commands completed include benchmark database preparation, all three seed
+profiles with seed 42, doctor, all three measured runs, and report generation.
+The detailed method, exact metrics, and honest comparison are in
+`docs/COMMERCIAL_STATE_BENCHMARK.md`; the generated artifacts are the
+authoritative run record.
+
+## 2026-08-27: Commercial State Runtime V1
+
+### Implemented
+
+- `src/lib/supply-os/state-runtime/` now owns the typed scope, evidence,
+  dependency, and packet contracts; deterministic canonicalization and hashing;
+  the fact registry; source readers; bounded compilation; immutable state-read
+  persistence; validation; instrumentation; action rollout policy; and sourcing
+  autopilot helpers. The support modules beyond the suggested tree are
+  `config.ts`, `enforcement.ts`, and `autopilot.ts`, plus reader-local `types.ts`,
+  `selectors.ts`, and `scope-ownership.ts`; they keep rollout parsing, action
+  policy, vendor packet binding, shared semantic selectors, and tenant guards
+  out of the canonical contracts and source-specific readers.
+- Live compilation supports company, procurement request, supplier, item, and
+  workspace scopes. It reuses existing Company Context and procurement context
+  assembly, reads the workflow database through its existing boundary, keeps
+  global supplier identity, company relationship, workspace intelligence, and
+  request vendor state distinct, preserves explicit item unknowns, and admits
+  only routed mail with exact scope linkage. It retrieves bounded Company Brain
+  evidence in parallel with the current-state projection.
+- `SupplyStateProjection` implements five office-scoped V1 cache types with
+  compiler version, source fingerprint, payload hash, evidence, dependency
+  manifest, build and dirty timestamps. Local context, snapshot, supplier
+  intelligence, sourcing research, decision, approval, and execution writes
+  invalidate affected scopes or enqueue idempotent rebuild jobs. Read-time
+  fingerprints bypass stale workflow-derived projections, and every projection
+  failure falls back to a live read.
+- `SupplyStateRead` stores bounded immutable packets only for durable work. New
+  `SupplyDecision`, `SupplyCapabilityRun`, and `SupplyExecutionTask` rows have
+  nullable state-read relations. The implemented decision, supplier-draft, and
+  execution-task creation paths bind those reads; generic capability-run
+  creation is schema-ready but is not yet wired to compile a read. Migration
+  `20260826000100_supply_state_runtime` adds office/workspace scope guards,
+  immutable read and reference triggers, bounded JSON checks, indexes,
+  conditional `derya_app` grants, and a read-only production verification
+  script. Historical null references remain valid.
+- Semantic validation rereads only the recorded fact keys and returns strict and
+  advisory changes. Missing or unavailable authoritative state counts as a
+  change. New Supply OS decision proposal, approval, task creation, task
+  approval, and release paths retain snapshot-current and approval-hash checks
+  and add state validation when a read is linked. Exact state read id, packet
+  hash, and source fingerprint are included in sealed decision/task scope.
+- `runProcurementAutopilot` compiles one request packet and derives independent
+  vendor packets. Durable drafts and possible sends receive immutable state
+  reads. Confirmed send selection validates the original draft and current
+  request/vendor facts; a strict conflict cancels the stale immutable draft,
+  produces an escalation, and requires a new plan and confirmation. The provider
+  path also proves that the action vendor, recipient, and source message exactly
+  match the packet's latest inbound vendor state, then validates again after a
+  fresh delivery claim and before the external call. A different supplier cannot
+  invalidate the selected vendor, and mailbox capacity remains owned by
+  send-time reservation.
+- Retrieval V2 preserves lexical search as the baseline and adds query planning,
+  exact-entity, operational-state, temporal, and vector interfaces. Results are
+  fused with Reciprocal Rank Fusion, capped per email thread, office scoped, and
+  required to carry evidence pointers. Public search callers remain compatible
+  and may add workspace, procurement order/vendor, supplier, and item scopes.
+  Exact entity retrieval traverses canonical workspace, company, supplier fact,
+  price, evidence, snapshot, item, and routed reply-task relationships directly,
+  so correctness does not depend on an `EntityMention` backfill. Retriever-local
+  `types.ts` and `routed-email.ts` are the two additional retrieval support files;
+  they centralize the additive public result shape and current mail-routing
+  admission checks.
+- Instrumentation records only ids, hashes, counts, and timings for packet
+  compile latency, reader latency, projection hits/rebuilds, packet bytes,
+  dependencies, validation latency, conflicts, advisory changes, and blocks.
+  Company Brain retrieval is timed independently. A custom sink may consume the
+  samples; production otherwise emits one structured content-free metric log.
+  Message bodies, document content, credentials, objectives, queries, and raw
+  packets are never metric fields.
+
+### Rollout and enforcement status
+
+- Implemented: compilation, projection caching, immutable state reads,
+  validation, Retrieval V2, and the action hooks described above are present in
+  code. This does not mean they are enabled in a deployment.
+- Default deployment state is off:
+  `SUPPLY_STATE_RUNTIME_ENABLED=false`,
+  `SUPPLY_STATE_PROJECTIONS_ENABLED=false`, and
+  `SUPPLY_STATE_VALIDATION_MODE=off`.
+- Shadow only: selecting `shadow` compiles and checks state, records diagnostics,
+  and never blocks an action. Shadow-first rollout is recommended, but no
+  deployed shadow enablement is claimed in this handoff.
+- Enforced: selecting `enforce` activates strict-conflict blocks for confirmed
+  supplier draft selection, the final supplier provider boundary, and linked
+  generic Supply OS decisions, approvals, and execution release. Advisory
+  changes do not block. Existing durable rows without a state read retain their
+  previous checks and behavior. Enforce is implemented but defaults off.
+- No browser switch can disable validation. Enable shadow first, measure false
+  conflicts and latency, then enable enforce with deployment configuration.
+
+### Tested in this pass
+
+The complete requested matrix was run against fresh migrated PostgreSQL 17
+databases with TLS and explicit `derya_app`, `dashboard_api`, and
+`bourne_supply_chain` roles. Passed:
+
+```bash
+npx prisma validate
+npm run db:generate
+npm run test:supply-state-runtime
+npm run test:supply-state-projection
+npm run test:supply-state-validation
+npm run test:supply-state-autopilot
+npm run test:supply-state-retrieval
+npm run test:supply-state-workflow-db
+npm run test:procurement-autopilot-plan
+npm run test:procurement-inbound-triage
+npm run test:procurement-file-draft-batch
+npm run test:procurement-file-draft-db
+npm run test:procurement-reply-send-db
+npm run test:procurement-workflow-db
+npm run test:supply-os-context
+npm run test:supply-os-context-db
+npm run test:supply-os-snapshot-twin
+npm run test:supply-os-planning-engine
+npm run test:supply-os-planning-persistence
+npm run test:supply-os-supply-intelligence
+npm run test:supply-os-execution
+npm run test:memory
+npm run test:memory-search
+npx tsc --noEmit --pretty false --incremental false
+npm run build
+git diff --check
+```
+
+The migration chain applied cleanly to three disposable databases, repeat
+deploy reported no pending migration, the read-only production verification SQL
+passed, and direct SQL checks proved state-read update/delete rejection,
+cross-office workspace rejection, and cascade cleanup. The restricted workflow
+suite proved that `dashboard_api` can select the communication ledger and cannot
+insert, update, or delete it. No required database subcase was skipped.
+
+Focused coverage now includes registry-owned policy downgrade rejection,
+advisory workspace control heads, supplier evidence drift, DRAFT decision hash
+fallback, exact action-to-packet binding, old-conversation/new-read rejection
+with zero provider calls, unrelated-supplier isolation, live projection fallback,
+direct no-index entity traversal, and routed two-office shared-mailbox cases.
+Expected database error logs in append-only and serialization-retry assertions
+still exit successfully.
+
+`npm run audit:tenant-scope:strict` is the one nonzero final check. It reports the
+same 31 known repository baseline heuristics (8 high, 23 medium); none is in the
+new state-runtime or retrieval paths. The two findings in the otherwise touched
+Supply Intelligence module are existing office/workspace-scoped queries whose
+scope is held in a local `where` constant that the static audit does not follow.
+The final changed-file U+2014 scan and `git diff --check` pass. The build passes
+with existing Next workspace-root/cache warnings and two existing CSS
+autoprefixer warnings. No production database, mailbox, or email provider was
+touched.
+
+### Deferred and limits
+
+- V1 has no vector backend, embedding writes, pgvector dependency, or external
+  vector service. `MEMORY_VECTOR_RETRIEVAL_ENABLED` defaults to false and an
+  implementation is deferred until a benchmark demonstrates material semantic
+  recall failure. A future backend must return source-linked identifiers that
+  are rehydrated through canonical tenant-scoped records before use.
+- Operational `EntityMention` population/backfill remains an optional retrieval
+  accelerator, not a correctness dependency. A direct reverse lookup from an
+  external workflow-only provider message into the workflow ledger is also
+  deferred; V1 traverses exact app-owned procurement reply-task and currently
+  routed local thread links when they exist.
+- The nullable `SupplyCapabilityRun.stateReadId` relation is migrated and guarded,
+  but generic capability-run creation does not yet compile or seal a state read.
+  Decision, supplier-draft, and execution-task paths are the enforced V1
+  integrations.
+- There is no new customer-facing UI, graph database, parallel operational
+  store, workflow write credential, automatic approval, or new autonomous send
+  policy.
+- State validation is optimistic semantic concurrency. App database reads,
+  workflow database reads, and provider calls are not one serializable
+  transaction. The final revalidation can still race the provider call, so
+  provider idempotency, delivery claims, reconciliation, approval scope, and
+  event ledgers remain the safety boundary.
+- Workflow runtime access remains the SSL-required `dashboard_api` role with
+  `PROCUREMENT_CUSTOMER_MAP_JSON`. Shared mailbox account `officeId` remains
+  provenance only; routed ownership and explicit request/vendor linkage decide
+  scope, and ambiguous or unrouted mail never enters compiled state or memory.
+
+### Recommended next step
+
+Deploy the verified migration through the protected migration workflow, then
+start staging with runtime and validation in `shadow` while projections remain
+independently controllable. Measure strict conflicts, advisory changes,
+compile/validation latency, projection hit rate, action blocks, and
+false-conflict cases before enabling `enforce`. Populate an operational entity
+index or add the bounded workflow reverse lookup only if measured retrieval
+latency/recall justifies it, and do not add vectors without a benchmark failure.
 
 ## 2026-08-25: Connected mailboxes are one shared pool with a unified admin Log
 

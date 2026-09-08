@@ -276,6 +276,23 @@ async function withSerializableRetry<T>(operation: () => Promise<T>, conflictMes
   throw new SupplyPersistenceError(conflictMessage, "conflict");
 }
 
+async function withWorkspaceControlProjectionInvalidation<T>(
+  args: { officeId: string; workspaceId: string },
+  operation: () => Promise<T>,
+) {
+  const result = await operation();
+  try {
+    const { invalidateWorkspaceControlStateProjection } = await import(
+      "./state-runtime/projections/invalidate"
+    );
+    await invalidateWorkspaceControlStateProjection(args);
+  } catch {
+    // Procurement ledgers are canonical. Projection invalidation is a
+    // best-effort post-commit cache update.
+  }
+  return result;
+}
+
 function inputJson(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
 }
@@ -1206,7 +1223,10 @@ export async function saveProcurementShortlist(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} AND "taskType" = ${TASK_TYPE} AND "input"->>'researchRunId' = ${researchRun.id} ORDER BY "id" FOR UPDATE`);
         const existingCases = await tx.supplyExecutionTask.findMany({
           where: {
@@ -1285,7 +1305,7 @@ export async function saveProcurementShortlist(args: {
           savedCases.push(task);
         }
         return savedCases;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       const retryable = retryableTransactionError(error);
       if (!retryable || attempt === 2) {
@@ -1323,7 +1343,10 @@ export async function saveProcurementSelection(args: {
   )) satisfies Prisma.InputJsonObject;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} AND "taskKey" = ${taskKey} AND "taskType" = ${TASK_TYPE} FOR UPDATE`);
         const existing = await tx.supplyExecutionTask.findFirst({
           where: { officeId: args.context.officeId, workspaceId: workspace.id, taskKey, taskType: TASK_TYPE },
@@ -1381,7 +1404,7 @@ export async function saveProcurementSelection(args: {
           },
         });
         return task;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       const retryable = retryableTransactionError(error);
       if (!retryable || attempt === 2) {
@@ -1446,7 +1469,10 @@ export async function saveSupplierQuoteRequest(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} AND "taskType" = ${QUOTE_CYCLE_TASK_TYPE} ORDER BY "id" FOR UPDATE`);
         const procurementCase = await tx.supplyExecutionTask.findFirst({
@@ -1674,7 +1700,7 @@ export async function saveSupplierQuoteRequest(args: {
           payload: eventPayload,
         });
         return { procurementCase: quoteCycleCaseView(updatedCase, quoteCycle), quoteCycle };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) throw new SupplyPersistenceError("Quote request changed concurrently. Reload and retry.", "conflict");
@@ -1717,7 +1743,10 @@ export async function recordSupplierQuoteRelease(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
@@ -1831,7 +1860,7 @@ export async function recordSupplierQuoteRelease(args: {
         await appendCaseEvent({ tx, caseId: quoteCycle.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED", status: "RUNNING", message: "External supplier quote-request release was recorded.", payload: eventPayload });
         await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED", message: "The quote request is awaiting a supplier response.", payload: eventPayload });
         return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, release: evidencedRelease };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) throw new SupplyPersistenceError("Quote-request release changed concurrently. Reload and retry.", "conflict");
@@ -1895,7 +1924,10 @@ export async function recordSupplierQuoteResponse(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         const procurementCase = await tx.supplyExecutionTask.findFirst({
@@ -2023,7 +2055,7 @@ export async function recordSupplierQuoteResponse(args: {
         await appendCaseEvent({ tx, caseId: quoteCycle.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED", status: "RUNNING", message: "Supplier quote response was recorded.", payload: eventPayload });
         await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED", message: "A supplier quote response is ready for commercial review.", payload: eventPayload });
         return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, response: evidencedResponse };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) throw new SupplyPersistenceError("Supplier quote response changed concurrently. Reload and retry.", "conflict");
@@ -2109,7 +2141,10 @@ export async function reviewProcurementGate(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         const procurementCase = await tx.supplyExecutionTask.findFirst({
           where: {
@@ -2401,7 +2436,7 @@ export async function reviewProcurementGate(args: {
           payload: inputJson({ gate, review, selectionHash: expectedSelectionHash }),
         });
         return updated;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) {
@@ -2427,7 +2462,10 @@ export async function requestProcurementApproval(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`
           SELECT "id"
           FROM "SupplyExecutionTask"
@@ -2612,7 +2650,7 @@ export async function requestProcurementApproval(args: {
           payload: inputJson({ approvalId: approval.id, scopeHash }),
         });
         return { procurementCase: updated, approval };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) {
@@ -2660,7 +2698,10 @@ export async function decideProcurementApproval(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         // Parent-first lock order matches gate review and approval request.
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${found.executionTask!.parentTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${found.workspaceId} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyApproval" WHERE "id" = ${args.approvalId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${found.workspaceId} FOR UPDATE`);
@@ -2887,7 +2928,7 @@ export async function decideProcurementApproval(args: {
           payload: inputJson({ approvalId: approval.id, scopeHash: approval.scopeHash, note }),
         });
         return { procurementCase: updated, approval: { ...approval, status: targetStatus, decidedAt, decisionNote: note } };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) {
@@ -2979,7 +3020,10 @@ export async function savePurchaseOrderDraft(args: {
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
         const procurementCase = await tx.supplyExecutionTask.findFirst({
@@ -3279,7 +3323,7 @@ export async function savePurchaseOrderDraft(args: {
           payload: inputJson({ purchaseDraftId: purchaseDraft.id, approvalId: approval.id, orderHash, revision }),
         });
         return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: null }, purchaseDraft, purchaseAction: null, stale: false };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
         if (retryableTransactionError(error)) {
@@ -3313,7 +3357,10 @@ export async function requestPurchaseActionApproval(args: {
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${request.expectedDraftTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${request.expectedDraftTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
@@ -3636,7 +3683,7 @@ export async function requestPurchaseActionApproval(args: {
           purchaseAction,
           approval,
         };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || transactionAttempt === 2) {
         if (retryableTransactionError(error)) {
@@ -3696,7 +3743,10 @@ export async function decidePurchaseActionApproval(args: {
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         if (supersededPurchaseDraftId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${supersededPurchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -4107,7 +4157,7 @@ export async function decidePurchaseActionApproval(args: {
           approval: actionWithApproval.approval,
           stale: false,
         };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || transactionAttempt === 2) {
         if (retryableTransactionError(error)) {
@@ -4175,7 +4225,10 @@ export async function recordPurchaseOrderRelease(args: {
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -4491,7 +4544,7 @@ export async function recordPurchaseOrderRelease(args: {
           purchaseAction: purchaseActionView(storedAction, approval),
           release,
         };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || transactionAttempt === 2) {
         if (retryableTransactionError(error)) {
@@ -4618,7 +4671,10 @@ export async function recordPurchaseOrderAcknowledgment(args: {
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -5055,7 +5111,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           purchaseAction: purchaseActionView(storedAction, approval),
           acknowledgment,
         };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || transactionAttempt === 2) {
         if (retryableTransactionError(error)) {
@@ -5090,7 +5146,10 @@ export async function recordSupplierOrderException(args: {
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withWorkspaceControlProjectionInvalidation({
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+      }, () => prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -5246,7 +5305,7 @@ export async function recordSupplierOrderException(args: {
         await appendCaseEvent({ tx, caseId: purchaseAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: "SUPPLIER_ORDER_EXCEPTION_RECORDED", status: "RUNNING", message: "A supplier order exception requires disposition before acceptance can continue.", payload });
         await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: "SUPPLIER_ORDER_EXCEPTION_RECORDED", status: "RUNNING", message: "Supplier terms differ from the authorized order.", payload });
         return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: purchaseActionView(updatedAction) }, purchaseDraft, purchaseAction: purchaseActionView(updatedAction), exception: supplierException };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (!retryableTransactionError(error) || transactionAttempt === 2) {
         if (retryableTransactionError(error)) throw new SupplyPersistenceError("Supplier order exception changed concurrently. Reload and retry.", "conflict");
@@ -5278,7 +5337,10 @@ export async function resolveSupplierOrderException(args: {
   const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
 
-  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
+  return withWorkspaceControlProjectionInvalidation({
+    officeId: accessContext.officeId,
+    workspaceId: workspace.id,
+  }, () => withSerializableRetry(() => prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -5354,7 +5416,7 @@ export async function resolveSupplierOrderException(args: {
     await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType, status: "RUNNING", message, payload });
     const resolvedException = supplierOrderExceptions.find((value) => value.exceptionHash === resolutionInput.exceptionHash)!;
     return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: purchaseActionView(updatedAction) }, purchaseDraft, purchaseAction: purchaseActionView(updatedAction), exception: resolvedException };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier order exception changed concurrently. Reload and retry.");
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier order exception changed concurrently. Reload and retry."));
 }
 
 export async function prepareRevisedPurchaseOrder(args: {
@@ -5381,7 +5443,10 @@ export async function prepareRevisedPurchaseOrder(args: {
   const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
 
-  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
+  return withWorkspaceControlProjectionInvalidation({
+    officeId: accessContext.officeId,
+    workspaceId: workspace.id,
+  }, () => withSerializableRetry(() => prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
@@ -5664,5 +5729,5 @@ export async function prepareRevisedPurchaseOrder(args: {
     await appendCaseEvent({ tx, caseId: revisedDraft.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: existing ? "REVISED_PURCHASE_DRAFT_UPDATED" : "REVISED_PURCHASE_DRAFT_CREATED", message: existing ? "The revised order draft was updated." : "A revised order draft was prepared from supplier exception evidence.", payload });
     await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: existing ? "REVISED_PURCHASE_DRAFT_UPDATED" : "REVISED_PURCHASE_DRAFT_CREATED", message: "The supplier exception is ready for a new exact-scope purchase authorization.", payload });
     return { procurementCase: { ...updatedCase, purchaseDraft: revisedDraft, purchaseAction: null }, purchaseDraft: revisedDraft, purchaseAction: null, stale: false };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Revised purchase draft changed concurrently. Reload and retry.");
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Revised purchase draft changed concurrently. Reload and retry."));
 }

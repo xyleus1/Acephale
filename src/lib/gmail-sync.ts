@@ -54,6 +54,36 @@ type GmailSyncResult = {
   backfillSkipped?: number;
 };
 
+async function invalidateRoutedCompanyEmailState(args: {
+  officeId: string;
+  threadId: string;
+  companyId?: string | null;
+}) {
+  try {
+    const companyId = args.companyId ?? (await prisma.emailThread.findFirst({
+      where: { id: args.threadId, officeId: args.officeId },
+      select: { companyId: true },
+    }))?.companyId ?? null;
+    if (!companyId) return;
+    const {
+      invalidateCompanyContextStateProjections,
+      invalidateRoutedEmailThreadStateProjections,
+    } = await import(
+      "./supply-os/state-runtime/projections/invalidate"
+    );
+    await Promise.all([
+      invalidateCompanyContextStateProjections({ officeId: args.officeId, companyId }),
+      invalidateRoutedEmailThreadStateProjections({
+        officeId: args.officeId,
+        companyId,
+        threadId: args.threadId,
+      }),
+    ]);
+  } catch {
+    // Email storage is authoritative; projection invalidation is best effort.
+  }
+}
+
 type GmailMessage = {
   id: string;
   threadId: string;
@@ -478,55 +508,6 @@ async function _syncEmailAccountInternal({
         deryaInbox: deryaInbox ? { email: deryaInbox.email, owner: deryaInbox.owner, role: deryaInbox.role } : null,
         attachments,
       };
-      const memoryObject = unroutedMessage ? null : await ingestKnowledgeObject({
-        officeId: targetOfficeId,
-        sourceType: "GMAIL",
-        sourceExternalId,
-        sourceLabel: account.email,
-        sourceMetadata: { accountId: account.id, provider: "GMAIL", deryaLoadRfqInbox: isDeryaLoadRfqInbox(account.email) },
-        canonicalType: "email_message",
-        title: subject,
-        text: [subject, fromEmail, fromName, body.slice(0, 8000)].filter(Boolean).join("\n"),
-        entityType: "email_message",
-        entityId: createdMessage.id,
-        jobId: localThread.jobId,
-        inquiryId: localThread.inquiryId,
-        emailThreadId: localThread.id,
-        emailMessageId: createdMessage.id,
-        occurredAt: sentAt,
-        payload: messagePayload,
-        provenance: {
-          source: "gmail",
-          operation: "message_ingest",
-          path: "src/lib/gmail-sync.ts",
-          function: "syncEmailAccountInternal",
-          sourceRecordId: createdMessage.id,
-          sourceExternalId: externalId,
-        },
-      }).catch(() => null);
-      if (!unroutedMessage) await recordMemoryEvent({
-        officeId: targetOfficeId,
-        sourceType: "GMAIL",
-        sourceExternalId,
-        sourceLabel: account.email,
-        sourceMetadata: { accountId: account.id, provider: "GMAIL", deryaLoadRfqInbox: isDeryaLoadRfqInbox(account.email) },
-        objectId: memoryObject?.id ?? null,
-        eventType: "gmail.message.ingested",
-        entityType: "email_message",
-        entityId: createdMessage.id,
-        occurredAt: sentAt,
-        payloadVersion: 1,
-        payload: messagePayload,
-        provenance: {
-          source: "gmail",
-          operation: "message_ingest",
-          path: "src/lib/gmail-sync.ts",
-          function: "syncEmailAccountInternal",
-          sourceRecordId: createdMessage.id,
-          sourceExternalId: externalId,
-        },
-        idempotencyKey: `gmail:message:${createdMessage.id}:ingested`,
-      }).catch(() => null);
       await prisma.emailThread.updateMany({
         where: { id: localThread.id, officeId: targetOfficeId },
         data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
@@ -535,7 +516,7 @@ async function _syncEmailAccountInternal({
       // Never throws - CRM logging must not break sync.
       // Unrouted mail belongs to no customer, so it never enters office memory.
       if (!unroutedMessage) {
-        await logEmailTouch({
+        const touch = await logEmailTouch({
           officeId: targetOfficeId,
           threadId: localThread.id,
           messageId: createdMessage.id,
@@ -545,6 +526,68 @@ async function _syncEmailAccountInternal({
           subject,
           snippet: body || null,
           sentAt,
+        });
+        const routedThread = touch.status === "created"
+          ? { companyId: touch.companyId, contactId: touch.contactId }
+          : await prisma.emailThread.findFirst({
+              where: { id: localThread.id, officeId: targetOfficeId },
+              select: { companyId: true, contactId: true },
+            });
+        const memoryObject = await ingestKnowledgeObject({
+          officeId: targetOfficeId,
+          sourceType: "GMAIL",
+          sourceExternalId,
+          sourceLabel: account.email,
+          sourceMetadata: { accountId: account.id, provider: "GMAIL", deryaLoadRfqInbox: isDeryaLoadRfqInbox(account.email) },
+          canonicalType: "email_message",
+          title: subject,
+          text: [subject, fromEmail, fromName, body.slice(0, 8000)].filter(Boolean).join("\n"),
+          entityType: "email_message",
+          entityId: createdMessage.id,
+          companyId: routedThread?.companyId ?? null,
+          contactId: routedThread?.contactId ?? null,
+          jobId: localThread.jobId,
+          inquiryId: localThread.inquiryId,
+          emailThreadId: localThread.id,
+          emailMessageId: createdMessage.id,
+          occurredAt: sentAt,
+          payload: messagePayload,
+          provenance: {
+            source: "gmail",
+            operation: "message_ingest",
+            path: "src/lib/gmail-sync.ts",
+            function: "syncEmailAccountInternal",
+            sourceRecordId: createdMessage.id,
+            sourceExternalId: externalId,
+          },
+        }).catch(() => null);
+        await recordMemoryEvent({
+          officeId: targetOfficeId,
+          sourceType: "GMAIL",
+          sourceExternalId,
+          sourceLabel: account.email,
+          sourceMetadata: { accountId: account.id, provider: "GMAIL", deryaLoadRfqInbox: isDeryaLoadRfqInbox(account.email) },
+          objectId: memoryObject?.id ?? null,
+          eventType: "gmail.message.ingested",
+          entityType: "email_message",
+          entityId: createdMessage.id,
+          occurredAt: sentAt,
+          payloadVersion: 1,
+          payload: messagePayload,
+          provenance: {
+            source: "gmail",
+            operation: "message_ingest",
+            path: "src/lib/gmail-sync.ts",
+            function: "syncEmailAccountInternal",
+            sourceRecordId: createdMessage.id,
+            sourceExternalId: externalId,
+          },
+          idempotencyKey: `gmail:message:${createdMessage.id}:ingested`,
+        }).catch(() => null);
+        await invalidateRoutedCompanyEmailState({
+          officeId: targetOfficeId,
+          threadId: localThread.id,
+          companyId: routedThread?.companyId ?? null,
         });
         routedOfficeIds.add(targetOfficeId);
       }

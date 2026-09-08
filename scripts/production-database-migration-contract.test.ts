@@ -6,7 +6,7 @@ const root = process.cwd();
 const workflow = readFileSync(
   join(root, ".github/workflows/production-database-migration.yml"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const verificationDirectory = join(root, "scripts/sql/production-verification");
 const verifications = new Map(
   readdirSync(verificationDirectory)

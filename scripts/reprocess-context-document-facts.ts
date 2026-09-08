@@ -5,6 +5,7 @@ import {
   CONTEXT_DOCUMENT_PROCESSING_VERSION,
   ingestContextDocument,
 } from "../src/lib/supply-os/context-documents";
+import { invalidateCompanyContextDocumentStateProjections } from "../src/lib/supply-os/state-runtime/projections/invalidate";
 
 // Re-run document extraction for context files whose stored markdown predates
 // the derived-facts pass, so bills of materials and STL meshes carry their
@@ -48,7 +49,7 @@ async function main() {
 
   const rows = await prisma.companyContext.findMany({
     where: { officeId, kind: "DOCUMENT", mimeType: { in: REPROCESSED_MIME_TYPES } },
-    select: { id: true, name: true, mimeType: true, storageUrl: true, payload: true },
+    select: { id: true, companyId: true, name: true, mimeType: true, storageUrl: true, payload: true },
     orderBy: { createdAt: "asc" },
   });
 
@@ -88,6 +89,30 @@ async function main() {
           payload,
         },
       });
+      await invalidateCompanyContextDocumentStateProjections({
+        officeId,
+        companyId: row.companyId,
+        documentId: row.id,
+      }).catch(() => undefined);
+      const workspace = await prisma.supplyWorkspace.findFirst({
+        where: { officeId, companyId: row.companyId, status: "ACTIVE" },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        select: { id: true },
+      }).catch(() => null);
+      if (workspace) {
+        await import("../src/lib/supply-os/state-runtime/projections/worker")
+          .then(({ enqueueSupplyStateProjectionRebuildIfEnabled }) => (
+            enqueueSupplyStateProjectionRebuildIfEnabled({
+              scope: {
+                type: "company",
+                officeId,
+                companyId: row.companyId,
+                workspaceId: workspace.id,
+              },
+            })
+          ))
+          .catch(() => undefined);
+      }
     }
     rewritten += 1;
   }

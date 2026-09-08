@@ -27,3 +27,5 @@ tsconfig.tsbuildinfo
 /.codex-tmp/supplier-eval/
 .leadgen/
 .local-uploads/
+/benchmark-output/
+/.benchmark-output/

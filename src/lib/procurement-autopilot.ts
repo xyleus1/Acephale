@@ -2,6 +2,7 @@ import "server-only";
 
 import { listSuppressedEmails } from "@/lib/email-delivery-events";
 import {
+  autopilotDraftBindingMatches,
   autopilotEscalations,
   autopilotFailures,
   autopilotGoalReached,
@@ -35,10 +36,13 @@ import {
   type ConversationTaskBacklog,
 } from "@/lib/procurement-conversation-task-store";
 import {
+  cancelStaleProcurementFileDeliveryDraft,
   getProcurementFileDeliveryDraft,
   saveProcurementFileDeliveryDraft,
 } from "@/lib/procurement-file-delivery-draft";
 import { procurementOperatorAccess } from "@/lib/procurement-operator-access";
+import { createProcurementVendorDraftStateRead } from "@/lib/procurement-state-runtime";
+import { prisma } from "@/lib/prisma";
 import { procurementRepliedVendors } from "@/lib/procurement-reply-scope";
 import { chasesSentAfterLastReply } from "@/lib/procurement-supplier-chase";
 import {
@@ -62,10 +66,22 @@ import {
 import { storedQuoteGoal } from "@/lib/supply-os/project-status";
 import {
   getProcurementRequest,
+  getProcurementWorkflowAccount,
   procurementWorkflowDatabase,
   VENDOR_SENT_MESSAGE_ID_SQL,
   type ProcurementOrderDetail,
 } from "@/lib/procurement-workflow";
+
+import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
+import { procurementVendorPacketWithSavedDraft } from "@/lib/supply-os/state-runtime/autopilot";
+import { compileProcurementRequestVendorPageState } from "@/lib/supply-os/state-runtime/compile";
+import { supplyStateRuntimeConfig } from "@/lib/supply-os/state-runtime/config";
+import {
+  summarizeSupplyStateConflict,
+  validateSupplyStateReadForAction,
+} from "@/lib/supply-os/state-runtime/enforcement";
+import { persistSupplyStateRead } from "@/lib/supply-os/state-runtime/persist-read";
+import type { SupplyWorldStatePacket } from "@/lib/supply-os/state-runtime/types";
 
 // One pass of the sourcing loop for a single request: read every supplier
 // thread, draft the replies the stored request files answer, deliver them when
@@ -195,6 +211,80 @@ type ChaseAnchor = {
   recipient: string;
   conversationSubject: string | null;
 };
+
+type StateReadReference = {
+  id: string;
+  packetHash: string;
+  sourceFingerprint: string;
+};
+
+type DraftBoundStateReadReference = StateReadReference & {
+  expectedTaskId: string;
+  expectedInputHash: string;
+};
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function workspaceIdFromOrder(order: ProcurementOrderDetail) {
+  const source = record(record(order.requestContext).source);
+  return typeof source.workspace_id === "string" && source.workspace_id.trim()
+    ? source.workspace_id.trim()
+    : null;
+}
+
+async function procurementStateScope(args: {
+  officeId: string;
+  customerId: string;
+  order: ProcurementOrderDetail;
+}) {
+  const account = await getProcurementWorkflowAccount({
+    customerId: args.customerId,
+    officeId: args.officeId,
+  });
+  if (!account) return null;
+  const workspaceId = workspaceIdFromOrder(args.order);
+  if (workspaceId) {
+    const workspace = await prisma.supplyWorkspace.findFirst({
+      where: { id: workspaceId, officeId: args.officeId, status: "ACTIVE" },
+      select: { id: true, companyId: true },
+    });
+    if (!workspace || workspace.companyId !== account.companyId) {
+      throw new SupplyPersistenceError(
+        "The procurement request workspace is not owned by the workflow company.",
+        "forbidden",
+      );
+    }
+    return {
+      type: "procurement_request" as const,
+      officeId: args.officeId,
+      companyId: account.companyId,
+      customerId: args.customerId,
+      orderId: args.order.id,
+      workspaceId: workspace.id,
+    };
+  }
+  return {
+    type: "procurement_request" as const,
+    officeId: args.officeId,
+    companyId: account.companyId,
+    customerId: args.customerId,
+    orderId: args.order.id,
+    workspaceId,
+  };
+}
+
+async function persistAutopilotStateRead(packet: SupplyWorldStatePacket): Promise<StateReadReference> {
+  const stateRead = await persistSupplyStateRead({ officeId: packet.scope.officeId, packet });
+  return {
+    id: stateRead.id,
+    packetHash: packet.packetHash,
+    sourceFingerprint: packet.sourceFingerprint,
+  };
+}
 
 async function vendorStates(args: {
   officeId: string;
@@ -333,6 +423,9 @@ async function vendorStates(args: {
       inboundKind: triage?.kind ?? null,
       triageDecision: triage?.decision ?? null,
       hasDraft: Boolean(draft),
+      draftBinding: draft?.taskId && draft.inputHash
+        ? { taskId: draft.taskId, inputHash: draft.inputHash }
+        : null,
       hasQuote: Boolean(vendor.quote),
       suppressed: suppressed.get(recipient) ?? null,
       lastMessageAt: latest?.sentAt ?? null,
@@ -381,17 +474,25 @@ async function draftChases(args: {
   outOfTime?: () => boolean;
 }) {
   const drafted: string[] = [];
+  const bindings = new Map<string, { taskId: string; inputHash: string }>();
   const failures: AutopilotRunResult["failures"] = [];
-  if (!args.targets.length) return { drafted, failures, stopped: false };
+  if (!args.targets.length) return { drafted, bindings, failures, stopped: false };
   const access = await procurementOperatorAccess(args.officeId);
   for (const target of args.targets) {
-    if (args.outOfTime?.()) return { drafted, failures, stopped: true };
+    if (args.outOfTime?.()) return { drafted, bindings, failures, stopped: true };
     const vendorId = target.vendorId;
     const vendor = args.order.vendors.find((candidate) => candidate.id === vendorId);
     const anchor = args.anchors.get(vendorId);
     if (!vendor || !anchor) continue;
     try {
-      await saveProcurementFileDeliveryDraft({
+      const stateRead = await createProcurementVendorDraftStateRead({
+        officeId: args.officeId,
+        customerId: args.customerId,
+        order: args.order,
+        vendorId,
+        objective: `Prepare the confirmed supplier follow up for vendor ${vendorId}.`,
+      });
+      const saved = await saveProcurementFileDeliveryDraft({
         context: access,
         customerId: args.customerId,
         order: args.order,
@@ -401,8 +502,12 @@ async function draftChases(args: {
         conversationSubject: anchor.conversationSubject,
         variant: "CHASE",
         missingFacts: target.missing,
+        stateRead,
       });
       drafted.push(vendorId);
+      if (saved.taskId && saved.inputHash) {
+        bindings.set(vendorId, { taskId: saved.taskId, inputHash: saved.inputHash });
+      }
     } catch (error) {
       failures.push({
         vendorId,
@@ -411,7 +516,7 @@ async function draftChases(args: {
       });
     }
   }
-  return { drafted, failures };
+  return { drafted, bindings, failures, stopped: false };
 }
 
 export async function runProcurementAutopilot(args: {
@@ -564,8 +669,12 @@ export async function runProcurementAutopilot(args: {
       anchors,
       outOfTime: outOfScanTime,
     })
-    : { drafted: [] as string[], failures: [] as AutopilotRunResult["failures"], stopped: false };
-  const deliverable = [
+    : { drafted: [] as string[], bindings: new Map<string, { taskId: string; inputHash: string }>(), failures: [] as AutopilotRunResult["failures"], stopped: false };
+  for (const entry of plan) {
+    const binding = chaseRun.bindings.get(entry.vendorId);
+    if (binding) entry.state = { ...entry.state, hasDraft: true, draftBinding: binding };
+  }
+  const requestedDeliverable = [
     ...plan
       .filter((entry) => !backingOff.has(entry.vendorId)
         && entry.action.kind === "SEND_DRAFT"
@@ -583,12 +692,135 @@ export async function runProcurementAutopilot(args: {
       .map((entry) => entry.vendorId),
     ...chaseRun.drafted,
   ];
+  const sendStateReads: Record<string, DraftBoundStateReadReference> = {};
+  const stateEscalations: Array<{ vendorId: string; vendorName: string; reason: string }> = [];
+  const runtime = supplyStateRuntimeConfig();
+  let packet: SupplyWorldStatePacket | null = null;
+  const selectedVendorIds = [...new Set(requestedDeliverable)].slice(0, limit);
+  const selectedVendors = new Set(selectedVendorIds);
+  const selectedEntries = plan.filter((entry) => selectedVendors.has(entry.vendorId));
+  if (runtime.enabled && selectedVendorIds.length && !outOfTime()) {
+    try {
+      const scope = await procurementStateScope({
+        officeId: summary.officeId,
+        customerId: summary.customerId,
+        order,
+      });
+      if (!scope) throw new Error("The procurement request is not linked to a tenant company.");
+      packet = await compileProcurementRequestVendorPageState({
+        scope,
+        vendorIds: selectedVendorIds,
+        objective: `Validate the bounded sourcing autopilot send pass for procurement request ${order.id}.`,
+      });
+    } catch {
+      if (runtime.validationMode === "enforce") {
+        for (const entry of selectedEntries) {
+          const reason = "Commercial state could not be compiled, so the supplier draft remains unsent until the request is refreshed.";
+          entry.action = { kind: "ESCALATE", reason };
+          stateEscalations.push({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason });
+        }
+      }
+    }
+  }
+  if (packet && autoSend) {
+    const access = await procurementOperatorAccess(summary.officeId);
+    for (const entry of selectedEntries) {
+      if (outOfTime()) break;
+      const draft = await getProcurementFileDeliveryDraft({
+        officeId: summary.officeId,
+        order,
+        vendorId: entry.vendorId,
+      });
+      if (!draft?.taskId || !draft.inputHash) {
+        const reason = "The saved supplier draft could not be bound to its immutable task input.";
+        entry.action = { kind: "ESCALATE", reason };
+        stateEscalations.push({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason });
+        continue;
+      }
+      if (!autopilotDraftBindingMatches(entry.state, draft)) {
+        const reason = "The saved supplier draft changed after this plan was compiled. The replacement draft was left unsent and requires a new plan and confirmation.";
+        entry.action = { kind: "ESCALATE", reason };
+        stateEscalations.push({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason });
+        continue;
+      }
+      try {
+        const draftValidation = await validateSupplyStateReadForAction({
+          officeId: summary.officeId,
+          stateReadId: draft.stateReadId,
+          action: "procurement_supplier_draft.validate_original_scope",
+        });
+        if (draftValidation.blocked) {
+          const changed = summarizeSupplyStateConflict(draftValidation);
+          const reason = `The saved supplier draft is stale: ${changed}. A new plan and confirmation are required.`;
+          await cancelStaleProcurementFileDeliveryDraft({
+            context: access,
+            customerId: summary.customerId,
+            order,
+            vendorId: entry.vendorId,
+            expectedTaskId: draft.taskId,
+            expectedInputHash: draft.inputHash,
+            reason,
+          });
+          entry.action = { kind: "ESCALATE", reason };
+          stateEscalations.push({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason });
+          continue;
+        }
+        const sendPacket = procurementVendorPacketWithSavedDraft({
+          packet,
+          customerId: summary.customerId,
+          orderId: order.id,
+          vendorId: entry.vendorId,
+          draft: { id: draft.taskId, inputHash: draft.inputHash, status: "PLANNED" },
+          objective: `Validate and deliver the confirmed supplier draft for vendor ${entry.vendorId}.`,
+        });
+        const stateRead = await persistAutopilotStateRead(sendPacket);
+        const validation = await validateSupplyStateReadForAction({
+          officeId: summary.officeId,
+          stateReadId: stateRead.id,
+          action: "procurement_supplier_draft.select_for_send",
+        });
+        if (validation.blocked) {
+          const changed = summarizeSupplyStateConflict(validation);
+          const reason = `The confirmed supplier draft is stale: ${changed}. A new plan and confirmation are required.`;
+          await cancelStaleProcurementFileDeliveryDraft({
+            context: access,
+            customerId: summary.customerId,
+            order,
+            vendorId: entry.vendorId,
+            expectedTaskId: draft.taskId,
+            expectedInputHash: draft.inputHash,
+            reason,
+          });
+          entry.action = { kind: "ESCALATE", reason };
+          stateEscalations.push({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason });
+          continue;
+        }
+        sendStateReads[entry.vendorId] = {
+          ...stateRead,
+          expectedTaskId: draft.taskId,
+          expectedInputHash: draft.inputHash,
+        };
+      } catch (error) {
+        if (runtime.validationMode !== "enforce") continue;
+        const reason = error instanceof Error
+          ? `Commercial state validation blocked this supplier draft: ${error.message}`
+          : "Commercial state validation blocked this supplier draft.";
+        entry.action = { kind: "ESCALATE", reason };
+        stateEscalations.push({ vendorId: entry.vendorId, vendorName: entry.vendorName, reason });
+      }
+    }
+  }
+  const blockedStateVendors = new Set(stateEscalations.map((entry) => entry.vendorId));
+  const deliverable = selectedVendorIds
+    .filter((vendorId) => !blockedStateVendors.has(vendorId))
+    .filter((vendorId) => !runtime.enabled || runtime.validationMode !== "enforce" || Boolean(sendStateReads[vendorId]));
   // Suppliers that never replied have no inbound message to answer, so their
   // follow up rides on our own RFQ thread instead of being silently skipped.
   const nudgeLimit = autopilotNudgeBudget(limit, deliverable.length);
   // Answering is the last phase to be given up, since a supplier is waiting on
   // it, and an unsent draft is delivered by the next pass either way.
-  const sendRun = autoSend && deliverable.length && !outOfTime()
+  // Even an empty delivery list reconciles unresolved provider attempts.
+  const sendRun = autoSend && !outOfTime()
     // A thread whose mailbox was disconnected or paused by sender protection
     // can only be answered from another pooled mailbox, and leaving it unsent
     // means a real supplier reply is never answered at all, so the loop allows
@@ -598,8 +830,22 @@ export async function runProcurementAutopilot(args: {
       limit,
       vendorIds: deliverable,
       allowPooledSender: true,
+      outOfTime,
+      ...(packet ? { vendorStateReads: sendStateReads } : {}),
     })
     : null;
+  const sendStateFailures = (sendRun?.outcomes ?? [])
+    .filter((outcome) => (outcome.state === "FAILED" || outcome.state === "STALE")
+      && /commercial state|strict commercial/i.test(outcome.error ?? ""))
+    .map((outcome) => ({
+      vendorId: outcome.vendorId,
+      vendorName: outcome.vendorName,
+      reason: `${outcome.error ?? "Commercial state changed before supplier delivery."} A new plan and confirmation are required.`,
+    }));
+  for (const failure of sendStateFailures) {
+    const entry = plan.find((candidate) => candidate.vendorId === failure.vendorId);
+    if (entry) entry.action = { kind: "ESCALATE", reason: failure.reason };
+  }
   const nudgeRun = followUps && nudgeLimit > 0 && !outOfScanTime()
     ? await runProcurementSupplierNudges({ orderId: args.orderId, limit: nudgeLimit })
     : null;
@@ -637,6 +883,7 @@ export async function runProcurementAutopilot(args: {
     // finished thread, so it keeps its task and is tried again.
     chase: [
       ...chaseRun.failures,
+      ...stateEscalations.map((entry) => ({ vendorId: entry.vendorId, vendorName: entry.vendorName, error: entry.reason })),
       ...recoveries
         .filter((outcome) => outcome.state === "FAILED")
         .map((outcome) => ({

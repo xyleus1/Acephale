@@ -15,6 +15,15 @@ import {
 import type { ProcurementOrderDetail, ProcurementOrderVendor } from "@/lib/procurement-workflow";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-os/persistence";
 import {
+  assertProcurementVendorActionMatchesStatePacket,
+  assertProcurementVendorStateReadBinding,
+} from "@/lib/supply-os/state-runtime/autopilot";
+import {
+  summarizeSupplyStateConflict,
+  validateSupplyStateAssertionForAction,
+  validateSupplyStateReadForAction,
+} from "@/lib/supply-os/state-runtime/enforcement";
+import {
   loadRequestDocumentAttachments,
   type RequestDocumentAttachmentSkip,
 } from "@/lib/supply-os/request-document-attachments";
@@ -27,6 +36,7 @@ import {
   record,
   requiredText,
   singleEmail,
+  withSerializableRetry,
 } from "@/lib/supply-os/supplier-communication-shared";
 
 // Suppliers replied to the RFQ campaign asking for the technical package, so a
@@ -65,6 +75,9 @@ export type ProcurementDraftVariant = "REPLY" | "CHASE";
 export type ProcurementFileDeliveryDraft = {
   state: "DRAFT";
   variant: ProcurementDraftVariant;
+  taskId?: string;
+  inputHash?: string;
+  stateReadId?: string | null;
   orderId: string;
   vendorId: string;
   sourceMessageId: string;
@@ -281,13 +294,56 @@ function companyName(order: ProcurementOrderDetail) {
   return name || "our customer";
 }
 
-function draftFromTask(task: { input: Prisma.JsonValue | null; result: Prisma.JsonValue | null }): ProcurementFileDeliveryDraft {
+async function invalidateProcurementDraftProjection(args: {
+  officeId: string;
+  companyId: string;
+  customerId: string;
+  orderId: string;
+  workspaceId: string;
+}) {
+  try {
+    const {
+      invalidateProcurementRequestStateProjection,
+      invalidateWorkspaceControlStateProjection,
+    } = await import(
+      "@/lib/supply-os/state-runtime/projections/invalidate"
+    );
+    await Promise.all([
+      invalidateProcurementRequestStateProjection({
+        type: "procurement_request",
+        officeId: args.officeId,
+        companyId: args.companyId,
+        customerId: args.customerId,
+        orderId: args.orderId,
+        workspaceId: args.workspaceId,
+      }),
+      invalidateWorkspaceControlStateProjection({
+        officeId: args.officeId,
+        workspaceId: args.workspaceId,
+      }),
+    ]);
+  } catch {
+    // A projection is a cache; invalidation failure cannot undo the canonical
+    // immutable draft or communication-ledger write.
+  }
+}
+
+function draftFromTask(task: {
+  id?: string;
+  inputHash?: string;
+  stateReadId?: string | null;
+  input: Prisma.JsonValue | null;
+  result: Prisma.JsonValue | null;
+}): ProcurementFileDeliveryDraft {
   const input = record(task.input);
   const message = record(input.message);
   const result = record(task.result);
   return {
     state: "DRAFT",
     variant: input.variant === "CHASE" ? "CHASE" : "REPLY",
+    ...(task.id ? { taskId: task.id } : {}),
+    ...(task.inputHash ? { inputHash: task.inputHash } : {}),
+    stateReadId: task.stateReadId ?? null,
     orderId: String(input.orderId ?? ""),
     vendorId: String(input.vendorId ?? ""),
     sourceMessageId: String(input.sourceMessageId ?? ""),
@@ -497,13 +553,89 @@ export async function saveProcurementFileDeliveryDraft(args: {
   variant?: ProcurementDraftVariant;
   answers?: readonly string[];
   missingFacts?: readonly SupplierQuoteMissingFact[];
+  stateRead?: {
+    id: string;
+    packetHash: string;
+    sourceFingerprint: string;
+  } | null;
 }): Promise<ProcurementFileDeliveryDraft> {
+  const access = await currentAccessContext(args.context);
+  const workspaceId = requestWorkspaceId(args.order);
+  const workspace = await requireSupplyWorkspace(access, workspaceId, "edit");
+  if (!workspace.companyId) {
+    throw new SupplyPersistenceError("This sourcing request is not linked to a company profile, so its files cannot be attached.", "conflict");
+  }
+  let stateRead = args.stateRead ? await prisma.supplyStateRead.findFirst({
+    where: {
+      id: args.stateRead.id,
+      officeId: access.officeId,
+      workspaceId,
+      packetHash: args.stateRead.packetHash,
+      sourceFingerprint: args.stateRead.sourceFingerprint,
+    },
+    select: {
+      id: true,
+      packetHash: true,
+      sourceFingerprint: true,
+      scopeType: true,
+      scopeRef: true,
+      packet: true,
+      dependencyManifest: true,
+    },
+  }) : null;
+  if (args.stateRead && !stateRead) {
+    throw new SupplyPersistenceError("The commercial state read does not belong to this supplier draft scope.", "conflict");
+  }
+  if (stateRead) {
+    const boundStateRead = stateRead;
+    try {
+      assertProcurementVendorStateReadBinding({
+        stateRead: boundStateRead,
+        scope: {
+          type: "procurement_request",
+          officeId: access.officeId,
+          companyId: workspace.companyId,
+          customerId: args.customerId,
+          orderId: args.order.id,
+          workspaceId,
+        },
+        vendorId: args.vendor.id,
+        requireSavedDraft: false,
+      });
+    } catch (error) {
+      throw new SupplyPersistenceError(
+        error instanceof Error ? error.message : "The commercial state read is bound to a different supplier.",
+        "conflict",
+      );
+    }
+    const actionBinding = validateSupplyStateAssertionForAction({
+      officeId: access.officeId,
+      action: "procurement_supplier_draft.bind_state_read",
+      assertion: () => assertProcurementVendorActionMatchesStatePacket({
+        packet: boundStateRead.packet,
+        vendorId: args.vendor.id,
+        vendor: args.vendor,
+        sourceMessageId: args.sourceMessageId,
+        recipient: args.recipient,
+        variant: args.variant,
+      }),
+    });
+    if (!actionBinding.valid) {
+      if (actionBinding.blocked) {
+        throw new SupplyPersistenceError(
+          actionBinding.error?.message ?? "The supplier draft no longer matches its commercial state read.",
+          "conflict",
+        );
+      }
+      stateRead = null;
+    }
+  }
   const documents = procurementRequestDocuments(args.order);
   if (!documents.length) {
     throw new SupplyPersistenceError("This sourcing request has no stored source files to send.", "conflict");
   }
   const state = await requestAttachmentState({ context: args.context, order: args.order });
-  const { access, workspaceId, attachments, selection } = state;
+  const { attachments, selection } = state;
   if (!attachments.length) {
     throw new SupplyPersistenceError("None of the stored request files passed the attachment safety check.", "conflict");
   }
@@ -539,10 +671,26 @@ export async function saveProcurementFileDeliveryDraft(args: {
     attachments,
     withheld,
     stateKey: stateKeyFor({ order: args.order, documents, attachments }),
+    ...(stateRead ? {
+      stateReadId: stateRead.id,
+      statePacketHash: stateRead.packetHash,
+      sourceFingerprint: stateRead.sourceFingerprint,
+    } : {}),
   };
+  const stateValidation = await validateSupplyStateReadForAction({
+    officeId: access.officeId,
+    stateReadId: stateRead?.id,
+    action: "procurement_supplier_draft.persist",
+  });
+  if (stateValidation.blocked) {
+    throw new SupplyPersistenceError(
+      `The supplier draft was not saved because its strict commercial state changed: ${summarizeSupplyStateConflict(stateValidation)}. Refresh and create a new plan.`,
+      "conflict",
+    );
+  }
   const result = { state: "DRAFT", savedAt, attachmentCount: attachments.length };
   const existing = await prisma.supplyExecutionTask.findMany({
-    where: { workspaceId, taskKey: { startsWith: `${taskScopeKey}:` } },
+    where: { officeId: access.officeId, workspaceId, taskKey: { startsWith: `${taskScopeKey}:` } },
     select: { id: true, officeId: true, taskType: true, status: true },
   });
   if (existing.some((row) => row.officeId !== access.officeId || row.taskType !== PROCUREMENT_REPLY_DRAFT_TASK_TYPE)) {
@@ -564,6 +712,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
       data: {
         officeId: access.officeId,
         workspaceId,
+        stateReadId: stateRead?.id ?? null,
         createdByUserId: access.userId,
         taskKey,
         taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
@@ -576,7 +725,7 @@ export async function saveProcurementFileDeliveryDraft(args: {
         resultHash: digest(result),
         idempotencyKey: taskKey,
       },
-      select: { id: true, input: true, result: true },
+      select: { id: true, inputHash: true, stateReadId: true, input: true, result: true },
     });
     await appendSupplierCommunicationEvent({
       tx,
@@ -599,33 +748,163 @@ export async function saveProcurementFileDeliveryDraft(args: {
     });
     return saved;
   });
+  await invalidateProcurementDraftProjection({
+    officeId: access.officeId,
+    companyId: workspace.companyId,
+    customerId: args.customerId,
+    orderId: args.order.id,
+    workspaceId,
+  });
   return draftFromTask(task);
+}
+
+export async function cancelStaleProcurementFileDeliveryDraft(args: {
+  context: SupplyAccessContext;
+  customerId: string;
+  order: ProcurementOrderDetail;
+  vendorId: string;
+  expectedTaskId: string;
+  expectedInputHash: string;
+  reason: string;
+}) {
+  const access = await currentAccessContext(args.context);
+  const workspaceId = requestWorkspaceId(args.order);
+  const workspace = await requireSupplyWorkspace(access, workspaceId, "edit");
+  if (!workspace.companyId) return false;
+  const reason = stripEmDashes(args.reason).replace(/[\r\n\0]+/g, " ").trim().slice(0, 2_000)
+    || "The commercial state changed after this draft was prepared.";
+  const changed = await prisma.$transaction(async (tx) => {
+    const update = await tx.supplyExecutionTask.updateMany({
+      where: {
+        id: args.expectedTaskId,
+        inputHash: args.expectedInputHash,
+        officeId: access.officeId,
+        workspaceId,
+        taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
+        taskKey: { startsWith: `${draftTaskScopeKey({ orderId: args.order.id, vendorId: args.vendorId })}:` },
+        status: { in: DRAFT_LIVE_STATUSES },
+      },
+      data: { status: "CANCELLED", cancelledAt: new Date() },
+    });
+    if (update.count !== 1) return false;
+    await appendSupplierCommunicationEvent({
+      tx,
+      taskId: args.expectedTaskId,
+      officeId: access.officeId,
+      workspaceId,
+      actorUserId: access.userId,
+      eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_STALE",
+      status: "CANCELLED",
+      message: "The saved supplier draft was cancelled because its strict commercial state changed.",
+      payload: inputJson({
+        orderId: args.order.id,
+        vendorId: args.vendorId,
+        expectedTaskId: args.expectedTaskId,
+        expectedInputHash: args.expectedInputHash,
+        reason,
+      }),
+    });
+    return true;
+  });
+  if (changed) {
+    await invalidateProcurementDraftProjection({
+      officeId: access.officeId,
+      companyId: workspace.companyId,
+      customerId: args.customerId,
+      orderId: args.order.id,
+      workspaceId,
+    });
+  }
+  return changed;
 }
 
 // A draft that was delivered stops being a draft, so the saved task records the
 // approval that sent it instead of staying PLANNED and being offered again.
 export async function markProcurementFileDeliveryDraftSent(args: {
   context: SupplyAccessContext;
+  customerId?: string;
   order: ProcurementOrderDetail;
   vendorId: string;
+  expectedTaskId: string;
+  expectedInputHash: string;
   sourceMessageId: string;
   providerMessageId: string;
 }): Promise<boolean> {
   const access = await currentAccessContext(args.context);
   const workspaceId = requestWorkspaceId(args.order);
-  const task = await prisma.supplyExecutionTask.findFirst({
-    where: {
-      officeId: access.officeId,
-      workspaceId,
-      taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
-      taskKey: { startsWith: `${draftTaskScopeKey({ orderId: args.order.id, vendorId: args.vendorId })}:` },
-      status: "PLANNED",
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true, inputHash: true },
-  });
-  if (!task) return false;
-  await prisma.$transaction(async (tx) => {
+  const workspace = await requireSupplyWorkspace(access, workspaceId, "edit");
+  const sourceMessageId = requiredText(args.sourceMessageId, "Delivered supplier message", 512);
+  const providerMessageId = requiredText(args.providerMessageId, "Delivered provider message", 1_000);
+  const result = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT "id"
+      FROM "SupplyExecutionTask"
+      WHERE "id" = ${args.expectedTaskId}
+        AND "officeId" = ${access.officeId}
+        AND "workspaceId" = ${workspaceId}
+      FOR UPDATE
+    `);
+    const task = await tx.supplyExecutionTask.findFirst({
+      where: {
+        id: args.expectedTaskId,
+        inputHash: args.expectedInputHash,
+        officeId: access.officeId,
+        workspaceId,
+        taskType: PROCUREMENT_REPLY_DRAFT_TASK_TYPE,
+        taskKey: { startsWith: `${draftTaskScopeKey({ orderId: args.order.id, vendorId: args.vendorId })}:` },
+      },
+      select: { id: true, inputHash: true, status: true, input: true },
+    });
+    if (!task) return "MISSING" as const;
+    const taskInput = record(task.input);
+    if (taskInput.orderId !== args.order.id
+      || taskInput.vendorId !== args.vendorId
+      || taskInput.sourceMessageId !== sourceMessageId) {
+      throw new SupplyPersistenceError(
+        "The delivered supplier reply does not match the exact saved draft task.",
+        "conflict",
+      );
+    }
+    if (task.status === "SUCCEEDED") return "ALREADY_FINALIZED" as const;
+    if (task.status !== "PLANNED") {
+      // The provider side effect won a race with a redraft or cancellation. The
+      // terminal task cannot be rewritten, but the exact delivered task still
+      // receives an immutable event. A successor is never selected or changed.
+      const payload = inputJson({
+        orderId: args.order.id,
+        vendorId: args.vendorId,
+        sourceMessageId,
+        providerMessageId,
+        terminalStatus: task.status,
+      });
+      const idempotencyKey = `procurement-file-reply-delivered-after-terminal:${digest(payload)}`;
+      const existingEvent = await tx.supplyExecutionEvent.findFirst({
+        where: { executionTaskId: task.id, idempotencyKey },
+        select: { id: true },
+      });
+      if (!existingEvent) {
+        const sequence = await tx.supplyExecutionEvent.aggregate({
+          where: { executionTaskId: task.id },
+          _max: { sequence: true },
+        });
+        await tx.supplyExecutionEvent.create({
+          data: {
+            officeId: access.officeId,
+            workspaceId,
+            executionTaskId: task.id,
+            actorUserId: access.userId,
+            sequence: (sequence._max.sequence ?? 0) + 1,
+            eventType: "PROCUREMENT_SUPPLIER_FILE_REPLY_DELIVERED_AFTER_TERMINAL",
+            status: task.status,
+            message: "The exact saved reply reached the provider after its draft task became terminal. No successor was changed.",
+            payload,
+            payloadHash: digest(payload),
+            idempotencyKey,
+          },
+        });
+      }
+      return "RECORDED_AFTER_TERMINAL" as const;
+    }
     // The draft was written with requiresApproval, so the database guard only
     // lets it complete once a matching approval exists. The operator send is
     // that approval, recorded against the exact draft input it delivered.
@@ -672,12 +951,22 @@ export async function markProcurementFileDeliveryDraftSent(args: {
       payload: inputJson({
         orderId: args.order.id,
         vendorId: args.vendorId,
-        sourceMessageId: args.sourceMessageId,
-        providerMessageId: args.providerMessageId,
+        sourceMessageId,
+        providerMessageId,
       }),
     });
-  });
-  return true;
+    return "FINALIZED" as const;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier file draft finalization changed concurrently. Retry reconciliation.");
+  if (workspace.companyId && args.customerId) {
+    await invalidateProcurementDraftProjection({
+      officeId: access.officeId,
+      companyId: workspace.companyId,
+      customerId: args.customerId,
+      orderId: args.order.id,
+      workspaceId,
+    });
+  }
+  return result === "FINALIZED";
 }
 
 // A draft whose thread moved past it can never be delivered, since the send
@@ -753,7 +1042,7 @@ export async function getProcurementFileDeliveryDraft(args: {
       status: "PLANNED",
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { input: true, result: true },
+    select: { id: true, inputHash: true, stateReadId: true, input: true, result: true },
   });
   return task ? draftFromTask(task) : null;
 }

@@ -102,6 +102,7 @@ type CommunicationLedgerRow = {
 
 export type ProcurementOrderVendor = {
   id: string;
+  supplierRegistryId: string | null;
   name: string;
   website: string | null;
   contact: {
@@ -162,6 +163,18 @@ export type ProcurementWakeReconciliationResult = {
   failed: number;
   skipped: number;
 };
+
+export type ProcurementWorkflowAccountRef = {
+  id: string;
+  officeId: string;
+  companyId: string;
+};
+
+export type ProcurementWorkflowAccountLookup = (args: {
+  officeId: string;
+  customerId: string;
+  companyId?: string | null;
+}) => Promise<ProcurementWorkflowAccountRef | null>;
 
 export const PROCUREMENT_WAKE_RECONCILIATION_LIMIT = 12;
 export const PROCUREMENT_WAKE_RECONCILIATION_CONCURRENCY = 4;
@@ -465,6 +478,35 @@ export function procurementCustomerIdsFromServerMetadata(
   return customerIds as string[];
 }
 
+export async function getProcurementWorkflowAccount(
+  args: { officeId: string; customerId: string; companyId?: string | null },
+  dependencies: {
+    database?: Pick<RawDatabase, "$queryRawUnsafe">;
+    resolveOfficeId?: typeof procurementOfficeIdFromServerMetadata;
+  } = {},
+): Promise<ProcurementWorkflowAccountRef | null> {
+  const customerId = uuidSchema.parse(args.customerId);
+  const resolveOfficeId = dependencies.resolveOfficeId ?? procurementOfficeIdFromServerMetadata;
+  if (resolveOfficeId(customerId) !== args.officeId) return null;
+  const database = dependencies.database ?? procurementWorkflowDatabase();
+  const rows = await database.$queryRawUnsafe<Array<{
+    id: string;
+    officeId: string;
+    companyId: string;
+  }>>(`
+    SELECT
+      id::text AS id,
+      office_id AS "officeId",
+      company_id AS "companyId"
+    FROM procurement_customer_scope
+    WHERE id = $1::uuid
+      AND office_id = $2
+      AND ($3::text IS NULL OR company_id = $3)
+    LIMIT 1
+  `, customerId, args.officeId, args.companyId ?? null);
+  return rows[0] ?? null;
+}
+
 async function existingIdempotentOrder(
   transaction: RawDatabase,
   customerId: string,
@@ -642,6 +684,10 @@ export async function createProcurementRequest(customerId: string, input: Procur
 
 export function normalizeProcurementVendor(value: unknown): ProcurementOrderVendor | null {
   if (!isObject(value) || typeof value.id !== "string") return null;
+  const supplierRegistryId = typeof value.supplierRegistryId === "string"
+    && uuidSchema.safeParse(value.supplierRegistryId).success
+    ? value.supplierRegistryId
+    : null;
   const contact = isObject(value.contact) ? {
     name: typeof value.contact.name === "string" && value.contact.name.trim() ? value.contact.name : null,
     email: typeof value.contact.email === "string" && value.contact.email.trim() ? value.contact.email : null,
@@ -653,6 +699,7 @@ export function normalizeProcurementVendor(value: unknown): ProcurementOrderVend
     : 0;
   return {
     id: value.id,
+    supplierRegistryId,
     name: typeof value.name === "string" && value.name.trim() ? value.name : "Unknown supplier",
     website: safeWebsite(value.website),
     contact: contact && (contact.name || contact.email || contact.phone) ? contact : null,
@@ -721,6 +768,7 @@ export async function getProcurementRequestFromDatabase(
           jsonb_agg(
             jsonb_build_object(
               'id', order_vendors.id::text,
+              'supplierRegistryId', to_jsonb(order_vendors)->>'supplier_registry_id',
               'name', COALESCE(
                 to_jsonb(order_vendors)->>'name',
                 to_jsonb(order_vendors)->>'vendor_name',

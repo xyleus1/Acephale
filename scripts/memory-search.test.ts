@@ -76,6 +76,7 @@ async function main() {
     const emailThread = await prisma.emailThread.create({
       data: {
         officeId: office.id,
+        companyId: company.id,
         inquiryId: inquiry.id,
         jobId: job.id,
         subject: `${runId} customs documents`,
@@ -261,6 +262,11 @@ async function main() {
 
     assert(JSON.stringify(afterSearch) === JSON.stringify(beforeSearch), `Search mutated memory rows: before=${JSON.stringify(beforeSearch)} after=${JSON.stringify(afterSearch)}`);
     assert(companySearch.results.length > 0, "Customer scoped memory search returned no results.");
+    assert(
+      companySearch.results.some((result) =>
+        result.canonicalType === "email_message" && result.entityId === emailMessage.id),
+      "Customer scoped memory search lost currently routed email evidence.",
+    );
     assert(jobSearch.results.length > 0, "Job scoped memory search returned no results.");
     assert(hybrid.results.some((result) => result.objectId && result.evidence.some((ref) => ref.knowledgeObjectId === result.objectId)), "Hybrid search results are missing object evidence.");
     assert(hybrid.results.some((result) => result.companyId === company.id || result.jobId === job.id), "Hybrid search did not preserve entity scope.");

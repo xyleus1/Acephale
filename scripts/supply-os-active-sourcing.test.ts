@@ -193,12 +193,14 @@ assert.match(workflow, /getProcurementCommunicationMessagesFromDatabase/);
 assert.match(workflow, /communication\.customer_id = \$1::uuid/);
 assert.match(workflow, /communication\.order_id = \$2::uuid/);
 assert.match(workflow, /communication\.vendor_id = \$3::uuid/);
-assert.match(conversation, /thread: \{ officeId \}/);
+assert.match(conversation, /thread: \{[\s\S]*officeId: args\.officeId/);
 assert.match(
   conversation,
-  /localProviderThreadMessages\(args\.officeId, providerThreadId\)/,
-  "stored mail stays office scoped even though mailboxes are shared",
+  /localProviderThreadMessages\(\{[\s\S]*officeId: args\.officeId,[\s\S]*companyId: workflowAccount\.companyId,[\s\S]*accountEmail: providerThread\.accountEmail,[\s\S]*externalThreadId: providerThread\.providerThreadId/,
+  "stored mail stays bound to the routed company and exact shared-mailbox account/thread pair",
 );
+assert.match(conversation, /UNROUTED_MAIL_THREAD_MARKER/);
+assert.match(conversation, /hiddenAt: null/);
 assert.doesNotMatch(
   conversation,
   /emailAccount\.findMany\(\{\s*where: \{\s*officeId/,

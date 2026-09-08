@@ -73,6 +73,13 @@ export type ProcurementReplyDraftDependencies = {
   conversation: typeof procurementVendorConversation;
   draft: typeof draftProcurementSupplierReply;
   saveFileDraft: typeof saveProcurementFileDeliveryDraft;
+  stateReadForFileDraft?: (args: {
+    officeId: string;
+    customerId: string;
+    order: NonNullable<Awaited<ReturnType<typeof getProcurementRequest>>>;
+    vendorId: string;
+    objective: string;
+  }) => Promise<{ id: string; packetHash: string; sourceFingerprint: string } | null>;
 };
 
 type ProcurementReplyDraftSession = ProcurementRouteSession & {
@@ -132,6 +139,9 @@ const defaultReplyDraftDependencies: ProcurementReplyDraftDependencies = {
   draft: async (args) => (await import("@/lib/procurement-reply-draft")).draftProcurementSupplierReply(args),
   saveFileDraft: async (args) => (
     (await import("@/lib/procurement-file-delivery-draft")).saveProcurementFileDeliveryDraft(args)
+  ),
+  stateReadForFileDraft: async (args) => (
+    (await import("@/lib/procurement-state-runtime")).createProcurementVendorDraftStateRead(args)
   ),
 };
 
@@ -482,6 +492,13 @@ export async function handleProcurementReplyDraft(
           { status: 409, headers: responseHeaders },
         );
       }
+      const stateRead = await dependencies.stateReadForFileDraft?.({
+        officeId: session.officeId,
+        customerId,
+        order,
+        vendorId: vendor.id,
+        objective: `Prepare a durable operator-reviewed supplier file draft for vendor ${vendor.id}.`,
+      }) ?? null;
       const saved = await dependencies.saveFileDraft({
         context: {
           officeId: session.officeId,
@@ -495,6 +512,7 @@ export async function handleProcurementReplyDraft(
         sourceMessageId: parsedInput.data.sourceMessageId,
         recipient: source.fromEmail || vendor.contact?.email || "",
         conversationSubject: source.subject,
+        stateRead,
       });
       return Response.json({ draft: saved }, { headers: responseHeaders });
     }

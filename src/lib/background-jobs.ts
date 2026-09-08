@@ -9,6 +9,7 @@ export type BackgroundJobType =
   | "PREWARM_INQUIRY_SUMMARY"
   | "CUSTOMER_STATUS_NOTIFY"
   | "CUSTOMER_MILESTONE_NOTIFY"
+  | "SUPPLY_STATE_PROJECTION_REBUILD"
   | "DEMO_EMAIL_CAPABILITY_TEST"
   | "PROCUREMENT_SOURCING_WAVE";
 
@@ -136,6 +137,17 @@ async function executeBackgroundJob(job: BackgroundJob) {
     const isActual = booleanValue(payload.isActual);
     if (!jobId || !milestoneType) throw new Error("Missing milestone notification payload.");
     await maybeNotifyCustomerOnMilestone(jobId, milestoneType, isActual);
+    return;
+  }
+
+  if (type === "SUPPLY_STATE_PROJECTION_REBUILD") {
+    const { runSupplyStateProjectionRebuildJob } = await import(
+      "./supply-os/state-runtime/projections/worker"
+    );
+    await runSupplyStateProjectionRebuildJob({
+      officeId: job.officeId,
+      payload: job.payload,
+    });
     return;
   }
 

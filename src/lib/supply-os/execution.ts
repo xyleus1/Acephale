@@ -9,6 +9,10 @@ import {
   SupplyPersistenceError,
   type SupplyAccessContext,
 } from "./persistence";
+import {
+  summarizeSupplyStateConflict,
+  validateSupplyStateReadForAction,
+} from "./state-runtime/enforcement";
 
 const MAX_JSON_BYTES = 128_000;
 const MAX_SCENARIOS = 24;
@@ -72,6 +76,7 @@ export type SupplyScenarioInput = {
 
 export type CreateSupplyDecisionInput = {
   snapshotId: string;
+  stateReadId?: string | null;
   decisionType: string;
   subjectType: string;
   subjectRef: string;
@@ -108,6 +113,52 @@ function invalid(message: string): never {
 
 function conflict(message: string): never {
   throw new SupplyPersistenceError(message, "conflict");
+}
+
+async function assertSupplyStateCurrent(input: {
+  officeId: string;
+  stateReadId?: string | null;
+  action: string;
+}) {
+  const validation = await validateSupplyStateReadForAction(input);
+  if (validation.blocked) {
+    conflict(`This action is stale because its commercial state changed: ${summarizeSupplyStateConflict(validation)}.`);
+  }
+  return validation;
+}
+
+async function requireSupplyStateReadReference(input: {
+  officeId: string;
+  workspaceId: string;
+  stateReadId?: string | null;
+}) {
+  if (!input.stateReadId) return null;
+  const stateRead = await prisma.supplyStateRead.findFirst({
+    where: {
+      id: input.stateReadId,
+      officeId: input.officeId,
+      workspaceId: input.workspaceId,
+    },
+    select: {
+      id: true,
+      packetHash: true,
+      sourceFingerprint: true,
+    },
+  });
+  if (!stateRead) invalid("State read does not belong to this office and workspace.");
+  return stateRead;
+}
+
+async function invalidateSupplyControlState(officeId: string, workspaceId: string) {
+  try {
+    const { invalidateWorkspaceControlStateProjection } = await import(
+      "./state-runtime/projections/invalidate"
+    );
+    await invalidateWorkspaceControlStateProjection({ officeId, workspaceId });
+  } catch {
+    // Projections are derived caches. Their invalidation must never roll back
+    // an authoritative decision, approval, or execution-ledger write.
+  }
 }
 
 function requiredText(value: unknown, label: string, maxLength = 240) {
@@ -351,6 +402,7 @@ async function assertCurrentSupplySnapshot(
 
 const decisionDetailInclude = {
   snapshot: { select: { id: true, version: true, status: true, sourceHash: true, publishedAt: true } },
+  stateRead: { select: { id: true, packetHash: true, sourceFingerprint: true } },
   scenarios: {
     orderBy: [{ rank: "asc" as const }, { scenarioKey: "asc" as const }],
     include: { evidenceLinks: { include: { evidence: true } } },
@@ -378,7 +430,7 @@ export async function createSupplyDecision(
   await requireSupplyWorkspace(context, workspaceId, "edit");
   const inputObject = plainObject(input, "Decision request");
   assertOnlyKeys(inputObject, [
-    "snapshotId", "decisionType", "subjectType", "subjectRef", "title", "objective", "riskLevel",
+    "snapshotId", "stateReadId", "decisionType", "subjectType", "subjectRef", "title", "objective", "riskLevel",
     "proposal", "rationale", "constraints", "scenarios", "evidence", "idempotencyKey",
   ], "Decision request");
   const key = idempotencyKey(input.idempotencyKey);
@@ -389,6 +441,17 @@ export async function createSupplyDecision(
   });
   if (!snapshot) invalid("Decisions require a published snapshot in this workspace.");
   await assertCurrentSupplySnapshot(context, workspaceId, snapshotId);
+  const stateReadId = optionalText(input.stateReadId, "State read ID", 512);
+  const stateRead = await requireSupplyStateReadReference({
+    officeId: context.officeId,
+    workspaceId,
+    stateReadId,
+  });
+  await assertSupplyStateCurrent({
+    officeId: context.officeId,
+    stateReadId: stateRead?.id,
+    action: "decision.create",
+  });
 
   if (!Array.isArray(input.evidence) || input.evidence.length < 1 || input.evidence.length > MAX_EVIDENCE) {
     invalid(`Decision evidence must contain 1 to ${MAX_EVIDENCE} records.`);
@@ -422,6 +485,7 @@ export async function createSupplyDecision(
   });
   if (existing) {
     const same = existing.snapshotId === snapshotId
+      && existing.stateReadId === (stateRead?.id ?? null)
       && existing.decisionType === normalizedDecision.decisionType
       && existing.subjectType === normalizedDecision.subjectType
       && existing.subjectRef === normalizedDecision.subjectRef
@@ -437,6 +501,7 @@ export async function createSupplyDecision(
         officeId: context.officeId,
         workspaceId,
         snapshotId,
+        stateReadId: stateRead?.id ?? null,
         createdByUserId: context.userId,
         decisionType: normalizedDecision.decisionType,
         subjectType: normalizedDecision.subjectType,
@@ -529,6 +594,7 @@ export async function createSupplyDecision(
     return decision.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
+  await invalidateSupplyControlState(context.officeId, workspaceId);
   return decisionDetail(decisionId);
 }
 
@@ -540,6 +606,13 @@ function sealedDecisionScope(decision: Awaited<ReturnType<typeof decisionDetail>
       version: decision.snapshot.version,
       sourceHash: decision.snapshot.sourceHash,
     },
+    ...(decision.stateRead ? {
+      stateRead: {
+        id: decision.stateRead.id,
+        packetHash: decision.stateRead.packetHash,
+        sourceFingerprint: decision.stateRead.sourceFingerprint,
+      },
+    } : {}),
     decision: {
       decisionType: decision.decisionType,
       subjectType: decision.subjectType,
@@ -591,6 +664,11 @@ function sealedDecisionScope(decision: Awaited<ReturnType<typeof decisionDetail>
 export async function proposeSupplyDecision(context: SupplyAccessContext, decisionId: string) {
   const decision = await requireDecision(context, decisionId, "edit");
   await assertCurrentSupplySnapshot(context, decision.workspaceId, decision.snapshotId);
+  await assertSupplyStateCurrent({
+    officeId: context.officeId,
+    stateReadId: decision.stateReadId,
+    action: "decision.propose",
+  });
   if (decision.status !== "DRAFT" && decision.status !== "PROPOSED") {
     conflict("Only a draft decision can be proposed.");
   }
@@ -614,6 +692,7 @@ export async function proposeSupplyDecision(context: SupplyAccessContext, decisi
       data: { status: "PROPOSED", proposalHash },
     });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  await invalidateSupplyControlState(context.officeId, decision.workspaceId);
   return decisionDetail(decision.id);
 }
 
@@ -638,6 +717,11 @@ export async function requestSupplyDecisionApproval(
 ) {
   const decision = await requireDecision(context, decisionId, "edit");
   await assertCurrentSupplySnapshot(context, decision.workspaceId, decision.snapshotId);
+  await assertSupplyStateCurrent({
+    officeId: context.officeId,
+    stateReadId: decision.stateReadId,
+    action: "decision.request_approval",
+  });
   if (decision.status !== "PROPOSED" || !decision.proposalHash) {
     conflict("Only a sealed proposed decision can request approval.");
   }
@@ -651,7 +735,7 @@ export async function requestSupplyDecisionApproval(
     }
     return existing;
   }
-  return prisma.supplyApproval.create({
+  const approval = await prisma.supplyApproval.create({
     data: {
       officeId: context.officeId,
       workspaceId: decision.workspaceId,
@@ -665,6 +749,8 @@ export async function requestSupplyDecisionApproval(
       expiresAt: request.expiresAt,
     },
   });
+  await invalidateSupplyControlState(context.officeId, decision.workspaceId);
+  return approval;
 }
 
 function approverRoles(requiredRole: string | null) {
@@ -709,27 +795,37 @@ export async function decideSupplyApproval(
     conflict("Decision approval authority does not match the required policy.");
   }
   let approvalSnapshotId: string | null = null;
+  let approvalStateReadId: string | null = null;
   if (approval.decisionId) {
     const targetDecision = await prisma.supplyDecision.findFirst({
       where: { id: approval.decisionId, officeId: context.officeId, workspaceId: approval.workspaceId },
-      select: { snapshotId: true },
+      select: { snapshotId: true, stateReadId: true },
     });
     if (!targetDecision) conflict("The approval decision no longer exists.");
     approvalSnapshotId = targetDecision.snapshotId;
+    approvalStateReadId = targetDecision.stateReadId;
   }
   if (approval.executionTaskId) {
     const targetTask = await prisma.supplyExecutionTask.findFirst({
       where: { id: approval.executionTaskId, officeId: context.officeId, workspaceId: approval.workspaceId },
-      select: { input: true, snapshotId: true },
+      select: { input: true, snapshotId: true, stateReadId: true },
     });
     if (!targetTask) conflict("The approval execution task no longer exists.");
     approvalSnapshotId = targetTask.snapshotId;
+    approvalStateReadId = targetTask.stateReadId;
     const action = executionAction((targetTask.input as JsonObject).action);
     if (approval.requiredRole !== ACTION_REQUIRED_ROLE[action]) {
       conflict("Task approval authority does not match the action policy.");
     }
   }
   await assertCurrentSupplySnapshot(context, approval.workspaceId, approvalSnapshotId);
+  if (desired === "APPROVED") {
+    await assertSupplyStateCurrent({
+      officeId: context.officeId,
+      stateReadId: approvalStateReadId,
+      action: approval.decisionId ? "decision.approve" : "execution_task.approve",
+    });
+  }
   if (approval.status !== "PENDING") {
     if (approval.status === desired && approval.decidedByUserId === context.userId) return approval;
     conflict("This approval has already been decided.");
@@ -764,6 +860,7 @@ export async function decideSupplyApproval(
       }
     }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  await invalidateSupplyControlState(context.officeId, approval.workspaceId);
   return prisma.supplyApproval.findUniqueOrThrow({ where: { id: approval.id } });
 }
 
@@ -781,6 +878,11 @@ export async function createSupplyExecutionTask(
 ) {
   const decision = await requireDecision(context, decisionId, "edit");
   await assertCurrentSupplySnapshot(context, decision.workspaceId, decision.snapshotId);
+  await assertSupplyStateCurrent({
+    officeId: context.officeId,
+    stateReadId: decision.stateReadId,
+    action: "execution_task.create",
+  });
   if (decision.status !== "APPROVED") conflict("Execution tasks require an approved decision.");
   const snapshot = await prisma.supplySnapshot.findFirst({
     where: { id: decision.snapshotId, officeId: context.officeId, workspaceId: decision.workspaceId, status: "PUBLISHED" },
@@ -796,9 +898,19 @@ export async function createSupplyExecutionTask(
   const parsed = capability?.inputSchema.safeParse(actionInput);
   if (!parsed?.success) invalid("Execution input does not match the action.execute capability contract.");
   const action = executionAction(parsed.data.action);
+  const stateRead = await requireSupplyStateReadReference({
+    officeId: context.officeId,
+    workspaceId: decision.workspaceId,
+    stateReadId: decision.stateReadId,
+  });
   const normalizedInput = {
     plan: requiredText(parsed.data.plan, "Execution plan", 500),
     action,
+    ...(stateRead ? {
+      stateReadId: stateRead.id,
+      statePacketHash: stateRead.packetHash,
+      sourceFingerprint: stateRead.sourceFingerprint,
+    } : {}),
   };
   const inputHash = supplyJsonHash(normalizedInput);
   const scheduledFor = normalizedDate(input.scheduledFor, "Scheduled timestamp");
@@ -818,13 +930,16 @@ export async function createSupplyExecutionTask(
     where: { officeId: context.officeId, workspaceId: decision.workspaceId, idempotencyKey: key },
   });
   if (existing) {
-    if (existing.decisionId !== decision.id || existing.taskKey !== taskKey || existing.inputHash !== inputHash) {
+    if (existing.decisionId !== decision.id
+      || existing.stateReadId !== (stateRead?.id ?? null)
+      || existing.taskKey !== taskKey
+      || existing.inputHash !== inputHash) {
       conflict("Idempotency key is already bound to a different execution task.");
     }
     return existing;
   }
 
-  return prisma.$transaction(async (tx) => {
+  const task = await prisma.$transaction(async (tx) => {
     const task = await tx.supplyExecutionTask.create({
       data: {
         officeId: context.officeId,
@@ -832,6 +947,7 @@ export async function createSupplyExecutionTask(
         snapshotId: decision.snapshotId,
         decisionId: decision.id,
         scenarioId,
+        stateReadId: stateRead?.id ?? null,
         createdByUserId: context.userId,
         taskKey,
         taskType: "action.execute",
@@ -845,7 +961,15 @@ export async function createSupplyExecutionTask(
         scheduledFor,
       },
     });
-    const eventPayload = { action, requiredRole: ACTION_REQUIRED_ROLE[action] };
+    const eventPayload = {
+      action,
+      requiredRole: ACTION_REQUIRED_ROLE[action],
+      ...(stateRead ? {
+        stateReadId: stateRead.id,
+        statePacketHash: stateRead.packetHash,
+        sourceFingerprint: stateRead.sourceFingerprint,
+      } : {}),
+    };
     await tx.supplyExecutionEvent.create({
       data: {
         officeId: context.officeId,
@@ -863,6 +987,8 @@ export async function createSupplyExecutionTask(
     });
     return task;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  await invalidateSupplyControlState(context.officeId, decision.workspaceId);
+  return task;
 }
 
 export async function requestSupplyTaskApproval(
@@ -872,6 +998,11 @@ export async function requestSupplyTaskApproval(
 ) {
   const task = await requireExecutionTask(context, taskId, "edit");
   await assertCurrentSupplySnapshot(context, task.workspaceId, task.snapshotId);
+  await assertSupplyStateCurrent({
+    officeId: context.officeId,
+    stateReadId: task.stateReadId,
+    action: "execution_task.request_approval",
+  });
   if (task.taskType !== "action.execute" || task.capabilityKey !== "action.execute") {
     invalid("Only action.execute tasks use this approval path.");
   }
@@ -889,7 +1020,7 @@ export async function requestSupplyTaskApproval(
     }
     return existing;
   }
-  return prisma.supplyApproval.create({
+  const approval = await prisma.supplyApproval.create({
     data: {
       officeId: context.officeId,
       workspaceId: task.workspaceId,
@@ -903,11 +1034,18 @@ export async function requestSupplyTaskApproval(
       expiresAt: request.expiresAt,
     },
   });
+  await invalidateSupplyControlState(context.officeId, task.workspaceId);
+  return approval;
 }
 
 export async function releaseSupplyExecutionTask(context: SupplyAccessContext, taskId: string) {
   const task = await requireExecutionTask(context, taskId, "edit");
   await assertCurrentSupplySnapshot(context, task.workspaceId, task.snapshotId);
+  await assertSupplyStateCurrent({
+    officeId: context.officeId,
+    stateReadId: task.stateReadId,
+    action: "execution_task.release",
+  });
   if (task.status === "READY") {
     return prisma.supplyExecutionTask.findUniqueOrThrow({
       where: { id: task.id },
@@ -960,6 +1098,7 @@ export async function releaseSupplyExecutionTask(context: SupplyAccessContext, t
       },
     });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  await invalidateSupplyControlState(context.officeId, task.workspaceId);
   return prisma.supplyExecutionTask.findUniqueOrThrow({
     where: { id: task.id },
     include: { approvals: { orderBy: { requestedAt: "desc" } }, events: { orderBy: { sequence: "asc" } } },

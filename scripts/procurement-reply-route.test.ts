@@ -29,6 +29,7 @@ const order = {
   decisionSnapshot: null,
   vendors: [{
     id: vendorId,
+    supplierRegistryId: null,
     name: "Bay Area Circuits",
     website: "https://bacircuits.com/",
     contact: { name: null, email: "sfielding@bacircuits.com", phone: null },
@@ -156,12 +157,24 @@ async function main() {
   assert.equal(missing.status, 404);
 
   let fileDraftInput: Parameters<ProcurementReplyDraftDependencies["saveFileDraft"]>[0] | null = null;
+  const fileDraftStateRead = {
+    id: "state-read-file-draft",
+    packetHash: "a".repeat(64),
+    sourceFingerprint: "b".repeat(64),
+  };
   const fileDraft = await handleProcurementReplyDraft(
     request({ sourceMessageId, withRequestFiles: true }),
     orderId,
     vendorId,
     dependencies({
       draft: async () => { throw new Error("The generated draft path must not run for a file delivery draft."); },
+      stateReadForFileDraft: async (input) => {
+        assert.equal(input.officeId, "office-a");
+        assert.equal(input.customerId, customerId);
+        assert.equal(input.order.id, orderId);
+        assert.equal(input.vendorId, vendorId);
+        return fileDraftStateRead;
+      },
       saveFileDraft: async (input) => {
         fileDraftInput = input;
         return {
@@ -186,6 +199,7 @@ async function main() {
   assert.equal(fileDraftInput?.sourceMessageId, sourceMessageId);
   assert.equal(fileDraftInput?.recipient, "sfielding@bacircuits.com");
   assert.equal(fileDraftInput?.context.officeId, "office-a");
+  assert.deepEqual(fileDraftInput?.stateRead, fileDraftStateRead, "A fresh durable browser draft must carry its compiled state read.");
 
   // An out of office note on top of the supplier's question is not the message
   // the operator is answering, so the saved file draft still goes to the
