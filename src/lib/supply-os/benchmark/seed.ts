@@ -1,6 +1,8 @@
 import {
   hashSupplyStateValue,
 } from "../state-runtime/canonicalize";
+import { procurementConversationFromLedger } from "../../procurement-conversation-model";
+import { procurementConversationMessageState } from "../state-runtime/readers/selectors";
 import { supplyStateScopeRef, supplyStateWorkspaceId, type SupplyStateDependency, type SupplyWorldEvidenceRef } from "../state-runtime/types";
 import type { BenchmarkClients, BenchmarkSqlClient } from "./database";
 import {
@@ -1623,7 +1625,7 @@ async function seedCompanyBrain(app: BenchmarkSqlClient, profile: BenchmarkProfi
   }
 }
 
-async function currentConcurrencyDependency(
+export async function readBenchmarkConcurrencyDependency(
   clients: Pick<BenchmarkClients, "app" | "dashboard">,
   profile: BenchmarkProfile,
   caseRow: BenchmarkCase,
@@ -1764,42 +1766,51 @@ async function currentConcurrencyDependency(
       FROM public.procurement_communication_messages
       WHERE customer_id = $1::uuid AND order_id = $2::uuid AND vendor_id = $3::uuid
       ORDER BY sent_at DESC, provider_message_id DESC
-      LIMIT 1
+      LIMIT 100
     `, context.customerId, context.orderId, context.vendorId);
-    const row = rows[0];
-    if (!row) throw new Error("Benchmark latest message concurrency source is missing.");
-    const messageId = benchmarkConversationMessageId({
-      customerId: context.customerId,
-      orderId: context.orderId,
-      vendorId: context.vendorId,
-      provider: row.provider,
-      accountEmail: row.accountEmail,
-      providerMessageId: row.providerMessageId,
-    });
+    if (!rows.length) throw new Error("Benchmark latest message concurrency source is missing.");
     const stringArray = (value: unknown) => Array.isArray(value)
       ? value.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim().toLowerCase()).filter(Boolean).sort()
       : [];
-    const value = {
-      id: messageId,
+    // Match the production transcript bounds and human-message/CHASE-anchor
+    // selector. Reading only the last row loses a prior human inbound anchor
+    // when a real outbound answer or an automatic notice follows it.
+    const messages = procurementConversationFromLedger(rows.map((row) => ({
+      id: benchmarkConversationMessageId({
+        customerId: context.customerId,
+        orderId: context.orderId,
+        vendorId: context.vendorId,
+        provider: row.provider.trim(),
+        accountEmail: row.accountEmail.trim().toLowerCase(),
+        providerMessageId: row.providerMessageId.trim(),
+      }),
+      provider: row.provider.trim(),
+      accountEmail: row.accountEmail.trim().toLowerCase(),
+      providerMessageId: row.providerMessageId.trim(),
+      providerThreadId: null,
+      rfcMessageId: null,
       direction: row.direction,
       fromEmail: row.fromEmail.trim().toLowerCase(),
+      fromName: null,
       toEmails: stringArray(row.toEmails),
       ccEmails: stringArray(row.ccEmails),
       subject: row.subject?.trim() || null,
-      bodyHash: hashSupplyStateValue(row.bodyText ?? ""),
+      bodyText: row.bodyText,
       sentAt: row.sentAt.toISOString(),
-      truncated: row.bodyTruncated,
-    };
+      bodyTruncated: row.bodyTruncated,
+    })));
+    const { latest, value, evidenceRefs } = procurementConversationMessageState(messages);
+    const valueHash = hashSupplyStateValue(value);
     return {
       key: concurrency.baselineDependencyKey,
       source: "EMAIL_LEDGER",
       entityType: "procurement_communication_message",
       entityRef: context.vendorId,
-      version: messageId,
-      valueHash: hashSupplyStateValue(value),
+      version: latest?.id ?? valueHash,
+      valueHash,
       policy: "STRICT",
       reason,
-      evidenceRefs: [{ kind: "procurement_message", id: messageId, valueHash: hashSupplyStateValue(value) }],
+      evidenceRefs,
     };
   }
   if (scenario.concurrencyKind === "vendor_saved_draft") {
@@ -1827,6 +1838,17 @@ async function currentConcurrencyDependency(
   throw new Error(`Unsupported benchmark concurrency source ${String(mutation.kind)}.`);
 }
 
+export function buildBenchmarkConcurrencyStateRead(caseRow: BenchmarkCase, current: SupplyStateDependency) {
+  const concurrency = caseRow.metadata.actionConcurrency;
+  if (!concurrency) throw new Error("Benchmark case is not a concurrency case.");
+  const dependency = concurrency.expectedValid ? current : {
+    ...current,
+    version: hashSupplyStateValue({ caseId: caseRow.id, state: "stale-version" }),
+    valueHash: hashSupplyStateValue({ caseId: caseRow.id, state: "stale-value" }),
+  };
+  return buildBenchmarkStateReadPacket({ caseRow, dependency, evidenceRefs: dependency.evidenceRefs });
+}
+
 async function seedStateReads(
   clients: Pick<BenchmarkClients, "app" | "dashboard">,
   manifest: BenchmarkCorpusManifest,
@@ -1834,17 +1856,8 @@ async function seedStateReads(
   const rows: JsonRow[] = [];
   for (const caseRow of manifest.cases.filter((candidate) => candidate.metadata.actionConcurrency)) {
     const concurrency = caseRow.metadata.actionConcurrency!;
-    const current = await currentConcurrencyDependency(clients, manifest.profile, caseRow);
-    const dependency = concurrency.expectedValid ? current : {
-      ...current,
-      version: hashSupplyStateValue({ caseId: caseRow.id, state: "stale-version" }),
-      valueHash: hashSupplyStateValue({ caseId: caseRow.id, state: "stale-value" }),
-    };
-    const packet = buildBenchmarkStateReadPacket({
-      caseRow,
-      dependency,
-      evidenceRefs: dependency.evidenceRefs,
-    });
+    const current = await readBenchmarkConcurrencyDependency(clients, manifest.profile, caseRow);
+    const packet = buildBenchmarkConcurrencyStateRead(caseRow, current);
     rows.push({
       id: concurrency.stateReadId,
       officeId: caseRow.scope.officeId,

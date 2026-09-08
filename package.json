@@ -148,6 +148,7 @@
     "test:supply-state-benchmark": "node --conditions=react-server --import tsx scripts/supply-state-benchmark.test.ts",
     "test:supply-state-vector-baseline": "node --conditions=react-server --import tsx scripts/supply-state-vector-baseline.test.ts",
     "test:benchmark-report-loading": "node --import tsx scripts/benchmark-report-loading.test.ts",
+    "test:benchmark-seed-state-read": "node --conditions=react-server --import tsx scripts/benchmark-seed-state-read.test.ts",
     "test:morning-brief": "tsx scripts/morning-brief.test.ts",
     "test:market-intelligence": "tsx scripts/market-intelligence-smoke.test.ts",
     "test:market-impact": "tsx scripts/market-impact-review.test.ts",

@@ -7,6 +7,10 @@
 - Recovery reconciles prior deliveries before filtering new send candidates;
   an empty new-send selection is not permission to abandon pending receipts.
 - Disabled retrieval V2 must preserve original lexical scores, order, and limit.
+- Benchmark fixtures must share production fact selectors rather than duplicate
+  their hash shape. A matching fixture must actually describe current state;
+  deliberately stale fixtures still substitute comparison hashes. Do not confuse
+  these validation checks with post-read mutations or provider action attempts.
 - Publish benchmark results under a frozen source fingerprint and the existing
   declared synthetic contract. Do not equate architecture/scope advantages with
   equal-input retrieval superiority, repeated cases with independent trials,

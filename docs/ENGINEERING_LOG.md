@@ -1,5 +1,20 @@
 ## 2026-09-08: Latest-main memory port and reproducible benchmark checkpoint
 
+- Preliminary 10K measurements on `bc045050` completed all 10,000 retrievals.
+  Audit found 80/200 matching validation fixtures rejected because the seed
+  builder omitted the shared selector's `latestInboundMessage: null` field.
+  Stored and current hashes were reconstructed exactly, with unchanged message
+  IDs. Correct fixture generation and add a regression before final measurement;
+  do not change the validator, gold labels, scoring, or synthetic stale cases.
+- Actual app timeout was 30 seconds because restricted role defaults override
+  database defaults. Final reproduction verifies the app connection after a
+  test-database-only 10-minute override. The complete preliminary cohort and
+  Windows launcher's null-exit-code failure are preserved separately.
+- `state-recheck.test.ts` passed six repetitions over 41 scenarios using local
+  DB/files and semantic runtime off: 162/162 stale or invalid attempts blocked,
+  0/84 false conflicts. These are existing guard/immutable-input checks, not
+  semantic benchmark counts or timing. No provider was contacted.
+
 - Ported immutable state reads, temporal/entity evidence retrieval, projections,
   semantic validation, and the benchmark from `f4a2fb96` onto `7080adad`.
 - Kept latest-main task/retry/mailbox behavior and added regression coverage for

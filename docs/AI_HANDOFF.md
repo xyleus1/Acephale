@@ -14,6 +14,15 @@ source-freeze checkpoint; do not present earlier figures as new measurements.
 The port contract records the three pre-existing broad-lint errors and build
 warnings rather than treating those checks as warning-free.
 
+The preliminary 10K cohort exposed an obsolete message-hash shape in benchmark
+fixture generation and a restricted-role timeout mismatch. Its complete results
+are preserved, including 80/200 false rejections of matching fixtures. The seed
+builder is aligned with the shared runtime selector before a fresh final cohort;
+validator/scoring behavior is unchanged. See the port contract for exact evidence
+and the important distinction between fixture validation and live action tests.
+The existing action-guard integration suite separately passed 162/162 stale or
+invalid attempts blocked and 0/84 false conflicts, with semantic runtime off.
+
 # Outreach campaign personalization
 
 Campaign copy now supports deterministic aliases and nested merge fallbacks. Audience snapshots retain bounded merge fields for follow-ups and legacy rows can be reloaded by office and list scope. The optional `ai_intro` is generated from row evidence only, guarded deterministically, and persisted per send so reconciliation reproduces the delivered body.

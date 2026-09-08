@@ -56,6 +56,16 @@ benchmark safety/vector/report-loading suites, and focused procurement
 planning/conversation/reply/file suites. Send database tests use fake
 providers with restricted application credentials, never live mailboxes.
 
+The existing `state-recheck.test.ts` integration suite also passed at its
+default six repetitions across 41 scenarios: 162/162 stale or invalid attempts
+blocked and 0/84 false conflicts on unrelated/control scenarios. It ran with
+semantic runtime, projections, and semantic validation explicitly disabled,
+using restricted local database credentials and local document storage. This
+verifies existing deterministic action guards and immutable database enforcement,
+not the new semantic validator's performance. Cases include post-prepare database
+changes, expiry, expected-hash mismatches, and prohibited immutable-input writes.
+Its counts and timings must not be merged with the semantic fixture benchmark.
+
 The broad changed-file lint scan reports three pre-existing errors, confirmed
 verbatim in base `7080adad`: `gmail-sync.ts` uses explicit `any` in
 `extractAttachments` and `reclassifyMessages`; `imap-sync.ts` uses `let` for
@@ -77,7 +87,16 @@ Use a fresh, explicitly named local benchmark database, not application
 runtime URLs. Prepare all three profiles before timing so index-plan checks
 see the same mixed-profile database as the prior publication cohort.
 Validate vector manifests against the seeded corpus; reuse only verified
-identical embeddings. Run each profile sequentially with:
+identical embeddings.
+
+After role provisioning, verify the actual restricted application connection's
+`statement_timeout`, not only the owner's database default. The role provisioning
+SQL sets `derya_app` to 30 seconds, which overrides a 10-minute database default.
+For reproduction of the earlier publication, apply a role-in-database 10-minute
+override to the explicitly isolated benchmark database only. Never change a
+production role or database setting for this purpose.
+
+Run each profile sequentially with:
 
 ```text
 npm run benchmark:run -- --profile=graph-small --vector-enabled=true --warmup-passes=3 --runs=10 --seed=42 --concurrency=4 --top-k=20
@@ -99,3 +118,45 @@ It is not an identical-input comparison of retrieval algorithms. Retrieval
 latency excludes separately measured validation. Baseline no-validator
 action outcomes are counterfactuals, not real provider sends. No process
 RSS/heap benchmark is present, so do not claim a measured RAM reduction.
+
+## Preliminary cohort and fixture correction
+
+The first 10K cohort on `bc045050` completed all 10,000 retrieval executions
+and all 50 system passes without query failures. It is retained in the separate
+local `derya-memory-benchmark-20260908` artifact directory, not used as the final
+publication cohort. Two setup defects were discovered during verification:
+
+- The actual application timeout was 30 seconds, not the intended 10 minutes.
+- Eight matching-state fixtures were rejected in all ten repetitions, yielding
+  80 false rejections out of 200 matching checks. Their message IDs were unchanged.
+  The seed builder manually hashed the obsolete latest-message shape without
+  `latestInboundMessage: null`; the production registry used the new shared
+  selector. Exact hash reconstruction confirmed this discrepancy. Merely seeding
+  again would not fix it. The fixture builder must use the shared selector,
+  retaining both genuine matching controls and deliberately stale fixtures.
+
+The Windows orchestration script also failed to retain the child process handle,
+so it read a null exit code after the successful 10K run and stopped before 50K.
+This launcher failure is distinct from the measured fixture false conflicts.
+The final launcher retains the handle, refreshes the process, and rejects missing
+exit status. All preliminary artifacts and the launcher error remain preserved.
+
+The final cohort uses a new isolated database and corrected fixture generation
+under one newly frozen source commit. Query cases, gold evidence, retrieval
+scoring, synthetic stale-hash substitutions, and confidence-interval methodology
+are not changed to obtain a desired result.
+
+`test:benchmark-seed-state-read` covers matching registry/seed hashes and
+evidence for inbound messages, outbound replies, automatic notices, notice-only
+threads, and changed prior inbound anchors. Matching fixtures validate, while
+the unchanged synthetic stale-hash construction still fails. A child-process
+check confirms that the seed CLI imports without React server conditions or
+loading the product's database singleton.
+
+The safety fixtures are not real concurrent action executions. Stale reads are
+constructed by substituting comparison hashes before insertion; matching reads
+retain current hashes. Unrelated facts are seeded before read creation, not
+mutated afterward. Only Derya Hot calls the real validator, and no provider send
+is attempted. Describe results as stale validation fixtures rejected and matching
+checks accepted, not as observed prevention of external stale actions or proof
+of tolerance to post-read unrelated mutations.
