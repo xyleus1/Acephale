@@ -1,0 +1,227 @@
+'use strict';
+const fs=require('node:fs');
+const fsp=require('node:fs/promises');
+const path=require('node:path');
+const crypto=require('node:crypto');
+const {Transform,Writable}=require('node:stream');
+const {pipeline}=require('node:stream/promises');
+const zlib=require('node:zlib');
+const c=require('./composition-core.cjs');
+const requireThat=c.check;
+const TARGET_RELATIVE='docs/benchmarks/memory-main-20260908';
+const TARGET=path.join(c.REPO,...TARGET_RELATIVE.split('/'));
+
+class DigestStream extends Transform {
+  constructor(scanText = false) {
+    super();
+    this.digest = crypto.createHash('sha256');
+    this.bytes = 0;
+    this.scanText = scanText;
+    this.tail = '';
+  }
+
+  _transform(chunk, encoding, callback) {
+    try {
+      this.digest.update(chunk);
+      this.bytes += chunk.length;
+      if (this.scanText) {
+        const text = this.tail + chunk.toString('utf8');
+        requireThat(!/(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s"'<>]+@/i.test(text),
+          'A data artifact contains a credential-bearing database URL.');
+        requireThat(!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text),
+          'A data artifact contains private-key material.');
+        requireThat(!/\b(?:sk-[A-Za-z0-9_-]{24,}|gh[pousr]_[A-Za-z0-9]{24,}|github_pat_[A-Za-z0-9_]{24,})\b/.test(text),
+          'A data artifact contains an apparent API token.');
+        this.tail = text.slice(-16384);
+      }
+      callback(null, chunk);
+    } catch (error) { callback(error); }
+  }
+
+  result() { return { sha256: this.digest.digest('hex'), bytes: this.bytes }; }
+}
+
+async function digestFile(filename, scanText = false) {
+  const probe = new DigestStream(scanText);
+  // Consume chunks without buffering the entire raw CSV or JSON document.
+  await pipeline(fs.createReadStream(filename), probe,
+    new Writable({ write(chunk, encoding, callback) { callback(); } }));
+  return probe.result();
+}
+
+class CanonicalGzipHeader extends Transform {
+  constructor() { super(); this.pending = Buffer.alloc(0); this.wroteHeader = false; }
+
+  _transform(chunk, encoding, callback) {
+    try {
+      if (this.wroteHeader) return callback(null, chunk);
+      this.pending = Buffer.concat([this.pending, chunk]);
+      if (this.pending.length < 10) return callback();
+      requireThat(this.pending[0] === 0x1f && this.pending[1] === 0x8b &&
+        this.pending[2] === 8 && this.pending[3] === 0,
+      'Unexpected gzip header; filename and optional fields must be absent.');
+      this.pending.fill(0, 4, 8); // MTIME is fixed, independent of the source file.
+      this.pending[9] = 255; // Unknown OS, independent of the exporting platform.
+      this.wroteHeader = true;
+      callback(null, this.pending);
+      this.pending = Buffer.alloc(0);
+    } catch (error) { callback(error); }
+  }
+
+  _flush(callback) {
+    callback(this.wroteHeader ? null : new Error('Incomplete gzip header.'));
+  }
+}
+
+function readme() {
+  return [
+    '# Memory and temporal benchmark: complete profile composition','',
+    `Measured source: ${c.COMMIT}, based on upstream main 7080adad57ed08bf529a1fa7234e9f2220568dc5 as checked at task start.`,'',
+    'This is 150 measured system/pass runs and 30,000 query executions assembled from three independently complete profiles, not one uninterrupted cohort. The 10K and 50K profiles were completed before a later AC-power interruption. All interrupted 250K rows were excluded and the entire 250K profile rerun in a fresh isolated database. No partial pass was filled in or selectively retried. The original failed launcher status remains visible under sources/resume.','',
+    '## Reproducibility','',
+    '- Each profile: five systems, 200 unique cases, three full warmup passes, ten measured passes, seed 42, concurrency four, top-k 20, and an actual app-role timeout of ten minutes.',
+    '- profile-provenance.json binds each complete profile to its original artifact hashes, source/database, run IDs, exact stage window, and infrastructure evidence. excluded-run-ids.json identifies every omitted interrupted 250K run.',
+    '- manifest.json lists raw and archived bytes and SHA-256 hashes. Gzip uses level 9 with fixed MTIME=0, no filename, and OS=255. A missing manifest means an incomplete export.',
+    '- Original profile CSV/summary/report files and both original launcher/status files are preserved. Combined summary arrays retain their original numerical values. results/report.html is rendered from that composed summary.',
+    '- Exact stdout/stderr logs for each accepted profile are preserved under sources. log-audit.json records their hashes and connection-reset/error-line counts. Completed measured cases do not imply error-free connection logs.',
+    '- Canonical statistics source is unchanged; the unchanged original extension adds query-type paired intervals without replacing the canonical overall interval. Both source hashes are recorded.',
+    '- Confidence intervals use 10,000 paired benchmark-case-cluster bootstrap resamples, retaining all ten repetitions within each sampled case. Latency percentiles use nearest rank.','',
+    '## Interpretation limits','',
+    'This is a synthetic architecture comparison. RAG baselines receive office/company scope, while Derya also uses exact operational scope. Typed-state/fact zeros are an output capability boundary, not proof that retrieved prose lacks the information. Preserve all five systems, MRR/fact-recall and subgroup regressions, cold/hot preparation costs, and latency-quantile tradeoffs. Profiles are measured at different times, so cross-profile timing is not a causal scaling experiment.','',
+    'Only Derya Hot executes the real validator. Each profile has twenty unique deliberately stale single-dependency fixtures and twenty matching-state single-dependency fixtures, each repeated ten times. Stale comparison hashes are substituted before immutable-read insertion; matching fixtures retain live hashes. No operational mutation occurs after the read and no provider action is sent. Other baselines are modeled no-validator controls. Raw legacy stale_escape/false_conflict labels do not establish escaped external actions or tolerance of post-read unrelated changes. Do not generalize these single-dependency timings to large production manifests.','',
+    'Executor latency excludes separately measured validation; separate percentile values cannot be added to obtain an end-to-end percentile. These trials contain no RSS, heap, retained-memory, or RAM measurement and support no RAM-savings claim. The separate runtime-off action-guard suite is not part of these benchmark counts.','',
+    'The process-held SystemRequired power request guards idle sleep only, requires AC power, and does not override lid closure, explicit sleep, shutdown, or power loss. The accepted stages passed the preserved launcher checks. A later failure remains part of the provenance. No persistent power/lid policy was changed. No credentials, environment files, database storage, or vector binaries are packaged.','',
+    '## Restore and reanalyze','',
+    'Restore all .gz artifacts into sibling files with byte/hash verification and no overwrite. From this package directory, with Python installed:','',
+    '```sh',
+    'python restore-artifacts.py',
+    'python analyze-composition.py --output analysis-recomputed',
+    '```','',
+    'NumPy 2.3.4 was used for the canonical analysis. Verify restored raw hashes against manifest.json. Recomputed timestamps and absolute paths may differ while numerical outputs should reproduce. The analysis output must be a new child directory.','',
+    'CommonJS utilities are archived byte-for-byte as .cjs.txt to avoid treating archived provenance as active repository lint targets. Their manifest rawPath identifies the original .cjs name. Restore those names only in an external working copy when inspecting or rerunning the tooling. Launcher scripts also require a separately prepared isolated environment; the credential/environment script is deliberately absent.','',
+    'The six PNG/SVG figure pairs are driven only by the audited analysis. Their manifest binds renderer and input hashes and records completed visual verification.','',
+  ].join('\n');
+}
+
+async function main() {
+  c.check(process.argv.length===2 && path.resolve(__dirname).toLowerCase()===c.ROOT.toLowerCase(),'Exporter accepts only its explicit publication root and no arguments.');
+  c.frozen(); c.check(!fs.existsSync(TARGET),'Publication target already exists; refusing overwrite.');
+  const status=c.readJson(path.join(c.ROOT,'composition-status.json'));
+  c.check(status.status==='completed' && status.kind==='complete_profile_composition' && status.sourceCommit===c.COMMIT && status.runs===150 && status.executions===30000,'Composition is incomplete.');
+  const locks=c.readJson(path.join(c.ROOT,'input-lock.json'));
+  const denied=c.readJson(path.join(c.ROOT,'excluded-run-ids.json'));
+  c.sourceFile(path.join(c.ROOT,'excluded-run-ids.json'),locks);
+  c.check(denied.count===45 && new Set(denied.runIds).size===45,'Missing interrupted-run denylist.');
+  const originals=c.SPECS.map(spec=>c.loadProfile(spec,locks,new Set(denied.runIds)));
+  c.check(new Set(originals.map(p=>p.audit.fingerprint)).size===1 && new Set(originals.map(p=>p.audit.runtime)).size===1,'Composed source/runtime differs across profiles.');
+  for(const artifact of status.artifacts) {
+    c.check(!path.isAbsolute(artifact.path) && !artifact.path.split(/[\\/]/).includes('..'),'Unsafe composition path.');
+    const actual=await digestFile(path.join(c.ROOT,artifact.path));
+    c.check(actual.sha256===artifact.sha256 && actual.bytes===artifact.bytes,'Composition changed after completion.');
+  }
+  const summary=c.readJson(path.join(c.ROOT,'results/summary.json'));
+  for(const key of ['configurations','systems','runs','bandwidthMultiplier','projectionAmortization']) c.check(c.stable(summary[key])===c.stable(originals.flatMap(p=>p.summary[key])),'Combined summary differs from original profile values.');
+  const originalCsv=originals[0].csv.slice(0,originals[0].csv.indexOf('\n')+1)+originals.map(p=>p.csv.slice(p.csv.indexOf('\n')+1)).join('');
+  c.check(c.hash(originalCsv)===(await digestFile(path.join(c.ROOT,'results/results.csv'))).sha256,'Combined CSV differs from accepted original row bytes.');
+  const provenance=c.readJson(path.join(c.ROOT,'profile-provenance.json'));
+  c.check(provenance.kind==='complete_profile_composition' && provenance.sourceCommit===c.COMMIT && provenance.profiles.length===3,'Wrong profile provenance.');
+  const expectedOriginals=new Map();
+  for(const input of originals) {
+    for(const [name,raw] of Object.entries(input.artifacts)) expectedOriginals.set(`sources/${input.spec.profile}/${name}`,raw);
+    const group=input.spec.sourceRoot===c.RESUME?'resume':'large';
+    expectedOriginals.set(`sources/${group}/cohort-status.json`,input.statusRaw);
+    expectedOriginals.set(`sources/${group}/run-cohort.ps1`,input.launcherRaw);
+  }
+  c.sameSet(provenance.originalArtifacts.map(a=>a.path),[...expectedOriginals.keys()],'preserved original artifact set');
+  for(const original of provenance.originalArtifacts) {const expected=expectedOriginals.get(original.path);c.check(original.sha256===expected.sha256 && original.bytes===expected.bytes,'Preserved source metadata differs from exact original bytes.');}
+  for(const input of originals) {
+    const profile=provenance.profiles.find(p=>p.profile===input.spec.profile);
+    c.check(profile && c.stable(profile.runIds)===c.stable(input.audit.runIds) && c.stable(profile.stage)===c.stable(input.audit.stage) && profile.fingerprint===input.audit.fingerprint,'Profile provenance differs from original acceptance audit.');
+  }
+  c.reportIds(fs.readFileSync(path.join(c.ROOT,'results/report.html'),'utf8'),summary);
+  const findings=c.readJson(path.join(c.ROOT,'analysis/findings.json'));
+  c.check(findings.audit?.runs===150 && findings.audit?.executions===30000 && findings.audit.source?.[0]===c.COMMIT && findings.audit.source?.[1]===originals[0].audit.fingerprint && findings.audit.source?.[2]===false && findings.compositionKind==='complete_profile_composition','Final numerical audit is incomplete or source mismatched.');
+  c.check(findings.statisticsCodeSha256===c.STATS_HASH && findings.statisticsExtensionCodeSha256===c.EXTENSION_HASH && c.stable(findings.profileProvenance)===c.stable(provenance),'Statistics or profile provenance changed.');
+  c.check(findings.sourceArtifacts.unmeasuredRowCount===0 && findings.sourceArtifacts.resultsSha256===c.hash(originalCsv) && findings.sourceArtifacts.summarySha256===(await digestFile(path.join(c.ROOT,'results/summary.json'))).sha256,'Findings do not describe the accepted raw artifacts.');
+  const actualAnalysisHashes={};
+  for(const name of ['data/figure_data.csv','data/confidence_intervals.csv']) actualAnalysisHashes[name]=(await digestFile(path.join(c.ROOT,'analysis',name))).sha256;
+  c.assertAnalysisDataHashes(findings,actualAnalysisHashes);
+  const figures=c.readJson(path.join(c.ROOT,'figures/manifest.json'));
+  c.check(figures.visualVerificationPassed===true && figures.rendererPath==='figures-source/renderer.py','Figures are not visually verified.');
+  c.check((await digestFile(path.join(c.ROOT,figures.rendererPath))).sha256===figures.rendererSha256,'Figure renderer changed.');
+  const figureInputs=['analysis/data/figure_data.csv','analysis/data/confidence_intervals.csv','analysis/findings.json'];
+  c.sameSet(Object.keys(figures.inputHashes||{}),figureInputs,'figure input hash set');
+  for(const input of figureInputs) c.check((await digestFile(path.join(c.ROOT,input))).sha256===figures.inputHashes[input],'Figure input changed.');
+  const names=['01_recall_latency','02_recall_scaling','03_query_types','04_evidence_bandwidth','05_semantic_concurrency','06_quality_tradeoffs'];
+  c.sameSet(figures.artifacts.map(a=>a.path),names.flatMap(name=>['png','svg'].map(extension=>`figures/${name}.${extension}`)),'complete figure pairs');
+  const specs=[];
+  function add(input,expected,originalPath) {
+    c.check(typeof input==='string' && !path.isAbsolute(input) && !input.split(/[\\/]/).includes('..') && !input.includes(':'),'Unsafe package artifact path.');
+    const gzip=input.endsWith('results.csv') || input.endsWith('summary.json');
+    const output=input.endsWith('.cjs')?`${input}.txt`:gzip?`${input}.gz`:input;
+    c.check(!specs.some(s=>s.output===output),'Duplicate output artifact.');
+    specs.push({input,output,gzip,expected,originalPath,scan:!input.endsWith('.png')});
+  }
+  for(const filename of ['results/results.csv','results/summary.json','results/report.html','analysis/findings.json','analysis/findings.md','analysis/data/figure_data.csv','analysis/data/confidence_intervals.csv','analysis/data/raw_measured_aggregate.csv','analysis/data/benchmark_summary.json','profile-provenance.json','composition-status.json','input-lock.json','excluded-run-ids.json','analyze-composition.py','restore-artifacts.py','composition-core.cjs','compose-profiles.cjs','render-composed-report.cjs','composition-core.test.cjs','export-publication.cjs']) add(filename);
+  add('analysis-code/publication_statistics.py',c.STATS_HASH); add('analysis-code/publication_extensions.py',c.EXTENSION_HASH);
+  for(const original of provenance.originalArtifacts) add(original.path,original.sha256);
+  // Keep exact runner diagnostics, including empty stderr files. These are
+  // supplemental provenance, not modifications to the accepted result rows.
+  const logAudit=[];
+  for(const input of originals) {
+    const audit={profile:input.spec.profile,sourceRoot:input.spec.sourceRoot,streams:{}};
+    for(const stream of ['stdout','stderr']) {
+      const originalPath=path.join(input.spec.sourceRoot,'logs',`${input.spec.profile}.${stream}.log`);
+      const raw=await digestFile(originalPath,true);
+      const lines=fs.readFileSync(originalPath,'utf8').split(/\r?\n/);
+      const relative=`sources/${input.spec.profile}/runner.${stream}.log`;
+      audit.streams[stream]={path:relative,...raw,
+        connectionResetLines:lines.filter(line=>line.includes('ConnectionReset')).length,
+        prismaErrorLines:lines.filter(line=>line.includes('prisma:error')).length};
+      add(relative,raw.sha256,originalPath);
+    }
+    logAudit.push(audit);
+  }
+  add('figures/manifest.json'); add(figures.rendererPath,figures.rendererSha256);
+  for(const artifact of figures.artifacts) {const actual=await digestFile(path.join(c.ROOT,artifact.path)); c.check(actual.sha256===artifact.sha256 && actual.bytes===artifact.bytes,'Figure artifact checksum/size changed.');add(artifact.path,artifact.sha256);}
+  for(const spec of specs) {
+    const filename=spec.originalPath||path.join(c.ROOT,spec.input), resolved=await fsp.realpath(filename);
+    c.check(resolved.toLowerCase()===filename.toLowerCase(),'Redirected artifact path refused.');
+    spec.raw=await digestFile(filename,spec.scan); c.check(spec.raw.bytes>0||spec.input.endsWith('/runner.stderr.log'),'Empty artifact.');
+    if(spec.expected)c.check(spec.raw.sha256===spec.expected,'Artifact differs from its provenance hash.');
+  }
+  c.frozen();
+  c.check((await fsp.realpath(path.join(c.REPO,'docs'))).toLowerCase()===path.join(c.REPO,'docs').toLowerCase(),'Redirected docs directory.');
+  await fsp.mkdir(path.dirname(TARGET),{recursive:true});
+  c.check((await fsp.realpath(path.dirname(TARGET))).toLowerCase()===path.dirname(TARGET).toLowerCase(),'Redirected benchmark parent.');
+  await fsp.mkdir(TARGET);
+  const artifacts=[];
+  for(const spec of specs) {
+    const from=spec.originalPath||path.join(c.ROOT,spec.input), to=path.join(TARGET,spec.output);
+    await fsp.mkdir(path.dirname(to),{recursive:true});
+    if(spec.gzip) {
+      const rawDigest=new DigestStream();
+      await pipeline(fs.createReadStream(from),rawDigest,zlib.createGzip({level:9}),new CanonicalGzipHeader(),fs.createWriteStream(to,{flags:'wx'}));
+      c.check(rawDigest.result().sha256===spec.raw.sha256,'Input changed while compressing.');
+      const decompressed=new DigestStream();
+      await pipeline(fs.createReadStream(to),zlib.createGunzip(),decompressed,new Writable({write(chunk,encoding,callback){callback();}}));
+      const verified=decompressed.result(); c.check(verified.sha256===spec.raw.sha256 && verified.bytes===spec.raw.bytes,'Gzip roundtrip differs from original.');
+    } else await fsp.copyFile(from,to,fs.constants.COPYFILE_EXCL);
+    const packaged=await digestFile(to); if(!spec.gzip)c.check(packaged.sha256===spec.raw.sha256,'Copied artifact changed.');
+    artifacts.push({path:spec.output,encoding:spec.gzip?'gzip':'identity',...packaged,rawPath:spec.input,rawSha256:spec.raw.sha256,rawBytes:spec.raw.bytes});
+  }
+  await fsp.writeFile(path.join(TARGET,'README.md'),readme(),{flag:'wx',encoding:'utf8'});
+  artifacts.push({path:'README.md',encoding:'identity',...await digestFile(path.join(TARGET,'README.md'))});
+  await fsp.writeFile(path.join(TARGET,'log-audit.json'),JSON.stringify({
+    note:'Exact accepted-profile runner logs. Connection diagnostics are retained; all measured cases completed, but the logs are not asserted error-free.',
+    profiles:logAudit,
+  },null,2)+'\n',{flag:'wx',encoding:'utf8'});
+  artifacts.push({path:'log-audit.json',encoding:'identity',...await digestFile(path.join(TARGET,'log-audit.json'))});
+  c.check(c.git('rev-parse','HEAD')===c.COMMIT && c.git('diff','--name-only','HEAD')==='','Source changed during export; completion manifest withheld.');
+  c.check(c.git('ls-files','--others','--exclude-standard').split(/\r?\n/).filter(Boolean).every(name=>name.startsWith(`${TARGET_RELATIVE}/`)),'Unrelated untracked files appeared during export.');
+  const manifest={schemaVersion:1,complete:true,kind:'complete_profile_composition',sourceCommit:c.COMMIT,sourceTreeFingerprint:originals[0].audit.fingerprint,runs:150,executions:30000,statisticsCodeSha256:c.STATS_HASH,statisticsExtensionCodeSha256:c.EXTENSION_HASH,
+    compression:{format:'gzip',level:9,mtime:0,os:255,filename:null,nodeVersion:process.version,zlibVersion:process.versions.zlib},artifacts,manifestNote:'The manifest is not included in its own hashes. Missing manifest means incomplete export.'};
+  await fsp.writeFile(path.join(TARGET,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx',encoding:'utf8'});
+  console.log(JSON.stringify({ok:true,target:TARGET,artifacts:artifacts.length,manifestSha256:(await digestFile(path.join(TARGET,'manifest.json'))).sha256},null,2));
+}
+main().catch(error=>{console.error(`Export refused or failed: ${error.message}. Partial files, if any, are preserved; no overwrite or cleanup is performed.`);process.exitCode=1;});

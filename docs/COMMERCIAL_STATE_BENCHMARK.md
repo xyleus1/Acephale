@@ -1,12 +1,18 @@
 # Commercial State Benchmark
 
-The figures below are historical and predate the latest-main port. See
-[Memory and temporal runtime on latest main](MEMORY_LATEST_MAIN_PORT.md)
-for the new source baseline, reproduction contract, and reporting caveats.
+The figures below are historical and predate the September 8 main-snapshot
+port. The completed 150-run, 30,000-execution publication on frozen source
+`7e23ff685bc88b3427e236d94e5463bae01a6304` is in
+[the new results report](MEMORY_LATEST_MAIN_RESULTS.md), with
+[reproducibility artifacts and figures](benchmarks/memory-main-20260908/README.md).
+It combines complete retained 10K/50K profiles with a complete fresh 250K
+profile, not one uninterrupted cohort or selected interrupted passes. See
+[the port contract](MEMORY_LATEST_MAIN_PORT.md) for the pinned upstream main
+snapshot `7080adad` verified September 8, opt-in flags, and partial action coverage.
 
 ## Purpose
 
-The Commercial State Benchmark measures whether Derya's compiled current state, exact entity links, historical evidence retrieval, and semantic dependency validation improve retrieval and action safety relative to standard retrieval paths. It reports measured results only. It does not encode an expected winner or a target multiplier.
+The Commercial State Benchmark measures Derya's compiled current state, exact entity links, historical evidence retrieval, and semantic validation of seeded immutable reads relative to standard retrieval paths. It does not measure live provider-action safety or encode an expected winner or a target multiplier.
 
 The benchmark runs real Derya readers, state compilation, projections, retrieval, and validation against one isolated PostgreSQL database. Production runtime code never reads the `benchmark` schema. Benchmark-only metadata is limited to `benchmark.cases`, `benchmark.runs`, and `benchmark.results`.
 
@@ -63,7 +69,7 @@ Every profile contains the same fixed commercial problem set:
 - 8 densely documented golden suppliers and 4 densely documented golden companies
 - 12 scripted scenario families
 - 200 evaluation queries
-- 40 action-concurrency cases
+- 40 immutable-read validation fixtures: 20 deliberately stale and 20 matching-state
 
 The query distribution is 40 exact lookups, 40 semantic queries, 35 current-versus-stale questions, 30 temporal questions, 30 exact entity-hop questions, 15 routing and tenant-isolation questions, and 10 autopilot-action questions. Semantic queries paraphrase the evidence. Exact queries intentionally favor keyword retrieval. Gold facts, evidence pointers, and dependency versions are evaluation metadata and are never passed into retrieval.
 
@@ -91,10 +97,20 @@ Vector-dependent systems are reported as unavailable when no vector backend and 
 
 The runner records Recall@5, Recall@10, Recall@20, MRR, current-state accuracy, temporal-order accuracy, entity-resolution accuracy, p50 and p95 latency, projection hit rate, cold and hot hydration latency, tenant leakage, unrouted-mail leakage, strict stale-state detection, stale-action escape, false conflicts, and validation p50 and p95.
 
+The `strict_stale_detected`, `stale_escape`, and `false_conflict` outcome names
+are legacy fixture fields, not observed external actions. Stale fixtures
+substitute dependency hashes before immutable-read
+insertion; matching fixtures retain current hashes. Only Derya Hot invokes the
+real validator, while the other systems are modeled no-validator controls.
+Each fixture has one dependency. No provider send or post-read state mutation
+is executed, and unrelated-change tolerance is not measured. Validation latency
+is separate from retrieval/hydration latency. No RSS, heap, or RAM-use benchmark
+is present. See the new results report for the ten-pass publication denominator.
+
 Evidence bandwidth is:
 
 ```text
-correct gold evidence references returned / retrieval wall-clock seconds
+sum of correct gold evidence references returned / sum of measured retrieval-hydration seconds
 ```
 
 Fact bandwidth is:
@@ -103,7 +119,7 @@ Fact bandwidth is:
 correct gold current-state facts returned / context-hydration wall-clock seconds
 ```
 
-The externally usable multiplier is Derya hot bandwidth divided by strong-hybrid bandwidth. It is absent when either measured denominator or required baseline is unavailable. It is never rounded into a marketing claim.
+These ratios are not wall-clock concurrent throughput. The externally usable multiplier is Derya hot bandwidth divided by strong-hybrid bandwidth. It is absent when either measured denominator or required baseline is unavailable. It is never rounded into a marketing claim.
 
 ## Commands
 
@@ -130,13 +146,13 @@ ALLOW_BENCHMARK_RESET=1 npm run benchmark:reset
 - `results.csv`, containing per-case measured results
 - `report.html`, a standalone static report whose graphs are derived from those results
 
-The HTML report includes Recall@20 by system and query type, recall-latency Pareto position, evidence bandwidth, p95 latency by corpus size, cold-versus-hot hydration latency, and stale-action escape versus false-conflict rates. Every graph repeats the measured corpus size, query count, top-K, embedding model, run count, environment label, and timestamp.
+The HTML report includes Recall@20 by system and query type, recall-latency Pareto position, evidence bandwidth, p95 latency by corpus size, cold-versus-hot hydration latency, and the legacy stale-escape versus false-conflict fixture fields. Those field names do not establish live action outcomes. Every graph repeats the measured corpus size, query count, top-K, embedding model, run count, environment label, and timestamp.
 
 ## Consistency boundary
 
 State validation is optimistic semantic concurrency, not a distributed transaction across the application database, workflow database, and Gmail. A final provider call still has a small validation-to-send race. Existing provider idempotency, sender reservation, event recording, and reconciliation remain required.
 
-## Measured results
+## Historical measured results
 
 All three final compiler-v1.1 profiles were measured on 2026-08-28 UTC with seed
 42, one run per system and profile, 200 queries, top-K 20, four-case process
@@ -158,11 +174,13 @@ configured.
 | 250K | `DERYA_COLD` | 0.7083 | 0.8433 | 0.5867 | 4,110.4 | 5,279.9 | 0.320 | 0.526 |
 | 250K | `DERYA_HOT` | 0.7083 | 0.8717 | 0.5864 | 5,117.2 | 6,478.0 | 0.275 | 0.441 |
 
-`DERYA_HOT` produced a 0.925 projection hit rate at every profile. Its strict
-stale-state detection rate was 1.0, stale-action escape rate was 0, and
-false-conflict rate was 0 across the 40 concurrency cases. Systems without
-semantic validation had a strict detection rate of 0 and stale-action escape
-rate of 1.0. Tenant and unrouted-mail leakage counts were zero for every active
+`DERYA_HOT` produced a 0.925 projection hit rate at every profile. Across the
+40 immutable-read fixtures, it rejected the deliberately stale reads and
+accepted the matching-state reads (raw `strict_stale_detected` rate 1.0,
+`stale_escape` rate 0, and `false_conflict` rate 0). Systems without semantic
+validation had modeled detection rate 0 and modeled `stale_escape` rate 1.0.
+These values are not measured escaped provider actions or post-read unrelated
+changes. Tenant and unrouted-mail leakage counts were zero for every active
 system and profile.
 
 The results are mixed and should be read as measurements, not a winner claim.

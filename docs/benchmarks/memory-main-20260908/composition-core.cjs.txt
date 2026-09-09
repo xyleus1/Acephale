@@ -1,0 +1,172 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
+
+const ROOT = 'C:\\Users\\apexs\\derya-memory-benchmark-publication-20260908';
+const REPO = 'C:\\Users\\apexs\\derya-crm-memory-main-20260908';
+const RESUME = 'C:\\Users\\apexs\\derya-memory-benchmark-resume-20260908';
+const LARGE = 'C:\\Users\\apexs\\derya-memory-benchmark-large-20260908';
+const COMMIT = '7e23ff685bc88b3427e236d94e5463bae01a6304';
+const STATS_HASH = 'cfeb9608e3f5837c5bed29533939d0459273f20a6ff9733a40f46876c9674d25';
+const EXTENSION_HASH = '127c615cc14d97fa9b7392c7db657d465afdb91f14f2fb198415fc9b4918d41d';
+const SYSTEMS = ['CURRENT_KEYWORD', 'VECTOR_RAG', 'STRONG_HYBRID_RAG', 'DERYA_COLD', 'DERYA_HOT'];
+const SPECS = [
+  { profile: 'graph-small', size: 10000, sourceRoot: RESUME, database: 'derya_main_benchmark_resume', mode: 'completed_stage_from_later_interrupted_launch', start: '2026-09-09T00:18:55.0495422Z', end: '2026-09-09T00:38:30.8895002Z', corpus: '5d2f8b3671cd3013c740df75c2cad5d54bd6fcdefa06da3a357f8248a79160cf', chunks: 3269 },
+  { profile: 'graph-medium', size: 50000, sourceRoot: RESUME, database: 'derya_main_benchmark_resume', mode: 'completed_stage_from_later_interrupted_launch', start: '2026-09-09T00:38:31.4147095Z', end: '2026-09-09T01:15:08.4718793Z', corpus: '15728b05bf2ba919cc0ae02627c6e5304b200ae4e5091c5abe47174fff507b24', chunks: 16603 },
+  { profile: 'graph-large', size: 250000, sourceRoot: LARGE, database: 'derya_main_benchmark_large_retry', mode: 'completed_standalone_profile_retry', corpus: 'aaea72301cd78d003aa185ef5cba1848be51ef1d2d4b82b63049563a70ff21a8', chunks: 83269 },
+];
+function check(condition, message) { if (!condition) throw new Error(message); }
+function hash(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
+function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
+function stable(value) {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+function git(...args) { return execFileSync('git', ['-C', REPO, ...args], {encoding:'utf8',windowsHide:true}).trim(); }
+function frozen() { check(git('rev-parse','HEAD') === COMMIT && git('status','--porcelain','--untracked-files=all') === '', 'Measured repository must remain exactly clean at frozen source.'); }
+function timestamp(value) { const result = Date.parse(value); check(Number.isFinite(result), `Invalid timestamp: ${value}`); return result; }
+function sameSet(actual, expected, label) { check(actual.length === expected.length && new Set(actual).size === actual.length && expected.every(x => actual.includes(x)), `Incomplete or duplicate ${label}.`); }
+function secretScan(text) {
+  check(!/(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s"'<>]+@/i.test(text), 'Credential-bearing database URL in artifact.');
+  check(!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text), 'Private key in artifact.');
+  check(!/\b(?:sk-[A-Za-z0-9_-]{24,}|gh[pousr]_[A-Za-z0-9]{24,}|github_pat_[A-Za-z0-9_]{24,})\b/.test(text), 'Apparent API token in artifact.');
+}
+function assertInfrastructure(status, spec) {
+  check(status.expectedCommit === COMMIT && status.repository === REPO && status.database === spec.database && status.endpoint === '127.0.0.1:55439', 'Wrong launch source/database/endpoint.');
+  const matches = status.stages?.filter(s => s.name === spec.profile) || [];
+  check(matches.length === 1, 'Missing or duplicate selected profile stage.');
+  const stage = matches[0], start = timestamp(stage.startedAt), end = timestamp(stage.completedAt);
+  check(end >= start && stage.exitCode === 0 && stage.infrastructureInterrupted === false && stage.ownedChildTerminated === false, 'Selected profile did not finish uninterrupted.');
+  check(Number.isFinite(stage.durationMs) && stage.durationMs > 0, 'Missing stage duration.');
+  check(start >= timestamp(status.startedAt) && end <= timestamp(status.completedAt), 'Profile stage lies outside launcher lifetime.');
+  if (spec.start) check(stage.startedAt === spec.start && stage.completedAt === spec.end, 'Retained profile is from the wrong launch window.');
+  const guard = status.powerGuard, sleep = status.sleepAudit;
+  check(guard?.kind === 'PowerCreateRequest:SystemRequired' && guard.acquired === true && guard.state === 'released' && guard.releaseConfirmed === true && guard.acRequired === true && guard.initialACLineStatus === 1 && guard.globalPolicyChanged === false && Number.isInteger(guard.checks) && guard.checks >= 2, 'Missing acquired/released AC power guard.');
+  check(timestamp(guard.acquiredAt) <= start && timestamp(guard.releasedAt) >= end && timestamp(guard.releasedAt) <= timestamp(status.completedAt), 'Power guard lifetime does not cover selected profile.');
+  check(sleep?.source === 'Windows System event log' && Number.isInteger(sleep.baselineRecordId) && sleep.baselineRecordId >= 0 && Number.isInteger(sleep.checks) && sleep.checks >= 2 && Array.isArray(sleep.events) && sleep.events.length === 0 && sleep.error === null, 'Missing clean standby audit.');
+  check(timestamp(sleep.startedAt) <= start && timestamp(sleep.lastCheckedAt) >= end, 'Standby audit does not cover selected profile completion.');
+  if (spec.mode === 'completed_standalone_profile_retry') {
+    check(status.status === 'completed' && status.error === null && status.failureKind === null && guard.lastACLineStatus === 1 && guard.error === null && sleep.state === 'completed', 'New standalone profile did not complete with clean terminal guards.');
+    check(status.profileOnly === 'graph-large' && status.expectedRuns === 50 && status.expectedExecutions === 10000 && status.cohortRelationship === 'independent_profile_retry_no_pass_splicing', 'Wrong standalone profile contract.');
+    sameSet(status.expectedSystems || [], SYSTEMS, 'standalone system set');
+    check(status.stages.length === 1, 'Standalone launcher must contain only the new 250K stage.');
+  } else {
+    check(status.status === 'failed' && status.failureKind === 'infrastructure_interruption' && guard.lastACLineStatus === 0 && guard.error === 'AC power must remain connected for reliable idle-sleep prevention (ACLineStatus=0).' && status.error === guard.error && sleep.state === 'active', 'Retained launch interruption provenance was altered.');
+    sameSet(status.stages.map(s => s.name), ['graph-small','graph-medium','graph-large'], 'retained launch stages');
+    const interrupted = status.stages.find(s => s.name === 'graph-large');
+    check(interrupted.infrastructureInterrupted === true && interrupted.ownedChildTerminated === true && timestamp(interrupted.startedAt) > end, 'Interruption must occur strictly after the accepted completed profile.');
+  }
+  return { stage, acceptanceMode: spec.mode, powerEvidence: 'Exact preserved launcher checks held AC power and standby events before and after every successful selected stage; later interruption remains preserved.', sourceStatus: status.status };
+}
+function parseCsv(text) {
+  const records = [], fields = []; let value = '', quoted = false, afterQuote = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (quoted) {
+      if (char === '"' && text[index+1] === '"') { value += '"'; index++; }
+      else if (char === '"') { quoted = false; afterQuote = true; }
+      else value += char;
+    } else if (char === '"' && value === '' && !afterQuote) quoted = true;
+    else if (char === ',') { fields.push(value); value = ''; afterQuote = false; }
+    else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[index+1] === '\n') index++;
+      fields.push(value); records.push(fields.splice(0)); value = ''; afterQuote = false;
+    } else { check(!afterQuote, 'Malformed CSV after closing quote.'); value += char; }
+  }
+  check(!quoted, 'Unclosed CSV quoted field.');
+  if (value !== '' || fields.length || afterQuote) { fields.push(value); records.push(fields); }
+  const headers = records.shift(); check(headers && new Set(headers).size === headers.length, 'Missing/duplicate CSV headers.');
+  const rows = records.map(record => { check(record.length === headers.length, 'Wrong CSV field count.'); return Object.fromEntries(headers.map((h,i)=>[h,record[i]])); });
+  return {headers, rows};
+}
+function assertProfile(summary, csv, status, spec, deniedIds) {
+  const infrastructure = assertInfrastructure(status, spec);
+  check(summary.schemaVersion === 1 && summary.runs?.length === 50 && summary.configurations?.length === 50 && summary.systems?.length === 5, 'Incomplete profile summary.');
+  const {rows,headers} = typeof csv === 'string' ? parseCsv(csv) : csv;
+  for (const name of ['run_id','status','failure_code','profile','system_name','case_id','measurement_pass','query_ordinal','tenant_leak_count','unrouted_leak_count']) check(headers.includes(name), `Missing ${name} CSV column.`);
+  check(rows.length === 10000, 'Profile must contain exactly 10,000 result rows.');
+  const byId = new Map(), grid = new Set(), configTimes = new Set(), vectors = new Set(), runtime = new Set(), fingerprints = new Set();
+  const windowStart = timestamp(infrastructure.stage.startedAt), windowEnd = timestamp(infrastructure.stage.completedAt);
+  for (const run of summary.runs) {
+    const c = run.configuration;
+    check(run.profile === spec.profile && SYSTEMS.includes(run.systemName) && c?.status === 'completed' && c.profile === spec.profile && c.databaseLabel === spec.database, 'Wrong run profile/system/status/database.');
+    check(c.commitSha === COMMIT && c.workingTreeDirty === false && /^[0-9a-f]{64}$/.test(c.sourceTreeFingerprint), 'Invalid frozen source provenance.');
+    for (const [key,wanted] of Object.entries({corpusSize:spec.size,queryCount:200,topK:20,runCount:10,warmupPassCount:3,concurrency:4,queryOrderSeed:42,postgresStatementTimeout:'10min',queryOrderPolicy:'seeded_random_per_pass_shared_across_systems',warmupPolicy:'full_corpus_seeded_random'})) check(c[key] === wanted, `Unexpected profile setting ${key}.`);
+    check(Number.isInteger(c.runIndex) && c.runIndex >= 1 && c.runIndex <= 10, 'Wrong measured pass index.');
+    const cell = `${run.systemName}:${c.runIndex}`;
+    check(!grid.has(cell), 'Duplicate system/pass.'); grid.add(cell);
+    check(typeof run.runId === 'string' && run.runId.startsWith(`benchmark:${spec.profile}:${run.systemName.toLowerCase()}:${c.runIndex}:`) && !byId.has(run.runId) && !deniedIds.has(run.runId), 'Duplicate, malformed, or excluded interrupted run ID.');
+    byId.set(run.runId, run);
+    const runStart = timestamp(run.startedAt), runEnd = timestamp(run.completedAt), configured = timestamp(c.timestamp);
+    check(configured >= windowStart && configured <= windowEnd && runStart >= windowStart && runEnd >= runStart && runEnd <= windowEnd, 'Run/configuration outside selected launch window.');
+    const v = c.vectorIndex;
+    check(v?.profile === spec.profile && v.modelId === 'Xenova/all-MiniLM-L6-v2' && v.modelRevision === 'cb3d680149bf9a3209564e1b27ab3bb355b65707' && v.modelDtype === 'q8' && v.dimensions === 384 && v.runtimeVersion === '4.2.0' && v.corpusFingerprint === spec.corpus && v.indexChunkCount === spec.chunks, 'Wrong pinned vector model or corpus.');
+    check(v.modelAssets?.length > 0 && [...v.modelAssets,v.vectorAsset,v.metadataAsset].every(a => Number.isFinite(a?.bytes) && a.bytes > 0 && /^[0-9a-f]{64}$/.test(a.sha256)), 'Missing vector asset hashes.');
+    fingerprints.add(c.sourceTreeFingerprint); configTimes.add(c.timestamp); vectors.add(stable(v));
+    runtime.add(stable(Object.fromEntries(['branch','commitSha','sourceTreeFingerprint','sourceTreeFingerprintAlgorithm','sourceTreeFileCount','hardwareLabel','runtimeLabel','postgresVersion','postgresStatementTimeout','prismaPoolConfiguration','embeddingModel','embeddingDimensions'].map(k=>[k,c[k]]))));
+  }
+  check(grid.size === 50 && configTimes.size === 1 && vectors.size === 1 && fingerprints.size === 1 && runtime.size === 1, 'Mixed launch/source/runtime configuration inside profile.');
+  check(stable(summary.configurations.map(stable).sort()) === stable(summary.runs.map(r=>stable(r.configuration)).sort()), 'Top-level configurations differ from measured runs.');
+  sameSet(summary.systems.map(s=>s.systemName), SYSTEMS, 'summary system set');
+  for (const system of summary.systems) {
+    check(system.profile === spec.profile && system.status === 'completed' && system.metrics && system.configuration?.databaseLabel === spec.database, 'Incomplete system summary.');
+    sameSet(system.measuredRunIds, summary.runs.filter(r=>r.systemName===system.systemName).map(r=>r.runId), 'system measured run IDs');
+    check(Array.isArray(system.warmups) && system.warmups.length === 1, 'Missing unique warmup record.');
+    const warmup = system.warmups[0];
+    check(warmup.passCount === 3 && warmup.executionCount === 600 && warmup.failureCount === 0 && new Set(warmup.queryOrderHashes).size === 3, 'Wrong warmups or warmup failures.');
+  }
+  const countByRun = new Map(), cells = new Set(), cases = new Map(), orders = new Map();
+  for (const row of rows) {
+    const run = byId.get(row.run_id);
+    check(run && !deniedIds.has(row.run_id) && row.status === 'completed' && row.failure_code === '' && row.profile === spec.profile && row.system_name === run.systemName, 'Unexpected, failed, or excluded CSV row.');
+    check(Number(row.measurement_pass) === run.configuration.runIndex && Number.isInteger(Number(row.query_ordinal)) && Number(row.query_ordinal) >= 1 && Number(row.query_ordinal) <= 200 && row.case_id !== '', 'Invalid case/pass/query ordinal.');
+    check(row.tenant_leak_count === '0' && row.unrouted_leak_count === '0', 'Leakage or missing leakage measurement.');
+    const cell = `${row.run_id}:${row.case_id}`; check(!cells.has(cell), 'Duplicate query row.'); cells.add(cell);
+    countByRun.set(row.run_id,(countByRun.get(row.run_id)||0)+1);
+    if (!cases.has(row.run_id)) cases.set(row.run_id,new Set()); cases.get(row.run_id).add(row.case_id);
+    if (!orders.has(row.run_id)) orders.set(row.run_id,[]); orders.get(row.run_id).push([Number(row.query_ordinal),row.case_id]);
+  }
+  const referenceCases = [...cases.values()][0];
+  const passOrders = new Map(), passHashes = new Map();
+  for (const run of summary.runs) {
+    check(countByRun.get(run.runId) === 200 && cases.get(run.runId).size === 200 && [...referenceCases].every(id=>cases.get(run.runId).has(id)), 'Incomplete or nonmatching case set.');
+    const order = orders.get(run.runId).sort((a,b)=>a[0]-b[0]);
+    check(order.every(([ordinal],i)=>ordinal===i+1), 'Duplicate or missing query ordinal.');
+    const signature = stable(order), pass = run.configuration.runIndex;
+    if (passOrders.has(pass)) check(passOrders.get(pass)===signature && passHashes.get(pass)===run.configuration.queryOrderHash, 'Systems have different order within a pass.');
+    else { passOrders.set(pass,signature); passHashes.set(pass,run.configuration.queryOrderHash); }
+  }
+  check(new Set(passOrders.values()).size === 10, 'Pass query orders were not independently randomized.');
+  check(timestamp(summary.generatedAt) >= Math.max(...summary.runs.map(r=>timestamp(r.completedAt))) && timestamp(summary.generatedAt) <= windowEnd, 'Profile summary generation outside completed stage.');
+  return {profile:spec.profile,database:spec.database,sourceRoot:spec.sourceRoot,...infrastructure,runs:50,executions:10000,runIds:[...byId.keys()],fingerprint:[...fingerprints][0],runtime:[...runtime][0]};
+}
+function reportIds(html, summary) {
+  const observed = [...html.matchAll(/<td>(benchmark:[^<]+)<\/td>/g)].map(m=>m[1]);
+  sameSet(observed, summary.runs.map(r=>r.runId), 'HTML report run IDs');
+}
+function assertAnalysisDataHashes(findings, actualHashes) {
+  const required=['data/figure_data.csv','data/confidence_intervals.csv'];
+  sameSet(Object.keys(findings.analysisDataHashes||{}),required,'findings-bound analysis data hashes');
+  sameSet(Object.keys(actualHashes||{}),required,'actual analysis data hashes');
+  for(const filename of required) check(/^[0-9a-f]{64}$/.test(findings.analysisDataHashes[filename]) && findings.analysisDataHashes[filename]===actualHashes[filename],`Analysis CSV differs from audited findings: ${filename}`);
+}
+function sourceFile(file, locks) {
+  const data = fs.readFileSync(file), digest = hash(data), locked = locks.artifacts.find(a=>a.path.toLowerCase()===file.toLowerCase());
+  if (locked) check(locked.sha256 === digest && locked.bytes === data.length, `Frozen input changed: ${file}`);
+  return {data,sha256:digest,bytes:data.length};
+}
+function loadProfile(spec, locks, denied) {
+  const statusFile = path.join(spec.sourceRoot,'cohort-status.json');
+  const launcherFile = path.join(spec.sourceRoot,'run-cohort.ps1');
+  const statusRaw = sourceFile(statusFile,locks), launcherRaw = sourceFile(launcherFile,locks);
+  const artifacts = {};
+  for (const name of ['summary.json','results.csv','report.html']) artifacts[name] = sourceFile(path.join(spec.sourceRoot,'profiles',spec.profile,name),locks);
+  const status=JSON.parse(statusRaw.data), summary=JSON.parse(artifacts['summary.json'].data), csv=artifacts['results.csv'].data.toString('utf8');
+  for (const value of [...Object.values(artifacts),statusRaw,launcherRaw]) secretScan(value.data.toString('utf8'));
+  const audit=assertProfile(summary,csv,status,spec,denied); reportIds(artifacts['report.html'].data.toString('utf8'),summary);
+  return {spec,status,summary,csv,artifacts,statusRaw,launcherRaw,audit};
+}
+module.exports={ROOT,REPO,RESUME,LARGE,COMMIT,STATS_HASH,EXTENSION_HASH,SYSTEMS,SPECS,check,hash,readJson,stable,git,frozen,timestamp,sameSet,secretScan,assertInfrastructure,parseCsv,assertProfile,reportIds,assertAnalysisDataHashes,sourceFile,loadProfile};

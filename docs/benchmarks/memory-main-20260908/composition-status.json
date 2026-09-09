@@ -1,0 +1,30 @@
+{
+  "status": "completed",
+  "kind": "complete_profile_composition",
+  "sourceCommit": "7e23ff685bc88b3427e236d94e5463bae01a6304",
+  "runs": 150,
+  "executions": 30000,
+  "completedAt": "2026-09-09T07:36:50.461Z",
+  "artifacts": [
+    {
+      "path": "results/results.csv",
+      "sha256": "34447305dbe747d4f82b985c17e393306389e3a9072c42ce59b93bdfbe60d74f",
+      "bytes": 14413706
+    },
+    {
+      "path": "results/summary.json",
+      "sha256": "3e2941e42633448ae56af8eb3a44b06d142f10c22a419c7e07c419bb071b56e4",
+      "bytes": 3758368
+    },
+    {
+      "path": "results/report.html",
+      "sha256": "9a340806f1b6f5e1e82850661217f4c4dd282a8234db813845e277c1028b85d8",
+      "bytes": 183585
+    },
+    {
+      "path": "profile-provenance.json",
+      "sha256": "ffc41f3e075d96fc8fd810162994df4b7f5858945c0c4377c2c2ef32d5a8cb1e",
+      "bytes": 27517
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "rendererPath": "figures-source/renderer.py",
+  "rendererSha256": "a2c59276120b18adcc0f10cf373f54a1e25d3649dc6e5d61c5ea78edf11e8470",
+  "inputHashes": {
+    "analysis/data/figure_data.csv": "3a2e8a2cc84d9ab501a4f53df50de60e971cd98685fb685dd6312fcdcaab3584",
+    "analysis/data/confidence_intervals.csv": "4e8f67e6de50c1393f3c971718ca1e218d576a0aea350471699868bfd7c436f9",
+    "analysis/findings.json": "15638a391d5f0b997ec58187f9649de8999f0e3be02032b3900bff93eb2a7e77"
+  },
+  "visualVerificationPassed": true,
+  "renderingEnvironment": {
+    "python": "3.13.5",
+    "matplotlib": "3.10.9",
+    "numpy": "2.3.4"
+  },
+  "artifacts": [
+    {
+      "path": "figures/01_recall_latency.png",
+      "sha256": "ca8310ad29ce46f7ccd752b471267fe61598b73cb115e1eec29246fbbae6989f",
+      "bytes": 150359
+    },
+    {
+      "path": "figures/01_recall_latency.svg",
+      "sha256": "8d66f75a67ad04cf1237652a87939a420cf003dc53eb726d76b6ca454aa8dedb",
+      "bytes": 100100
+    },
+    {
+      "path": "figures/02_recall_scaling.png",
+      "sha256": "3e17ea75734ed4369cf92502e21edfde0f2f3f11cbd6ce2781b7c0b2fb7b67b4",
+      "bytes": 132437
+    },
+    {
+      "path": "figures/02_recall_scaling.svg",
+      "sha256": "0c91a45c38da35341faf0254f5e73594139d5925532ff3b22f3c2a6828877d58",
+      "bytes": 87873
+    },
+    {
+      "path": "figures/03_query_types.png",
+      "sha256": "596c3541cbeeb3b04c05fae5270231b32895af40ad4b55de960a6e41fc20a210",
+      "bytes": 166067
+    },
+    {
+      "path": "figures/03_query_types.svg",
+      "sha256": "9c41bc714e4ec04b8052f908f58830fc8858b357d13d14b5fa5f828f19e884e4",
+      "bytes": 111947
+    },
+    {
+      "path": "figures/04_evidence_bandwidth.png",
+      "sha256": "a1b69e39a0f3947f6b72be1e94b67103a0575ed3ba6d3484179db1801399f1c2",
+      "bytes": 196163
+    },
+    {
+      "path": "figures/04_evidence_bandwidth.svg",
+      "sha256": "9a1fbc33a52545614655cce4b3483cabb85883170a3f75387a65add594634024",
+      "bytes": 88781
+    },
+    {
+      "path": "figures/05_semantic_concurrency.png",
+      "sha256": "9ccd2b10037e4f51a6449e3637962bd4400594d71cda5d2c955c1b85dec8560d",
+      "bytes": 132230
+    },
+    {
+      "path": "figures/05_semantic_concurrency.svg",
+      "sha256": "4b0c54f9074e96c916e2cc37992e58c6897b53d528db5fee46b01d73c76c3153",
+      "bytes": 83801
+    },
+    {
+      "path": "figures/06_quality_tradeoffs.png",
+      "sha256": "b43caeeb05c4d5b051ca1bbcbdfb242a7aa65a5cabebc5a51261d88f6184c0a3",
+      "bytes": 168781
+    },
+    {
+      "path": "figures/06_quality_tradeoffs.svg",
+      "sha256": "9958785512d3dba1453ee1f491bab9dcd7e47ad10a0249574cf5e2a6edee64bf",
+      "bytes": 131374
+    }
+  ]
+}

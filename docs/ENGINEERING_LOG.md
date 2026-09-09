@@ -1,3 +1,34 @@
+## 2026-09-09: Completed memory benchmark and fork-only publication artifacts
+
+- Completed 150 measured runs / 30,000 executions at frozen source `7e23ff6`,
+  based on the September 8 upstream main snapshot `7080adad`. Accepted complete
+  10K/50K profiles and the entire fresh 250K profile; excluded all interrupted
+  250K runs without pass splicing. Original failed status remains preserved.
+- At 250K, Hot evidence recall was 84.33% versus Hybrid 72.08%, +12.25 points,
+  paired 95% CI +9.25 to +15.33. Retrieval p95 was 2850.96 versus 4808.77ms,
+  40.71% lower. Vector stayed fastest; MRR/entity and p50 tradeoffs remain visible.
+- Single-dependency semantic fixtures: 200/200 stale checks rejected and 200/200
+  matching checks accepted per profile. At 250K validation p50/p95 was
+  44.21/141.44ms. These were not live action sends or post-read mutation trials.
+- All benchmark cases and warmups completed. The 250K stdout still contained
+  14 connection-reset diagnostics; preserve exact logs and do not call them
+  error-free. No samples were discarded or corrected for these diagnostics.
+- Verified the complete result grid, frozen-source and power/sleep provenance,
+  41 fail-closed composition tests, canonical statistics, data-to-figure hashes,
+  six visually inspected PNG/SVG pairs, and deterministic gzip round trips.
+- A fresh external copy verified all 57 packaged artifacts and restored nine
+  compressed files. Portable reanalysis reproduced all three data CSVs, all 15
+  system aggregates, 72 paired comparisons, and 474 interval rows exactly.
+- Verified all 58 package files, including the manifest, in Git's staged blobs.
+  Preserve archival CRLF/whitespace and explicitly track the six runner logs;
+  authored documentation passes scoped whitespace/punctuation/link checks.
+- Exported raw data, logs, provenance and portable analysis without secrets or
+  database storage. No RAM savings, identical-input ranking superiority,
+  universal action fencing, or atomic provider delivery is claimed.
+- See [measured report and publication text](MEMORY_LATEST_MAIN_RESULTS.md) and
+  [artifact package](benchmarks/memory-main-20260908/README.md). Publication is
+  restricted to the user's existing fork feature branch, not either main.
+
 ## 2026-09-08: Latest-main memory port and reproducible benchmark checkpoint
 
 - Preliminary 10K measurements on `bc045050` completed all 10,000 retrievals.

@@ -50,9 +50,11 @@ compilation and do not block normal reads.
 `SupplyStateRead` is an immutable snapshot of a packet used by durable work.
 Normal read-only hydration is not persisted. Implemented decision,
 supplier-draft, and execution-task paths bind the state-read id, packet hash,
-and source fingerprint into sealed scope or input hashes; historical rows with
-no state read retain their existing behavior. The schema also exposes a nullable
-capability-run relation, but generic capability-run creation is not a V1 binding
+and source fingerprint into sealed scope or input hashes. Generic legacy Supply
+OS rows with no linked state read retain their existing checks; covered supplier
+reply, CHASE, and file sends require bound proof when runtime and enforcement
+are enabled. The schema also exposes a nullable capability-run relation, but
+generic capability-run creation is not a V1 binding
 path. The app role may insert and read state reads but may not update or delete
 them. Before dependency validation, the runtime verifies that the stored packet,
 dependency manifest, evidence manifest, scope, objective, fingerprint, and hash
@@ -127,15 +129,19 @@ credentials, and raw packets are not logged.
   unrelated-supplier isolation, two-office shared-mailbox routing, immutable
   database guards, app/workflow roles, planning/execution persistence, and
   Company Brain search compatibility.
-- Shadow only: `SUPPLY_STATE_VALIDATION_MODE=shadow` performs validation and
+- Shadow only: with `SUPPLY_STATE_RUNTIME_ENABLED=true`,
+  `SUPPLY_STATE_VALIDATION_MODE=shadow` checks linked state and
   records outcomes but never blocks. Shadow is the required first rollout stage;
   this document does not claim it is enabled in a deployed environment.
-- Enforced: when deployment configuration selects `enforce`, strict stale state
-  blocks confirmed supplier draft selection, the final supplier reply, CHASE,
+- Enforced: with `SUPPLY_STATE_RUNTIME_ENABLED=true` and validation mode
+  `enforce`, strict stale state blocks confirmed supplier draft selection,
+  the final supplier reply, CHASE,
   and file provider boundary, and linked Supply OS decision, approval, and
   execution transitions. Existing bulk RFQ and supplier-nudge sends retain
   their original guards without semantic state-read validation.
-  Existing durable rows without a state read preserve historical behavior.
+  Generic legacy Supply OS rows without a linked state read preserve their
+  original checks. Covered supplier reply, CHASE, and file sends instead require
+  bound immutable-read proof under enforce; missing proof blocks a new send.
 - Deferred: a vector backend, embedding writes, pgvector, generic capability-run
   state binding, operational mention backfill, workflow-only reverse message
   lookup, expansion to additional agent workflows, and any claim of distributed

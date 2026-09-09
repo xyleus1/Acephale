@@ -1,0 +1,1387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Derya Commercial State Runtime Benchmark</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #172033; background: #eef2f7; }
+    body { margin: 0; }
+    main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 48px 0 80px; }
+    h1 { font-size: clamp(2rem, 5vw, 3.6rem); line-height: 1; margin: 0 0 14px; letter-spacing: -0.04em; }
+    h2 { margin: 0 0 8px; font-size: 1.45rem; }
+    h3 { margin: 28px 0 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: #526077; }
+    p { color: #526077; line-height: 1.55; }
+    .lede { max-width: 760px; font-size: 1.05rem; }
+    .stamp { font-variant-numeric: tabular-nums; }
+    .chart, .table-card { margin-top: 26px; padding: 28px; border: 1px solid #d7deea; border-radius: 16px; background: white; box-shadow: 0 8px 30px rgba(28, 39, 60, .05); }
+    svg { display: block; width: 100%; height: auto; overflow: visible; margin-top: 22px; }
+    svg text { font-family: inherit; fill: #334155; }
+    .label { font-size: 12px; }
+    .small-label { font-size: 10px; }
+    .value { font-size: 12px; font-variant-numeric: tabular-nums; }
+    .axis { stroke: #94a3b8; stroke-width: 1; }
+    .axis-label { font-size: 12px; text-anchor: middle; }
+    .config { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; padding: 1px; margin: 8px 0 0; background: #dbe2ec; border-radius: 10px; overflow: hidden; }
+    .config + .config { margin-top: 8px; }
+    .config div { padding: 10px 12px; background: #f8fafc; min-width: 0; }
+    .config dt { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: #64748b; }
+    .config dd { margin: 4px 0 0; font-size: .82rem; overflow-wrap: anywhere; }
+    .no-data { margin: 22px 0; padding: 32px; border: 1px dashed #b9c4d4; border-radius: 10px; color: #64748b; text-align: center; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .78rem; font-variant-numeric: tabular-nums; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    th { color: #526077; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; }
+    footer { color: #64748b; margin-top: 28px; font-size: .8rem; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Derya benchmark</h1>
+    <p class="lede">Measured retrieval, state hydration, and semantic-concurrency results. Skipped systems are identified in run metadata and are never plotted as measured values.</p>
+    <p class="stamp">Generated 2026-09-09T01:15:05.505Z</p>
+  </header>
+  <section class="chart" id="recall-system">
+    <h2>Recall@20 by system</h2>
+    <p>Gold evidence recovered in the first 20 ranked evidence pointers.</p>
+    <svg viewBox="0 0 980 268" role="img" aria-label="Bar chart"><g>
+      <text x="0" y="40" class="label">graph-medium / CURRENT_KEYWORD</text>
+      <rect x="245" y="24" width="515.9683794466397" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD: 71.33%</title></rect>
+      <text x="768.9683794466397" y="40" class="value">71.33%</text>
+    </g><g>
+      <text x="0" y="82" class="label">graph-medium / VECTOR_RAG</text>
+      <rect x="245" y="66" width="499.6936758893278" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG: 69.08%</title></rect>
+      <text x="752.6936758893278" y="82" class="value">69.08%</text>
+    </g><g>
+      <text x="0" y="124" class="label">graph-medium / STRONG_HYBRID_RAG</text>
+      <rect x="245" y="108" width="521.3932806324103" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG: 72.08%</title></rect>
+      <text x="774.3932806324103" y="124" class="value">72.08%</text>
+    </g><g>
+      <text x="0" y="166" class="label">graph-medium / DERYA_COLD</text>
+      <rect x="245" y="150" width="610" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD: 84.33%</title></rect>
+      <text x="863" y="166" class="value">84.33%</text>
+    </g><g>
+      <text x="0" y="208" class="label">graph-medium / DERYA_HOT</text>
+      <rect x="245" y="192" width="610" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT: 84.33%</title></rect>
+      <text x="863" y="208" class="value">84.33%</text>
+    </g></svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+<section class="chart" id="recall-query-type">
+    <h2>Recall@20 by query type</h2>
+    <p>Evidence recall separated by the benchmark query taxonomy.</p>
+    <svg viewBox="0 0 980 1528" role="img" aria-label="Bar chart"><g>
+      <text x="0" y="40" class="label">graph-medium / CURRENT_KEYWORD / autopilot_action</text>
+      <rect x="245" y="24" width="488" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / autopilot_action: 80%</title></rect>
+      <text x="741" y="40" class="value">80%</text>
+    </g><g>
+      <text x="0" y="82" class="label">graph-medium / CURRENT_KEYWORD / current_vs_stale</text>
+      <rect x="245" y="66" width="357.28571428571473" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / current_vs_stale: 58.57%</title></rect>
+      <text x="610.2857142857147" y="82" class="value">58.57%</text>
+    </g><g>
+      <text x="0" y="124" class="label">graph-medium / CURRENT_KEYWORD / entity_hop</text>
+      <rect x="245" y="108" width="467.6666666666667" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / entity_hop: 76.67%</title></rect>
+      <text x="720.6666666666667" y="124" class="value">76.67%</text>
+    </g><g>
+      <text x="0" y="166" class="label">graph-medium / CURRENT_KEYWORD / exact</text>
+      <rect x="245" y="150" width="457.5" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / exact: 75%</title></rect>
+      <text x="710.5" y="166" class="value">75%</text>
+    </g><g>
+      <text x="0" y="208" class="label">graph-medium / CURRENT_KEYWORD / routing_tenant</text>
+      <rect x="245" y="192" width="508.33333333333337" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / routing_tenant: 83.33%</title></rect>
+      <text x="761.3333333333334" y="208" class="value">83.33%</text>
+    </g><g>
+      <text x="0" y="250" class="label">graph-medium / CURRENT_KEYWORD / semantic</text>
+      <rect x="245" y="234" width="457.5" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / semantic: 75%</title></rect>
+      <text x="710.5" y="250" class="value">75%</text>
+    </g><g>
+      <text x="0" y="292" class="label">graph-medium / CURRENT_KEYWORD / temporal</text>
+      <rect x="245" y="276" width="379.5555555555558" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD / temporal: 62.22%</title></rect>
+      <text x="632.5555555555559" y="292" class="value">62.22%</text>
+    </g><g>
+      <text x="0" y="334" class="label">graph-medium / VECTOR_RAG / autopilot_action</text>
+      <rect x="245" y="318" width="488" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / autopilot_action: 80%</title></rect>
+      <text x="741" y="334" class="value">80%</text>
+    </g><g>
+      <text x="0" y="376" class="label">graph-medium / VECTOR_RAG / current_vs_stale</text>
+      <rect x="245" y="360" width="331.1428571428574" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / current_vs_stale: 54.29%</title></rect>
+      <text x="584.1428571428573" y="376" class="value">54.29%</text>
+    </g><g>
+      <text x="0" y="418" class="label">graph-medium / VECTOR_RAG / entity_hop</text>
+      <rect x="245" y="402" width="467.6666666666667" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / entity_hop: 76.67%</title></rect>
+      <text x="720.6666666666667" y="418" class="value">76.67%</text>
+    </g><g>
+      <text x="0" y="460" class="label">graph-medium / VECTOR_RAG / exact</text>
+      <rect x="245" y="444" width="457.5" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / exact: 75%</title></rect>
+      <text x="710.5" y="460" class="value">75%</text>
+    </g><g>
+      <text x="0" y="502" class="label">graph-medium / VECTOR_RAG / routing_tenant</text>
+      <rect x="245" y="486" width="508.33333333333337" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / routing_tenant: 83.33%</title></rect>
+      <text x="761.3333333333334" y="502" class="value">83.33%</text>
+    </g><g>
+      <text x="0" y="544" class="label">graph-medium / VECTOR_RAG / semantic</text>
+      <rect x="245" y="528" width="457.5" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / semantic: 75%</title></rect>
+      <text x="710.5" y="544" class="value">75%</text>
+    </g><g>
+      <text x="0" y="586" class="label">graph-medium / VECTOR_RAG / temporal</text>
+      <rect x="245" y="570" width="318.5555555555556" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG / temporal: 52.22%</title></rect>
+      <text x="571.5555555555557" y="586" class="value">52.22%</text>
+    </g><g>
+      <text x="0" y="628" class="label">graph-medium / STRONG_HYBRID_RAG / autopilot_action</text>
+      <rect x="245" y="612" width="488" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / autopilot_action: 80%</title></rect>
+      <text x="741" y="628" class="value">80%</text>
+    </g><g>
+      <text x="0" y="670" class="label">graph-medium / STRONG_HYBRID_RAG / current_vs_stale</text>
+      <rect x="245" y="654" width="383.4285714285719" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / current_vs_stale: 62.86%</title></rect>
+      <text x="636.4285714285719" y="670" class="value">62.86%</text>
+    </g><g>
+      <text x="0" y="712" class="label">graph-medium / STRONG_HYBRID_RAG / entity_hop</text>
+      <rect x="245" y="696" width="467.6666666666667" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / entity_hop: 76.67%</title></rect>
+      <text x="720.6666666666667" y="712" class="value">76.67%</text>
+    </g><g>
+      <text x="0" y="754" class="label">graph-medium / STRONG_HYBRID_RAG / exact</text>
+      <rect x="245" y="738" width="457.5" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / exact: 75%</title></rect>
+      <text x="710.5" y="754" class="value">75%</text>
+    </g><g>
+      <text x="0" y="796" class="label">graph-medium / STRONG_HYBRID_RAG / routing_tenant</text>
+      <rect x="245" y="780" width="508.33333333333337" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / routing_tenant: 83.33%</title></rect>
+      <text x="761.3333333333334" y="796" class="value">83.33%</text>
+    </g><g>
+      <text x="0" y="838" class="label">graph-medium / STRONG_HYBRID_RAG / semantic</text>
+      <rect x="245" y="822" width="457.5" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / semantic: 75%</title></rect>
+      <text x="710.5" y="838" class="value">75%</text>
+    </g><g>
+      <text x="0" y="880" class="label">graph-medium / STRONG_HYBRID_RAG / temporal</text>
+      <rect x="245" y="864" width="379.5555555555558" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG / temporal: 62.22%</title></rect>
+      <text x="632.5555555555559" y="880" class="value">62.22%</text>
+    </g><g>
+      <text x="0" y="922" class="label">graph-medium / DERYA_COLD / autopilot_action</text>
+      <rect x="245" y="906" width="579.5" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / autopilot_action: 95%</title></rect>
+      <text x="832.5" y="922" class="value">95%</text>
+    </g><g>
+      <text x="0" y="964" class="label">graph-medium / DERYA_COLD / current_vs_stale</text>
+      <rect x="245" y="948" width="479.2857142857142" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / current_vs_stale: 78.57%</title></rect>
+      <text x="732.2857142857142" y="964" class="value">78.57%</text>
+    </g><g>
+      <text x="0" y="1006" class="label">graph-medium / DERYA_COLD / entity_hop</text>
+      <rect x="245" y="990" width="518.5" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / entity_hop: 85%</title></rect>
+      <text x="771.5" y="1006" class="value">85%</text>
+    </g><g>
+      <text x="0" y="1048" class="label">graph-medium / DERYA_COLD / exact</text>
+      <rect x="245" y="1032" width="510.875" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / exact: 83.75%</title></rect>
+      <text x="763.875" y="1048" class="value">83.75%</text>
+    </g><g>
+      <text x="0" y="1090" class="label">graph-medium / DERYA_COLD / routing_tenant</text>
+      <rect x="245" y="1074" width="610" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / routing_tenant: 100%</title></rect>
+      <text x="863" y="1090" class="value">100%</text>
+    </g><g>
+      <text x="0" y="1132" class="label">graph-medium / DERYA_COLD / semantic</text>
+      <rect x="245" y="1116" width="510.875" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / semantic: 83.75%</title></rect>
+      <text x="763.875" y="1132" class="value">83.75%</text>
+    </g><g>
+      <text x="0" y="1174" class="label">graph-medium / DERYA_COLD / temporal</text>
+      <rect x="245" y="1158" width="491.38888888888886" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD / temporal: 80.56%</title></rect>
+      <text x="744.3888888888889" y="1174" class="value">80.56%</text>
+    </g><g>
+      <text x="0" y="1216" class="label">graph-medium / DERYA_HOT / autopilot_action</text>
+      <rect x="245" y="1200" width="579.5" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / autopilot_action: 95%</title></rect>
+      <text x="832.5" y="1216" class="value">95%</text>
+    </g><g>
+      <text x="0" y="1258" class="label">graph-medium / DERYA_HOT / current_vs_stale</text>
+      <rect x="245" y="1242" width="479.2857142857142" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / current_vs_stale: 78.57%</title></rect>
+      <text x="732.2857142857142" y="1258" class="value">78.57%</text>
+    </g><g>
+      <text x="0" y="1300" class="label">graph-medium / DERYA_HOT / entity_hop</text>
+      <rect x="245" y="1284" width="518.5" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / entity_hop: 85%</title></rect>
+      <text x="771.5" y="1300" class="value">85%</text>
+    </g><g>
+      <text x="0" y="1342" class="label">graph-medium / DERYA_HOT / exact</text>
+      <rect x="245" y="1326" width="510.875" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / exact: 83.75%</title></rect>
+      <text x="763.875" y="1342" class="value">83.75%</text>
+    </g><g>
+      <text x="0" y="1384" class="label">graph-medium / DERYA_HOT / routing_tenant</text>
+      <rect x="245" y="1368" width="610" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / routing_tenant: 100%</title></rect>
+      <text x="863" y="1384" class="value">100%</text>
+    </g><g>
+      <text x="0" y="1426" class="label">graph-medium / DERYA_HOT / semantic</text>
+      <rect x="245" y="1410" width="510.875" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / semantic: 83.75%</title></rect>
+      <text x="763.875" y="1426" class="value">83.75%</text>
+    </g><g>
+      <text x="0" y="1468" class="label">graph-medium / DERYA_HOT / temporal</text>
+      <rect x="245" y="1452" width="491.38888888888886" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT / temporal: 80.56%</title></rect>
+      <text x="744.3888888888889" y="1468" class="value">80.56%</text>
+    </g></svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+<section class="chart" id="recall-latency-pareto">
+    <h2>Recall versus p95 latency Pareto view</h2>
+    <p>Measured Recall@20 against end-to-end p95 latency.</p>
+    <svg viewBox="0 0 980 460" role="img" aria-label="Recall versus p95 latency scatter plot">
+    <line x1="80" y1="375" x2="910" y2="375" class="axis" />
+    <line x1="80" y1="25" x2="80" y2="375" class="axis" />
+    <text x="495" y="425" class="axis-label">p95 latency (ms, lower is better)</text>
+    <text x="18" y="200" class="axis-label" transform="rotate(-90 18 200)">Recall@20 (higher is better)</text>
+    <g>
+      <circle cx="533.8282901025404" cy="125.33333333333363" r="7" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD; p95 1,215.81 ms; Recall@20 0.7133</title></circle>
+      <text x="543.8282901025404" y="117.33333333333363" class="small-label">graph-medium / CURRENT_KEYWORD</text>
+    </g><g>
+      <circle cx="122.24159531110897" cy="133.20833333333346" r="7" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG; p95 113.17 ms; Recall@20 0.6908</title></circle>
+      <text x="132.24159531110897" y="125.20833333333346" class="small-label">graph-medium / VECTOR_RAG</text>
+    </g><g>
+      <circle cx="910" cy="122.70833333333364" r="7" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG; p95 2,223.57 ms; Recall@20 0.7208</title></circle>
+      <text x="920" y="114.70833333333364" class="small-label">graph-medium / STRONG_HYBRID_RAG</text>
+    </g><g>
+      <circle cx="443.7478649773888" cy="79.83333333333331" r="7" fill="#f59e0b"><title>graph-medium / DERYA_COLD; p95 974.48 ms; Recall@20 0.8433</title></circle>
+      <text x="453.7478649773888" y="71.83333333333331" class="small-label">graph-medium / DERYA_COLD</text>
+    </g><g>
+      <circle cx="425.9259269087061" cy="79.83333333333331" r="7" fill="#10b981"><title>graph-medium / DERYA_HOT; p95 926.74 ms; Recall@20 0.8433</title></circle>
+      <text x="435.9259269087061" y="71.83333333333331" class="small-label">graph-medium / DERYA_HOT</text>
+    </g>
+  </svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+<section class="chart" id="evidence-bandwidth">
+    <h2>Evidence bandwidth</h2>
+    <p>Correct gold evidence pointers divided by retrieval seconds.</p>
+    <svg viewBox="0 0 980 268" role="img" aria-label="Bar chart"><g>
+      <text x="0" y="40" class="label">graph-medium / CURRENT_KEYWORD</text>
+      <rect x="245" y="24" width="74.09461454238937" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD: 1.826/s</title></rect>
+      <text x="327.09461454238937" y="40" class="value">1.826/s</text>
+    </g><g>
+      <text x="0" y="82" class="label">graph-medium / VECTOR_RAG</text>
+      <rect x="245" y="66" width="610" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG: 15.032/s</title></rect>
+      <text x="863" y="82" class="value">15.032/s</text>
+    </g><g>
+      <text x="0" y="124" class="label">graph-medium / STRONG_HYBRID_RAG</text>
+      <rect x="245" y="108" width="43.75944831997179" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG: 1.078/s</title></rect>
+      <text x="296.7594483199718" y="124" class="value">1.078/s</text>
+    </g><g>
+      <text x="0" y="166" class="label">graph-medium / DERYA_COLD</text>
+      <rect x="245" y="150" width="68.79923820202032" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD: 1.695/s</title></rect>
+      <text x="321.7992382020203" y="166" class="value">1.695/s</text>
+    </g><g>
+      <text x="0" y="208" class="label">graph-medium / DERYA_HOT</text>
+      <rect x="245" y="192" width="74.42442354118788" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT: 1.834/s</title></rect>
+      <text x="327.4244235411879" y="208" class="value">1.834/s</text>
+    </g></svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+<section class="chart" id="scale-p95">
+    <h2>p95 latency at 10K, 50K, and 250K</h2>
+    <p>End-to-end p95 latency for measured corpus profiles.</p>
+    <svg viewBox="0 0 980 268" role="img" aria-label="Bar chart"><g>
+      <text x="0" y="40" class="label">50,000 / CURRENT_KEYWORD</text>
+      <rect x="245" y="24" width="333.5364541717465" height="22" rx="4" fill="#64748b"><title>50,000 / CURRENT_KEYWORD: 1,215.807 ms</title></rect>
+      <text x="586.5364541717465" y="40" class="value">1,215.807 ms</text>
+    </g><g>
+      <text x="0" y="82" class="label">50,000 / VECTOR_RAG</text>
+      <rect x="245" y="66" width="31.045027879248753" height="22" rx="4" fill="#8b5cf6"><title>50,000 / VECTOR_RAG: 113.165 ms</title></rect>
+      <text x="284.0450278792488" y="82" class="value">113.165 ms</text>
+    </g><g>
+      <text x="0" y="124" class="label">50,000 / STRONG_HYBRID_RAG</text>
+      <rect x="245" y="108" width="610" height="22" rx="4" fill="#0ea5e9"><title>50,000 / STRONG_HYBRID_RAG: 2,223.571 ms</title></rect>
+      <text x="863" y="124" class="value">2,223.571 ms</text>
+    </g><g>
+      <text x="0" y="166" class="label">50,000 / DERYA_COLD</text>
+      <rect x="245" y="150" width="267.3327682363942" height="22" rx="4" fill="#f59e0b"><title>50,000 / DERYA_COLD: 974.481 ms</title></rect>
+      <text x="520.3327682363943" y="166" class="value">974.481 ms</text>
+    </g><g>
+      <text x="0" y="208" class="label">50,000 / DERYA_HOT</text>
+      <rect x="245" y="192" width="254.23471736663942" height="22" rx="4" fill="#10b981"><title>50,000 / DERYA_HOT: 926.736 ms</title></rect>
+      <text x="507.2347173666394" y="208" class="value">926.736 ms</text>
+    </g></svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+<section class="chart" id="cold-hot-hydration">
+    <h2>Derya cold versus hot hydration</h2>
+    <p>Commercial-state hydration p95 with projections bypassed versus fresh projections.</p>
+    <svg viewBox="0 0 980 150" role="img" aria-label="Bar chart"><g>
+      <text x="0" y="40" class="label">graph-medium / DERYA_COLD</text>
+      <rect x="245" y="24" width="610" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD: 972.404 ms</title></rect>
+      <text x="863" y="40" class="value">972.404 ms</text>
+    </g><g>
+      <text x="0" y="82" class="label">graph-medium / DERYA_HOT</text>
+      <rect x="245" y="66" width="580.5064491218014" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT: 925.388 ms</title></rect>
+      <text x="833.5064491218014" y="82" class="value">925.388 ms</text>
+    </g></svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+<section class="chart" id="semantic-concurrency">
+    <h2>Stale escape and false conflict</h2>
+    <p>Safety error rates from measured semantic-concurrency cases. Lower is better.</p>
+    <svg viewBox="0 0 980 478" role="img" aria-label="Bar chart"><g>
+      <text x="0" y="40" class="label">graph-medium / CURRENT_KEYWORD stale escape</text>
+      <rect x="245" y="24" width="610" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD stale escape: 100%</title></rect>
+      <text x="863" y="40" class="value">100%</text>
+    </g><g>
+      <text x="0" y="82" class="label">graph-medium / CURRENT_KEYWORD false conflict</text>
+      <rect x="245" y="66" width="1" height="22" rx="4" fill="#64748b"><title>graph-medium / CURRENT_KEYWORD false conflict: 0%</title></rect>
+      <text x="254" y="82" class="value">0%</text>
+    </g><g>
+      <text x="0" y="124" class="label">graph-medium / VECTOR_RAG stale escape</text>
+      <rect x="245" y="108" width="610" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG stale escape: 100%</title></rect>
+      <text x="863" y="124" class="value">100%</text>
+    </g><g>
+      <text x="0" y="166" class="label">graph-medium / VECTOR_RAG false conflict</text>
+      <rect x="245" y="150" width="1" height="22" rx="4" fill="#8b5cf6"><title>graph-medium / VECTOR_RAG false conflict: 0%</title></rect>
+      <text x="254" y="166" class="value">0%</text>
+    </g><g>
+      <text x="0" y="208" class="label">graph-medium / STRONG_HYBRID_RAG stale escape</text>
+      <rect x="245" y="192" width="610" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG stale escape: 100%</title></rect>
+      <text x="863" y="208" class="value">100%</text>
+    </g><g>
+      <text x="0" y="250" class="label">graph-medium / STRONG_HYBRID_RAG false conflict</text>
+      <rect x="245" y="234" width="1" height="22" rx="4" fill="#0ea5e9"><title>graph-medium / STRONG_HYBRID_RAG false conflict: 0%</title></rect>
+      <text x="254" y="250" class="value">0%</text>
+    </g><g>
+      <text x="0" y="292" class="label">graph-medium / DERYA_COLD stale escape</text>
+      <rect x="245" y="276" width="610" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD stale escape: 100%</title></rect>
+      <text x="863" y="292" class="value">100%</text>
+    </g><g>
+      <text x="0" y="334" class="label">graph-medium / DERYA_COLD false conflict</text>
+      <rect x="245" y="318" width="1" height="22" rx="4" fill="#f59e0b"><title>graph-medium / DERYA_COLD false conflict: 0%</title></rect>
+      <text x="254" y="334" class="value">0%</text>
+    </g><g>
+      <text x="0" y="376" class="label">graph-medium / DERYA_HOT stale escape</text>
+      <rect x="245" y="360" width="1" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT stale escape: 0%</title></rect>
+      <text x="254" y="376" class="value">0%</text>
+    </g><g>
+      <text x="0" y="418" class="label">graph-medium / DERYA_HOT false conflict</text>
+      <rect x="245" y="402" width="1" height="22" rx="4" fill="#10b981"><title>graph-medium / DERYA_HOT false conflict: 0%</title></rect>
+      <text x="254" y="418" class="value">0%</text>
+    </g></svg>
+    <h3>Measured configuration</h3>
+    
+    <dl class="config">
+      <div><dt>Profile</dt><dd>graph-medium</dd></div>
+      <div><dt>Corpus size</dt><dd>50,000</dd></div>
+      <div><dt>Query count</dt><dd>200</dd></div>
+      <div><dt>Top-K</dt><dd>20</dd></div>
+      <div><dt>Embedding model</dt><dd>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</dd></div>
+      <div><dt>Run count</dt><dd>10</dd></div>
+      <div><dt>Hardware</dt><dd>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</dd></div>
+      <div><dt>PostgreSQL statement timeout</dt><dd>10min</dd></div>
+      <div><dt>Prisma pool</dt><dd>32 connections / 120s wait</dd></div>
+      <div><dt>Source tree SHA-256</dt><dd>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</dd></div>
+      <div><dt>Source file count</dt><dd>1,425</dd></div>
+      <div><dt>Timestamp</dt><dd>2026-09-09T00:38:40.918Z</dd></div>
+    </dl>
+  </section>
+  <section class="table-card">
+    <h2>Bandwidth multiplier</h2>
+    <p>Derya hot bandwidth divided by Strong Hybrid RAG bandwidth. A value is omitted when the vector baseline was not measured.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Profile</th><th>Metric</th><th>Multiplier</th></tr></thead>
+      <tbody><tr>
+    <td>graph-medium</td>
+    <td>evidence</td>
+    <td>1.701x</td>
+  </tr><tr>
+    <td>graph-medium</td>
+    <td>fact</td>
+    <td>baseline_not_measured</td>
+  </tr></tbody>
+    </table></div>
+  </section>
+  <section class="table-card">
+    <h2>Run metadata</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Run ID</th><th>Profile</th><th>System</th><th>Status</th><th>Corpus</th><th>Queries</th><th>Top-K</th><th>Embedding</th><th>Run</th><th>Hardware</th><th>Statement timeout</th><th>Prisma pool</th><th>Source tree SHA-256</th><th>Started</th><th>Completed</th><th>Recall@20</th><th>p95 ms</th></tr></thead>
+      <tbody><tr>
+    <td>benchmark:graph-medium:current_keyword:1:9126de66-9658-4446-9494-0afbf4429339</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>1 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:47:23.780Z</td>
+    <td>2026-09-09T00:47:52.475Z</td>
+    <td>0.7133</td>
+    <td>1,093.27</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:1:4ba65204-cd72-4270-a5c3-b03781b70e5c</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>1 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:47:52.546Z</td>
+    <td>2026-09-09T00:47:57.988Z</td>
+    <td>0.6908</td>
+    <td>118.26</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:1:0a454e78-c82e-4342-9402-cad799546036</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>1 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:47:57.997Z</td>
+    <td>2026-09-09T00:48:46.347Z</td>
+    <td>0.7208</td>
+    <td>2,355.34</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:1:274fbbaf-f3d5-491c-b4a6-a7d9580ab225</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>1 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:48:46.354Z</td>
+    <td>2026-09-09T00:49:27.856Z</td>
+    <td>0.8433</td>
+    <td>945.41</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:1:ab9ea86d-789f-46c1-8ab6-7231218c133c</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>1 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:49:27.865Z</td>
+    <td>2026-09-09T00:50:06.392Z</td>
+    <td>0.8433</td>
+    <td>850.45</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:2:7b11818c-f260-42a5-be50-d49278b58887</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>2 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:50:06.430Z</td>
+    <td>2026-09-09T00:50:11.023Z</td>
+    <td>0.6908</td>
+    <td>89.79</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:2:1f888878-4054-45ff-b9f0-d6331007055e</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>2 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:50:11.029Z</td>
+    <td>2026-09-09T00:50:56.082Z</td>
+    <td>0.7208</td>
+    <td>1,731.06</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:2:7f08ae9e-f669-4d98-9529-87722375c9b4</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>2 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:50:56.092Z</td>
+    <td>2026-09-09T00:51:37.335Z</td>
+    <td>0.8433</td>
+    <td>1,014.19</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:2:fbf0d35a-d3e4-4c06-810f-602e67570323</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>2 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:51:37.379Z</td>
+    <td>2026-09-09T00:52:15.071Z</td>
+    <td>0.8433</td>
+    <td>836.99</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:2:4e423b81-9e70-45bc-a1c1-2ba870250672</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>2 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:52:15.082Z</td>
+    <td>2026-09-09T00:52:44.643Z</td>
+    <td>0.7133</td>
+    <td>1,163.1</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:3:810e8578-89ca-4cc5-a7b8-058d45aeff34</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>3 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:52:44.711Z</td>
+    <td>2026-09-09T00:53:36.225Z</td>
+    <td>0.7208</td>
+    <td>2,167.79</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:3:788211da-355c-44e8-9a76-5ba41cd81b2b</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>3 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:53:36.234Z</td>
+    <td>2026-09-09T00:54:17.943Z</td>
+    <td>0.8433</td>
+    <td>977.81</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:3:968faae2-9c31-4d99-9109-3fa1cbbdb8b2</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>3 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:54:17.952Z</td>
+    <td>2026-09-09T00:54:56.089Z</td>
+    <td>0.8433</td>
+    <td>860.16</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:3:9badb9f2-b2ca-4661-bc51-78c78814030d</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>3 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:54:56.098Z</td>
+    <td>2026-09-09T00:55:24.919Z</td>
+    <td>0.7133</td>
+    <td>1,034.34</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:3:ded50642-1d05-46b7-b5b9-7e2e017fe68a</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>3 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:55:24.938Z</td>
+    <td>2026-09-09T00:55:30.275Z</td>
+    <td>0.6908</td>
+    <td>138.74</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:4:0f9f67f6-4af2-408d-8c38-8968ba78b457</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>4 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:55:30.323Z</td>
+    <td>2026-09-09T00:56:11.915Z</td>
+    <td>0.8433</td>
+    <td>989.45</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:4:7ca7bec9-863d-4d4a-ac67-7c61ed06ecf6</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>4 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:56:11.932Z</td>
+    <td>2026-09-09T00:56:50.837Z</td>
+    <td>0.8433</td>
+    <td>907.43</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:4:8d2d6402-f77e-412d-b2ed-202c64e3ce5b</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>4 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:56:50.855Z</td>
+    <td>2026-09-09T00:57:22.651Z</td>
+    <td>0.7133</td>
+    <td>1,441.21</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:4:01a004f1-794f-450c-b4f0-87eab621849b</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>4 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:57:22.730Z</td>
+    <td>2026-09-09T00:57:28.356Z</td>
+    <td>0.6908</td>
+    <td>128.81</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:4:effac28c-8d5c-494e-a88b-8573f361eeec</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>4 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:57:28.368Z</td>
+    <td>2026-09-09T00:58:19.951Z</td>
+    <td>0.7208</td>
+    <td>2,050.34</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:5:afd1cf08-f8e2-402f-ba1c-65316557942d</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>5 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:58:20.002Z</td>
+    <td>2026-09-09T00:58:59.381Z</td>
+    <td>0.8433</td>
+    <td>885.89</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:5:3ab06d31-8a3b-4b3e-81dd-0699f95074f3</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>5 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:58:59.395Z</td>
+    <td>2026-09-09T00:59:29.148Z</td>
+    <td>0.7133</td>
+    <td>1,092.33</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:5:30aafe06-81d8-402c-93a9-3a6f407c5789</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>5 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:59:29.155Z</td>
+    <td>2026-09-09T00:59:34.155Z</td>
+    <td>0.6908</td>
+    <td>113.17</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:5:6c37bfcc-16d1-4f4a-946c-504d4103e5aa</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>5 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T00:59:34.161Z</td>
+    <td>2026-09-09T01:00:27.764Z</td>
+    <td>0.7208</td>
+    <td>2,221.85</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:5:496de403-eeed-4508-b6cc-a291be66b9e3</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>5 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:00:27.779Z</td>
+    <td>2026-09-09T01:01:09.640Z</td>
+    <td>0.8433</td>
+    <td>997.03</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:6:f87b0597-e833-455c-8a02-3e72d043d427</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>6 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:01:09.725Z</td>
+    <td>2026-09-09T01:01:38.139Z</td>
+    <td>0.7133</td>
+    <td>1,079.87</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:6:be110559-6f63-4669-ad3e-ce7cc52089d9</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>6 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:01:38.148Z</td>
+    <td>2026-09-09T01:01:42.840Z</td>
+    <td>0.6908</td>
+    <td>91.9</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:6:2228eb4d-ed54-4f3f-a560-0ef0e0dde65f</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>6 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:01:42.845Z</td>
+    <td>2026-09-09T01:02:34.194Z</td>
+    <td>0.7208</td>
+    <td>2,208.78</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:6:b8facc5a-fdba-4c86-9fd1-9298016e3e5d</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>6 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:02:34.203Z</td>
+    <td>2026-09-09T01:03:14.246Z</td>
+    <td>0.8433</td>
+    <td>921.6</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:6:cd3e3298-8967-46d2-8574-817f42938e5a</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>6 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:03:14.254Z</td>
+    <td>2026-09-09T01:03:52.202Z</td>
+    <td>0.8433</td>
+    <td>865.63</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:7:1e806b0a-5bf2-42e0-91c1-980487d509f5</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>7 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:03:52.239Z</td>
+    <td>2026-09-09T01:03:56.949Z</td>
+    <td>0.6908</td>
+    <td>95.57</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:7:a8432c32-3764-4115-a55b-0b9bed5a9fd8</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>7 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:03:56.967Z</td>
+    <td>2026-09-09T01:04:41.204Z</td>
+    <td>0.7208</td>
+    <td>1,710.53</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:7:b359aa9d-3ebc-47a5-813b-91a4e7255965</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>7 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:04:41.210Z</td>
+    <td>2026-09-09T01:05:21.882Z</td>
+    <td>0.8433</td>
+    <td>978.2</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:7:798821f6-81ab-4101-86ef-37e6a573ea4e</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>7 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:05:21.892Z</td>
+    <td>2026-09-09T01:06:00.286Z</td>
+    <td>0.8433</td>
+    <td>867.74</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:7:a8c75546-927c-4918-ae2b-23726b5de2fc</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>7 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:06:00.315Z</td>
+    <td>2026-09-09T01:06:28.465Z</td>
+    <td>0.7133</td>
+    <td>1,038.48</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:8:1108f8f4-2537-4c06-ac2a-a1aa3fb812b0</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>8 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:06:28.492Z</td>
+    <td>2026-09-09T01:07:23.254Z</td>
+    <td>0.7208</td>
+    <td>2,517.44</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:8:f16845a3-9ab9-43d1-a9dd-889b2240593d</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>8 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:07:23.259Z</td>
+    <td>2026-09-09T01:08:03.633Z</td>
+    <td>0.8433</td>
+    <td>930.95</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:8:3446767d-ff90-4e76-aa1c-d884031c90a6</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>8 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:08:03.662Z</td>
+    <td>2026-09-09T01:08:48.155Z</td>
+    <td>0.8433</td>
+    <td>1,357.28</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:8:e4269d6d-230e-4496-b842-4940d76026a6</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>8 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:08:48.208Z</td>
+    <td>2026-09-09T01:09:15.818Z</td>
+    <td>0.7133</td>
+    <td>1,058.29</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:8:ffd77da3-af88-487d-9b66-6cc3594e5188</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>8 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:09:15.832Z</td>
+    <td>2026-09-09T01:09:20.743Z</td>
+    <td>0.6908</td>
+    <td>110.93</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:9:9c5ee995-24c0-45f0-981b-5f3bff2e2a97</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>9 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:09:20.771Z</td>
+    <td>2026-09-09T01:10:01.610Z</td>
+    <td>0.8433</td>
+    <td>942.77</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:9:3f43b193-c60b-4034-b01b-625d8fad957b</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>9 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:10:01.618Z</td>
+    <td>2026-09-09T01:10:41.586Z</td>
+    <td>0.8433</td>
+    <td>978.23</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:9:e2176494-11ed-42ab-a4fa-3702d263b971</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>9 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:10:41.596Z</td>
+    <td>2026-09-09T01:11:12.022Z</td>
+    <td>0.7133</td>
+    <td>1,357.04</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:9:0eeaf130-34e7-49dd-b237-f68d74aab56d</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>9 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:11:12.029Z</td>
+    <td>2026-09-09T01:11:16.928Z</td>
+    <td>0.6908</td>
+    <td>112.83</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:9:db9cc29f-c5e9-42c6-9112-56038d0f2a21</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>9 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:11:16.936Z</td>
+    <td>2026-09-09T01:12:09.247Z</td>
+    <td>0.7208</td>
+    <td>2,223.57</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_hot:10:36770b20-71dc-4354-be08-a95ed13f7ac3</td>
+    <td>graph-medium</td>
+    <td>DERYA_HOT</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>10 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:12:09.313Z</td>
+    <td>2026-09-09T01:12:48.977Z</td>
+    <td>0.8433</td>
+    <td>935.09</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:current_keyword:10:927bf81f-74b8-45d7-8e40-c0129273421d</td>
+    <td>graph-medium</td>
+    <td>CURRENT_KEYWORD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>10 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:12:49.006Z</td>
+    <td>2026-09-09T01:13:20.939Z</td>
+    <td>0.7133</td>
+    <td>1,346.71</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:vector_rag:10:c575ef11-e5fb-441d-b117-c483ae2dfdbe</td>
+    <td>graph-medium</td>
+    <td>VECTOR_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>10 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:13:20.959Z</td>
+    <td>2026-09-09T01:13:25.979Z</td>
+    <td>0.6908</td>
+    <td>110.05</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:strong_hybrid_rag:10:0e312c68-a57c-4d37-aa77-3456e243ca58</td>
+    <td>graph-medium</td>
+    <td>STRONG_HYBRID_RAG</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>10 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:13:25.997Z</td>
+    <td>2026-09-09T01:14:22.186Z</td>
+    <td>0.7208</td>
+    <td>2,374.1</td>
+  </tr><tr>
+    <td>benchmark:graph-medium:derya_cold:10:6a135529-2d38-4dab-9666-d65bd1ce83c8</td>
+    <td>graph-medium</td>
+    <td>DERYA_COLD</td>
+    <td>completed</td>
+    <td>50,000</td>
+    <td>200</td>
+    <td>20</td>
+    <td>local:Xenova/all-MiniLM-L6-v2:cb3d680149bf:q8:384d</td>
+    <td>10 / 10</td>
+    <td>win32 10.0.26200; 12th Gen Intel(R) Core(TM) i5-1235U; 8 GiB; 12 logical CPUs</td>
+    <td>10min</td>
+    <td>32 / 120s</td>
+    <td>12abbebcc499750d8a9f5eddd613be4bded950218b09a37b0ef4b9b7e78f3e11</td>
+    <td>2026-09-09T01:14:22.193Z</td>
+    <td>2026-09-09T01:15:04.919Z</td>
+    <td>0.8433</td>
+    <td>999.12</td>
+  </tr></tbody>
+    </table></div>
+  </section>
+  <footer>Static report. All charts are rendered from summary.json values produced by the benchmark runner.</footer>
+</main>
+</body>
+</html>

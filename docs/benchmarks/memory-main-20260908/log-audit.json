@@ -1,0 +1,65 @@
+{
+  "note": "Exact accepted-profile runner logs. Connection diagnostics are retained; all measured cases completed, but the logs are not asserted error-free.",
+  "profiles": [
+    {
+      "profile": "graph-small",
+      "sourceRoot": "C:\\Users\\apexs\\derya-memory-benchmark-resume-20260908",
+      "streams": {
+        "stdout": {
+          "path": "sources/graph-small/runner.stdout.log",
+          "sha256": "f5dc56037fa4ee5fbde810350a43463b2552176642c1b2492005869500419d36",
+          "bytes": 11771,
+          "connectionResetLines": 0,
+          "prismaErrorLines": 0
+        },
+        "stderr": {
+          "path": "sources/graph-small/runner.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "connectionResetLines": 0,
+          "prismaErrorLines": 0
+        }
+      }
+    },
+    {
+      "profile": "graph-medium",
+      "sourceRoot": "C:\\Users\\apexs\\derya-memory-benchmark-resume-20260908",
+      "streams": {
+        "stdout": {
+          "path": "sources/graph-medium/runner.stdout.log",
+          "sha256": "d695dead14e78944297e4c9a68a3ba3035dbdc1766192d2a474adc3cee304469",
+          "bytes": 11872,
+          "connectionResetLines": 0,
+          "prismaErrorLines": 0
+        },
+        "stderr": {
+          "path": "sources/graph-medium/runner.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "connectionResetLines": 0,
+          "prismaErrorLines": 0
+        }
+      }
+    },
+    {
+      "profile": "graph-large",
+      "sourceRoot": "C:\\Users\\apexs\\derya-memory-benchmark-large-20260908",
+      "streams": {
+        "stdout": {
+          "path": "sources/graph-large/runner.stdout.log",
+          "sha256": "4057b8e7209d75d6da3d5e85d4990ff0abf51279b2187e46fd8e74ba45a133ae",
+          "bytes": 14503,
+          "connectionResetLines": 14,
+          "prismaErrorLines": 14
+        },
+        "stderr": {
+          "path": "sources/graph-large/runner.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "connectionResetLines": 0,
+          "prismaErrorLines": 0
+        }
+      }
+    }
+  ]
+}

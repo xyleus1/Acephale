@@ -1,3 +1,19 @@
+## 2026-09-09: Publish whole-profile benchmark composition with explicit provenance
+
+- Status: accepted for the isolated memory fork branch.
+- A completed profile may be retained before a later launcher interruption only
+  with its original source/configuration, full case/pass grid, exact artifacts,
+  stage window, and successful power/sleep evidence preserved. Keep the parent
+  launcher's failed status visible; do not relabel it successful.
+- Rerun an interrupted profile in full. Never selectively fill missing passes,
+  omit unfavorable complete samples, or describe separate launches as one
+  uninterrupted cohort. Publish excluded run IDs and original artifact hashes.
+- Bind statistical CSV hashes into findings and verify them in the figure and
+  export steps. Preserve connection diagnostics even when all cases complete.
+- Keep measured source separate from the later documentation/artifact commit.
+  Results are conditional synthetic comparisons, not RAM savings, live action
+  safety, or causal before/after optimization claims.
+
 ## 2026-09-08: Preserve conversation semantics across the memory port
 
 - Status: accepted for the isolated memory fork branch.

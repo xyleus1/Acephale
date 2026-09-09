@@ -1,16 +1,51 @@
-# 2026-09-08: Memory and temporal runtime port onto latest main
+# 2026-09-09: Memory benchmark publication completed
+
+The measured implementation is frozen at
+`7e23ff685bc88b3427e236d94e5463bae01a6304`, ported onto upstream main snapshot
+`7080adad57ed08bf529a1fa7234e9f2220568dc5` verified on September 8. This does not
+claim that main still has that head at publication time. The destination remains
+only the `xyleus1/derya-crm` fork's `codex/memory-temporal-main-20260908` branch;
+no main branch, deployment, production database, or real mailbox is changed.
+
+The audited 150-run, 30,000-execution publication combines complete retained
+10K/50K profiles with a complete fresh 250K profile, with no interrupted 250K
+passes. At 250K, Derya Hot reached 84.33% Evidence Recall@20 versus 72.08% for
+Strong Hybrid RAG (+12.25pp; paired 95% CI +9.25 to +15.33pp), with p95
+2,850.96ms versus 4,808.77ms (40.71% lower). Vector RAG remained fastest.
+See [the results report](MEMORY_LATEST_MAIN_RESULTS.md) and
+[the artifact package](benchmarks/memory-main-20260908/README.md) for all systems,
+exact provenance, statistics, figures, and limitations.
+
+The semantic validator rejected 200/200 deliberately stale checks and accepted
+200/200 matching-state checks at 250K; p50/p95 were 44.21/141.44ms. These are
+20 unique single-dependency fixtures of each class repeated ten times, not
+provider sends, post-read mutations, or unrelated-change tolerance tests. No
+process RAM measurement was made. Keep these counts separate from the existing
+deterministic action-guard suite's 162/162 blocked and 0/84 false conflicts.
+
+The fresh 250K run exited 0 with no sleep/AC guard failure. Fourteen Prisma
+`ConnectionReset` messages remain in its stdout despite all cases completing;
+the package preserves them and its log audit. Do not describe the logs as
+error-free. Runtime/retrieval flags remain off by default. With runtime enabled,
+`enforce` requires state-read proof for covered reply, CHASE, and file sends;
+bulk RFQ and supplier nudges retain their original guards. No universal action
+fencing or production enablement is claimed.
+
+# 2026-09-08: Memory and temporal runtime port onto the main snapshot
 
 The memory branch is integrated with upstream main `7080adad` in the isolated
-fork branch `codex/memory-temporal-main-20260908`. Latest supplier conversation
-tasks, CHASE, retry/reconciliation, notices, and sender protection are retained.
+fork branch `codex/memory-temporal-main-20260908`. The pinned main supplier
+conversation tasks, CHASE, retry/reconciliation, notices, and sender protection
+are retained.
 The runtime and retrieval flags remain off by default. No deployment, main
 branch update, production database operation, or real provider send was made.
 
 See [the port and reproduction contract](MEMORY_LATEST_MAIN_PORT.md) for
 implementation, verification, safety coverage, and benchmark limitations.
 Full TypeScript, the complete application build, and focused state/procurement
-database checks pass. The new publication cohort is pending at this
-source-freeze checkpoint; do not present earlier figures as new measurements.
+database checks pass. Publication measurements were pending at this historical
+source-freeze checkpoint; the September 9 entry records the completed result set.
+Do not present earlier figures as new measurements.
 The port contract records the three pre-existing broad-lint errors and build
 warnings rather than treating those checks as warning-free.
 
@@ -1949,12 +1984,15 @@ logical CPUs.
 | 250K | `DERYA_COLD` | 0.8433 | 4,110.4 | 5,279.9 | 0.320 | 0.526 |
 | 250K | `DERYA_HOT` | 0.8717 | 5,117.2 | 6,478.0 | 0.275 | 0.441 |
 
-Hot projection hit rate was 0.925. Across the 40 concurrency cases,
-`DERYA_HOT` detected every strict stale state, allowed no stale action to
-escape, and produced no false conflict. All active systems had zero tenant and
-unrouted-mail leaks. These results are deliberately mixed: Derya improved
-Recall@20 and action safety, but keyword retained higher Recall@5, MRR, and
-current-state accuracy, and Derya's latency/bandwidth regressed at 250K.
+Hot projection hit rate was 0.925. Across the 40 historical immutable-read
+fixtures, `DERYA_HOT` rejected the deliberately stale reads and accepted the
+matching-state reads. The raw zero `stale_escape`/`false_conflict` fields are
+fixture outcomes, not observed external action escapes or proof of tolerance
+to post-read unrelated changes. No provider send or post-read mutation occurred.
+All active systems had zero tenant and unrouted-mail leaks. These historical
+results are deliberately mixed: Derya improved Recall@20, but keyword retained
+higher Recall@5, MRR, and current-state accuracy, and Derya's latency/bandwidth
+regressed at 250K. They are not the September 9 port measurements.
 
 ### Status and limitations
 
@@ -2066,14 +2104,17 @@ authoritative run record.
   `SUPPLY_STATE_RUNTIME_ENABLED=false`,
   `SUPPLY_STATE_PROJECTIONS_ENABLED=false`, and
   `SUPPLY_STATE_VALIDATION_MODE=off`.
-- Shadow only: selecting `shadow` compiles and checks state, records diagnostics,
-  and never blocks an action. Shadow-first rollout is recommended, but no
+- Shadow only: with runtime enabled, selecting `shadow` checks linked state,
+  records diagnostics, and never blocks an action. Shadow-first rollout is recommended, but no
   deployed shadow enablement is claimed in this handoff.
-- Enforced: selecting `enforce` activates strict-conflict blocks for confirmed
-  supplier draft selection, the final supplier provider boundary, and linked
+- Enforced: with runtime enabled, selecting `enforce` activates strict-conflict
+  blocks for confirmed supplier draft selection, the final supplier provider boundary, and linked
   generic Supply OS decisions, approvals, and execution release. Advisory
-  changes do not block. Existing durable rows without a state read retain their
-  previous checks and behavior. Enforce is implemented but defaults off.
+  changes do not block. Generic legacy Supply OS rows without a linked state
+  read retain their previous checks; this is not a missing-proof exemption for
+  the covered supplier reply, CHASE, or file sends, which require bound proof
+  under enforce in the September 8 port. Bulk RFQ and supplier-nudge sends do
+  not acquire semantic validation. Enforce is implemented but defaults off.
 - No browser switch can disable validation. Enable shadow first, measure false
   conflicts and latency, then enable enforce with deployment configuration.
 
