@@ -1,0 +1,13 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { LocalController } from "../src/lib/goalspec/controller";
+import { canonical } from "../src/lib/goalspec/canonical";
+const [artifactPath, checkpointsPath, outputPath] = process.argv.slice(2);
+const model = new LocalController(JSON.parse(readFileSync(artifactPath, "utf8")));
+const rows = readFileSync(checkpointsPath, "utf8").trim().split(/\r?\n/).map(line => JSON.parse(line));
+const elapsed: number[] = [];
+for (let warmup = 0; warmup < 3; warmup++) for (const row of rows.slice(0, 64)) model.decide(row.state, row.candidates);
+const decisions = rows.map(row => { const start = performance.now(), decision = model.decide(row.state, row.candidates); elapsed.push(performance.now() - start); return { groupId: row.groupId, split: row.split, action: decision.action, candidateCount: row.candidates.length }; });
+elapsed.sort((a, b) => a - b);
+const result = { artifactHash: model.artifact.contentHash, samples: elapsed.length, meanMs: elapsed.reduce((a, b) => a + b, 0) / elapsed.length, p50Ms: elapsed[Math.floor(elapsed.length * 0.5)], p95Ms: elapsed[Math.floor(elapsed.length * 0.95)], maximumMs: elapsed.at(-1), targetP95Ms: 10, targetMet: elapsed[Math.floor(elapsed.length * 0.95)] < 10, maximumCandidates: Math.max(...decisions.map(d => d.candidateCount)), decisions };
+writeFileSync(outputPath, canonical(result) + "\n", { flag: "wx" });
+console.log(JSON.stringify({ ...result, decisions: undefined }, null, 2));

@@ -29,3 +29,16 @@ tsconfig.tsbuildinfo
 .local-uploads/
 /benchmark-output/
 /.benchmark-output/
+
+# GoalSpec local execution and archival artifacts
+/.pytest-*/
+/.test-artifacts/
+/outputs/.archive-test-*/
+/outputs/.pytest-*/
+/outputs/goalspec-local-*.zip*
+/outputs/goalspec-local-*.closing.json
+/outputs/goalspec-official-benchmarks-*.zip*
+/outputs/goalspec-v5-postfreeze/
+/outputs/goalspec-*-tools/__pycache__/
+/outputs/goalspec-*-tools/test-temp-*/
+/infra/webarena-local/__pycache__/

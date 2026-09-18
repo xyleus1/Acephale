@@ -57,5 +57,6 @@ export const COMMITTED_MIGRATIONS: readonly string[] = [
   "20260906000100_outreach_campaign_auto_reply",
   "20260906000200_outreach_campaign_send_intro",
   "20260906000300_outreach_campaign_reply_lifecycle",
-  "20260907000100_grant_prisma_migrations_read"
+  "20260907000100_grant_prisma_migrations_read",
+  "20260916180000_goalspec_read_epochs"
 ];

@@ -1,0 +1,19 @@
+{
+  "repository": "Salesforce/APIGen-MT-5k",
+  "revision": "abc4a517d67c541f85f6470cbd8fd3186b36830e",
+  "license": "cc-by-nc-4.0",
+  "card_sha256": "fcda213ea7911ad16baff240cd352fbd639acf5b6313211277ed600023756c77",
+  "gated": false,
+  "files": [
+    ".gitattributes",
+    "README.md",
+    "apigen-mt_5k.json"
+  ],
+  "verification_tier": "source_reported",
+  "unauthenticated_data_http_status": 200,
+  "data_url": "https://huggingface.co/datasets/Salesforce/APIGen-MT-5k/resolve/abc4a517d67c541f85f6470cbd8fd3186b36830e/apigen-mt_5k.json",
+  "bytes": 127761256,
+  "data_sha256": "5225b54198c1d4d2ae9ff14ddd98341751677138efe64ded10dcb770276b5841",
+  "research_only": true,
+  "independent_replay_verified": false
+}

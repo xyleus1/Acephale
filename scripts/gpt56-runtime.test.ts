@@ -20,7 +20,7 @@ function sourceFiles(dir: string): string[] {
 
 const files = sourceFiles(root);
 const sources = files.map((file) => ({
-  file: path.relative(root, file),
+  file: path.relative(root, file).split(path.sep).join("/"),
   source: fs.readFileSync(file, "utf8"),
 }));
 const combined = sources.map(({ file, source }) => `FILE:${file}\n${source}`).join("\n");
@@ -49,7 +49,10 @@ assert.equal(isDeryaModelIdentityQuestion("are you Claude"), true);
 assert.equal(isDeryaModelIdentityQuestion("quote this load"), false);
 assert.match(agentChat, /Never identify yourself as Claude/);
 
-const directModelValues = [...combined.matchAll(/\bmodel:\s*["']([^"']+)["']/g)]
+// Business records also have a `model` field (for example a vehicle model).
+// Inspect provider/client modules for this API contract instead of domain data.
+const providerSources = sources.filter(({ source }) => /(?:from\s+["']openai["']|\bGpt56Client\b|\.responses\.create\b|\.chat\.completions\.create\b)/.test(source));
+const directModelValues = [...providerSources.map(({ source }) => source).join("\n").matchAll(/\bmodel:\s*["']([^"']+)["']/g)]
   .map((match) => match[1]);
 assert.deepEqual(
   [...new Set(directModelValues)].sort(),

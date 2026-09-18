@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "benchmarks": {
+    "tau3": {
+      "repository": "https://github.com/sierra-research/tau2-bench.git",
+      "revision": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "verified_date": "2026-09-11",
+      "python": "3.12",
+      "environment": ".benchmarks/tau3",
+      "dependency_lock": "upstream uv.lock",
+      "extra_dependencies": ["knowledge", "voice"],
+      "supported_mode": "half_duplex",
+      "audited_actor": "llm_agent",
+      "domains": ["airline", "retail", "telecom", "banking_knowledge"],
+      "notes": "Native Results importer and isolated capture worker. No speculative benchmark execution yet. Public context capture precedes execution. Raw native results retain evaluator material outside model-facing trajectories. Upstream eagerly imports voice providers even for text runs, requiring its voice extra."
+    }
+  }
+}

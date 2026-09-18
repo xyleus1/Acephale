@@ -4,12 +4,15 @@ import Gpt56Client, {
   DERYA_AI_IDENTITY_REPLY,
   DERYA_AI_MODEL_LABEL,
   isDeryaModelIdentityQuestion,
+  parseClientChatHistory,
 } from "./gpt56-client";
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TOOLS, dispatchTool } from "@/lib/agent-tools";
+import { createDeryaChatRuntime } from "@/lib/goalspec-adapters/derya-chat";
+import { ensureDeryaGoalSpec } from "@/lib/goalspec-adapters/derya-server";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { createWithFileReference } from "@/lib/references";
 import { applyPendingJobAgentProposal } from "@/lib/agent-proposals";
@@ -817,6 +820,7 @@ export async function chatWithAgent(history: ChatMsg[], userMessage: string, sco
 }
 
 async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string, scopePage?: string): Promise<ChatResult> {
+  history = parseClientChatHistory(history);
   const session = await requireSession();
   const intelDeskScope = isIntelDeskScope(scopePage);
   const campaignDeskScope = isCampaignDeskScope(scopePage);
@@ -1428,12 +1432,30 @@ Do not create or update an RFQ from text entered on this page.`
   const MAX_TOOL_TURNS = 6;
   let finalText = "";  // text from a non-tool-use response
   let preambleText = ""; // text from a tool-use response (intermediate)
+  let goalSpec = await (async () => {
+    await ensureDeryaGoalSpec(TOOLS, session);
+    return createDeryaChatRuntime(session, userMessage, systemBlocks[0].text);
+  })().catch(() => {
+    console.warn("[goalspec] runtime initialization unavailable");
+    return undefined;
+  });
   try {
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+      let goalSpecContext = "";
+      if (goalSpec) {
+        try { goalSpecContext = await goalSpec.boundary(); }
+        catch {
+          await goalSpec.close();
+          goalSpec = undefined;
+          console.warn("[goalspec] prediction unavailable; resumed native actor");
+        }
+      }
       const response = await client.messages.create({
         model: "gpt-5.6",
         max_tokens: 1024,
         system: systemBlocks as any,
+        runtimeObservation: goalSpecContext ? goalSpec?.observation() : undefined,
+        runtimeContextMode: goalSpec?.actorContextMode,
         tools: toolsWithCache as any,
         messages,
       });
@@ -1464,8 +1486,9 @@ Do not create or update an RFQ from text entered on this page.`
 
       // Run all requested tools in parallel.
       const toolUseBlocks = response.content.filter((b: any) => b.type === "tool_use") as any[];
-      const toolResults = await Promise.all(toolUseBlocks.map(async (tu) => {
-        const r = await dispatchTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, {
+      const executeTool = (index: number): Promise<{ ok: boolean; result?: unknown; error?: unknown }> => {
+        const tu = toolUseBlocks[index];
+        return dispatchTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, {
           officeId: session.officeId,
           userId: session.userId,
           role: session.role,
@@ -1473,6 +1496,12 @@ Do not create or update an RFQ from text entered on this page.`
           scopeJobId: effectiveScopeJobId ?? undefined,
           scopeCompanyId: scopeCompanyId ?? undefined,
         });
+      };
+      const dispatched = goalSpec
+        ? await goalSpec.batch(toolUseBlocks.map(tu => ({ id: tu.id, name: tu.name, input: tu.input ?? {} })), executeTool)
+        : await Promise.all(toolUseBlocks.map((_, index) => executeTool(index)));
+      const toolResults = dispatched.map((r, index) => {
+        const tu = toolUseBlocks[index];
         toolTrace.push({
           name: tu.name,
           input: tu.input ?? {},
@@ -1485,7 +1514,7 @@ Do not create or update an RFQ from text entered on this page.`
           content: JSON.stringify(r),
           is_error: !r.ok,
         };
-      }));
+      });
       messages.push({ role: "user", content: toolResults });
 
       // After the LAST permitted tool round, force the model to produce a
@@ -1525,6 +1554,8 @@ Do not create or update an RFQ from text entered on this page.`
       tools: toolTrace,
     });
     return { reply: `Agent error - ${msg.slice(0, 400)}`, toolTrace: exposeToolTrace(toolTrace) };
+  } finally {
+    if (goalSpec) await goalSpec.close();
   }
 }
 

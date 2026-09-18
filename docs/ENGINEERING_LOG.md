@@ -1,3 +1,299 @@
+# 2026-09-18: Publish GoalSpec v1-v5 source and benchmark summaries
+
+The staged Node core checkout separately passed 280 tests with two optional
+prerequisite skips. CI now includes v5 and retains the analysis dependencies
+required by Python tests. Ruff remains a known failure with 74 existing lint
+violations; its CI gate stays enabled. No green CI result is claimed.
+
+Prepared the existing GoalSpec implementation for the GitHub branch
+`codex/memory-temporal-main-20260908`. Publication includes runtime and Derya
+integration source, research and archival helper code, schemas, tests, benchmark
+summaries, and six exact controller/parity artifacts required by the checked-in
+configurations. Raw traces, episodic memory, local databases, provider ledgers,
+downloaded datasets, and large archives remain local. See
+`docs/goalspec/GITHUB_CHECKOUT.md` for checkout scope and reproduction limits.
+
+Packaging corrections fix the v5 npm test filename and explicitly skip historical
+artifact regressions when their excluded inputs are absent. Synthetic contract
+coverage remains active. No model was retrained, no paid benchmark ran, no
+migration or deployment was applied, and V6 remains deferred. Original frozen
+results and ZIPs are unchanged.
+
+Validation: schema generation checks and TypeScript compilation passed; Node core
+tests passed 281 with one optional database skip; Node v5 passed 49. The staged
+checkout also passed v5's 49 tests and Python's 472 tests, with 13 explicit skips
+(two historical datasets and 11 cross-language cases requiring local node_modules).
+Initial sandbox Windows user-info/temp-directory failures passed after retry with
+the required access. Credential-pattern and oversized-file publication scans found
+no matches. Git whitespace checks passed with CRLF report bytes preserved.
+
+## 2026-09-17 UTC: V5 archive closure and source-hash guard correction
+
+- Exported and independently reconstructed all 7,052 archive files, 880,084,345 exact bytes. The 22 research tables additionally roundtrip as row-wise JSONL/Parquet, preserving 43,009 rows.
+- Committed the append-only v5 archive with complete row readback: 3 cohort, 7,052 file and 7,802 chunk rows. All 26 existing research/archive tables retain their hashes; all five earlier ZIPs remain unchanged. The deterministic results archive and verified receipt are `outputs/goalspec-local-v5-final.zip` and `outputs/goalspec-local-v5-final.zip.receipt.json`.
+- After that immutable ZIP closed, corrected `prepare_archive_plan.py` so a supplied ZIP hash cannot override a different or missing original frozen hash. The actual staging supplied no override and independently matched its original plans. Installed six meaningful regression cases; all 29 focused archive tests pass. The post-freeze supplement records original and current bytes, the intentional defect reproduction, exact patches and this documentation update.
+- No paid call, benchmark rescore, runtime change or new performance claim. Experimental/default-off disposition and all prior results are retained.
+
+## 2026-09-17 UTC: V5 frozen evaluation and final reporting closed
+
+- Closed the 36-trial public official native subset with all host clocks valid and all original grades retained: Base 11/12, legacy v4 12/12, selected literal-context v5 10/12. Mean live seconds were 45.440, 46.863 and 49.140; total physical tool calls were 62, 71 and 59. No speculative read started. Selected v5 had `goalConditioning=false`, so this is not a live inferred-goal result. Family uncertainty, native clock boundaries and all costs remain in `research/goalspec/runs/local-v5-confirmation-report-20260916/`.
+- Preserved the 16-slot development cohort with seven host-interrupted failures and nine valid clocks. The declared literal selection is confounded by unequal completed coverage. Bound independent Windows evidence and the post-hoc native failure diagnosis without changing any reward, rerunning a failed trial or updating the frozen model.
+- Closed all 16 prediction prefixes and 128 shared-pool ranker rows. Memory improved read exact Top-1 from 1/6 to 3/6; full goals stayed 3/6. Strict complete-atom goal Top-1/Top-3 was 0/16 with one missing grade. An independent audit verified 30 raw teacher responses, 16 goals and 128 score rows; graded atom coverage was 79/119. The zero strict score does not establish zero core-intent recognition. Matched-temperature residual accuracy was unchanged and coarsened next-read loss changed +0.000222 nats, with a family interval crossing zero. Preserve the separate calibration confound in primary controls.
+- Closed Derya's 36 synthetic tasks: each arm 12/12 correct, identical 12 tool reads and 102 SQL statements per arm. Goal context added 12 provider attempts and +0.316 seconds mean paired latency, interval [+0.021, +0.584]. The separate 32-case BFCL conditioning probe scored 28 direct versus 27 goal-context correct and took longer with goals. Neither is a full-runtime superiority result.
+- Assembled ten closed reports plus a separately hash-bound interpretation. Final artifacts: `research/goalspec/reports/2026-09-16-v5-local/` and `research/goalspec/runs/local-v5-final-interpretation-20260916/`. Fifteen focused Python reporting tests passed; six Node replay tests previously passed. Main source reports, source snapshots, failed attempts and grades remain unchanged. V5 stays experimental and opt-in, with Derya reuse off.
+- Closed cumulative accounting at USD 79.537568 known settled request usage and USD 166.891414 spent/reserved, with 56 unresolved requests under the USD 500 ceiling. V5 incremental known usage is USD 12.293490. These differ from invoices and observed response subtotals; all outstanding reservations remain protected. AWS charges are zero.
+
+## 2026-09-17 UTC: Interrupted v5 development closed; fixed confirmation dispatched
+
+- Retained all 16 development slots and original scores without a repeat: Base1/4, legacy v4 2/4, literal3/4, hypotheses2/4. Seven host-interrupted failures remain in success denominators; only nine valid clocks enter primary latency summaries, with all raw timings retained. Report: `research/goalspec/runs/local-v5-development-report-20260916/`.
+- Independent Windows evidence identifies lid-triggered Modern Standby at 2026-09-16 23:08:14.945 UTC and wake at 2026-09-17 00:27:12.212 UTC. A degraded guard heartbeat begins at23:08:21.691705 UTC; maximum gap4,726,953ms. Receipt: `research/goalspec/runs/local-v5-development-interruption-20260916/receipt.json`. Host suspension, rather than unsupported attribution to concurrent analysis, explains the documented interruption.
+- Selected literal context under the declared rule, while explicitly retaining the confound from unequal completed coverage. Confirmation has six official tasks, two repetitions and Base/v4/selected-v5 arms:36 trials, USD2.50 per-trial allowance after censored development, USD90 fully reserved. The selected arm is `actorContext=literal`, `goalConditioning=false`; it is not a live inferred-goal treatment. Final results await closure.
+- Development recorded USD0.751542 known usage. Six unstarted null-cost native rows are conservative missing telemetry, not six new unresolved provider requests; the ledger's56 historical unresolved requests are unchanged. Preserve that distinction when rendering the generic `unknownChargeTrials` field.
+- Passed six Node and14 Python targeted tests. The offline replay now has five unchanged primary controls plus feature-corruption sensitivity and a separate matched-temperature neutral/full-residual pair,128 rows for16 prefixes. Applied-temperature log-odds and identical weight/context/memory/pool assertions pass. No runtime policy, primary score or paid request was changed by this diagnostic.
+
+## 2026-09-16: V5 selective goal conditioning, training and component calibration
+
+- Added opt-in current-only actor context with a source-linked literal obligation ledger, preserving real protocol IDs, observations, opaque continuation items and the explicit v4 legacy compiler. Hypotheses remain an experimental exposure policy and do not authorize tools or assert task completion. Native simulator stop behavior is unchanged.
+- Added a 128-candidate read universe with separate NO_READ and READ_UNCOVERED outcomes, neutral plus reliability-weighted goal scores, active fitting-only memory and expected-cost admission. Historical entity values remain unusable without current bindings. Fresh data uses 12 fitting, four selection and four calibration families before labels; fitting memory excludes the latter eight families and every development/confirmation cohort.
+- Closed 40 custom Base training trials: 36/40 successes, 198 physical tool calls, mean live interaction 30.625 seconds, all 40 host timing samples valid and USD 2.016866 known usage. Family-clustered success interval is [80%, 97.5%]. The training report verifies all 489 archived execution-source bodies, the complete trial grid and the closed 1,520-event chain. Report: `research/goalspec/runs/local-v5-training-report-20260916/`.
+- Preserved the original 100-prefix annotation selection across host interruptions. Continuations may complete only slots with no physical provider attempt in the full chain. Final strict agreement is 29/100, overall-goal agreement 48/98 graded, and two labels remain missing/masked. Required identity coverage is 71/119 atoms. Source: `research/goalspec/runs/local-v5-annotation-diagnosis-20260916.json`.
+- Refit the local neutral controller and freeze its weights for the independently annotated goal residual. The single predeclared reliability bin uses one agreement among 19 calibration prefixes, yielding 2/21 after Laplace smoothing. The small two-family estimate is not semantic truth. Goal-active temperature0.75 differs from neutral temperature1.0, so a composite policy log-loss difference is not purely a residual effect. Model lineage: `research/goalspec/runs/local-v5-model-pipeline-20260916/lineage-receipt.json`.
+- Published/imported a distinct 40-pattern research snapshot `native-training-v5-20260916`, using 24 eligible fresh fitting episodes and positive support from 21 successful independently verified episodes. Eight selection and eight calibration episodes are excluded from the library. Publication receipt: `research/goalspec/runs/local-v5-library-publication-20260916/publication.json`; original collected failures remain unchanged.
+- Measured actual projection read/refresh/consumption and real Node gateway/policy/scheduler components on 31 fixed training-only cases, two measured repetitions per path. All 62 native parity checks passed; 56 gateway samples were eligible and six were retained policy rejections. Native direct mean0.1656ms and projection read0.7315ms compare with legacy full-fixture snapshot1.5604ms. Actual gateway refresh mean5.9305ms dominates the saved read. The component utility remains negative at probability one, -11.3736ms, with zero unmeasured exposure credit. Small generated databases and repeated timings do not establish official/live speedup. Closed profile: `research/goalspec/runs/local-v5-native-component-profile-20260916-c/`; earlier diagnostic attempts remain preserved.
+- Derya passed 100 independent correctness scenarios, but the epoch performance gate failed and verified reuse remains off. No business/live or native confirmation result is claimed. See `research/goalspec/runs/local-v5-derya-profile-20260916/report.json`.
+- Extended analysis to preserve raw clocks and all failed trials while excluding explicitly invalid host clocks from primary latency statistics. Read-prediction metrics now explicitly distinguish exact read matches from coarsened NO_READ/READ_UNCOVERED loss. Fourteen Python report/replay tests and five Node replay tests passed; core TypeScript passed. Development, confirmation and remaining probes are pending, with no new final or superiority claim.
+
+## 2026-09-16: Frozen official tau and component benchmark evaluation
+
+- Added an official-task v4 harness with ID-only selection, full paired reservation, source freezing, native protocol parity, exact run identity, terminal-state checks and failure retention. Executed all 112 trials locally on 14 original retail/airline test tasks, two seeds and four arms. Service and host guard closed cleanly; all 447 frozen execution sources and the controller weights retained their hashes.
+- Native success was Base 20/28, paper-based PASTE 20/28, Salesforce-style 24/28 and GoalSpec 21/28. Mean live seconds were 44.876, 47.734, 49.048 and 50.896; physical calls were 184, 197, 194 and 185. Both-trial task successes were 9/14, 8/14, 12/14 and 9/14. GoalSpec-minus-Base success interval spans -7.14 to +14.29 percentage points, and latency interval spans -0.839 to +15.000 seconds. No overall superiority was established. No speculative reads were admitted.
+- Kept native simulator stop behavior, original grades and ALL/strict-replay evaluation. Four of seven GoalSpec failures were shared by every arm; three traces stopped on confirmation plus the native stop sentinel before an intended write. The post-hoc audit is descriptive and cannot justify rescoring or fitting on these outcomes.
+- Ran 64 pinned BFCL multiple/irrelevance cases through the unchanged research actor and official checker: 28/32 and 27/32 correct. All requests completed, with USD 0.248918 usage. Verified all input hashes, the provider event chain, source hashes and checker denominators. This is an actor-only two-category subset, not a full BFCL or GoalSpec comparison score.
+- Replayed all 5,000 APIGen episodes with zero provider calls, yielding 46,127 source checkpoints and 45,602 valid labels. Frozen logistic exact Top-1 improved 39.24% to 42.85%, while tool Top-1 declined 53.67% to 51.75% and gated exact Top-1 declined 39.24% to 18.58%. Invalid catalog/schema calls, source-formatting limitations, research-only lineage and provisional-family uncertainty remain in the report.
+- Preserved the first concurrent-analysis controller p95 of 11.521 ms, then performed one predeclared isolated rerun with five complete warmup and five measured passes. The 3,215 measured samples yielded mean 0.537 ms and p95 2.047 ms. This is component inference timing only.
+- Passed focused official harness/report tests, native protocol parity, BFCL checker/contract tests, APIGen leakage/report tests, synthesis/export tests and core TypeScript checks. No actor, controller, policy, memory or production changes were fitted to the new benchmark. Pinned snapshots, custom judge/scaffold settings, public exposure and subset limits are explicit in the reports.
+- Final local ledger records USD 67.244078 settled logical-request usage and USD 143.001562 spent/reserved against the original USD 500 ceiling. All 55 unresolved requests keep their allowances, including one new uncertain request. Response usage inside unresolved requests is reported separately. AWS charges remain zero; the frozen experience repository was not updated.
+- Full results: research/goalspec/reports/2026-09-16-official-benchmarks/README.md. Raw native cohort: research/goalspec/runs/local-official-v4-confirmation-20260916. Existing custom v4 reports and prior archives remain unchanged.
+
+## 2026-09-16: GoalSpec v4 architecture, local training and frozen evaluation
+
+- Implemented the shared explicit goal ledger, literal user-span protocol, typed native candidate graph, local controller and separate execution/exposure decisions. Preserved office authorization, complete Derya rereads, mixed-batch invalidation, exact promotion and generation fencing. Missing Derya controller configuration explicitly abstains; native-trained weights are not claimed to improve business-domain ranking.
+- Trained CPU logistic and MLP controllers, same-base fine-tuning variants and model soup with family-disjoint train/selection/calibration folds. Logistic won selection. Exported weights have Python/TypeScript parity. Runtime feature normalization preserved all 6,291 training rows exactly; auxiliary action-kind scores remain telemetry only, and the causal exposure head remains untrained.
+- Preserved failed goal protocols A and B and final protocol C, all costs, original grades and blinded second annotations. Final teacher agreement was 44/77 versus prior 49/77 despite 78/80 valid outputs. No retrospective rescoring was used to turn that regression into a gain.
+- Completed 16 development trials, with 4/4 success for each arm. GoalSpec executed eight speculative reads, five promotions and two evidence exposures. Its 28.14 second mean versus Base's 29.40 did not establish an improvement, and physical calls increased from 19 to 23.
+- Completed the frozen 64-trial confirmation across four fresh custom task families. Base/PASTE/Salesforce-style/GoalSpec success was 15/16, 13/16, 12/16, 14/16; mean seconds 35.370, 40.266, 35.050, 39.883; physical calls 93, 99, 91, 106. All failures remain included. Normal admission executed no speculation because measured validation overhead exceeded cheap native reads. This is a custom tau-compatible pilot, not a full official score or verified upstream reproduction.
+- Closed controller replay retained 148 checkpoints. Same-pool tool Top-1 improved from 30/70 to 48/70 and exact arguments from 24/70 to 38/70; gated exact arguments fell from 24/70 to 19/70. NO_READ specificity improved from 11/78 to 51/78. Four-family intervals and cross-entropy estimates are reported without a true conditional-entropy or general superiority claim.
+- A hash-bound post-hoc audit retained the two GoalSpec failures while identifying simulator-approved partial changes that conflict with the fixed original target, and a paired Salesforce STOP-after-consent success. It also identified 19 correct ranked reads rejected by learned gates, including seven server-eligible identity lookups rejected on readiness. These are diagnostic findings, not rescoring or confirmation-driven tuning.
+- Passed core/full-app TypeScript, 276 Node tests, 384 Python tests, three independent-connection Derya DB tests and two real browser isolation tests. The optional Node DB case was separately exercised. Initial default Node heap exhaustion and Windows temporary-directory failures were resolved by explicit resources/paths, with successful reruns recorded. Overlapping focused suites are not summed.
+- Final accounting: $55.511468 settled logical-request usage, $130.097091 spent/reserved, 54 unresolved requests, no AWS. Confirmation has another $0.029408 reported response usage within unresolved reservations, with no double counting. Verified unchanged confirmation execution/input hashes, development source archive, previous v3 reports and v2/v3 ZIPs. Full report: research/goalspec/reports/2026-09-16-local-v4/README.md.
+- Exported 167 source files and 26,590 records from both v4 cohorts and diagnostics, with exact original-source and JSONL/Parquet roundtrips. Imported into goalspec_archive_v4 with transactional JSONB and byte/hash readback. All 26 existing tables, 61,786 rows and 2,208,740,943 serialized legacy bytes retained identical hashes. PostgreSQL stopped after verification. The initial scanner false positive is preserved in a failed-export receipt and partial output; the v4-only boundary repair passed 17 tests. Report helpers passed 19 tests, and the final deterministic packager passed nine. Final source ZIPs remain distinct from post-run analysis overlays.
+
+## 2026-09-15: GoalSpec v3 final results and reproducible closure
+
+- Retained all 64 confirmation trials after three development rounds. Native success: Base 10/16, PASTE 13/16, Salesforce-style 14/16, GoalSpec 13/16. Respective mean live seconds: 47.310, 43.775, 42.264, 51.608. GoalSpec lowered authoritative calls by 26.09% but increased physical calls by 31.52%; no overall live advantage was established.
+- Preserved 172 prediction checkpoints. On 68 read-only decisions GoalSpec next-tool/full-argument Top-1 was 21/68 and 19/68, versus PASTE 16/68 and 8/68. Teacher agreement was 49/77 scored visible-request revisions. The late audit found donor goals inserted after input budgeting in 38 shuffled controls. A hash-bound 38-case correction cost $0.089054, retained the original run and all other seven arms, and recomputed affected identical-pool diagnostics.
+- The correction passed 16 focused tests, isolated TypeScript and the actual 38-input no-provider smoke. Frozen native source and input verification passed again before documentary overlays. Existing broad tests and separate Derya DB/browser validation remain recorded; overlapping suites are not summed.
+- Replayed all 64 saved native tapes with real tools and fresh isolated state: every original observation and recorded final database matched. This zero-provider replay is separate from live task scores and timings. The initial setup failure is retained.
+- Exported four cohorts, 112 trials, 148 original files and 18,926 native archive records with exact JSONL/Parquet roundtrips. Two initial database imports rolled back; a bounded streaming importer completed byte-verified readback. All 22 legacy tables and 42,707 rows remained unchanged. PostgreSQL stopped after final export.
+- Final authoritative ledger: $44.367714 settled request usage, $114.209793 spent/reserved, 50 unresolved requests, no AWS. Another $0.015381 of confirmation retry response usage lies inside retained unresolved maxima and is not added to commitments. Post-correction accounting supersedes the preserved earlier closure. See research/goalspec/reports/2026-09-15-local-v3/README.md.
+
+## 2026-09-15: GoalSpec v3 third development cohort and final prompt amendment
+
+- Development-3 completed 16/16 native trials without new unresolved charges. Base and Salesforce scored 2/4; PASTE and GoalSpec scored 3/4. Mean live time was base 48.965s, PASTE 47.569s, Salesforce 51.051s, GoalSpec 56.903s. Original failed rewards remain failures. Source tree: f351dafe41130607d3f20533452fb33c4bac23be0dc612adea815c272c7a7b89.
+- Typed binding and admission repairs produced three exact promotions, but 10 speculative plus 27 authoritative calls exceeded base's 31 physical calls. GoalSpec's retail95 delay included two extra user exchanges and 14.245s more actor-provider time; its drain was only about 25ms. Airline39 added flight-status lookups, and Salesforce airline15 expanded into an extra user-requested booking beyond the gold final state.
+- Before the sole confirmation, compact GoalSpec context now directs authorized lookup of record details needed by the request, retaining clarification for unresolved choices and required consent. This development-informed amendment is not included in the development-3 result. Twenty-nine compiler/actor/session/native-integration tests pass after the prompt change.
+- Offline replay adds bounded concurrency four, a mandatory completed annotation freeze before prediction, deterministic emission order and drain-on-failure. Thirty-seven Node replay tests and eleven Python reporting tests are verified. Native reporting adds domain/task-cluster metrics and event-chain verification; thirteen tests pass. Archive tooling passes 29 Python and three Node tests plus an actual byte-preserving closed development export. Overlapping suite counts are not additive.
+
+## 2026-09-15: GoalSpec v3 second native development cohort
+
+- All 16 declared development-2 trials are retained: base 2/4, PASTE 2/4, Salesforce 3/4, GoalSpec 3/4. GoalSpec remains slower on average. One Salesforce actor socket failure has an unresolved charge; fresh connections alone did not eliminate the transport issue.
+- Successful native evidence exposure now works with sub-millisecond keyed snapshots. Completed traces exposed a separate admission bug: policy-denied high-confidence proposals prevented candidate-model fallback. The next revision checks eligibility before calibration, adds a typed identity-to-profile edge, suppresses redundant deterministic profiles, and distinguishes pure calculation from mutation.
+- Retail task 13 has simulator-path variation: the failed base/PASTE paths included a user request contradicting the private task instruction. Native rewards are unchanged. This result is not evidence of a causal GoalSpec accuracy gain by itself. Airline task 39's potential gold-policy mismatch remains separately audited.
+- Numeric source ordering, bounded application retry accounting, Derya evidence continuity and trusted continuation metadata are under regression verification before the final development stage. Runtime source remained immutable throughout the timed cohort.
+
+## 2026-09-15: GoalSpec v3 first native development cohort
+
+- Retained all 16 development-1 trials, with 3/4 native success for each arm. No live advantage was established. Source and input archives precede dispatch; the service startup is excluded from trial clocks.
+- Fixed the v3 native response boundary to decode successful Python ToolMessage envelopes for ownership checks and actor evidence, while preserving original Python leases and legacy wire values. Captured real native envelopes now exercise identity, profile and owned-order chains; malformed/error responses fail closed.
+- Added complete dependency projections for 13 audited tools, with isolated copies and ordered fingerprints at execution, refresh and consumption. Fourteen actual-native verification groups and 21 focused Python checks passed. Local keyed-record read medians fell from 399-1153 ms to 0.7-1.8 ms; these are component timings, not live gains.
+- Shared accounting after development-1: $30.769788 known usage, $89.984786 spent or reserved, 45 unresolved requests. No AWS charges. The next paired development run remains within the original allocations.
+
+## 2026-09-15: GoalSpec v3 architecture and verification underway
+
+- Audited the primary PASTE and Salesforce papers, separating lossless speculation from actor-visible GoalSpec evidence.
+- Added full frozen episodic, contrastive transition and miss/confusion memory from permitted training/development lineage, with source and scope checks.
+- Added fast current-source binding and measured-benefit admission, prompt-prefix preservation, equivalent small-input compilation, durable explicit runtime context and safe provider exception diagnostics.
+- Added authenticated service readiness, separately budgeted native evaluator workers and four-arm official-native study support. Historical public task exposure is explicitly reported. All legacy runtime tests passed (73 plus one optional database test skipped pending its dedicated run). New v3 checks and paid trials are ongoing, not reported as completed results.
+
+## 2026-09-15: GoalSpec v2 rearchitecture and bounded reevaluation
+
+- Compact strict model contracts now leave canonical IDs, provenance, scope and
+  hashes to the server. Goal inference and read prediction run concurrently in
+  one managed pipeline while actor boundaries consume completed current context.
+  Admission rejects stale, repeated and low-confidence reads; writes invalidate
+  speculation and close drains sibling work. No speculative commitments.
+- The first 24-trial development round exposed a Windows heartbeat replacement
+  failure. All failures remain preserved. Immutable numbered publications passed
+  15,180 readiness checks with intentional reader holds. The next development
+  round retained all 24 outcomes, including one unknown-charge request failure.
+- Development-driven user STOP guidance was applied equally to all arms before
+  freezing the one confirmation cohort. The six-case selected-turn probe passed;
+  native STOP semantics and the failed development records were unchanged.
+- Confirmation retained all 48 trials: base 15/16, neutral 15/16, GoalSpec 14/16.
+  Mean total seconds including drain: 32.755, 33.402, 40.355. One GoalSpec failure
+  is a lexical communication-verifier false negative, retained in the primary
+  score. Three additional failures have unresolved request costs. No live success
+  or latency benefit is established; startup timing imbalance remains disclosed.
+- Replay of the same 213 previously observed v1 checkpoints improved contract
+  validity from 1/213 to 213/213 and teacher-scored requested-goal Top-1/Top-3 from
+  0/213 to 171/213. All original visible inputs and 109 teacher references are
+  preserved. This is v2 development evidence, not independent held-out accuracy.
+- Verification includes 73 passing Node tests plus a covered optional DB skip,
+  separate database 3/3, 273 Python regression tests with later targeted checks,
+  core/full-app type checks, native parity and deterministic browser checks.
+  Final export amendment tests passed 5/5 and package-helper tests passed 12/12.
+- Imported all 96 new outcomes, including 21 host-blocked failures with explicit
+  zero per-run event coverage. Export preserves 372 runs, 22 tables and 42,707
+  rows; all data-file hashes and Parquet roundtrips passed. Frozen memory is
+  unchanged. The dedicated PostgreSQL cluster is cleanly stopped.
+- Closed shared accounting: $29.271244 known usage, $86.195518 spent/reserved,
+  43 unresolved requests; v2 known increment $7.350941. No AWS or new paid work.
+  Source and report artifacts distinguish measured execution from allowed
+  post-freeze analysis/export/documentation. See the
+  [v2 report](../research/goalspec/reports/2026-09-15-local-v2/README.md).
+
+## 2026-09-15: GoalSpec v2 architecture and pre-development validation
+
+- Replaced full model-written envelopes with compact strict structured outputs;
+  IDs, paths, scope, hashes and normalized weights are now server-owned. Added
+  complete-objective and literal-identifier preservation. Pinned models unchanged.
+- Moved inference, embedding and candidate prediction to one managed background
+  pipeline per run. New boundaries coalesce, stale admissions are fenced, current
+  evidence still requires validation, and close drains all provider/tool siblings.
+- Reduced historical hints and candidate count, added a 0.75 engineering admission
+  threshold and already-observed-read rejection. Thresholds are not calibrated
+  probability claims. Shared one tokenizer instance per process.
+- Added Windows idle-sleep hold, latched host heartbeat and numeric/boolean host
+  status validation; no global power-policy edits. Provider failures retain safe
+  status/code/request IDs without request bodies or authorization headers.
+- Fresh v2 study permits two development rounds and one confirmation, with
+  precommitted fixtures, unique IDs, cost-only sizing and immutable stage claims.
+  Per-run native close acknowledgments expose managed drain and total trial time.
+- Validation: 268 Python tests, Ruff and core TypeScript pass; 64 TypeScript tests
+  pass with one optional skip, separate Derya DB 3/3 pass, retail/airline native
+  consumption/drain parity pass. All 32 new fixture records passed preflight.
+- Protocol development smoke: 12/12 valid, teacher matches 8/12, known usage
+  $0.136905. Follow-up prompt correction has not yet been measured. An earlier
+  copied queue failed hash validation before provider dispatch because Windows
+  default decoding changed Unicode; its replacement uses explicit UTF-8 and the
+  original failed copy is preserved. No native v2 result claimed at this checkpoint.
+
+## 2026-09-15: Completed local GoalSpec runtime, native evaluation and artifacts
+
+- Implemented the shared TypeScript runtime, audited Derya reads, authenticated
+  Python/Node step gateway, isolated native reads, browser isolation adapter,
+  pgvector repository, source-grounded prediction and durable budget ownership.
+  Preserved Derya's existing generic-loop limits and specialized branches.
+- Local execution replaced AWS at the user's direction. Pinned research models
+  were used without substitution. APIGen retained 5,000 research-only source
+  records; its 100-request annotation pilot yielded 99 valid records and one
+  retained failure. Large Toucan/Nemotron/NNetNav imports and paid WebArena runs
+  remain outside this completed pilot.
+- Collected 48 training, 36 development and 192 held-out trials. A uniform training
+  verifier amendment corrected four false consent refusals, preserving originals.
+  Frozen training memory contains 32 workflows and embeddings. All held-out
+  allowances were reserved before dispatch; failed tasks were never replaced.
+- Held-out base/neutral/GoalSpec success: 52/64, 47/64, 44/64. Mean interaction
+  latency: 20.60, 87.47, 88.06 seconds. GoalSpec-base success difference -12.50
+  percentage points, exploratory family interval [-21.88, -4.69]. Host power logs
+  confirm standby/network interruptions near the failure cluster. API statuses
+  were not logged, so individual causes and unresolved charges remain unknown.
+- All 213 frozen goal predictions, 109 unique requested-objective annotations
+  and 213 grades completed. Only one prediction passed its contract; requested
+  Top-1/Top-3 were 0/213. Seven prediction conditions and seven identical-pool
+  controls show no inferred-goal advantage. Endpoint unknown matches are reported
+  separately; predictive cross-entropy is not called true conditional entropy.
+- Native execution replay matched all observations and complete final states in
+  24 development traces, 153 boundaries: 78 speculative reads, 25 consumed, 91
+  lease checks, zero provider calls. Replay timing is separate from live latency.
+- Closed accounting: $21.920303 known usage, $70.291194 spent/reserved, 39 unresolved
+  requests. The original mixed-version journal is archived byte-identically;
+  uncertainty caps are retained and not double-counted. No invoice reconciliation.
+- Final research export: 47 files, 22 tables, 31,395 rows, all JSONL/Parquet hashes
+  and round trips verified. All eleven frozen memory-table hashes are unchanged.
+  Native-service OTLP contains 18,473 spans. A disclosed exporter repair preserves
+  32 failures without a public request using explicit unobserved provenance;
+  original partial artifacts and 158 earlier imports remain byte-identical.
+- Verification before held-out: 242 Python tests and Ruff; 41 TypeScript passes
+  plus one optional DB skip, separate three-test Derya DB pass, two browser passes,
+  native retail/airline parity, core and full-app type checks. After execution:
+  three exporter tests plus core checking, analysis numerical-equivalence checks,
+  seven package-helper checks. Full-app checking required an 8 GB Node heap.
+  The unrelated vehicle/model source-scan failure remains explicitly disclosed.
+- Dedicated PostgreSQL is stopped after export, with no further provider work.
+  Automatic policy blocked removal of the temporary encrypted key copy; receipt
+  records the outside-repository copy and archive exclusion. Protected runtime
+  source stayed frozen; allowed report/export/docs changes are disclosed.
+- [Final report and package](../research/goalspec/reports/2026-09-14-local-v1/README.md).
+  This custom tau-compatible pilot does not establish an efficiency or success
+  improvement, PASTE superiority, live Derya performance or an official score.
+
+## 2026-09-11: Completed the GoalSpec published-trajectory evaluation
+
+- Added public source/catalog acquisition and semantic annotation audits, an
+  isolated CLI classifier with captured posteriors and usage, matched controls,
+  source-bound reports, portable small evidence and depth/confidence figures.
+- Corrected same-context conditioning, domain-scoped unknown goals, task-level
+  label consistency and initial-only matched shuffles before final source freeze.
+- A bounded fit-local reference cache preserves complete mined artifacts. The
+  fixed 12-trajectory profile matched uncached pattern bytes at 1.64 versus 65.02
+  seconds. The complete 616-trial fit took 78.85 seconds, yielding 45 goals,
+  16,294 patterns and 1,753 bindings. The unfinished original fit is preserved.
+- Verification: 179 tests passed in 6.15 seconds; Ruff source/test/script checks
+  and uv lock checks pass. Four frozen replay commands completed, with shared
+  PASTE/oracle outputs and donor-map invariance verified across goal backends.
+  The new CI workflow has not run remotely.
+- Acquired 1,500 real published trials, 375 tasks and 19,074 schema-valid tool
+  calls. Prediction retains 1,044 trials across three domains, with the full
+  telecom exclusion declared before fitting. No fresh native actor run occurred.
+- Final test: 224 trials, 56 tasks, 52 families and 2,865 calls. LLM GoalSpec
+  tool Top-1 is 35.15% versus local PASTE 33.58%; primary macro NLL is 1.98323
+  versus 1.96176. Improvement -0.02146, paired 95% CI [-0.14618, +0.06073].
+  Initial goal Top-1/Top-3 is 63.27%/79.59%, including explicit unknown labels;
+  seen-goal scores are 59.21%/73.68%.
+- Exact full Top-1 is 7.36% for LLM goals, 7.43% for their shuffled control and
+  3.73% for local PASTE. Lexical/shuffled conditions share every full-match hit.
+  Preserve this candidate-pool confound and the negative primary result.
+- Gates remain insufficient evidence with scheduling disabled. No original-PASTE
+  superiority, execution efficiency, changed actor success, memory-baseline win
+  or SOTA claim is supported. Proxy labels and reconstructed contexts cannot open
+  the native gate; the development oracle also misses its numerical threshold.
+- Source SHA256 `e44f25558951f10291a4060246d4e0388927274263f2fee4e865d20f627c1572`.
+  [Report, full measurements and conclusion](../research/goalspec/reports/2026-09-11-public-replay/README.md).
+  CRM code, dependencies, databases, mailboxes and prior memory artifacts unchanged.
+
+## 2026-09-11: Initial GoalSpec pre-scheduler implementation checkpoint
+
+- Added an isolated Python research package and path-scoped CI workflow. No CRM
+  source, production database schema, mailbox behavior or root npm dependency changed.
+- Built versioned trajectory/provenance contracts, public prefix replay, grouped
+  split and trial-grid validation, frozen training artifacts, endpoint normalization,
+  PrefixSpan mining, safe symbolic binding, configurable goal backends and metrics.
+- Added official pinned tau3 import/worker integration, including provider-free
+  context capture, native outcome semantics, failure manifests, source hashes and
+  explicit classification of mock traces as synthetic.
+- Fixed review findings around batch/future leakage, assistant-first greetings,
+  invalid actor tools, native reward tolerance, horizon failures, trial duplication,
+  stale artifact hashes and missing actor/model/seed provenance.
+- Verification: 114 tests passed; Ruff and uv lock checks passed. A 360-trajectory
+  synthetic pipeline run completed with `insufficient_evidence` and no scheduler
+  authorization. Actual native mock/retail context capture and a provider-blocked
+  scripted native collector/scorer/import check passed. New CI was not remotely run.
+- No real actor API evaluation was run. The agreed A/B scientific gate remains
+  pending real trajectories and offline endpoint/template labels. Scheduler,
+  memory ablations, further benchmark adapters and live guidance remain deferred.
+- Reproduction and exact next steps: [GOALSPEC_RESEARCH_PLAN.md](GOALSPEC_RESEARCH_PLAN.md).
+
 ## 2026-09-09: Completed memory benchmark and fork-only publication artifacts
 
 - Completed 150 measured runs / 30,000 executions at frozen source `7e23ff6`,
@@ -11106,3 +11402,50 @@ Use this file for chronological implementation notes that future agents should s
   subjects prefer the first-touch rendered subject or original variant.
 - Reserved queued rows are settled in a dedicated recovery pass before fresh
   capacity and recipient filters, including rows now suppressed.
+# 2026-09-14: GoalSpec runtime implementation checkpoint
+
+Added tested TypeScript contracts, canonical hashing, bounded mining/binding,
+prediction/session interfaces, physical-read scheduler, model protocol and budget
+primitives; Derya transaction adapters and generic-loop hooks; native authenticated
+step gateway and mock parity test; source ingestion and cohort design; research SQL
+and preliminary AWS definition. Preserved the previous Python pilot and reports.
+
+Acquired APIGen revision abc4a517d67c541f85f6470cbd8fd3186b36830e: 5,000 records,
+127,761,256 bytes, with research-only lineage and a 100-record annotation queue.
+Independent replay/native eligibility remains zero. No provider or AWS spend.
+
+Local independent-connection PostgreSQL tests and native mock orchestration parity
+passed. Full TypeScript checking needs an increased Node heap. The existing model
+scan has an unrelated vehicle-model false positive. Details, reproduction commands
+and all remaining v1 requirements are in `docs/goalspec/IMPLEMENTATION_STATUS.md`.
+
+## 2026-09-14: GoalSpec continuation, cancellation and recovery
+
+Added Python operation identities, cancellation tombstones, bounded freshness
+leases and Node completion reconciliation. Added a hash-chained, fsynced budget
+journal with exclusive local ownership, restored reservations and overrun fencing.
+Added retail/airline database snapshot adapters and native ToolCall consumption.
+
+Verification: 208 Python tests, 21 TypeScript tests, core type checking, Ruff and
+changed-file ESLint pass. Real HTTP abort tests confirm Python completion before
+Node settles. Native retail/airline scripted checks preserve observations, state,
+termination and native reward; these are not benchmark scores. The initial broad
+pytest run had 61 setup errors from Windows default-temp access; a new explicit
+workspace basetemp passed all 208 tests. ESLint requires the repository's legacy
+configuration flag. No provider calls or AWS provisioning occurred. Production
+bootstrap, automatic native promotion and the paid evaluation remain unfinished.
+
+## 2026-09-14: GoalSpec service-to-native integration
+
+Added the runnable service host, budget/event ownership, pinned native actor worker,
+and lease transfer to the external native agent. Native consumption rechecks state
+and expiry, preserves real call IDs, and falls back on stale evidence. Mixed batches
+invalidate promotion. Added a scripted bootstrap and retail/airline end-to-end
+service parity harness. It verifies actual native consumption with unchanged
+observations, state, termination and native reward, with zero provider calls.
+
+209 Python tests and 22 TypeScript tests pass. Added lease-expiry, schema-drift,
+step-budget, mixed-batch and stale-promotion checks. The initial fixture assumed a
+fixed user-source index and failed before dispatch; it now selects the actual
+visible source. Failed fixture processes were stopped. Production bootstrapping,
+fresh cohorts and paid evaluation remain unfinished.

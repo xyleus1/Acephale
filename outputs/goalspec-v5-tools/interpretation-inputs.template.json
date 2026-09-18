@@ -1,0 +1,23 @@
+{
+    "version":  "goalspec-v5-interpretation-inputs-v1",
+    "preparationOnly":  true,
+    "outline":  "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\outputs\\goalspec-v5-tools\\FINAL_INTERPRETATION_DRAFT.md",
+    "finalDirectory":  "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-final-interpretation-20260916",
+    "sources":  [
+                    {
+                        "path":  "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-native-component-profile-20260916-c\\report.json",
+                        "sha256":  "24dd78e346b975ea8e2c391ebd5b807920a52880e8e8c9c39a62289f6390964a",
+                        "closed":  true
+                    },
+                    {
+                        "path":  "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-development-interruption-20260916\\receipt.json",
+                        "sha256":  "05a7d49910a1846ce75db4655279ee7866ac1cd0b60dd81565a1ca234e9a18cb",
+                        "closed":  true
+                    },
+                    {
+                        "path":  "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-confirmation-diagnosis-20260916\\report.json",
+                        "sha256":  "53f7bce8d12f4d0c1a23a7cca95e64d3aeee20598c8499d462ffb7f0c3684873",
+                        "closed":  true
+                    }
+                ]
+}

@@ -1,0 +1,25 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://derya.local/goalspec/v4-action-kind.schema.json",
+  "title":"ActionKindArtifact",
+  "type":"object","additionalProperties":false,
+  "required":["version","featureVersion","goalFeaturePolicy","classes","trained","weights","bias","temperature","lineage","contentHash"],
+  "properties":{
+    "version":{"const":"goalspec-action-kind-artifact-v1"},
+    "featureVersion":{"const":"goalspec-controller-features-v1"},
+    "goalFeaturePolicy":{"const":"public-request-only"},
+    "classes":{"type":"array","minItems":5,"maxItems":5,"items":{"enum":["read","message","write","compute","stop"]}},
+    "trained":{"type":"array","minItems":5,"maxItems":5,"items":{"type":"boolean"}},
+    "weights":{"type":"array","minItems":5,"maxItems":5,"items":{"type":"array","minItems":216,"maxItems":216,"items":{"type":"number"}}},
+    "bias":{"type":"array","minItems":5,"maxItems":5,"items":{"type":"number"}},
+    "temperature":{"type":"number","exclusiveMinimum":0},
+    "lineage":{"type":"object","additionalProperties":false,"required":["datasetHash","baseOnly","trainFamilies","selectionFamilies","calibrationFamilies","trainLabelCounts","seed","selectedEpoch","stopLabelPolicy","roleMapHash"],"properties":{
+      "datasetHash":{"type":"string","pattern":"^[a-f0-9]{64}$"},"baseOnly":{"const":true},
+      "trainFamilies":{"type":"array","items":{"type":"string"}},"selectionFamilies":{"type":"array","items":{"type":"string"}},"calibrationFamilies":{"type":"array","items":{"type":"string"}},
+      "trainLabelCounts":{"type":"array","minItems":5,"maxItems":5,"items":{"type":"integer","minimum":0}},
+      "seed":{"type":"integer"},"selectedEpoch":{"type":"integer","minimum":0},
+      "stopLabelPolicy":{"const":"unavailable-without-explicit-public-actor-stop"},"roleMapHash":{"type":"string","pattern":"^[a-f0-9]{64}$"}
+    }},
+    "contentHash":{"type":"string","pattern":"^[a-f0-9]{64}$"}
+  }
+}

@@ -1,3 +1,116 @@
+## 2026-09-17 UTC: Keep v5 experimental after mixed and negative confirmation
+
+- Do not promote v5 or enable Derya verified reuse from these results. The selected literal-context policy had lower observed native accuracy and higher mean latency than Base and legacy v4. Fewer aggregate calls, a small memory-ranking gain, source integrity and correctness tests do not establish improvement on all requested metrics. The existing performance gate remains binding.
+- Label the selected policy exactly: `actorContext=literal`, `goalConditioning=false`. Its native scores cannot establish an inferred-goal benefit. Local controller training is distinct from hosted actor fine-tuning; model soup is a candidate method, not an automatic improvement. The BFCL synchronous goal probe and Derya synthetic read probe remain separate component/intervention evidence.
+- Report strict complete-atom teacher agreement separately from recognition of the main objective, atom coverage and annotation ambiguity. Preserve the final 0/16 strict result and missing annotation, along with the independent audit confirming the scorer. Do not weaken the declared metric or silently replace references after seeing the result. Teacher labels remain fallible annotations, not task ground truth.
+- Use the declared matched-temperature comparison to discuss the goal residual itself. Primary neutral/full-goal probability differences include calibration changes. Coarsened next-read log loss is not full native action loss or true entropy. Provenance rejection of donor goals does not validate current-sourced but incorrect semantics.
+- Retain simulator/reference mismatches and policy interpretation failures under the original independent grades. Post-hoc audits explain observed traces without proving a causal architecture effect. These confirmation tasks are now exposed diagnostics and cannot be recycled as untouched confirmation for the next revision.
+- Keep final synthesis immutable and hash-bind supporting interpretation to the closed sources. Preserve all failed preparation/continuation attempts, full denominators, host-invalid raw clocks, uncertain charges and original benchmark archives. Cumulative usage, reservations and invoice charges remain distinct; no AWS deployment is required for this completed local evaluation.
+
+## 2026-09-17 UTC: Preserve interrupted development and label selected intervention exactly
+
+- Do not replace or repeat development trials interrupted by documented laptop suspension. Retain every declared slot and its recorded failure, preserve raw clocks, and exclude only explicitly invalid latency observations. Report unequal completed coverage as a selection limitation rather than claiming a reliable treatment gain.
+- Apply the predeclared censored-development allowance of USD2.50 per confirmation trial. Freeze the selected literal-context v5 policy and the complete six-task, two-trial, three-arm design before dispatch. `goalConditioning=false` means the selected intervention does not establish a live inferred-goal benefit, regardless of any later task score.
+- Distinguish missing native trial-cost telemetry from unresolved provider ledger requests. An unstarted null-cost row can conservatively widen a report bound without creating a new uncertain provider charge. Preserve original ledger reservations and native records rather than coercing either value to zero or equating their counts.
+- Keep primary replay controls as frozen-policy comparisons. Add a separately declared offline matched-temperature residual pair when neutral and goal-active calibration differ, with identical weights, context, memory and candidate pool, explicit overrides and source hashes. Do not apply that analysis-only override to the live runtime.
+
+## 2026-09-16: GoalSpec v5 current context, selective conditioning and measured admission
+
+- Preserve the actor's original causal history, actual observations, tool-call IDs and required continuations. Remove only obsolete derived GoalSpec context in the opt-in v5 compiler; retain an explicitly selectable legacy path for v4. Literal obligations, inferred hypotheses, confirmation language, observed receipts, server authorization and independent completion remain different kinds of evidence. No ledger or prompt changes the native simulator stop protocol.
+- Use a neutral local ranker plus a bounded goal correction. Current-source provenance is necessary but cannot establish semantic correctness. Calibrate correction strength against independent requested-goal teacher agreement with predeclared family partitions, mask missing labels and report small-sample limits. Do not describe local controller fitting as hosted actor fine-tuning. Goal-active temperature changes must be disclosed alongside residual changes; pure residual controls require matching temperatures.
+- Keep fitting, model selection, calibration, development and confirmation families separate before annotation, mining or memory construction. The fresh collection has 12 fitting, four selection and four calibration families. Only fitting episodes may enter runtime memory, and failed episodes cannot support successful-endpoint patterns. Preserve all original collected outcomes and prior source snapshots.
+- A continuation may fill a predeclared annotation slot only after proving that no physical provider attempt occurred for that slot anywhere in the original/continuation chain. Preserve every attempted incomplete response, all source/selection hashes and outstanding reservations. Never replace a paid failure with a more favorable result.
+- Measure actual projection snapshots, authorization/freshness validation, gateway transport, scheduling and local context costs. Correct older constants only from explicitly scoped evidence. Training-fixture component means do not establish official-environment or live latency. Zero contention is an optimistic lower bound when unmeasured; zero exposure credit records absent causal evidence, not proof that early evidence is useless. Do not force speculation to manufacture a benchmark improvement.
+- Keep host-interrupted trials in task-success denominators. Preserve their raw native/drain/judge clocks while excluding explicitly invalid timing from primary latency estimates and paired intervals, with n and missing counts. Source/setup/artifact work and shared startup/shutdown have separate timing scope. Unknown charges keep reservations and are not equated with known response usage or invoices.
+- Read-pool Top-1/Top-3 measures exact audited reads, not exact write actions. A joint pool with NO_READ and READ_UNCOVERED defines a coarsened next-read decision/set event; its log loss is not full native action tool-and-argument loss or true conditional entropy. Correct aggregate abstention never becomes exact tool/argument credit. Paper-based PASTE and Salesforce architecture lineage remains subject to the existing source audit, without a verified reproduction or SOTA claim.
+
+## 2026-09-16: GoalSpec v4 local learning and frozen confirmation
+
+- Keep the actor fixed. Replace GoalSpec's remote next-call predictor with a CPU controller over a typed, currently grounded candidate graph. Select among logistic, MLP, same-base fine-tuning and model soup using development folds only. Model averaging is not assumed to improve performance, and a locally trained controller is not a fine-tuned hosted actor.
+- Use a source-grounded goal ledger with separate intent, prohibitions, unresolved choices, resolved facts and observed progress. The model selects server-prepared literal user spans; it cannot create authorization. Complete active-goal replacement is atomic. Preserve failed protocol iterations, their original teacher grades and their billed usage.
+- Separate candidate coverage, ranking accuracy, READ/NO_READ classification, goal agreement and independent task completion. A missing candidate cannot be repaired by ranking alone. Future observed use does not establish causal exposure benefit. Keep an exposure-benefit head untrained until randomized evidence supports it.
+- Admission uses measured execution, validation, scheduling, prediction and context costs. Assign no invented actor-round benefit. A correct controller may abstain from speculation when native tools are cheaper than validation. Development exploration is explicitly bounded and randomized; confirmation disables it.
+- Freeze controller weights, memory, source bytes, task families, trial seeds, allocation and paired arm order before confirmation. Use fresh custom retail/airline compositions with independent checks. Label the result a custom tau-compatible pilot, with no official reward or full-benchmark claim. Four family clusters support only limited uncertainty estimates.
+- V4 currently uses frozen workflow retrieval and experience-trained weights. The former episodic transition/confusion prompt is inactive in its local candidate path. The Salesforce-style comparison retains that prompt. Native retail/airline weights require separate validation before claiming improved Derya business ranking.
+- Export v4 results through a distinct lossless JSONL/Parquet contract, and import only into the append-only research schema goalspec_archive_v4. Preserve immutable executed source ZIPs and label later reporting/import helpers as analysis overlays. Do not mutate prior report artifacts or frozen experience tables.
+
+## 2026-09-15: Preserve measurement failures and explicitly amend controls
+
+- A compiler defect discovered after a frozen experiment may be repaired in a separately hash-bound correction limited to the declared affected control/checkpoints. Preserve original artifacts, unchanged arms, donor selection and native outcomes; recompute any pooled diagnostics affected by changed candidate availability. Report combined phase costs without adding cumulative ledger snapshots.
+- Keep native task success, next-action prediction, automated goal agreement and execution parity as distinct measures. A reduction in authoritative calls is not a reduction in physical work when speculation adds calls. Fixed-tape replay timings cannot establish live latency gains.
+- Label child-ledger actuals as settled request usage. Successful retry responses can report usage while their logical request remains unresolved after an unknown-charge first attempt. Disclose that usage separately, retaining the full maximum and avoiding double counting in spent/reserved commitments.
+- Preserve the v3 confirmation as a single measured cohort even when results regress. Future performance revisions require independent development and a newly declared confirmation; do not tune to or selectively rerun final failures. Paper-based hosted PASTE/Salesforce controls with zero admitted speculation do not measure active upstream acceleration.
+- Native archive population must use a bounded streaming/readback path in a separate append-only schema. A failed import must roll back, and legacy/frozen table hashes must match before stopping the local database. Keep post-run helper changes separate from the immutable executed source capture.
+
+## 2026-09-15: GoalSpec final confirmation and offline replay boundaries
+
+- Early verified records should reduce unnecessary user clarification. Compact GoalSpec context prefers authorized reads for missing identifiers/details needed by the current request, preserving unresolved user choices and required consent. This final prompt amendment follows completed development traces and must be measured only by the one frozen confirmation; no native policy or task exception is added.
+- Offline prediction replay may run four independent requests concurrently, with ordered checkpoint output, frozen teacher annotations before prediction, pre-reserved full request bounds and complete drain before accounting closes. Its throughput is not live task latency. Shuffled goals must come from another task family; same-task repetitions are not valid negative-control donors.
+- Preserve v3 four-arm artifacts in their own lossless archive contract and optional append-only database schema. Do not coerce them into the legacy three-arm experiment schema or mutate frozen experience tables. All final reports retain unavailable observations and failed declared slots.
+
+## 2026-09-15: GoalSpec v3 development-driven admission and transport repairs
+
+- Treat argument binding and admission as separate steps. Only currently eligible, grounded and unobserved proposals may establish that the deterministic predictor is sufficient. A denied high-confidence binding must not suppress the candidate model.
+- Bind audited native identity outputs to profile inputs through current source references. Suppress deterministic profile proposals already observed for the same identity; this is an optimization abstention, not a claim that old data is fresh or a restriction on authoritative refresh.
+- Separate known non-mutating native calls from speculation eligibility. The pinned pure calculator preserves evidence generations, but is never itself speculated. Unknown calls and mutations still invalidate; native ownership and Python freshness checks remain mandatory.
+- Restore numeric conversation order before assigning compact goal source IDs, since canonical copying orders object keys lexically.
+- The v3 research transport may retry an UND_ERR_SOCKET failure once. Reserve the maximum for both attempts before dispatch, recheck host readiness before retry, preserve unknown-charge reservations, and expose retry policy in the experiment event manifest. SDK retries remain zero; malformed calls, refusals and unexpected models are not retried.
+- Native task reward remains primary even when auditing an upstream gold-policy conflict or a simulated user contradicting private instructions. Such diagnostics qualify interpretation and never replace failed trials or alter scores.
+
+## 2026-09-15: GoalSpec v3 source fidelity and native evaluation
+
+- Distinguish PASTE's lossless execution scheduling, Salesforce's Speculate with Memory, and GoalSpec's actor-visible goals/evidence. APIGen is a dataset, not the Salesforce runtime architecture. Four research comparisons do not introduce application mode switches.
+- Use local deterministic bindings before paid prediction and admit work by expected exposed latency saving. Keep native identity, ownership, source grounding and freshness checks before exposure. Preserve real speculative evidence as separately labeled historical context.
+- V3 evaluates unchanged pinned retail/airline tasks and native ALL rewards. Prior public replay covered every published task ID, so report fresh executions on a historically exposed official subset, not unseen tasks or a full official score. Freeze v3 development-disjoint confirmation IDs before outcomes.
+- Keep the pinned models and original $500 allocations, local infrastructure only, complete paired reservations and all failures. Use up to three declared development stages and one confirmation cohort; no repeated confirmation selection for a favorable result. Details: docs/goalspec/V3_IMPLEMENTATION.md.
+
+## 2026-09-11: Separate published replay evidence from native scheduler evidence
+
+- Public Sierra actor trajectories are valid prediction diagnostics, with original
+  recorded rewards and source revisions retained. Missing original tool catalogs
+  require an independently reconstructed catalog and the distinct
+  `tau3-public-replay` benchmark identity. They cannot open the native scheduler gate.
+- Automatic evaluator-derived terminal semantics are labeled proxies requiring
+  review. Goal identity is independent of realized actor paths and consistent
+  across a task's trials. No unlabeled or failed task is silently removed.
+- Select the structural pattern context without goals and hold it fixed across
+  all ablations. Compare matched shuffled initial and oracle goals as well as
+  dynamic goals. Resolve ontology coverage within benchmark/domain.
+- Apply the existing minimum of five request families before prediction scoring.
+  Telecom's three families exclude it from fitting and held-out prediction in this
+  public release; all its traces remain in descriptive actor outcomes.
+- Freeze lexical and explicit-model initial-goal configurations before scoring.
+  Codex CLI classification uses one public request per isolated process, disabled
+  tool features, strict structured output and bounded concurrency. Do not share
+  held-out requests in a classifier prompt or inspect credential files.
+- Report held-out NLL as predictive cross entropy, not true conditional entropy.
+  Frozen actor pass rates and times cannot establish a treatment speedup or success
+  improvement. Published-system superiority requires actual corresponding baselines.
+- Preserve the frozen public pilot when interpreting its results. Goal mixtures
+  can expose additional symbolic bindings even with shuffled goals. Any next study
+  claiming endpoint-specific argument gains must include a goal-independent
+  candidate-pool control and a direct query-conditioned predictor. Do not tune on
+  the completed held-out cohort or count per-comparison intervals as multiplicity
+  corrected evidence.
+
+## 2026-09-11: Isolate GoalSpec research and gate speculative scheduling on evidence
+
+- Status: accepted by the user for this research branch.
+- GoalSpec lives in a Python 3.12/uv package in the same repo, without depending
+  on the Next.js/Prisma application. Benchmark-native interfaces and scorers stay
+  authoritative. Existing CRM evaluations are supporting regressions only.
+- Successful training endpoints condition shared structural patterns. Oracle
+  labels and evaluator data remain outside runtime predictor inputs. Complete
+  task/template splits precede learning, and paired trials stay together.
+- Before scheduler development, oracle endpoint conditioning must improve
+  development next-tool NLL by at least 10%; inferred initial goals must recover
+  at least 25% of that gap. Both paired 95% improvement intervals must exclude zero.
+- Synthetic fixtures, native mock runs, missing provenance, incomplete cohorts,
+  and test-set results cannot open the gate. Lossless speculative timing and
+  actor-visible goal guidance are separate experimental interventions.
+- See [GoalSpec research status](GOALSPEC_RESEARCH_PLAN.md) for implemented scope,
+  validation and the remaining gated stages.
+
 ## 2026-09-09: Publish whole-profile benchmark composition with explicit provenance
 
 - Status: accepted for the isolated memory fork branch.
@@ -5777,3 +5890,108 @@ Context prospecting persists only entity-qualified targets: deterministic non-co
 - Post-batch cleanup auto-deletes only deterministic findings (duplicates,
   rule-based non-companies); model or score based deletions stay behind a Run
   card.
+# 2026-09-14: Local GoalSpec evaluation and frozen research evidence
+
+- The user's latest instruction replaces AWS deployment with local execution.
+  No AWS resource is provisioned. The $500 ceiling and protected allocations
+  remain in one durable ledger for every paid preparation and evaluation request.
+- Research uses a dedicated loopback PostgreSQL 17 database with pgvector 0.8.6.
+  APIGen records and annotations retain research-only, source-reported lineage.
+  Only independently checked native training episodes enter the frozen executable
+  workflow snapshot. Derya business snapshots use separate provenance and scope.
+- The research actor remains `gpt-5.4-2026-03-05`, with medium reasoning and
+  4,096 output tokens. Predictors and the simulator use `gpt-4.1-mini-2025-04-14`.
+  Derya keeps its existing `gpt-5.6` actor and is tested separately.
+- The Derya generic loop now invokes trusted, lazy server composition when its
+  durable budget directory is configured. Current office-wide operator access
+  remains mandatory. There is one runtime behavior, with comparison arms confined
+  to the native research harness.
+- Complete paired cohorts are reserved atomically before dispatch. Budget journal
+  version 2 appends changed reservations and supports streaming recovery of mixed
+  historical snapshot and delta records. Unknown charges retain their caps.
+  Windows process-restart recovery is tested; power-loss recovery is unvalidated.
+- Fresh task results are a custom tau-compatible pilot. Failed executions are
+  retained. Training consent-verifier corrections preserve original executions and
+  verdicts in an explicit uniform amendment; no actor trial is replaced.
+- Freeze actual working-tree source bytes, fixtures, repository records and
+  development-only cost calibration before held-out execution. The pattern score
+  threshold of 0.8 is an engineering default, not statistically calibrated
+  confidence. No performance or superiority claim follows from implementation.
+
+# 2026-09-14: Shared GoalSpec runtime and research isolation
+
+- The current user-authorized plan permits implementing and testing physical
+  speculation independently of the earlier scientific promotion gate. That does
+  not establish the performance hypothesis or authorize superiority claims.
+- One TypeScript runtime serves Derya and research adapters. Experimental arms
+  belong to the harness; there is no four-mode application switch.
+- Derya early reads require current office-wide operator access and complete
+  scoped rereads in separate read-only transactions. Validation SQL is counted.
+- Native orchestration and independent evaluation remain Python-owned. Corpus
+  source verification never grants native execution, and APIGen remains research-only.
+- The new wire hash profile uses RFC 8785 with finite numbers bounded to the safe
+  integer range. Historical Python pilot hashes remain unchanged.
+- Implementation is not yet full v1. See `docs/goalspec/IMPLEMENTATION_STATUS.md`.
+
+## 2026-09-14: Native cancellation and durable spending ownership
+
+- An aborted transport never establishes physical cancellation. Native read IDs
+  remain registered; cancel-before-start tombstones fence delayed requests, and
+  running callbacks must return before Node releases capacity or drains shutdown.
+- The research runner uses one durable budget owner per local journal. Unknown
+  provider charges survive restart as maximum reservations. Crash locks require
+  verified process termination before recovery; recorded overruns halt dispatch.
+- Retail and airline isolation copies database values into fresh audited toolkits.
+  Native calls invalidate leases, and full state hashes check freshness. Native
+  consumption requires an actual matching actor call with its real call ID.
+
+## 2026-09-14: Native promotion ownership
+
+The Node worker stages opaque leases outside the actor message. Python matches
+them to actual native ToolCalls and validates again at consumption. Lease refresh
+rotates the token without extending its original expiry. Mixed batches execute
+through native orchestration after invalidation. Count final usefulness from
+Python consumption events, since Node staging can still become stale.
+
+The service entry point loads an explicit trusted local bootstrap module. The
+supplied scripted fixture is excluded from research performance claims and paid
+model arms. Production bootstrapping must share the host's durable budget ledger.
+
+## 2026-09-15: Preserve the completed local GoalSpec study and negative findings
+
+The user-authorized local v1 implementation and three-arm custom native pilot are
+complete. Implementation authorization did not imply a scientific performance
+claim. The observed GoalSpec arm reduced success and increased latency relative
+to base; goal contract failures and independently observed host suspension limit
+interpretation. Retain every declared trial, original source freeze, unresolved
+charge reservation and original artifact. Do not repair or replace the measured
+run after seeing its results. Future protocol or host-lifecycle changes require
+a new version and fresh experimental identities; they cannot inherit these scores.
+
+Requested-goal accuracy, endpoint proxy accuracy and source/schema acceptance are
+different measurements. Unknown endpoint matches do not establish correct requested
+goals. Identical candidate pools are required when comparing argument ranking, and
+predictive cross-entropy estimates must not be labeled true conditional entropy.
+Native trial latency includes prediction and in-trial validation, while execution
+replay timing remains separate. Usage-derived costs are not invoice-confirmed.
+
+No AWS resources were created. Final research storage is exported and its local
+cluster stopped. Full upstream WebArena and paid live Derya evaluation remain
+unmeasured. The final report and implementation status supersede earlier checkpoint
+statements that paid execution or the shared runtime were unfinished.
+
+## 2026-09-15: GoalSpec v2 concurrent prediction and bounded retesting
+
+The user authorized architecture changes and new tests after v1's negative result.
+Advance working source to v2 while preserving the original measured source and
+artifacts. Compact predictor contracts delegate only semantic choices to models;
+the server constructs canonical metadata and resolves opaque current-source IDs.
+One managed background prediction pipeline runs alongside each actor. Only current
+completed goals and verified reads cross actor boundaries, with generation fences
+and full drain before spending ownership closes. Validation remains authoritative.
+
+Retesting uses precommitted fresh compositional fixtures, at most two development
+rounds and one confirmation cohort. Development may guide revisions; confirmation
+cannot be rerun until a favorable result appears. Retain failures and report total
+trial time including background drain. The original $500 ledger, allocation caps,
+unresolved reservations, model identities and local-only scope remain in force.

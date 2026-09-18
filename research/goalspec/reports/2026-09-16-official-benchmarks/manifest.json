@@ -1,0 +1,68 @@
+{
+  "version": "goalspec-cross-benchmark-report-v1",
+  "immutable": true,
+  "providerCalls": 0,
+  "sources": {
+    "tau": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-official-v4-analysis-20260916\\report.json",
+      "sha256": "a94d0ad6cbba4281e24dab7fc28893d1a338c9e780ea4984ea7c9c8c80d38dd0"
+    },
+    "bfcl": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-bfcl-v4-analysis-20260916\\report.json",
+      "sha256": "7e4cebc42f2736dcab6fa213b6c8b157cb689ec50b2d366a70d8a1034ec8e57b"
+    },
+    "apigen": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v4-apigen-controller-replay-20260916\\report.json",
+      "sha256": "c268b17d8d2b0d7fbc428edfe74cd47c4f9eeb3ada7001828a011818713e8a25"
+    },
+    "cpu_initial": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v4-component-benchmark-20260916\\latency.json",
+      "sha256": "bd1491996dce639c80c781a1ec739f19cfd74d8a1cb8f20795729cae1a3395da"
+    },
+    "cpu_isolated": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v4-component-isolated-20260916\\report.json",
+      "sha256": "80a9e10364a03d1bbd9176438d983f806bd2225616cf84ec6644759745737b55"
+    },
+    "budget": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-benchmarks-v4-budget-final-20260916.json",
+      "sha256": "89f908527c3ffcaab2d60740776a838daee45e6d1061c63a350564106fcf2133"
+    },
+    "tau_manifest": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-official-v4-analysis-20260916\\manifest.json",
+      "sha256": "1fb56f2d59b5602cf6d63ffb8d08283ff5301570b3315c69e4ad15624f381f2e"
+    },
+    "apigen_manifest": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v4-apigen-controller-replay-20260916\\manifest.json",
+      "sha256": "ad05f90b849d7676e1d9e2696f887214d31c83f9bb0d35f45b0d79e98766be60"
+    },
+    "cpu_initial_context": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v4-component-benchmark-20260916\\context.json",
+      "sha256": "b1b1765c8cc0fa1de18cdb44480b2fcfae790704fa873334cfa6e3d84588fd89"
+    },
+    "bfcl_integrity_receipt": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-bfcl-v4-analysis-20260916\\integrity-receipt.json",
+      "sha256": "4d9bdbbc45f9004a6c03a775450d163414dbd216ec234fb1fbf5225fac75a245"
+    },
+    "cpu_isolated_samples": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v4-component-isolated-20260916\\samples.jsonl",
+      "sha256": "26e94107c8f5c034e695ef3d57d2154f88588e8c21e5810b5410eac0888fe55b"
+    },
+    "bfcl_error_audit": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-bfcl-v4-analysis-20260916\\error-audit.json",
+      "sha256": "9c7b5573a997d99c6e196c0aa4d01a879719b770c2032f576461b520d0422e9e"
+    },
+    "generator": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\outputs\\goalspec-benchmarks-tools\\final_report.py",
+      "sha256": "8a914a23dd82594de6f1b03cdcebb41a432d66a613dcdafe8104f998359295cc"
+    },
+    "readme_template": {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\outputs\\goalspec-benchmarks-tools\\README.template.md",
+      "sha256": "7a91a545aabbc68eb0b08775ef0dd1452ab4a7c5c2b011abd242ff354aa8e44b"
+    }
+  },
+  "outputs": {
+    "metrics.csv": "18613b719d77c8c4ee47f222c2f1f8c5525a1cfbd446caa5751187ae4c3860f2",
+    "README.md": "01d976b8336d832269579c85d40feebf115ba495e8a36a2ece45f3e8e502bf90",
+    "report.json": "5c8fe8a6df3cdfc9a337866f9bcfaeee75acafd36b95b35d62a092c1f48715fd"
+  }
+}

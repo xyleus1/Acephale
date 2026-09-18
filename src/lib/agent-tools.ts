@@ -5,6 +5,8 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
+import { readDeryaAuthoritative } from "./goalspec-adapters/derya-read-executor";
+import { deryaProjection } from "./goalspec-adapters/derya-projections";
 import { DEMO_EMAIL_THREAD_MARKER } from "./email-demo-markers";
 import { draftReplyToMessage, draftCounterOffer } from "./sourcing-award";
 import { extractSourcingOffersForInquiry } from "./sourcing-offers";
@@ -2399,64 +2401,13 @@ export async function dispatchTool(
   try {
     switch (name) {
       case "search_jobs": {
-        const q = String(input.q ?? "");
-        const limit = Math.min(50, Number(input.limit ?? 10));
-        const where: any = {};
-        if (input.type) where.type = String(input.type);
-        if (input.status) where.status = String(input.status);
-        const rows = await prisma.job.findMany({
-          where: {
-            officeId: ctx.officeId,
-            ...where,
-            OR: q ? [
-              { reference: { contains: q, mode: "insensitive" } },
-              { origin: { contains: q, mode: "insensitive" } },
-              { destination: { contains: q, mode: "insensitive" } },
-              { commodity: { contains: q, mode: "insensitive" } },
-              { notes: { contains: q, mode: "insensitive" } },
-              { company: { name: { contains: q, mode: "insensitive" } } },
-            ] : undefined,
-          },
-          select: {
-            id: true, reference: true, type: true, status: true,
-            origin: true, destination: true, commodity: true,
-            company: { select: { name: true } },
-          },
-          take: limit, orderBy: { updatedAt: "desc" },
-        });
-        return { ok: true, result: rows };
+        return await readDeryaAuthoritative(prisma, deryaProjection, "search_jobs", input as Parameters<typeof readDeryaAuthoritative>[3], ctx);
       }
       case "search_inquiries": {
-        const q = String(input.q ?? "");
-        const limit = Math.min(50, Number(input.limit ?? 10));
-        const where: any = { officeId: ctx.officeId };
-        if (input.type) where.type = String(input.type);
-        const rows = await prisma.inquiry.findMany({
-          where: {
-            ...where,
-            OR: q ? [
-              { reference: { contains: q, mode: "insensitive" } },
-              { subject: { contains: q, mode: "insensitive" } },
-              { commodity: { contains: q, mode: "insensitive" } },
-              { fromEmail: { contains: q, mode: "insensitive" } },
-              { fromCompany: { contains: q, mode: "insensitive" } },
-              { origin: { contains: q, mode: "insensitive" } },
-              { destination: { contains: q, mode: "insensitive" } },
-            ] : undefined,
-          },
-          select: { id: true, reference: true, subject: true, type: true, status: true, commodity: true, origin: true, destination: true, fromEmail: true, receivedAt: true },
-          take: limit, orderBy: { receivedAt: "desc" },
-        });
-        return { ok: true, result: rows };
+        return await readDeryaAuthoritative(prisma, deryaProjection, "search_inquiries", input as Parameters<typeof readDeryaAuthoritative>[3], ctx);
       }
       case "search_companies": {
-        const q = String(input.q ?? "");
-        const rows = await prisma.company.findMany({
-          where: { officeId: ctx.officeId, name: { contains: q, mode: "insensitive" } },
-          select: { id: true, name: true, status: true },
-          take: Math.min(50, Number(input.limit ?? 10)),
-        });
-        return { ok: true, result: rows };
+        return await readDeryaAuthoritative(prisma, deryaProjection, "search_companies", input as Parameters<typeof readDeryaAuthoritative>[3], ctx);
       }
       case "search_email_threads": {
         const q = String(input.q ?? "");
@@ -2734,77 +2685,10 @@ export async function dispatchTool(
       }
       case "get_job": {
         if (!jobId) return { ok: false, error: "No job_id and no focused job" };
-        const job = await prisma.job.findFirst({
-          where: { id: jobId, officeId: ctx.officeId },
-          include: {
-            company: { select: { name: true } },
-            inquiry: { include: {
-              carrierQuotes: true,
-              emailThreads: { include: { messages: { orderBy: { sentAt: "desc" }, take: 1 } } },
-            } },
-            milestones: true,
-            documents: true,
-          },
-        });
-        if (!job) return { ok: false, error: "Job not found" };
-        const documentReadiness = compactDocumentReadinessForAgent(job.documents);
-        // Slim result for token budget
-        const offers = (job.inquiry?.emailThreads ?? []).map((t) => {
-          let o: any = {};
-          try { if (t.supplierOffer) o = JSON.parse(t.supplierOffer); } catch {}
-          return {
-            thread_id: t.id,
-            subject: t.subject,
-            supplier: o.supplierName ?? null,
-            price: o.pricePerUnit ?? null,
-            currency: o.currency ?? null,
-            unit: o.unit ?? null,
-            qty: o.qtyAvailable ?? null,
-            incoterms: o.incoterms ?? null,
-            origin: o.origin ?? null,
-            lead_time: o.leadTime ?? null,
-            payment_terms: o.paymentTerms ?? null,
-            awarded: !!t.awardedAt,
-          };
-        });
-        return {
-          ok: true,
-          result: {
-            id: job.id, reference: job.reference, type: job.type, status: job.status,
-            customer: job.company?.name ?? null,
-            origin: job.origin, destination: job.destination, mode: job.mode,
-            commodity: job.commodity, weight: job.weight, volume: job.volume,
-            etd: job.etd, eta: job.eta,
-            revenue: job.revenue, cost: job.cost, currency: job.currency,
-            inquiry_id: job.inquiryId,
-            supplier_offers: job.type === "SOURCING" ? offers : undefined,
-            carrier_quotes: job.type === "FORWARDING" ? job.inquiry?.carrierQuotes.map((q) => ({
-              carrier: q.carrier, status: q.status, total_40hc: q.total40HC, total_40: q.total40, total_20: q.total20, transit_days: q.transitDays, service: q.service,
-            })) : undefined,
-            milestones: job.milestones.map((m) => ({ type: m.type, planned: m.plannedAt, actual: m.actualAt })),
-            document_readiness: documentReadiness,
-            documents: job.documents.map((d) => ({
-              id: d.id,
-              name: d.name,
-              type: d.docType,
-              status: d.status,
-              ai_summary: d.aiSummary,
-              ai_flags: d.aiFlags,
-              ai_key_fields: d.aiKeyFields,
-            })),
-          },
-        };
+        return await readDeryaAuthoritative(prisma, deryaProjection, "get_job", { ...input, job_id: jobId } as Parameters<typeof readDeryaAuthoritative>[3], ctx);
       }
       case "list_open_inquiries": {
-        const where: any = { officeId: ctx.officeId, status: openInquiryStatusFilter() };
-        if (input.type) where.type = String(input.type);
-        const rows = await prisma.inquiry.findMany({
-          where,
-          select: { id: true, reference: true, subject: true, type: true, commodity: true, origin: true, destination: true, status: true },
-          take: Math.min(50, Number(input.limit ?? 20)),
-          orderBy: { receivedAt: "desc" },
-        });
-        return { ok: true, result: rows };
+        return await readDeryaAuthoritative(prisma, deryaProjection, "list_open_inquiries", input as Parameters<typeof readDeryaAuthoritative>[3], ctx);
       }
       case "list_lead_board": {
         const stageInput = typeof input.stage === "string" ? input.stage.trim().toLowerCase() : "";

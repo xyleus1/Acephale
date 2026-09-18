@@ -1,0 +1,9 @@
+# Source hashes must be stable on Windows and Unix checkouts.
+*.py text eol=lf
+*.toml text eol=lf
+uv.lock text eol=lf
+benchmarks.lock.json text eol=lf
+# Preserve the original exported model and parity artifact bytes.
+runs/**/controller.json -text
+runs/**/action-kind.json -text
+runs/**/parity-fixtures.json -text

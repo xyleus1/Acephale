@@ -1,0 +1,85 @@
+name: GoalSpec research tests
+
+on:
+  pull_request:
+    paths:
+      - "research/goalspec/**"
+      - "src/lib/goalspec/**"
+      - "src/lib/goalspec-adapters/**"
+      - "services/goalspec-runtime/**"
+      - "scripts/goalspec-*"
+      - "package*.json"
+      - "src/lib/agent-chat.ts"
+      - "src/lib/gpt56-client.ts"
+      - "tsconfig.goalspec.json"
+      - ".github/workflows/goalspec-tests.yml"
+  push:
+    branches: [main, codex/memory-temporal-main-20260908]
+    paths:
+      - "research/goalspec/**"
+      - "src/lib/goalspec/**"
+      - "src/lib/goalspec-adapters/**"
+      - "services/goalspec-runtime/**"
+      - "scripts/goalspec-*"
+      - "package*.json"
+      - "src/lib/agent-chat.ts"
+      - "src/lib/gpt56-client.ts"
+      - "tsconfig.goalspec.json"
+      - ".github/workflows/goalspec-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: goalspec_owner
+          POSTGRES_PASSWORD: fixture
+          POSTGRES_DB: goalspec_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U goalspec_owner -d goalspec_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: research/goalspec
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.13"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: research/goalspec/uv.lock
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts
+        working-directory: .
+      - run: npx prisma generate
+        working-directory: .
+        env:
+          DATABASE_URL: postgresql://fixture@127.0.0.1/goalspec_ci
+      - run: npm run goalspec:check && npm run test:goalspec && npm run test:goalspec-v5
+        working-directory: .
+      - run: |
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script --output /tmp/goalspec-schema.sql
+          psql "$GOALSPEC_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /tmp/goalspec-schema.sql
+          npm run test:goalspec-db
+        working-directory: .
+        env:
+          DATABASE_URL: postgresql://goalspec_owner:fixture@127.0.0.1:5432/goalspec_ci
+          GOALSPEC_TEST_DATABASE_URL: postgresql://goalspec_owner:fixture@127.0.0.1:5432/goalspec_ci
+      - run: uv sync --frozen --extra analysis --group dev
+      - run: uv run --frozen --extra analysis pytest
+      - run: uv run --frozen --extra analysis goalspec demo --output runs/ci-demo --groups 10 --bootstrap-samples 100
+      - run: uv run --frozen --extra analysis ruff check src tests

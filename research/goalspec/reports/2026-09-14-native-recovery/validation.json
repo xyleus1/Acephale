@@ -1,0 +1,18 @@
+{
+  "status": "implementation_checkpoint_not_complete_v1",
+  "python_tests_passed": 208,
+  "typescript_tests_passed": 21,
+  "core_typecheck": "passed",
+  "ruff": "passed",
+  "changed_file_eslint": "passed_with_legacy_configuration",
+  "native_http_cancellation": "passed_node_waits_for_physical_python_completion",
+  "native_snapshot_domains": ["retail", "airline"],
+  "native_observation_cases_per_domain": 3,
+  "native_orchestration_parity": ["observations", "state", "termination", "native_environment_reward"],
+  "durable_budget_checks": ["exclusive_owner", "restored_reservations", "partial_journal_rejection", "overrun_halt_after_reopen"],
+  "provider_calls": 0,
+  "provider_and_aws_research_spend_usd": 0,
+  "live_evaluation_completed": false,
+  "limitations_document": "docs/goalspec/IMPLEMENTATION_STATUS.md",
+  "recovery_document": "services/goalspec-runtime/RECOVERY.md"
+}

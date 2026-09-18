@@ -1,0 +1,91 @@
+{
+  "condition_counts": {
+    "goalspec": {
+      "candidate_count": 7243,
+      "full_top1_hits": 306,
+      "full_top3_hits": 330,
+      "steps_with_candidates": 3099
+    },
+    "goalspec_initial": {
+      "candidate_count": 7243,
+      "full_top1_hits": 306,
+      "full_top3_hits": 330,
+      "steps_with_candidates": 3099
+    },
+    "oracle": {
+      "candidate_count": 4991,
+      "full_top1_hits": 190,
+      "full_top3_hits": 206,
+      "steps_with_candidates": 2605
+    },
+    "paste": {
+      "candidate_count": 5406,
+      "full_top1_hits": 156,
+      "full_top3_hits": 175,
+      "steps_with_candidates": 2665
+    },
+    "shuffled": {
+      "candidate_count": 7243,
+      "full_top1_hits": 306,
+      "full_top3_hits": 330,
+      "steps_with_candidates": 3099
+    },
+    "shuffled_initial": {
+      "candidate_count": 7243,
+      "full_top1_hits": 306,
+      "full_top3_hits": 330,
+      "steps_with_candidates": 3099
+    },
+    "shuffled_oracle": {
+      "candidate_count": 4833,
+      "full_top1_hits": 174,
+      "full_top3_hits": 192,
+      "steps_with_candidates": 2524
+    }
+  },
+  "counts": {
+    "gains_also_hit_by_shuffled": 150,
+    "gains_target_absent_from_all_baseline_candidates": 148,
+    "gains_target_present_in_baseline_but_reranked": 2,
+    "goal_full_top1_gains_over_baseline": 150,
+    "goal_full_top1_losses_against_baseline": 0,
+    "goal_shuffled_different_tool_probabilities": 3445,
+    "goal_shuffled_same_candidate_order": 3488,
+    "goal_shuffled_same_candidate_set": 3515,
+    "goal_shuffled_same_positive_posterior_support": 3515,
+    "goal_shuffled_same_top1_candidate": 3506,
+    "goal_shuffled_same_top1_hit_status": 3515,
+    "goal_shuffled_same_top3_hit_status": 3515,
+    "goal_strictly_expands_baseline_candidates": 1824,
+    "steps": 3515
+  },
+  "goal_top1_gains_by_domain_tool": [
+    {
+      "domain": "airline",
+      "gains": 2,
+      "tool": "get_reservation_details"
+    },
+    {
+      "domain": "banking_knowledge",
+      "gains": 29,
+      "tool": "get_current_time"
+    },
+    {
+      "domain": "retail",
+      "gains": 69,
+      "tool": "get_order_details"
+    },
+    {
+      "domain": "retail",
+      "gains": 50,
+      "tool": "get_user_details"
+    }
+  ],
+  "interpretation": "Observational audit only. The implementation mixes candidates from every goal with positive posterior mass. Equal candidate sets and correct-call gains under shuffled goals can arise from access to additional goal-specific argument bindings, independently of identifying the right endpoint. Prediction weights may still differ. This is not a new experiment, tuned configuration, or causal attribution.",
+  "partition": "development",
+  "predictions_sha256": "a5766640bf83f5152c2a2620ecacd4f3d48f9929cc2d170e0ace2dd23a25099f",
+  "run_path": "runs\\public-pilot-20260911\\development-lexical",
+  "schema_version": 1,
+  "source_sha256": "e44f25558951f10291a4060246d4e0388927274263f2fee4e865d20f627c1572",
+  "summary_sha256": "df616c96bcead7f5655ccfdb6ccdd45c16945659420987d0cf704aa9eae69c66"
+}

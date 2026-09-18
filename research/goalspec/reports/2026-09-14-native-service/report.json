@@ -1,0 +1,16 @@
+{
+  "label": "native service parity with scripted model, not benchmark performance",
+  "provider_calls": 0,
+  "checks": [
+    {
+      "domain": "retail",
+      "passed": true,
+      "native_consumptions": 1
+    },
+    {
+      "domain": "airline",
+      "passed": true,
+      "native_consumptions": 1
+    }
+  ]
+}

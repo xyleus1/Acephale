@@ -1,0 +1,98 @@
+{
+  "version": "goalspec-v5-final-synthesis-v1",
+  "inputsConfiguration": {
+    "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-final-synthesis-inputs-20260916.json",
+    "sha256": "e48f38f7dcedaa67b148b759c1333b6fa8dd9a00edb09fddd9c21e182b171bb8"
+  },
+  "generator": {
+    "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\outputs\\goalspec-v5-tools\\assemble_report.py",
+    "sha256": "43631b27f736c57637944ce9a5e47b7b4c562dfc37d7a9a514860e50a27c008a"
+  },
+  "sources": [
+    {
+      "role": "annotation",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-annotation-diagnosis-20260916.json",
+      "sha256": "13d0a2f72e16c246cdf2a8426311ce12b6ddd4ff8fac6d180bff82dccceaa484",
+      "version": "v5-annotation-diagnosis-v1",
+      "closedDeclared": true
+    },
+    {
+      "role": "training",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-training-report-20260916\\report.json",
+      "sha256": "7cc0eb113ac5d03e9abb28705b0c34dddfd1a18e8ee5c22c59f34ed45c1d0182",
+      "version": "goalspec-native-v5-report-v1",
+      "closedDeclared": true
+    },
+    {
+      "role": "development",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-development-report-20260916\\report.json",
+      "sha256": "64d07e98f8cbca185705255a1b310a0d9af1b4ff5173a5c796f7e505e5da696b",
+      "version": "goalspec-native-v5-report-v1",
+      "closedDeclared": true
+    },
+    {
+      "role": "confirmation",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-confirmation-report-20260916\\report.json",
+      "sha256": "1dfb9ee133c05563127166b7c812dfaa40497e5884de8991c6634fe8d5d1eb3f",
+      "version": "goalspec-native-v5-report-v1",
+      "closedDeclared": true
+    },
+    {
+      "role": "derya_profile",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-derya-profile-20260916\\report.json",
+      "sha256": "1d4aa7845397b537ec0f4760f4fd3d4ae415e08f9644c1320de6bfab0494af10",
+      "version": "derya-real-read-profile-v5.1",
+      "closedDeclared": true
+    },
+    {
+      "role": "derya_live",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-derya-live-report-20260916\\report.json",
+      "sha256": "a3da908f8e69e5f799b747c107105ab1e6c7eb16452a41b1ea3d865c2936e567",
+      "version": "derya-live-read-v5.1",
+      "closedDeclared": true
+    },
+    {
+      "role": "bfcl",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-bfcl-v5-probe-report-20260916\\report.json",
+      "sha256": "c90a754371f83bcadcabd4e2abc9c4264f761160bffe3a285b083af40244ee90",
+      "version": "goalspec-bfcl-goal-conditioning-v5-20260916",
+      "closedDeclared": true
+    },
+    {
+      "role": "prediction",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-prediction-replay-report-20260916.json",
+      "sha256": "7822481d205bb7d9d57cd6b57614a2c4067d03ee7234c519aebc52053acf0336",
+      "version": "goalspec-v5-confirmation-prediction-report-v1",
+      "closedDeclared": true
+    },
+    {
+      "role": "controller",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-model-pipeline-20260916\\conditional\\report.json",
+      "sha256": "526e3f352a8598dba36cd83e6b2f406b16323c59c42b471d00e56d96a2f016bf",
+      "version": "goalspec-controller-v5-teacher-fit",
+      "closedDeclared": true
+    },
+    {
+      "role": "budget",
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v5-budget-final-20260916.json",
+      "sha256": "e196fa18b78d8732236438d0d94a5a4ae7eff17eef89e96fec4a3848c81f4564",
+      "version": null,
+      "closedDeclared": true
+    }
+  ],
+  "unavailable": {},
+  "outputs": [
+    {
+      "path": "README.md",
+      "sha256": "a8f520f77b6b76f3b5c1a1acc24fd04fb0b3cd29878b9c7e6d7955d242606c92"
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "e48f38f7dcedaa67b148b759c1333b6fa8dd9a00edb09fddd9c21e182b171bb8"
+    }
+  ],
+  "scoresModified": false,
+  "providerCalls": 0,
+  "rawCasesRead": false,
+  "pooledBenchmarkScore": false
+}

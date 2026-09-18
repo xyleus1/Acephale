@@ -1,0 +1,11 @@
+﻿{
+    "research/goalspec/src/goalspec/adapters/step_gateway.py":  "4e3a9800271722b006cc90f379f35119d220b74cd9080c40fadbb32b65b20240",
+    "scripts/goalspec-service.ts":  "b3276aedf870f6db082a806650cf3761f31c0dc6c81895eba7df18dc0a2f71b8",
+    "services/goalspec-runtime/gateway-client.ts":  "91a96907f548b4cfc9cf35192f096ea691e9bdb25c37f5bb62c64a1522816996",
+    "research/goalspec/src/goalspec/adapters/tau_external_agent.py":  "eb873a94a068b6a28ed2325580995592de522d8d3e048f9ce152f0a2af30db52",
+    "services/goalspec-runtime/worker.ts":  "179979477cbac4a20c73d991f4dbaa1ce7b42eebded576005e9bba0ff3d585a8",
+    "research/goalspec/scripts/native_service_parity.py":  "e8ac3bd90b4ffebc6b3db8a9a28aa52d6f3c07cd141815a18ee066a6aad521da",
+    "services/goalspec-runtime/host.ts":  "d0320dde3c627f8f92c2bf2beeb6767de1988ef0a0b5a59d39d79952db323713",
+    "research/goalspec/src/goalspec/adapters/tau_snapshot.py":  "53e1d64a0e9ae0e3e6d882408b120a56186b27c7a6e0d9ccd254f7ee216df923",
+    "scripts/goalspec-service-fixture.ts":  "6fe4aa8d5c7e6171a2cafa92e1d4f10416aec89708c75704311d5d8c2f1ffba5"
+}

@@ -1,0 +1,16 @@
+{
+  "controllerPath": "research/goalspec/runs/local-controller-v5-trained-20260916/controller.json",
+  "legacyConfigurationPath": "research/goalspec/v4-confirmation.configuration.json",
+  "estimate": {
+    "toolMs": 0.6040316,
+    "validationMs": 9.2,
+    "schedulingMs": 1,
+    "predictionMs": 1.2,
+    "contentionMs": 0,
+    "contextMs": 0,
+    "measuredExposureBenefitMs": 0
+  },
+  "actorContext": "hypotheses",
+  "goalConditioning": true,
+  "exposeEvidence": true
+}

@@ -1,0 +1,17 @@
+{
+  "status": "implementation_checkpoint_not_complete_v1",
+  "baseline_git_revision": "e257708d44b2279f72cc542d527cb2bf445e3adf",
+  "working_tree_source_hash": "17be9ba3d1fd61f4491807627401488b5801ca4223f12613a1d4ebb24fb2d438",
+  "python_tests_passed": 203,
+  "typescript_runtime_model_tests_passed": 17,
+  "independent_postgres_freshness": "passed",
+  "native_mock_gateway_parity": "passed",
+  "core_typecheck": "passed",
+  "application_typecheck": "passed_with_8192_mb_heap",
+  "existing_model_scan": "failed_unrelated_vehicle_model_fixture",
+  "ruff": "passed",
+  "provider_calls": 0,
+  "provider_and_aws_research_spend_usd": 0,
+  "live_evaluation_completed": false,
+  "limitations_document": "docs/goalspec/IMPLEMENTATION_STATUS.md"
+}

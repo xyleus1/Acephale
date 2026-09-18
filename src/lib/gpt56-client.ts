@@ -1,4 +1,19 @@
 import OpenAI from "openai";
+import type { EvidenceEnvelope } from "./goalspec/contracts/generated";
+
+type RuntimeObservation = { context: string; evidence: EvidenceEnvelope[] };
+type ServerContinuation = { output: unknown[]; observation?: RuntimeObservation };
+
+// Next server-action arguments are untrusted at runtime even when the browser
+// caller has a TypeScript type. Chat history carries plain dialogue only.
+export function parseClientChatHistory(value: unknown): { role: "user" | "assistant"; content: string }[] {
+  if (!Array.isArray(value)) throw new Error("Invalid chat history");
+  return value.map(item => {
+    if (!item || typeof item !== "object" || !["user", "assistant"].includes(item.role)
+      || typeof item.content !== "string") throw new Error("Chat history must contain user or assistant text");
+    return { role: item.role as "user" | "assistant", content: item.content };
+  });
+}
 
 export const DERYA_AI_MODEL = "gpt-5.6" as const;
 export const DERYA_AI_MODEL_LABEL = "GPT-5.6" as const;
@@ -44,12 +59,14 @@ type LegacyCreateParams = {
   system?: string | Array<{ type?: string; text?: string }>;
   messages: LegacyMessage[];
   tools?: LegacyTool[];
+  runtimeObservation?: RuntimeObservation;
+  runtimeContextMode?: "legacy" | "current-only";
 };
 
 export type Gpt56Message = {
   content: LegacyContentBlock[];
   stop_reason: "tool_use" | "end_turn";
-  model: typeof DERYA_AI_MODEL;
+  model: string;
 };
 
 function instructionsFromSystem(system: LegacyCreateParams["system"]): string | undefined {
@@ -63,41 +80,36 @@ function instructionsFromSystem(system: LegacyCreateParams["system"]): string | 
 }
 
 function parseToolArguments(argumentsJson: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(argumentsJson);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
+  const parsed: unknown = JSON.parse(argumentsJson);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Function arguments must be a JSON object");
   }
+  return parsed as Record<string, unknown>;
 }
 
-function responsesInputFromMessages(messages: LegacyMessage[]): unknown[] {
+function responsesInputFromMessages(messages: LegacyMessage[], continuations: WeakMap<object, ServerContinuation>, mode: "legacy" | "current-only" = "legacy"): unknown[] {
   const input: unknown[] = [];
 
   for (const message of messages) {
+    if (message.role !== "user" && message.role !== "assistant") throw new Error("Invalid chat message role");
     if (typeof message.content === "string") {
       input.push({ role: message.role, content: message.content });
       continue;
     }
 
     if (message.role === "assistant") {
-      const originalOutput = (
-        message.content as Array<Record<string, unknown>> & {
-          _openaiOutput?: unknown[];
-        }
-      )._openaiOutput;
+      // Only this client's in-memory response objects own trusted metadata.
+      // Private-looking properties and serialized copies carry no authority.
+      const continuation = continuations.get(message.content);
+      const observation = continuation?.observation;
+      if (observation?.context && mode === "legacy") input.push({ role: "developer", content: observation.context });
+      const originalOutput = continuation?.output;
       if (originalOutput?.length) {
-        input.push(...originalOutput);
+        input.push(...structuredClone(originalOutput));
         continue;
       }
 
       for (const block of message.content) {
-        if (block._openaiItem) {
-          input.push(block._openaiItem);
-          continue;
-        }
         if (block.type === "text" && typeof block.text === "string") {
           input.push({ role: "assistant", content: block.text });
         } else if (
@@ -149,16 +161,18 @@ function responsesTools(tools: LegacyTool[] | undefined): unknown[] | undefined 
 
 export default class Gpt56Client {
   private readonly client: OpenAI;
+  private readonly continuations = new WeakMap<object, ServerContinuation>();
 
   readonly messages: {
     create: (params: LegacyCreateParams) => Promise<Gpt56Message>;
   };
 
-  constructor(options: { apiKey: string }) {
+  constructor(options: { apiKey: string; fetch?: typeof globalThis.fetch }) {
     this.client = new OpenAI({
       apiKey: options.apiKey,
       timeout: 45_000,
       maxRetries: 1,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
     });
     this.messages = {
       create: (params) => this.createMessage(params),
@@ -166,10 +180,16 @@ export default class Gpt56Client {
   }
 
   private async createMessage(params: LegacyCreateParams): Promise<Gpt56Message> {
+    // Snapshot before dispatch, preserving exactly the observation this turn
+    // saw even if a concurrent caller advances its runtime boundary.
+    const observation = params.runtimeObservation?.context.trim()
+      ? structuredClone(params.runtimeObservation) : undefined;
+    const input = responsesInputFromMessages(params.messages, this.continuations, params.runtimeContextMode);
+    if (observation) input.push({ role: "developer", content: observation.context });
     const response = await this.client.responses.create({
-      model: DERYA_AI_MODEL,
+      model: params.model ?? DERYA_AI_MODEL,
       instructions: instructionsFromSystem(params.system),
-      input: responsesInputFromMessages(params.messages) as never,
+      input: input as never,
       tools: responsesTools(params.tools) as never,
       max_output_tokens: Math.max(params.max_tokens, params.tools?.length ? 1_024 : 512),
       reasoning: { effort: params.tools?.length ? "medium" : "low" },
@@ -201,11 +221,16 @@ export default class Gpt56Client {
       value: response.output,
       enumerable: false,
     });
+    if (observation) Object.defineProperty(content, "_goalspecObservation", {
+      value: structuredClone(observation),
+      enumerable: false,
+    });
+    this.continuations.set(content, { output: structuredClone(response.output), observation });
 
     return {
       content,
       stop_reason: content.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn",
-      model: DERYA_AI_MODEL,
+      model: response.model,
     };
   }
 }
