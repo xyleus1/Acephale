@@ -1,3 +1,16 @@
+# 2026-10-03: Prepare dedicated GoalSpec repository
+
+Cloned the published GoalSpec branch at
+`086b98535829eb36b338528be4a7f0dc6f2a6ceb` into a separate `goalspec` checkout.
+Prepared local `main` for the dedicated `xyleus1/goalspec` repository, retaining the
+original `derya-crm` remote as `upstream`. The existing source checkout is untouched.
+
+Added a GoalSpec landing section to the root README with checkout and benchmark
+links; the original Derya README and full history remain as integration context.
+This preparation changes documentation only. No runtime, model, frozen result, or
+benchmark changed; V6 remains deferred. Commit and remote publication verification
+are subsequent steps and are not claimed complete by this entry.
+
 # 2026-09-18: Publish GoalSpec v1-v5 source and benchmark summaries
 
 The staged Node core checkout separately passed 280 tests with two optional

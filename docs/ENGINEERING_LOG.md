@@ -1,3 +1,9 @@
+# 2026-10-03: Prepare dedicated GoalSpec repository
+
+- Cloned the published branch at `086b98535829eb36b338528be4a7f0dc6f2a6ceb` into a separate `goalspec` directory; prepared local `main` and renamed the original remote `upstream`.
+- Added a GoalSpec README landing section linking the published checkout guide and closed v5 results while preserving the original Derya README and Git history.
+- Documentation-only preparation for `xyleus1/goalspec`; no paid calls, runtime changes, retraining, or V6 implementation. Remote publication is not yet claimed by this entry.
+
 # 2026-09-18: Publish GoalSpec v1-v5 source and benchmark summaries
 
 The staged Node core checkout separately passed 280 tests with two optional
