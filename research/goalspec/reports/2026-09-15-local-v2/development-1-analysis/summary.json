@@ -1,0 +1,2026 @@
+{
+  "schemaVersion": "local-v2-report-1",
+  "createdAtUtc": "2026-09-15T18:32:24.172864+00:00",
+  "studyId": "goalspec-v2-20260915-a",
+  "stages": [
+    {
+      "schemaVersion": "1.0.0",
+      "label": "custom tau-compatible pilot",
+      "experimentId": "fresh-native-v2:goalspec-v2-20260915-a:development-1:b53fc324c1a50585",
+      "snapshotId": "native-training-v1-20260915",
+      "cohortPolicy": "all_predeclared_trials_retained_failures_never_replaced",
+      "designVerified": true,
+      "arms": {
+        "base": {
+          "trials": 8,
+          "tasks": 8,
+          "families": 4,
+          "successes": 0,
+          "nativeSuccess": 0.0,
+          "successInterval": {
+            "estimate": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "families": 4,
+            "domains": 2,
+            "weighting": "equal_domain_equal_family_equal_observation_within_family",
+            "bootstrapSamples": 2000,
+            "bootstrapSeed": 42
+          },
+          "constraintViolations": 0,
+          "constraintCompliantTrials": 8,
+          "budgetTerminations": 0,
+          "terminationCounts": {
+            "execution_error": 8
+          },
+          "pass1": 0.0,
+          "twoTrialConsistency": {
+            "eligibleTasks": 0,
+            "ineligibleTasks": 8,
+            "bothSucceed": null,
+            "sameOutcome": null
+          },
+          "calls": {
+            "authoritativeCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "speculativeCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "usefulCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "wastedCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "rejectedCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "cancelledCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "revalidationCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "freshnessChecks": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            }
+          },
+          "authoritativeCallsPerSuccessfulTask": null,
+          "physicalCallsPerSuccessfulTask": null,
+          "speculationHitRate": null,
+          "billedUsd": {
+            "measuredTrials": 8,
+            "missingTrials": 0,
+            "sum": 0.010841,
+            "observedSum": 0.010841,
+            "measurement": "provider_reported_usage_times_configured_standard_prices",
+            "invoiceReconciled": false
+          },
+          "latency": {
+            "measurement": "native orchestration through termination, before managed-worker drain",
+            "unit": "ms",
+            "measuredTrials": 8,
+            "missingTrials": 0,
+            "mean": 5372.242474999439,
+            "median": 19.740549998459755,
+            "p95": 27853.005609999833,
+            "p99": 39837.785521999635,
+            "maximum": 42833.9804999996
+          },
+          "timings": {
+            "latencyMs": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 42977.93979999551,
+              "observedSum": 42977.93979999551,
+              "mean": 5372.242474999439,
+              "median": 19.740549998459755,
+              "p95": 27853.005609999833,
+              "maximum": 42833.9804999996,
+              "unit": "ms",
+              "measurement": "native orchestration through termination, before managed-worker drain"
+            },
+            "totalTrialSeconds": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 43.209647299994685,
+              "observedSum": 43.209647299994685,
+              "mean": 5.401205912499336,
+              "median": 0.04575299999851268,
+              "p95": 27.888972184999307,
+              "maximum": 42.85513279999941,
+              "unit": "s",
+              "measurement": "native orchestration plus acknowledged actor/user managed-work drain"
+            },
+            "serviceDrainSeconds": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0.23168229999646428,
+              "observedSum": 0.23168229999646428,
+              "mean": 0.028960287499558035,
+              "median": 0.022356749999744352,
+              "p95": 0.05284818499876563,
+              "maximum": 0.06347449999884702,
+              "unit": "s",
+              "measurement": "time spent requesting and awaiting both managed-worker closes"
+            }
+          },
+          "drainFailures": 0,
+          "unknownCostTrials": 0,
+          "knownUsageSubtotalUsd": 0.010841,
+          "knownUsageSubtotalSource": "verified_provider_event_logs",
+          "declaredTrialAllowanceUsd": 10.0,
+          "readExecutions": {
+            "authoritativeReads": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0,
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "maximum": 0
+            },
+            "physicalReads": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0,
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "maximum": 0
+            }
+          },
+          "readCountUnavailableReasons": {},
+          "eventDiagnostics": {
+            "decisionContexts": 0,
+            "validGoalContexts": 0,
+            "nonunknownGoalContexts": 0,
+            "goalResponses": 0,
+            "events": {
+              "model_attempt": 2,
+              "execution_frame": 1,
+              "actor_boundary": 1,
+              "actor_response": 1
+            },
+            "goalInvalidReasons": {},
+            "predictionRejections": {},
+            "schedulerRejections": {},
+            "candidateAdmissionRejections": {},
+            "predictionCycleFailures": {},
+            "knownUsageByRoleMicrodollars": {
+              "user": 228,
+              "actor": 10613
+            },
+            "providerFailuresByRole": {},
+            "eventLogsSupplied": true,
+            "runsWithDecisionContexts": 0,
+            "runsWithNonunknownGoals": 0,
+            "declaredTrials": 8,
+            "goalContextApplicable": false,
+            "validityMeaning": "canonical shape, probability mass and references visible in the same frame; not semantic goal accuracy",
+            "cycleCompletedMeaning": "settled cycles including failures; completed does not imply successful prediction",
+            "knownUsageSubtotalUsd": 0.010841,
+            "nativeRowKnownSubtotalUsd": 0.010841,
+            "knownSubtotalDifferenceUsd": 0.0,
+            "pricedEventsObserved": 2,
+            "pricedEventsInNativeRows": 2,
+            "pricedEventsCoverNativeRows": true
+          }
+        },
+        "neutral_memory_prefetch": {
+          "trials": 8,
+          "tasks": 8,
+          "families": 4,
+          "successes": 0,
+          "nativeSuccess": 0.0,
+          "successInterval": {
+            "estimate": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "families": 4,
+            "domains": 2,
+            "weighting": "equal_domain_equal_family_equal_observation_within_family",
+            "bootstrapSamples": 2000,
+            "bootstrapSeed": 42
+          },
+          "constraintViolations": 0,
+          "constraintCompliantTrials": 8,
+          "budgetTerminations": 0,
+          "terminationCounts": {
+            "execution_error": 8
+          },
+          "pass1": 0.0,
+          "twoTrialConsistency": {
+            "eligibleTasks": 0,
+            "ineligibleTasks": 8,
+            "bothSucceed": null,
+            "sameOutcome": null
+          },
+          "calls": {
+            "authoritativeCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "speculativeCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "usefulCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "wastedCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "rejectedCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "cancelledCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "revalidationCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "freshnessChecks": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            }
+          },
+          "authoritativeCallsPerSuccessfulTask": null,
+          "physicalCallsPerSuccessfulTask": null,
+          "speculationHitRate": null,
+          "billedUsd": {
+            "measuredTrials": 8,
+            "missingTrials": 0,
+            "sum": 0.0,
+            "observedSum": 0.0,
+            "measurement": "provider_reported_usage_times_configured_standard_prices",
+            "invoiceReconciled": false
+          },
+          "latency": {
+            "measurement": "native orchestration through termination, before managed-worker drain",
+            "unit": "ms",
+            "measuredTrials": 8,
+            "missingTrials": 0,
+            "mean": 24.33249999921827,
+            "median": 20.552600000883103,
+            "p95": 43.201310000404185,
+            "p99": 46.77058200042665,
+            "maximum": 47.66290000043227
+          },
+          "timings": {
+            "latencyMs": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 194.65999999374617,
+              "observedSum": 194.65999999374617,
+              "mean": 24.33249999921827,
+              "median": 20.552600000883103,
+              "p95": 43.201310000404185,
+              "maximum": 47.66290000043227,
+              "unit": "ms",
+              "measurement": "native orchestration through termination, before managed-worker drain"
+            },
+            "totalTrialSeconds": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0.4515694999972766,
+              "observedSum": 0.4515694999972766,
+              "mean": 0.05644618749965957,
+              "median": 0.04997754999931203,
+              "p95": 0.0937281350019475,
+              "maximum": 0.1098645000020042,
+              "unit": "s",
+              "measurement": "native orchestration plus acknowledged actor/user managed-work drain"
+            },
+            "serviceDrainSeconds": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0.25688300000183517,
+              "observedSum": 0.25688300000183517,
+              "mean": 0.032110375000229396,
+              "median": 0.027637000001050183,
+              "p95": 0.05395974500042938,
+              "maximum": 0.06219710000004852,
+              "unit": "s",
+              "measurement": "time spent requesting and awaiting both managed-worker closes"
+            }
+          },
+          "drainFailures": 0,
+          "unknownCostTrials": 0,
+          "knownUsageSubtotalUsd": 0.0,
+          "knownUsageSubtotalSource": "verified_provider_event_logs",
+          "declaredTrialAllowanceUsd": 10.0,
+          "readExecutions": {
+            "authoritativeReads": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0,
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "maximum": 0
+            },
+            "physicalReads": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0,
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "maximum": 0
+            }
+          },
+          "readCountUnavailableReasons": {},
+          "eventDiagnostics": {
+            "decisionContexts": 0,
+            "validGoalContexts": 0,
+            "nonunknownGoalContexts": 0,
+            "goalResponses": 0,
+            "events": {},
+            "goalInvalidReasons": {},
+            "predictionRejections": {},
+            "schedulerRejections": {},
+            "candidateAdmissionRejections": {},
+            "predictionCycleFailures": {},
+            "knownUsageByRoleMicrodollars": {},
+            "providerFailuresByRole": {},
+            "eventLogsSupplied": true,
+            "runsWithDecisionContexts": 0,
+            "runsWithNonunknownGoals": 0,
+            "declaredTrials": 8,
+            "goalContextApplicable": true,
+            "validityMeaning": "canonical shape, probability mass and references visible in the same frame; not semantic goal accuracy",
+            "cycleCompletedMeaning": "settled cycles including failures; completed does not imply successful prediction",
+            "knownUsageSubtotalUsd": 0.0,
+            "nativeRowKnownSubtotalUsd": 0.0,
+            "knownSubtotalDifferenceUsd": 0.0,
+            "pricedEventsObserved": 0,
+            "pricedEventsInNativeRows": 0,
+            "pricedEventsCoverNativeRows": true
+          }
+        },
+        "goalspec": {
+          "trials": 8,
+          "tasks": 8,
+          "families": 4,
+          "successes": 0,
+          "nativeSuccess": 0.0,
+          "successInterval": {
+            "estimate": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "families": 4,
+            "domains": 2,
+            "weighting": "equal_domain_equal_family_equal_observation_within_family",
+            "bootstrapSamples": 2000,
+            "bootstrapSeed": 42
+          },
+          "constraintViolations": 0,
+          "constraintCompliantTrials": 8,
+          "budgetTerminations": 0,
+          "terminationCounts": {
+            "execution_error": 8
+          },
+          "pass1": 0.0,
+          "twoTrialConsistency": {
+            "eligibleTasks": 0,
+            "ineligibleTasks": 8,
+            "bothSucceed": null,
+            "sameOutcome": null
+          },
+          "calls": {
+            "authoritativeCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "speculativeCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "usefulCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "wastedCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "rejectedCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "cancelledCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "revalidationCalls": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            },
+            "freshnessChecks": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0
+            }
+          },
+          "authoritativeCallsPerSuccessfulTask": null,
+          "physicalCallsPerSuccessfulTask": null,
+          "speculationHitRate": null,
+          "billedUsd": {
+            "measuredTrials": 8,
+            "missingTrials": 0,
+            "sum": 0.013314000000000001,
+            "observedSum": 0.013314000000000001,
+            "measurement": "provider_reported_usage_times_configured_standard_prices",
+            "invoiceReconciled": false
+          },
+          "latency": {
+            "measurement": "native orchestration through termination, before managed-worker drain",
+            "unit": "ms",
+            "measuredTrials": 8,
+            "missingTrials": 0,
+            "mean": 10766.88280000144,
+            "median": 29.97325000069395,
+            "p95": 43099.198015000366,
+            "p99": 43341.257762999376,
+            "maximum": 43401.77269999913
+          },
+          "timings": {
+            "latencyMs": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 86135.06240001152,
+              "observedSum": 86135.06240001152,
+              "mean": 10766.88280000144,
+              "median": 29.97325000069395,
+              "p95": 43099.198015000366,
+              "maximum": 43401.77269999913,
+              "unit": "ms",
+              "measurement": "native orchestration through termination, before managed-worker drain"
+            },
+            "totalTrialSeconds": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 86.39068969999789,
+              "observedSum": 86.39068969999789,
+              "mean": 10.798836212499737,
+              "median": 0.07343589999982214,
+              "p95": 43.11928689999841,
+              "maximum": 43.42026939999778,
+              "unit": "s",
+              "measurement": "native orchestration plus acknowledged actor/user managed-work drain"
+            },
+            "serviceDrainSeconds": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0.2556006999948295,
+              "observedSum": 0.2556006999948295,
+              "mean": 0.031950087499353685,
+              "median": 0.033599749998757034,
+              "p95": 0.04503051500087167,
+              "maximum": 0.04870099999970989,
+              "unit": "s",
+              "measurement": "time spent requesting and awaiting both managed-worker closes"
+            }
+          },
+          "drainFailures": 0,
+          "unknownCostTrials": 0,
+          "knownUsageSubtotalUsd": 0.013314,
+          "knownUsageSubtotalSource": "verified_provider_event_logs",
+          "declaredTrialAllowanceUsd": 10.0,
+          "readExecutions": {
+            "authoritativeReads": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0,
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "maximum": 0
+            },
+            "physicalReads": {
+              "measuredTrials": 8,
+              "missingTrials": 0,
+              "sum": 0,
+              "observedSum": 0,
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "maximum": 0
+            }
+          },
+          "readCountUnavailableReasons": {},
+          "eventDiagnostics": {
+            "decisionContexts": 2,
+            "validGoalContexts": 2,
+            "nonunknownGoalContexts": 0,
+            "goalResponses": 2,
+            "events": {
+              "model_attempt": 5,
+              "actor_boundary": 2,
+              "execution_frame": 2,
+              "prediction_cycle_started": 2,
+              "compiler_metadata": 3,
+              "decision_context": 2,
+              "embedding": 1,
+              "prediction_response": 2,
+              "prediction_cycle_failed": 2,
+              "prediction_cycle_completed": 2,
+              "actor_response": 1
+            },
+            "goalInvalidReasons": {},
+            "predictionRejections": {},
+            "schedulerRejections": {},
+            "candidateAdmissionRejections": {},
+            "predictionCycleFailures": {
+              "Error": 2
+            },
+            "knownUsageByRoleMicrodollars": {
+              "user": 567,
+              "embedding": 1,
+              "goal": 2263,
+              "actor": 10483
+            },
+            "providerFailuresByRole": {},
+            "eventLogsSupplied": true,
+            "runsWithDecisionContexts": 2,
+            "runsWithNonunknownGoals": 0,
+            "declaredTrials": 8,
+            "goalContextApplicable": true,
+            "validityMeaning": "canonical shape, probability mass and references visible in the same frame; not semantic goal accuracy",
+            "cycleCompletedMeaning": "settled cycles including failures; completed does not imply successful prediction",
+            "knownUsageSubtotalUsd": 0.013314,
+            "nativeRowKnownSubtotalUsd": 0.013314000000000001,
+            "knownSubtotalDifferenceUsd": -1.734723475976807e-18,
+            "pricedEventsObserved": 6,
+            "pricedEventsInNativeRows": 6,
+            "pricedEventsCoverNativeRows": true
+          }
+        }
+      },
+      "pairedDifferences": [
+        {
+          "baseline": "base",
+          "treatment": "neutral_memory_prefetch",
+          "metric": "success",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "neutral_memory_prefetch",
+          "metric": "latencyMs",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 5347.909975000221,
+          "ci95": [
+            -11.591925001084746,
+            10707.411875001526
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "neutral_memory_prefetch",
+          "metric": "billedUsd",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.001355125,
+          "ci95": [
+            0.0,
+            0.00271025
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "neutral_memory_prefetch",
+          "metric": "authoritativeCalls",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "goalspec",
+          "metric": "success",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "goalspec",
+          "metric": "latencyMs",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -5394.640325002001,
+          "ci95": [
+            -21487.862875001156,
+            10698.582224997153
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "goalspec",
+          "metric": "billedUsd",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -0.00030912500000000015,
+          "ci95": [
+            -0.0033285000000000003,
+            0.00271025
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "goalspec",
+          "metric": "authoritativeCalls",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "treatment": "goalspec",
+          "metric": "success",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "treatment": "goalspec",
+          "metric": "latencyMs",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -10742.550300002222,
+          "ci95": [
+            -21480.359650001446,
+            -4.740950002997124
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "treatment": "goalspec",
+          "metric": "billedUsd",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -0.0016642500000000001,
+          "ci95": [
+            -0.0033285000000000003,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "treatment": "goalspec",
+          "metric": "authoritativeCalls",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "neutral_memory_prefetch",
+          "metric": "totalTrialSeconds",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 5.344759724999676,
+          "ci95": [
+            -0.024621925001156342,
+            10.714141375000509
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "neutral_memory_prefetch",
+          "metric": "serviceDrainSeconds",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -0.0031500875006713613,
+          "ci95": [
+            -0.01302942500115023,
+            0.006729249999807507
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "goalspec",
+          "metric": "totalTrialSeconds",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -5.397630300000401,
+          "ci95": [
+            -21.49066752499948,
+            10.695406924998679
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "base",
+          "treatment": "goalspec",
+          "metric": "serviceDrainSeconds",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -0.0029897999997956504,
+          "ci95": [
+            -0.005829550000271411,
+            -0.00015004999931989005
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "treatment": "goalspec",
+          "metric": "totalTrialSeconds",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": -10.742390025000077,
+          "ci95": [
+            -21.470348624999133,
+            -0.014431425001021125
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "treatment": "goalspec",
+          "metric": "serviceDrainSeconds",
+          "direction": "positive_favors_treatment",
+          "pairedTrials": 8,
+          "missingPairs": 0,
+          "estimate": 0.00016028750087571098,
+          "ci95": [
+            -0.009689950000392855,
+            0.010010525002144277
+          ],
+          "families": 4,
+          "domains": 2,
+          "weighting": "equal_domain_equal_family_equal_observation_within_family",
+          "bootstrapSamples": 2000,
+          "bootstrapSeed": 42
+        }
+      ],
+      "definitions": {
+        "pass1": "mean per-task trial success; not best-of-k",
+        "bothSucceed": "all two declared trials succeed; not pass@2",
+        "callsPerSuccessfulTask": "all trial calls divided by successful trial count",
+        "physicalCalls": "executed authoritative calls after promotions plus speculative executions plus validation DB/tool rereads; excludes native freshness lease checks",
+        "revalidationCalls": "physical DB/tool rereads for freshness validation; native snapshot leases perform no such rereads",
+        "freshnessChecks": "native Python freshness lease validation calls, counted separately from physical DB/tool rereads; overhead remains included in whole-trial latency",
+        "usefulCalls": "verified exact-call speculative reuse, a lower bound on broader usefulness; evidence may influence actor decisions without a matching call",
+        "wastedCalls": "speculative executions unused by an exact matching call, an upper bound on waste; this does not establish absence of semantic influence from exposed evidence",
+        "speculationHitRate": "verified exact-call reuse divided by physical speculative executions; not a measure of all evidence influence",
+        "billedUsd": "legacy field name for provider-reported usage priced at configured standard rates; usage-calculated cost, not invoice-reconciled charges; unknown usage stays unmeasured",
+        "intervals": "exploratory percentile 95% family-clustered bootstrap intervals; unadjusted multiple comparisons",
+        "latencyTail": "observed sample quantiles, with counts; not stable population-tail guarantees",
+        "latencyMs": "native orchestration through termination, before managed-worker drain",
+        "totalTrialSeconds": "native orchestration plus acknowledged actor/user managed-work drain",
+        "serviceDrainSeconds": "time spent requesting and awaiting both managed-worker closes",
+        "timingSums": "sum of overlapping per-trial times, never phase wall time",
+        "physicalReads": "transcript-reconciled authoritative read executions plus speculative reads plus physical freshness rereads; excludes mutations and native lease checks",
+        "knownUsageSubtotalUsd": "sum of observed usage-priced costs; incomplete lower bound when any trial is unresolved, never invoice reconciled",
+        "declaredTrialAllowanceUsd": "original design allowance, not current ledger spent/reserved balance"
+      },
+      "trialDiagnostics": [
+        {
+          "runId": "v2-df424bd6f3-development-1-0000-232e70c787d9",
+          "familyId": "airline:v2_retime_and_name",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_retime_and_name:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 42537.27360000266,
+          "totalTrialSeconds": 42.56031939999957,
+          "serviceDrainSeconds": 0.02304079999885289,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.011756,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0000-232e70c787d9.json",
+            "publicUserMessages": [
+              "Hello! I would like to make some changes to one of my reservations, G116192901A. Can you assist me with that?"
+            ],
+            "lastAssistantMessage": "{\"message\":\"Yes. To help modify reservation G116192901A, please provide your user ID and tell me what you want to change: flights, cabin class, checked bags, or passenger information.\"}",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0001-90d77ca612e0",
+          "familyId": "airline:v2_retime_and_name",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_retime_and_name:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 14.06940000015311,
+          "totalTrialSeconds": 0.03375930000038352,
+          "serviceDrainSeconds": 0.01968699999997625,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0001-90d77ca612e0.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0002-4ccf06d7aeb0",
+          "familyId": "airline:v2_retime_and_name",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_retime_and_name:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 17.26570000028005,
+          "totalTrialSeconds": 0.042589199998474214,
+          "serviceDrainSeconds": 0.025321000000985805,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0002-4ccf06d7aeb0.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0003-0276cefb527e",
+          "familyId": "airline:v2_retime_and_name",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_retime_and_name:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 43401.77269999913,
+          "totalTrialSeconds": 43.42026939999778,
+          "serviceDrainSeconds": 0.01849509999738075,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.001558,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0003-0276cefb527e.json",
+            "publicUserMessages": [
+              "Hello! I would like to move my reservation G145928797A to a later flight, HAT1459287972 on May 21, 2024. I want to keep the economy class and one bag, and I am okay with paying the $40 difference using my Visa card. Also, could you correct the passenger surname from Chen to Cheng while keeping the first name Mira and the date of birth as June 12, 1988? Please note that reservation G145928797B should remain unchanged."
+            ],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0004-c986537a7c4f",
+          "familyId": "airline:v2_retime_and_name",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_retime_and_name:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 21.51909999884083,
+          "totalTrialSeconds": 0.042964299998857314,
+          "serviceDrainSeconds": 0.02144359999874723,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0004-c986537a7c4f.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0005-4138f4123c08",
+          "familyId": "airline:v2_retime_and_name",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_retime_and_name:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 47.66290000043227,
+          "totalTrialSeconds": 0.1098645000020042,
+          "serviceDrainSeconds": 0.06219710000004852,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0005-4138f4123c08.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0006-17c1bc7fe569",
+          "familyId": "airline:v2_two_reservation_cabin_changes",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_two_reservation_cabin_changes:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 42833.9804999996,
+          "totalTrialSeconds": 42.85513279999941,
+          "serviceDrainSeconds": 0.021149899999727495,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.010841,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0006-17c1bc7fe569.json",
+            "publicUserMessages": [
+              "Hello! I have a couple of requests regarding my flight reservations. Could you assist me with moving one of my reservations to a different flight and upgrading another one?"
+            ],
+            "lastAssistantMessage": "{\"message\":\"Yes. I can help with both requests. Please provide your user id and the reservation id for each reservation. For the reservation you want to move to a different flight, also share the new flight details you want if you know them. For the reservation you want to upgrade, tell me which cabin class you want.\"}",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0007-6302441e6cd1",
+          "familyId": "airline:v2_two_reservation_cabin_changes",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_two_reservation_cabin_changes:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 14.080399996601045,
+          "totalTrialSeconds": 0.03276699999696575,
+          "serviceDrainSeconds": 0.018682699999772012,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0007-6302441e6cd1.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0008-93e85c73c1b9",
+          "familyId": "airline:v2_two_reservation_cabin_changes",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_two_reservation_cabin_changes:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 33.97240000049351,
+          "totalTrialSeconds": 0.08268019999741227,
+          "serviceDrainSeconds": 0.04870099999970989,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0008-93e85c73c1b9.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0009-70098f7a2a48",
+          "familyId": "airline:v2_two_reservation_cabin_changes",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_two_reservation_cabin_changes:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 31.195100000331877,
+          "totalTrialSeconds": 0.09467389999917941,
+          "serviceDrainSeconds": 0.06347449999884702,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0009-70098f7a2a48.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0010-7ce9cd989dc7",
+          "familyId": "airline:v2_two_reservation_cabin_changes",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_two_reservation_cabin_changes:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 20.774900000105845,
+          "totalTrialSeconds": 0.0549286999994365,
+          "serviceDrainSeconds": 0.03414879999763798,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0010-7ce9cd989dc7.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0011-8dbe6571bb86",
+          "familyId": "airline:v2_two_reservation_cabin_changes",
+          "taskId": "goalspec-v2-20260915-a:development-1:airline:v2_two_reservation_cabin_changes:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 20.832400001381757,
+          "totalTrialSeconds": 0.046542399999452755,
+          "serviceDrainSeconds": 0.025707599997986108,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0011-8dbe6571bb86.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0012-02a1d07517c7",
+          "familyId": "retail:v2_payment_and_default_scope",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_payment_and_default_scope:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 25.974100000894396,
+          "totalTrialSeconds": 0.06419160000223201,
+          "serviceDrainSeconds": 0.038213900003029266,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0012-02a1d07517c7.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0013-e9601944a030",
+          "familyId": "retail:v2_payment_and_default_scope",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_payment_and_default_scope:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 34.91550000035204,
+          "totalTrialSeconds": 0.06376060000184225,
+          "serviceDrainSeconds": 0.02884200000335113,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0013-e9601944a030.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0014-335c305165a0",
+          "familyId": "retail:v2_payment_and_default_scope",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_payment_and_default_scope:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 17.129099996964214,
+          "totalTrialSeconds": 0.03609869999854709,
+          "serviceDrainSeconds": 0.018967100000736536,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0014-335c305165a0.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0015-d2bb8bf9d3be",
+          "familyId": "retail:v2_payment_and_default_scope",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_payment_and_default_scope:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 25.158900003589224,
+          "totalTrialSeconds": 0.05940520000149263,
+          "serviceDrainSeconds": 0.03424280000035651,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0015-d2bb8bf9d3be.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0016-c10b51997e4d",
+          "familyId": "retail:v2_payment_and_default_scope",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_payment_and_default_scope:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 17.203199997311458,
+          "totalTrialSeconds": 0.04363739999826066,
+          "serviceDrainSeconds": 0.026431999998749234,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0016-c10b51997e4d.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0017-e72f49976e11",
+          "familyId": "retail:v2_payment_and_default_scope",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_payment_and_default_scope:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 17.96199999807868,
+          "totalTrialSeconds": 0.04854169999816804,
+          "serviceDrainSeconds": 0.030576699999073753,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0017-e72f49976e11.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0018-2ccc3fc6e0af",
+          "familyId": "retail:v2_subset_return_and_cancel",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_subset_return_and_cancel:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 15.644900002371287,
+          "totalTrialSeconds": 0.03891790000125184,
+          "serviceDrainSeconds": 0.023269900000741472,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0018-2ccc3fc6e0af.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0019-f9170edce972",
+          "familyId": "retail:v2_subset_return_and_cancel",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_subset_return_and_cancel:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 22.427099997003097,
+          "totalTrialSeconds": 0.04502639999918756,
+          "serviceDrainSeconds": 0.02259760000015376,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0019-f9170edce972.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0020-1eb307d3761a",
+          "familyId": "retail:v2_subset_return_and_cancel",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_subset_return_and_cancel:v0",
+          "variant": 0,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 74.369600002683,
+          "totalTrialSeconds": 0.10755330000029062,
+          "serviceDrainSeconds": 0.033181799997691996,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0020-1eb307d3761a.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0021-784754162e52",
+          "familyId": "retail:v2_subset_return_and_cancel",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_subset_return_and_cancel:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "goalspec",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 15.708700000686804,
+          "totalTrialSeconds": 0.04972819999966305,
+          "serviceDrainSeconds": 0.03401769999982207,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0021-784754162e52.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0022-25a1e2ab7db5",
+          "familyId": "retail:v2_subset_return_and_cancel",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_subset_return_and_cancel:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "base",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 26.439699999173172,
+          "totalTrialSeconds": 0.05955869999888819,
+          "serviceDrainSeconds": 0.03311359999861452,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0022-25a1e2ab7db5.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        },
+        {
+          "runId": "v2-df424bd6f3-development-1-0023-d7715d29be9f",
+          "familyId": "retail:v2_subset_return_and_cancel",
+          "taskId": "goalspec-v2-20260915-a:development-1:retail:v2_subset_return_and_cancel:v1",
+          "variant": 1,
+          "trial": 0,
+          "arm": "neutral_memory_prefetch",
+          "success": false,
+          "constraintViolations": 0,
+          "termination": "execution_error",
+          "nativeTermination": "execution_error",
+          "latencyMs": 20.330300001660362,
+          "totalTrialSeconds": 0.05899570000110543,
+          "serviceDrainSeconds": 0.038661800001136726,
+          "serviceDrainSucceeded": true,
+          "serviceDrainErrors": [],
+          "billedUsd": 0.0,
+          "unknownProviderCharge": false,
+          "authoritativeReads": 0,
+          "physicalReads": 0,
+          "reason": null,
+          "panel": {
+            "sourceRecord": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0023-d7715d29be9f.json",
+            "publicUserMessages": [],
+            "lastAssistantMessage": "Hi! How can I help you today?",
+            "actorToolSequence": [],
+            "independentVerdict": {
+              "stateMatch": false,
+              "communicationMatch": true,
+              "constraintViolations": 0,
+              "violations": []
+            }
+          }
+        }
+      ],
+      "studyStage": "development-1",
+      "studyId": "goalspec-v2-20260915-a",
+      "stageOutput": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915",
+      "completeReceiptPresent": true,
+      "nativeService": {
+        "serviceWallSeconds": 66.72492020000209,
+        "finalServiceDrainSeconds": 1.3471138999993855,
+        "serviceExitCode": 0
+      }
+    }
+  ],
+  "protocolSmoke": {
+    "label": "development protocol smoke on previously observed v1 checkpoints",
+    "checkpoints": 12,
+    "validPredictions": 12,
+    "requestedGoalTop1Matches": 8,
+    "timing": "score preceded the literal-identity-preservation prompt fix; no post-fix score supplied",
+    "interpretation": "protocol validity and teacher semantic match are distinct; neither is live task success",
+    "selection": "first checkpoint per first six sorted families per domain; no outcome filtering",
+    "directory": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915"
+  },
+  "sourceInputs": [
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\summarize_study.py",
+      "sha256": "02ec85153de84245ea40e9161618cc046e2086a7398e4bd8586716d83b33e24b",
+      "bytes": 34468
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\study.json",
+      "sha256": "0f1c125969627ec7b01cd26a322a3119958b9ce1e8b487bc0aaade48ff6eb7c4",
+      "bytes": 4450
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\src\\goalspec\\evaluation_v1.py",
+      "sha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2",
+      "bytes": 18824
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\design.json",
+      "sha256": "77d5ed8e40ab2e44a3134bb659911f9e8f069980a3997741965dfef986a72806",
+      "bytes": 5910
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\outcomes.jsonl",
+      "sha256": "bcb9e69e7bd95580305c7b557100126aab6d927d718e171f732a535036ba2ef6",
+      "bytes": 34419
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\summary.json",
+      "sha256": "c5e0cf2dfe9b34e903c7154ae595b3663aa8e8c33b5ff27698fb983e95a3a9da",
+      "bytes": 1104
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-1-claim.json",
+      "sha256": "1c630ab990b5370315fd1673c4090d1280025f63bdad9dced6250182d9376929",
+      "bytes": 1150
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-1-design.json",
+      "sha256": "77d5ed8e40ab2e44a3134bb659911f9e8f069980a3997741965dfef986a72806",
+      "bytes": 5910
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-1-complete.json",
+      "sha256": "ff6d65a43dd20608470d359f2ef6a23f55076236daf97b856e9f113e29f8d59a",
+      "bytes": 665
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0000-232e70c787d9.json",
+      "sha256": "3519b0dc9786f93c032e210854c68e47e0e9ce29d924aa0a9d39c12f98a6e9e3",
+      "bytes": 16912
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0001-90d77ca612e0.json",
+      "sha256": "a3dba5ab293508e8fe2000c95f3b4b0ffcf116be4545759bcaf24bb624d10f58",
+      "bytes": 11415
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0002-4ccf06d7aeb0.json",
+      "sha256": "8a70a21d100b1d4a8ccd2642216d8c366b453abe9b63d593203dc11a4d7dd322",
+      "bytes": 11436
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0003-0276cefb527e.json",
+      "sha256": "d527d69346b90e5e778b2d98584e167e297e9c02e33b6dc1a2cf96c708583242",
+      "bytes": 12851
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0004-c986537a7c4f.json",
+      "sha256": "5278395273622ae7be9931e939996cd472b282e47385c46d598a282ec90d3727",
+      "bytes": 11415
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0005-4138f4123c08.json",
+      "sha256": "1e7994de44d6dd9e2b296f5db2127bd9e4991ed54aa62e1d0f9afbd02f7b04a0",
+      "bytes": 11432
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0006-17c1bc7fe569.json",
+      "sha256": "ff96c484e67b2fe16e8013329905d1c38ec14289645aee32a1f88c8132524f54",
+      "bytes": 17215
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0007-6302441e6cd1.json",
+      "sha256": "a0b1fc669022265750c6384a89d66b0510e33d11afe444c5390f57b872bfa871",
+      "bytes": 11478
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0008-93e85c73c1b9.json",
+      "sha256": "96ea37128803fc3a192d66edbb4a21601c00a1899fa2252ebfb4f2ce24e6692c",
+      "bytes": 11460
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0009-70098f7a2a48.json",
+      "sha256": "8d21ca110b47b2ca8e385bba28cfc70e0a73b3835a64762a20bb89ce8d2dfabd",
+      "bytes": 11458
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0010-7ce9cd989dc7.json",
+      "sha256": "ed118d161e6325138d272ec0b21db45a6297630d37f4ccf63c818498fac4e188",
+      "bytes": 11476
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0011-8dbe6571bb86.json",
+      "sha256": "e9aae329b4b148655c8d78d7cacf9a6f88c179d59640892bc384d6819f915a59",
+      "bytes": 11464
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0012-02a1d07517c7.json",
+      "sha256": "55c7a05abc7847605bb67556e27c7b4b70cf57f8b9431bd205048aa0bc5aab03",
+      "bytes": 7806
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0013-e9601944a030.json",
+      "sha256": "584520fe43ce217946ca8ae7734c73b37a88982e22d7150eefd1aa379e93cfcf",
+      "bytes": 7818
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0014-335c305165a0.json",
+      "sha256": "bd1b5c36dd52d28aa231919151697a4a56f273eee6a701011654da796f4aeca9",
+      "bytes": 7802
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0015-d2bb8bf9d3be.json",
+      "sha256": "31557a062af0ad2ea08a0801bbbacf62c43b11f4d38dbbd8b9c0386404a9b2b3",
+      "bytes": 7771
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0016-c10b51997e4d.json",
+      "sha256": "9eef1b8b7a62e5156e6dcf0229b425e6d19829059005a299af9be9838f0041c8",
+      "bytes": 7787
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0017-e72f49976e11.json",
+      "sha256": "78963977e74f6b643ef0e7c0b0d71a27aa00ff97dfc8af57935a604ced6da13f",
+      "bytes": 7766
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0018-2ccc3fc6e0af.json",
+      "sha256": "9f75a8e3dd203760cc690e449c0f71adf6b1bebf197ca2ffda5a830591451bfa",
+      "bytes": 8087
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0019-f9170edce972.json",
+      "sha256": "e8d803b113398b98fdc11fdb99fe4d80890cb207c0007121050f08657112e1dd",
+      "bytes": 8105
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0020-1eb307d3761a.json",
+      "sha256": "bc13bbd7c0af32a7b8e31bf6b9ee8f911b931d37ed9a15987fa0cfd902c144ea",
+      "bytes": 8085
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0021-784754162e52.json",
+      "sha256": "e958357f9434cc2a41b924a210c80f89dd1771675cba1fbaa92ef1a17933507a",
+      "bytes": 8086
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0022-25a1e2ab7db5.json",
+      "sha256": "2ead2c40389d02f26cc5605fb83ea8564323d28872aee4f1e9e5649d1a79de32",
+      "bytes": 8082
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0023-d7715d29be9f.json",
+      "sha256": "d160a00c00cad9dc73d410bf7ebb5a84a911c18a97bee495cceab51780692841",
+      "bytes": 8102
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\src\\lib\\goalspec\\contracts\\v1.schema.json",
+      "sha256": "9ff166791e7b9d3d43f18200c88e836a19c1afab2960528760d8f85212ea40c1",
+      "bytes": 14414
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-evaluation-20260914\\events-8d62260c-e4ab-46fc-976e-fc69d1182f4a.jsonl",
+      "snapshotBytes": 102195,
+      "snapshotSha256": "745057457698c5416f0b3a2ccedda18addeb9e38022916f082d1af0c02fc6db9",
+      "completeRecords": 32,
+      "partialTailIgnored": false,
+      "chainVerified": true
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\manifest.json",
+      "sha256": "60caba723eced100877b26edd8edf58dd8efb90319c308a1990e33ba4a642a51",
+      "bytes": 390
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\queue.jsonl",
+      "sha256": "9dfcadd7237b12df92780e1f0cd63fd600f08096efd2122dbc89a65f547cc516",
+      "bytes": 126925
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\predictions\\requested-predictions.jsonl",
+      "sha256": "0ee8d7270a37b1b9bce9422101d957eaa4d0d974c748a6946030984f955382f3",
+      "bytes": 16593
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\grades\\requested-grades.jsonl",
+      "sha256": "17d4d2a12a97baba1fb18e0be6017fc81a87b41855ea01521dd7e40f68c738bc",
+      "bytes": 5776
+    }
+  ],
+  "interpretation": "separate exploratory development and one precommitted confirmation; no cross-stage pooling or v1 paired comparison"
+}

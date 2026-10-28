@@ -1,0 +1,18 @@
+{
+  "label": "lightweight offline report-helper verification, not a v2 live outcome",
+  "helper": {
+    "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\summarize_study.py",
+    "sha256": "02ec85153de84245ea40e9161618cc046e2086a7398e4bd8586716d83b33e24b",
+    "bytes": 34468
+  },
+  "smokeValid": 12,
+  "smokeTop1": 8,
+  "eventChainRecordsChecked": 48,
+  "nativeReadReconciliationExample": {
+    "record": "heldout-0000-535efbc5c5ac.json",
+    "authoritativeReads": 3,
+    "physicalReads": 8
+  },
+  "providerCallsMade": 0,
+  "protectedSourcesEdited": false
+}

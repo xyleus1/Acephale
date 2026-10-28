@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "archiveId": "goalspec-official-v3-final-20260915",
+  "packageRoot": "C:\\Users\\apexs\\derya-crm-memory-main-20260908",
+  "cohorts": [
+    {
+      "directory": "research/goalspec/runs/local-v3-development-1-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-8ca64687-5f6c-402f-9e4b-3c6fab9a5bf1.jsonl"
+      ]
+    },
+    {
+      "directory": "research/goalspec/runs/local-v3-development-2-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-4ebc87c5-b942-4ef3-9386-83e7fe9a13a7.jsonl"
+      ]
+    },
+    {
+      "directory": "research/goalspec/runs/local-v3-development-3-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-3d79d988-168c-48e1-bc02-9ef107a8768f.jsonl"
+      ]
+    },
+    {
+      "directory": "research/goalspec/runs/local-v3-confirmation-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-2b0cbcda-e863-46d2-9848-39c4018fbd92.jsonl"
+      ]
+    }
+  ],
+  "attachments": [
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-report-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-report-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-report-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-report-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-analysis-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-analysis-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/dispatch-plan.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/selection.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/manifest.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/predictions.jsonl",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/model-events.jsonl",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/provider-events.jsonl",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/requested-annotations.jsonl",
+      "kind": "annotation"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/annotations-frozen.json",
+      "kind": "annotation"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/requested-grades.jsonl",
+      "kind": "grading"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/goal-summary.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/billing.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/summary.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/completion.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/execution-receipt.json",
+      "kind": "prediction"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915/analysis-receipt.json",
+      "kind": "analysis"
+    }
+  ],
+  "packageFiles": [
+    "docs/goalspec/V3_SOURCE_AUDIT.md",
+    "docs/goalspec/V3_IMPLEMENTATION.md",
+    "docs/goalspec/OFFICIAL_V3_PROTOCOL.md",
+    "docs/goalspec/IMPLEMENTATION_STATUS.md",
+    "docs/goalspec/LOCAL_REPRODUCTION.md",
+    "research/goalspec/.benchmarks/tau3/LICENSE",
+    "research/goalspec/.benchmarks/tau3/README.md",
+    "research/goalspec/.benchmarks/tau3/pyproject.toml",
+    "research/goalspec/.benchmarks/tau3/uv.lock",
+    "research/goalspec/scripts/archive_public_evidence.py",
+    "research/goalspec/scripts/archive_v1_validation.py",
+    "research/goalspec/scripts/audit_candidate_union.py",
+    "research/goalspec/scripts/evaluate_v1.py",
+    "research/goalspec/scripts/export_native_training.py",
+    "research/goalspec/scripts/export_otel.py",
+    "research/goalspec/scripts/export_parquet.py",
+    "research/goalspec/scripts/plot_public_results.py",
+    "research/goalspec/scripts/public_results.py",
+    "research/goalspec/src/goalspec/evaluation_v1.py",
+    "research/goalspec/src/goalspec/metrics.py",
+    "research/goalspec/src/goalspec/reporting.py",
+    "research/goalspec/src/goalspec/training_export.py",
+    "scripts/goalspec-export-repository.ts",
+    "scripts/goalspec-telemetry.ts",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/manifest.json",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/manifest.sha256",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/source.zip",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/inputs.zip",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/manifest.json",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/manifest.sha256",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/source.zip",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/inputs.zip",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/manifest.json",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/manifest.sha256",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/source.zip",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/inputs.zip",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/manifest.json",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/manifest.sha256",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/source.zip",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/inputs.zip",
+    "research/goalspec/runs/local-final-accounting-v3-20260915/budget-report.json",
+    "research/goalspec/runs/local-final-accounting-v3-20260915/budget-journal.jsonl",
+    "research/goalspec/runs/local-final-accounting-v3-20260915/closure.json"
+  ],
+  "finalized": false,
+  "pending": [
+    "Prediction selection, annotations, grading and provider closure",
+    "Final native/prediction reports, narrative and figures",
+    "Authoritative accounting copy SHA256 and closure receipt SHA256",
+    "Portable archive manifest SHA256 after roundtrip verification",
+    "Optional isolated PostgreSQL import and legacy before/after hash audit",
+    "Finalized exact paths, overlay hashes and post-replay closure"
+  ],
+  "expectedOutput": "research/goalspec/runs/local-final-artifact-archive-v3-20260915",
+  "nativeCohortsClosed": true,
+  "nativeClosureAudit": "research/goalspec/reports/2026-09-15-local-v3/closed-native-cohort-inventory.json"
+}

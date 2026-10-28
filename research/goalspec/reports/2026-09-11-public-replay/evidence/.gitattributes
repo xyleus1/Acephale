@@ -1,0 +1,2 @@
+# Preserve provenance-bound bytes across platform checkouts.
+* -text

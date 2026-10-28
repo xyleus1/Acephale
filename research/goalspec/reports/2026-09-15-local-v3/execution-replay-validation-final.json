@@ -1,0 +1,34 @@
+{
+  "typeScriptCommand": [
+    "node",
+    "node_modules/typescript/bin/tsc",
+    "-p",
+    "research/goalspec/reports/2026-09-15-local-v3/tsconfig.execution-replay.json",
+    "--pretty",
+    "false"
+  ],
+  "typeScriptExitCode": 0,
+  "typeScriptOutput": "",
+  "typeScriptWallSeconds": 2.6965597000016714,
+  "pythonSyntaxValid": true,
+  "files": [
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/native_execution_replay_v3.py",
+      "sha256": "d16661244e2a184c8b16ccedbd566946455a7bfeef611660a3c49ac620b87f4d"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/native_execution_replay_v3.ts",
+      "sha256": "44f86b4c890c0fa3617c11ce718a8ff675f354fe57e267a9add3908a8049d6a7"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/tsconfig.execution-replay.json",
+      "sha256": "469b65469dc223d6fed35f35215eb3d59561cd4eae2cb9cf37abe817fbfa59f7"
+    }
+  ],
+  "nativeReplayStatus": "complete",
+  "nativeReplayDirectory": "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915-b",
+  "nativeReplayReportSha256": "5dea0f338c5b31d68c2aedb665dba97e47b7e6ba467d500f3da6aac5a2d924da",
+  "nativeParityRuns": 64,
+  "nativeParityBoundaries": 654,
+  "paidApiCalls": 0
+}

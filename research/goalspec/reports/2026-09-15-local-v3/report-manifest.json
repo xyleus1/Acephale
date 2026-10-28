@@ -1,0 +1,615 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "primaryNativeOutcomesUnchanged": true,
+  "sourceTreeHash": "39d7c7aaef4241d96fd9c274355862632eb45d6adec9882394fc7f45d6b8e022",
+  "predictionAnalysisDirectory": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915",
+  "predictionDirectory": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915",
+  "assemblyPlan": {
+    "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/final-assembly-plan.json",
+    "sha256": "b1650aa3e7c6ed11dae9475f8eb5e4ff1dbe3006f74a0a24436fe597990c59be",
+    "bytes": 12930
+  },
+  "sources": [
+    {
+      "path": "docs/goalspec/V3_SOURCE_AUDIT.md",
+      "sha256": "d9d41582ed57ce85a633602d7a2cfec951ec2879d9a5df93e0a129e6b4e2ac62",
+      "bytes": 8220
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v2/README.md",
+      "sha256": "58a4a89ca68db552bc0c9d85273cf8bc7c26843a31f2faae7d7fe4adce271452",
+      "bytes": 16316
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.png",
+      "sha256": "99c437cb8aab2e32959563efed474bb6cbae163afa003f73dbfe137031139c1f",
+      "bytes": 148586
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/figures/plot-data.json",
+      "sha256": "9844f4c8ee47f073753fb59cd367baa1fc375e31b2654bf390cfb9ef54baf689",
+      "bytes": 2450
+    },
+    {
+      "path": "research/goalspec/runs/local-final-accounting-v3-20260915-b/budget-report.json",
+      "sha256": "02c78d216e979cb3a4aee1306cebefa8333d82813d34078291b4b67f28aeb26f",
+      "bytes": 1607
+    },
+    {
+      "path": "research/goalspec/runs/local-final-accounting-v3-20260915-b/closure.json",
+      "sha256": "c19d7f834da947d2dc2a2740eedd30b9806fa86aa480a53a5d0ea9bf94eee67b",
+      "bytes": 1877
+    },
+    {
+      "path": "research/goalspec/runs/local-final-artifact-archive-v3-20260915-b/manifest.json",
+      "sha256": "4cd7e85163b9cb2ae1ec9707fa452e2fee0c5e8bde3003c05f2b2b3165e17fa3",
+      "bytes": 84649
+    },
+    {
+      "path": "research/goalspec/runs/local-memory-v3-20260915/artifact.json",
+      "sha256": "2412c9a59610f130ac93a3bdbd6653181f0c9540b59e1aa18ff3b9e7ad39694b",
+      "bytes": 3101798
+    },
+    {
+      "path": "research/goalspec/runs/local-study-v3-20260915/study.json",
+      "sha256": "3fa6c9f164c2a438244e29002696def72b7a86c914f6bbdcabac9910614ebaea",
+      "bytes": 72953
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915/manifest.json",
+      "sha256": "09f892c22e53e193b184efba9685110a2b389178e1c482ea72dedecbb34049fc",
+      "bytes": 21394
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915/report.json",
+      "sha256": "a7c577e774b77195ae790b3f6b10e1b1b6c13f11249f7c26b972014d2f6a6237",
+      "bytes": 673277
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-cost-audit-20260915/README.md",
+      "sha256": "75328b0df04f106409266410b779b3f4a87e517592fcbfec893b6adf95f670dc",
+      "bytes": 1166
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-diagnosis-20260915/README.md",
+      "sha256": "deb2392a8cc27c4a0d3db50b46994eafac8aac7a3daec3fc3db8a8f08215bc01",
+      "bytes": 9482
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915/report.json",
+      "sha256": "86a9394cf548f3944040fb7a771199578cf7419382b1f69d1b3b244a3b7b8a17",
+      "bytes": 63985
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915-b/completion.json",
+      "sha256": "6cf7a1f27da748d9ee4f2550962bc8fa07d41407fc8277495ceaa24e8b87ef5c",
+      "bytes": 2735
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915-b/execution-replay-summary.md",
+      "sha256": "78d6fd1f905104f7f21d964ef54515490cdc69031d453a3edfb1caa5a4a34ee8",
+      "bytes": 2661
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915/execution-receipt.json",
+      "sha256": "b0d91ddeed82e841723350bd0b8c5372cb6fa39be30dab0ea31b34ef81b84e95",
+      "bytes": 1483
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/assembly-validation.json",
+      "sha256": "c36d382b66dc71b8249178d4664329cb5e7c165fa876b57f752d93c7e51ba86c",
+      "bytes": 2239
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/completion.json",
+      "sha256": "548f135447de3f4e3373243ec8a0021a1fd5e49e455de103ea2846f188dc409d",
+      "bytes": 551
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/derivation-receipt.json",
+      "sha256": "d99f29e8712b77ef9b69ea977935e1615db47b23940fd3de43fb6a1a370e6fe3",
+      "bytes": 1504
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/derivation.json",
+      "sha256": "31d63164cb58c22589fc1bd80a403d3f2cbe89b63da3b18cb88a22b66c34ca5b",
+      "bytes": 6987
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/execution-receipt.json",
+      "sha256": "15df98c626e4550d4fe848d4b9fa14c81c89e8c92250ba048684fd2b2cd56def",
+      "bytes": 1576
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/selection.json",
+      "sha256": "ee8b3d74ebd49733db8c900fcf616ba5e817445d1855587b99b7f574913499d8",
+      "bytes": 23304
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/manifest.json",
+      "sha256": "33034e5af39666e8e7470e2f613f9da517526a089d27e544d8195fce00d93027",
+      "bytes": 3293
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/analysis-receipt.json",
+      "sha256": "d9bf251fdee860a0f8d9dd81d9a5af8f0ec78470e5e3b4d2ee69dae6d5f42fb2",
+      "bytes": 3908
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/metrics.csv",
+      "sha256": "c88b522d8c224bc029a1d68aa2547098d09a1a8ddabd5e504c58da6662ca8a8d",
+      "bytes": 17037
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/paired-differences.csv",
+      "sha256": "101fa8b96faed4ec55143e487f0e9de63d5f73c83e0a0d735872c655a4dd8592",
+      "bytes": 75822
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/report.json",
+      "sha256": "786e88fc859a53af47e78a5b182c4c9b9cdb5ee7ec87a9d8a6d90dc9260e681a",
+      "bytes": 254654
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/report.md",
+      "sha256": "db338bc7e821571e1a8090214a2caac4ef6ff16c0a57496c0c01f78ae49d2e01",
+      "bytes": 3918
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915/report.md",
+      "sha256": "3355c33ef118ed73568a43f69523ac852e9e9fa9c36d2b8fd05907c82fdb378e",
+      "bytes": 3918
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-source-20260915/manifest.json",
+      "sha256": "cb4f6f1dda5039c8cc0597e0daa6d68f1fae80c39bb241abeb07385526f26c20",
+      "bytes": 213361
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-validation-20260915/verification.json",
+      "sha256": "0674dd0c85220aeabe38692c88bd2149823d6f73885b7e33ab1c7b84c1282347",
+      "bytes": 1174
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-diagnosis-20260915/README.md",
+      "sha256": "445bd3da5d0c8a0c1bfd9dd2ca26ef461d65714b2012502633e62bf06d22014e",
+      "bytes": 8122
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-execution-replay-reader-fix-20260915/fix-receipt.json",
+      "sha256": "608cea84ffe62d1fe75918a706c460cf7c5e27122c5c91c0c1da5278abaec2b1",
+      "bytes": 879
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/build_final_report.py",
+      "sha256": "9888358a191b8df0ffcdbc50f0856222cd41158f021aa2ca61d098f9440f6190",
+      "bytes": 9172
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_corrected_replay_slots.py",
+      "sha256": "dad5a3ab0389c9ec7afc92bdd0eb40e3f291a5bded36d8a21bd2f3e2b2db2f71",
+      "bytes": 11481
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_native_slots.py",
+      "sha256": "adbea8450265ce59649c09037e8be2956978e43a65ba976b9e15abff00c5b06f",
+      "bytes": 13857
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_replay_slots.py",
+      "sha256": "1a1be18c336ddf4df3f486ca1f80b0160e41f0ae1d10b49f99e3b6853d382073",
+      "bytes": 7943
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-fill-manifest.json",
+      "sha256": "c4433277979a8ba6656ee38f5b4bed7db17d596bdb4c3c64af8be55ce7056b9b",
+      "bytes": 1906
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-metrics.csv",
+      "sha256": "2647b86a12f3fb4d7da962bd8732b0c9097a94ba16aa1e44891666762a28b34f",
+      "bytes": 80829
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-slots.json",
+      "sha256": "6ccc7feaab7edb3ba80ff36d8e649444c8affd2de0481f66a1cb37b4ecadb882",
+      "bytes": 7991
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/README.template.md",
+      "sha256": "b70f56d2debedbab38e13a3ebc53dbfb5503cc7d9e9d63c4faadd0a7b67aed21",
+      "bytes": 15647
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/replay-corrected-slots.json",
+      "sha256": "b384d7a7a36a96c7c3c4d98918428402c2641f226287e25bdaa91df817fce105",
+      "bytes": 11039
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/report-source-overlays.json",
+      "sha256": "e85f6d288aac64a93f1ecefe87caf6df46f0ada09791972e78aa1b4295410a73",
+      "bytes": 1381
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/root-slots.json",
+      "sha256": "fb2cf26a4ae0e8abd00acaaf9be54b5b00584058d41a395cb66ab1798e2ed793",
+      "bytes": 8292
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-replay-availability-audit-20260915/diagnostic.json",
+      "sha256": "9a958ab4c9571198d60a64711e696074e97483d29ec8c34d5e99d57d254bff6a",
+      "bytes": 111959
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-20260915/completion.json",
+      "sha256": "abafe5b212593383d18b7242388bfde86676c5f0f03321b7f16aaaa3160bec96",
+      "bytes": 888
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-plan-20260915/plan.json",
+      "sha256": "6f02afd401697c5efd7cf540280021d05d035faeb5f174223470e7850fdc7026",
+      "bytes": 50642
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/smoke-receipt.json",
+      "sha256": "67ddc526ff4579cbfe096eca9a9b4a3ffd671c3b97af28d8f93070b38d81445f",
+      "bytes": 4990
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-validation-20260915/dispatch-validation.json",
+      "sha256": "f25649ef6f9b7d9f43c7f40194756b6e173ea4ef1b02a282f1deb8a65e958050",
+      "bytes": 2936
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-export-v3-20260915/manifest.json",
+      "sha256": "a50120ea6eaddcf13f137f75c0ef0ecc70e59d6056e58fb06ade3e01580fb86a",
+      "bytes": 16101
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/importer-attempts.json",
+      "sha256": "d9dee52e6ae4e98bc2d2bf95a68ad038732766368f0e166a00e1f1d98fb2b9c1",
+      "bytes": 1031
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/legacy-preimport-comparison.json",
+      "sha256": "823d82b1e1695cfdc77653227f68372f5561b3c7f9c7860b1e3722d397f8b0ef",
+      "bytes": 572
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/legacy-table-preservation.json",
+      "sha256": "7761f4b97863df7721a5d0346a6a0d05c2723a2c8a1af0ccc5f6c952bf09b9a6",
+      "bytes": 1015
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/research-postgres-shutdown.json",
+      "sha256": "95e6e4d5ecfe1073f3907f7d23367604059b0116d8e5fe0c28932d67351fd677",
+      "bytes": 248
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze-after-replay.json",
+      "sha256": "fec1bd16df5efb5e9992031b35773e320b756c29b0106315764fa45755e1d904",
+      "bytes": 554
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze-final-pre-docs.json",
+      "sha256": "e20b826ebe31231f34f54b6ea09215dc68566f38a3164f6fc05817d9f2bf55fc",
+      "bytes": 554
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze.json",
+      "sha256": "060de6382bf603a19be24907701afd490d0a2655800e1fe90963af572ecab7ca",
+      "bytes": 554
+    },
+    {
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/v3-archive-import.json",
+      "sha256": "589564e215eb0ea30b1140ec7aec238792791ad51b6b1ebea2a6cf3f84af8ad7",
+      "bytes": 1102
+    }
+  ],
+  "metricsRows": 1108,
+  "links": [
+    {
+      "target": "figures/confirmation.png",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-diagnosis-20260915/README.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../../../docs/goalspec/V3_SOURCE_AUDIT.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-corrected-20260915/selection.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-corrected-20260915/execution-receipt.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-corrected-report-20260915/report.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-20260915/execution-receipt.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-report-20260915/report.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-replay-availability-audit-20260915/diagnostic.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-shuffled-correction-20260915/completion.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-development-3-diagnosis-20260915/README.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../2026-09-15-local-v2/README.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-cost-audit-20260915/README.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-final-accounting-v3-20260915-b/closure.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/repository-final-verification-v3-20260915/source-freeze-final-pre-docs.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-validation-development-3-20260915",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-validation-20260915/verification.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-shuffled-correction-validation-20260915/dispatch-validation.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-shuffled-correction-source-20260915/smoke-receipt.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-execution-replay-20260915-b/execution-replay-summary.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-execution-replay-20260915/report.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-execution-replay-reader-fix-20260915/fix-receipt.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/repository-final-verification-v3-20260915/importer-attempts.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/repository-final-verification-v3-20260915/v3-archive-import.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/repository-final-verification-v3-20260915/legacy-table-preservation.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/repository-final-verification-v3-20260915/research-postgres-shutdown.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-analysis-20260915/report.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-diagnosis-20260915/README.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-final-writeup-staging-20260915/native-metrics.csv",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-corrected-report-20260915/report.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-corrected-20260915/execution-receipt.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-corrected-parquet-20260915/manifest.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-report-20260915/report.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-prediction-20260915/execution-receipt.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-shuffled-correction-plan-20260915/plan.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-shuffled-correction-20260915/completion.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-execution-replay-20260915-b/execution-replay-summary.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-execution-replay-20260915-b/completion.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-source-20260915/source.zip",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-source-20260915/inputs.zip",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-study-v3-20260915/study.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-memory-v3-20260915/artifact.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "figures/plot-data.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-final-accounting-v3-20260915-b/budget-report.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-final-accounting-v3-20260915-b/closure.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-v3-confirmation-cost-audit-20260915/README.md",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/local-final-artifact-archive-v3-20260915-b/manifest.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../runs/repository-final-export-v3-20260915/manifest.json",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    },
+    {
+      "target": "../../../../outputs/goalspec-local-v3-final.zip",
+      "exists": false,
+      "declaredFuturePackageFile": true
+    },
+    {
+      "target": "../../../../outputs/goalspec-local-v3-final.zip.sha256",
+      "exists": false,
+      "declaredFuturePackageFile": true
+    },
+    {
+      "target": "../../../../outputs/goalspec-local-v3-final.zip.manifest.json",
+      "exists": false,
+      "declaredFuturePackageFile": true
+    },
+    {
+      "target": "../../../../outputs/goalspec-local-v3-final.zip.verification.json",
+      "exists": false,
+      "declaredFuturePackageFile": true
+    },
+    {
+      "target": "../../../../outputs/goalspec-local-v2-final.zip",
+      "exists": true,
+      "declaredFuturePackageFile": false
+    }
+  ],
+  "outputs": [
+    {
+      "path": "README.md",
+      "bytes": 41838,
+      "sha256": "fa987ace22b429500ebe9cf99c6cda9535b3c409df10ac2106522f4a83c5462f"
+    },
+    {
+      "path": "metrics.csv",
+      "bytes": 274895,
+      "sha256": "6885543aa177481cf5996d7d2cdb617cf336dd056de115965b628351589b8fae"
+    }
+  ],
+  "figureFiles": [
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.pdf",
+      "sha256": "680925014036a3cc51055da177527e690eb48940638c29a6360ba32d0fb16298",
+      "bytes": 38813
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.png",
+      "sha256": "99c437cb8aab2e32959563efed474bb6cbae163afa003f73dbfe137031139c1f",
+      "bytes": 148586
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.svg",
+      "sha256": "e3bd3b7d0a5ab81a4bfb5896d068d1882a5fa7b158ec29e05f73d2f0e437b47c",
+      "bytes": 113708
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/figures/plot-data.json",
+      "sha256": "9844f4c8ee47f073753fb59cd367baa1fc375e31b2654bf390cfb9ef54baf689",
+      "bytes": 2450
+    }
+  ],
+  "packageHashesExcluded": "Final ZIP hash/size belongs in external sidecars to avoid self-reference",
+  "paidApiCalls": 0,
+  "ledgerOpened": false
+}

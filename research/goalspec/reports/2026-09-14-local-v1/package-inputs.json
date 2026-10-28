@@ -1,0 +1,609 @@
+{
+  "schemaVersion": 1,
+  "packageLabel": "GoalSpec local paid evaluation, frozen native cohort plus final analyses",
+  "freezeDirectory": "research/goalspec/runs/local-freeze-v2-20260915",
+  "mustBeAbsent": [
+    "research/goalspec/runs/local-evaluation-20260914/budget.jsonl.lock"
+  ],
+  "additionalCurrentSourceFiles": [],
+  "redactedCopies": [],
+  "groups": [
+    {
+      "name": "final_report_and_packager",
+      "path": "research/goalspec/reports/2026-09-14-local-v1",
+      "patterns": [
+        "*.md",
+        "*.py",
+        "*.json",
+        "*.csv"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "build_package.py",
+        "package-inputs.json",
+        "prediction-conditions.csv",
+        "prediction-comparisons.csv",
+        "PREDICTION_DIAGNOSTICS.md"
+      ],
+      "minimumFiles": 6,
+      "recursive": false
+    },
+    {
+      "name": "frozen_source",
+      "path": "research/goalspec/runs/local-freeze-v2-20260915",
+      "patterns": [
+        "*.json",
+        "*.sha256",
+        "source.zip"
+      ],
+      "requiredFiles": [
+        "manifest.json",
+        "manifest.sha256",
+        "source.zip",
+        "verify-final.json"
+      ],
+      "minimumFiles": 4,
+      "recursive": false
+    },
+    {
+      "name": "training",
+      "path": "research/goalspec/runs/local-training-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "outcomes.jsonl",
+        "public-contexts.json",
+        "service-manifest.json",
+        "summary.json"
+      ],
+      "minimumFiles": 53,
+      "recursive": false
+    },
+    {
+      "name": "training_v2_verdicts",
+      "path": "research/goalspec/runs/local-training-v2-verdicts-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "outcomes.jsonl",
+        "public-contexts.json",
+        "service-manifest.json",
+        "summary.json"
+      ],
+      "minimumFiles": 53,
+      "recursive": false
+    },
+    {
+      "name": "development",
+      "path": "research/goalspec/runs/local-development-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "outcomes.jsonl",
+        "public-contexts.json",
+        "service-manifest.json",
+        "summary.json"
+      ],
+      "minimumFiles": 41,
+      "recursive": false
+    },
+    {
+      "name": "heldout",
+      "path": "research/goalspec/runs/local-heldout-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "outcomes.jsonl",
+        "public-contexts.json",
+        "service-manifest.json",
+        "summary.json"
+      ],
+      "minimumFiles": 197,
+      "recursive": false
+    },
+    {
+      "name": "original_provider_events",
+      "path": "research/goalspec/runs/local-evaluation-20260914",
+      "patterns": [
+        "events-*.jsonl",
+        "environment.json",
+        "provider-smoke*.json",
+        "provider-smoke-events.jsonl"
+      ],
+      "requiredFiles": [
+        "environment.json",
+        "events-67005aef-9af2-4a3b-bb9a-553870cabe2b.jsonl",
+        "events-f1dcc009-fba5-4e53-8009-766e29bf6b51.jsonl",
+        "events-f265ec2d-ce68-4986-91fe-ec6035857dd6.jsonl",
+        "events-library-02e82549-5183-4333-b749-7c1b7d464cb2.jsonl",
+        "provider-smoke-events.jsonl",
+        "provider-smoke.json"
+      ],
+      "minimumFiles": 7,
+      "recursive": false
+    },
+    {
+      "name": "fresh_native_fixtures",
+      "path": "research/goalspec/runs/fresh-native-v1-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "fresh-tasks.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "frozen_library_and_publication",
+      "path": "research/goalspec/runs/local-library-v1-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "records.json",
+        "publication.json",
+        "mined.json",
+        "omitted.json",
+        "summary.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "apigen_preparation",
+      "path": "research/goalspec/runs/apigen-annotations-20260914",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "annotations.jsonl",
+        "events.jsonl",
+        "records.jsonl",
+        "report.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "apigen_overlap_audit",
+      "path": "research/goalspec/runs/apigen-overlap-audit-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.csv"
+      ],
+      "requiredFiles": [],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "checkpoint_queue",
+      "path": "research/goalspec/runs/local-requested-queue-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "manifest.json",
+        "queue.jsonl"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "prediction",
+      "path": "research/goalspec/runs/local-requested-predict-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl",
+        "progress.jsonl",
+        "requested-predictions.jsonl",
+        "frozen-goals.jsonl",
+        "report.json"
+      ],
+      "minimumFiles": 5,
+      "recursive": false
+    },
+    {
+      "name": "training_export",
+      "path": "research/goalspec/runs/local-training-export-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "export-manifest.json",
+        "repository-bundle.json",
+        "trajectories.jsonl",
+        "mining-episodes.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "heldout_export",
+      "path": "research/goalspec/runs/local-heldout-export-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "export-manifest.json",
+        "repository-bundle.json",
+        "trajectories.jsonl",
+        "mining-episodes.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "training_db_telemetry",
+      "path": "research/goalspec/runs/local-training-db-telemetry-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "import.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "development_db_telemetry",
+      "path": "research/goalspec/runs/local-development-db-telemetry-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "import.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "heldout_db_telemetry",
+      "path": "research/goalspec/runs/local-heldout-db-telemetry-v3-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "import.json"
+      ],
+      "minimumFiles": 193,
+      "recursive": false,
+      "completionNote": "Final v3 import receipt is required; includes 192 run telemetry JSON files plus import.json, including zero-frame executions."
+    },
+    {
+      "name": "development_analysis",
+      "path": "research/goalspec/runs/local-development-analysis-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "manifest.json",
+        "summary.json",
+        "report.md",
+        "trial-results.jsonl"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "heldout_analysis",
+      "path": "research/goalspec/runs/local-heldout-analysis-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "manifest.json",
+        "summary.json",
+        "report.md",
+        "trial-results.jsonl"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "native_execution_replay_development",
+      "path": "research/goalspec/runs/native-execution-replay-development-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "report.json",
+        "replay-input.json",
+        "scheduler-events.jsonl",
+        "scheduler-summary.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "heldout_billing_failure_audit",
+      "path": "research/goalspec/runs/local-budget-audit-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.csv",
+        "*.md",
+        "*.py"
+      ],
+      "requiredFiles": [
+        "audit.md",
+        "reconciliation.json",
+        "trial-charge-audit.csv",
+        "heldout-billing-failure-audit.json"
+      ],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "annotation",
+      "path": "research/goalspec/runs/local-requested-annotate-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl",
+        "progress.jsonl",
+        "requested-annotations.jsonl",
+        "report.json"
+      ],
+      "minimumFiles": 4,
+      "recursive": false
+    },
+    {
+      "name": "teacher_grading",
+      "path": "research/goalspec/runs/local-requested-grade-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl",
+        "progress.jsonl",
+        "requested-grades.jsonl",
+        "report.json"
+      ],
+      "minimumFiles": 4,
+      "recursive": false
+    },
+    {
+      "name": "prediction_analysis",
+      "path": "research/goalspec/runs/local-prediction-analysis-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "predictions.jsonl",
+        "summary.json",
+        "report.md",
+        "manifest.json"
+      ],
+      "minimumFiles": 4,
+      "recursive": false
+    },
+    {
+      "name": "final_database_jsonl_and_parquet",
+      "path": "research/goalspec/runs/repository-final-export-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.parquet",
+        "*.sha256"
+      ],
+      "requiredFiles": [
+        "jsonl-manifest.json",
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "minimumFiles": 47,
+      "recursive": true
+    },
+    {
+      "name": "final_budget_report",
+      "path": "research/goalspec/runs/local-final-accounting-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "budget-report.json",
+        "budget-journal.jsonl",
+        "otel.json",
+        "manifest.json",
+        "cleanup.json"
+      ],
+      "minimumFiles": 5,
+      "recursive": false
+    },
+    {
+      "name": "final_otlp_telemetry",
+      "path": "research/goalspec/runs/local-final-accounting-v1-20260915/otel.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "final_verification",
+      "path": "research/goalspec/runs/local-freeze-v2-20260915/verify-final.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "requested_analysis",
+      "path": "research/goalspec/runs/local-requested-analysis-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "summary.json",
+        "report.md",
+        "manifest.json"
+      ],
+      "minimumFiles": 3,
+      "recursive": false
+    },
+    {
+      "name": "final_report_figures",
+      "path": "research/goalspec/reports/2026-09-14-local-v1/figures",
+      "patterns": [
+        "*.png",
+        "*.svg",
+        "*.py",
+        "*.json"
+      ],
+      "requiredFiles": [
+        "heldout-success.png",
+        "heldout-latency.png",
+        "heldout-success.svg",
+        "heldout-latency.svg",
+        "manifest.json",
+        "build_live_figures.py"
+      ],
+      "minimumFiles": 6,
+      "recursive": false
+    },
+    {
+      "name": "apigen_acquired_release",
+      "path": "research/goalspec/runs/apigen-abc4a517d67c541f85f6470cbd8fd3186b36830e",
+      "patterns": [
+        "acquisition.json",
+        "family-assignments.json",
+        "apigen-mt_5k.json"
+      ],
+      "requiredFiles": [
+        "acquisition.json",
+        "family-assignments.json",
+        "apigen-mt_5k.json"
+      ],
+      "minimumFiles": 3,
+      "recursive": false
+    },
+    {
+      "name": "apigen_ingested_release_and_pilot",
+      "path": "research/goalspec/runs/apigen-abc4a517d67c541f85f6470cbd8fd3186b36830e/ingested",
+      "patterns": [
+        "episodes.jsonl",
+        "quarantine.jsonl",
+        "manifest.json",
+        "annotation-pilot.jsonl",
+        "annotation-pilot.parquet",
+        "pilot-manifest.json"
+      ],
+      "requiredFiles": [
+        "episodes.jsonl",
+        "quarantine.jsonl",
+        "manifest.json",
+        "annotation-pilot.jsonl",
+        "annotation-pilot.parquet",
+        "pilot-manifest.json"
+      ],
+      "minimumFiles": 6,
+      "recursive": false
+    },
+    {
+      "name": "heldout_db_telemetry_partial_v1",
+      "path": "research/goalspec/runs/local-heldout-db-telemetry-v1-20260915",
+      "patterns": [
+        "heldout-*.json"
+      ],
+      "requiredFiles": [
+        "heldout-0000-535efbc5c5ac.json",
+        "heldout-0157-264222429592.json"
+      ],
+      "minimumFiles": 158,
+      "recursive": false,
+      "interpretation": "Preserved partial first telemetry attempt; v3 is the complete final export and the native outcomes remain unchanged. The v2 pre-import failure is documented in telemetry-amendment.json; its duplicate event partitions are not selected."
+    },
+    {
+      "name": "repository_final_verification",
+      "path": "research/goalspec/runs/repository-final-verification-v1-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "source-freeze.json",
+        "telemetry-amendment.json",
+        "database-verification.json",
+        "research-postgres-shutdown.json"
+      ],
+      "minimumFiles": 4,
+      "recursive": false
+    },
+    {
+      "name": "live_goal_audit",
+      "path": "research/goalspec/runs/local-live-goal-audit-v1-20260915.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "analysis_report_description_check",
+      "path": "research/goalspec/runs/analysis-report-description-check-v1-20260915.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "minimumFiles": 1,
+      "recursive": false
+    },
+    {
+      "name": "host_power_audit",
+      "path": "research/goalspec/runs/local-host-power-audit-v1-20260915",
+      "patterns": [
+        "events.json",
+        "manifest.json",
+        "audit.md",
+        "timing-reconciliation.json"
+      ],
+      "requiredFiles": [
+        "events.json",
+        "manifest.json",
+        "audit.md",
+        "timing-reconciliation.json"
+      ],
+      "minimumFiles": 4,
+      "recursive": false
+    }
+  ],
+  "pendingInstructions": "All planned phase paths are configured, including final heldout telemetry v3 and its amendment evidence. Required files and minimum counts must exist before packaging. Preserve the partial v1 telemetry separately. Final database export has 22 JSONL and 22 Parquet files plus 3 manifests, without a budget attachment. The verbatim closed budget journal is included only from local-final-accounting-v1-20260915. Root must confirm all paid phases, exports, analyses, and docs complete before a NEW ZIP is built outside input trees."
+}

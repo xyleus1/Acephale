@@ -1,0 +1,28 @@
+{
+  "command": "node --import tsx --test --test-concurrency=1 research/goalspec/reports/2026-09-15-local-v3/import_archive_postrun.test.ts",
+  "exitCode": 0,
+  "tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "testDurationMs": 860.1317,
+  "semanticTypeScriptCommand": "node node_modules/typescript/bin/tsc -p research/goalspec/reports/2026-09-15-local-v3/tsconfig.import-archive-postrun.json --pretty false",
+  "semanticTypeScriptExitCode": 0,
+  "semanticTypeScriptWallSeconds": 6.036372,
+  "files": [
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/import_archive_postrun.test.ts",
+      "sha256": "91429702e618de3238f268113f1512afce571569637e276650a46f94c2f571c9"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/import_archive_postrun.ts",
+      "sha256": "be80454daf16c9b6544e251453c2ebbef39283465ba1d30ef98f61168db8d4fd"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/tsconfig.import-archive-postrun.json",
+      "sha256": "a7f8ab2110816ceac64f2466056cd2e426821f92caca7f4c5b5e0b523c788043"
+    }
+  ],
+  "databaseOpened": false,
+  "realArchiveRead": false,
+  "paidApiCalls": 0
+}

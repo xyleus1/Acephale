@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "archiveId": "goalspec-official-v3-native-final-20260915",
+  "packageRoot": "C:\\Users\\apexs\\derya-crm-memory-main-20260908",
+  "cohorts": [
+    {
+      "directory": "research/goalspec/runs/local-v3-development-1-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-8ca64687-5f6c-402f-9e4b-3c6fab9a5bf1.jsonl"
+      ]
+    },
+    {
+      "directory": "research/goalspec/runs/local-v3-development-2-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-4ebc87c5-b942-4ef3-9386-83e7fe9a13a7.jsonl"
+      ]
+    },
+    {
+      "directory": "research/goalspec/runs/local-v3-development-3-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-3d79d988-168c-48e1-bc02-9ef107a8768f.jsonl"
+      ]
+    },
+    {
+      "directory": "research/goalspec/runs/local-v3-confirmation-20260915",
+      "events": [
+        "research/goalspec/runs/local-evaluation-20260914/events-2b0cbcda-e863-46d2-9848-39c4018fbd92.jsonl"
+      ]
+    }
+  ],
+  "attachments": [
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-report-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-report-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-report-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-report-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-analysis-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-analysis-20260915/manifest.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915/report.json",
+      "kind": "analysis"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915/manifest.json",
+      "kind": "analysis"
+    }
+  ],
+  "packageFiles": [
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/manifest.json",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/manifest.sha256",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/source.zip",
+    "research/goalspec/runs/local-v3-development-1-source-20260915-b/inputs.zip",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/manifest.json",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/manifest.sha256",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/source.zip",
+    "research/goalspec/runs/local-v3-development-2-source-20260915-b/inputs.zip",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/manifest.json",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/manifest.sha256",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/source.zip",
+    "research/goalspec/runs/local-v3-development-3-source-20260915/inputs.zip",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/manifest.json",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/manifest.sha256",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/source.zip",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/inputs.zip",
+    "research/goalspec/.benchmarks/tau3/LICENSE",
+    "research/goalspec/.benchmarks/tau3/README.md",
+    "research/goalspec/.benchmarks/tau3/pyproject.toml",
+    "research/goalspec/.benchmarks/tau3/uv.lock",
+    "research/goalspec/reports/2026-09-15-local-v3/closed-native-cohort-inventory.json",
+    "research/goalspec/reports/2026-09-15-local-v3/archive-native-inputs.json"
+  ],
+  "scope": "Four closed native cohorts, all112 declared outcomes, original native events and eight closed native report artifacts. Pending replay, final accounting and mutable narrative are excluded from this immutable native archive.",
+  "nativeUnknownChargeRowsRetained": {
+    "development-1": 2,
+    "development-2": 1,
+    "development-3": 0,
+    "confirmation": 4
+  },
+  "expectedOutput": "research/goalspec/runs/local-final-artifact-archive-v3-20260915"
+}

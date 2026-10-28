@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "verifiedAtUtc": "2026-09-15T19:25:09.041137+00:00",
+  "passed": true,
+  "method": "Independent readback and streamed SHA256 checks after finalizer completion",
+  "accountingArtifactsVerified": 5,
+  "nativeEventCopiesVerified": 7,
+  "journalBytes": 330784467,
+  "journalSha256": "14b6c199db93db62192ba513157c7429d2628988970a764b3e0ccf9322a32d13",
+  "accountingManifestSha256": "0bea394200df0a4e84e43052787e5b0a3b79092964505a1e53a1e5ca4550a196",
+  "closureReceiptSha256": "755bc48602305a565962e2ec3c42cdc682d41227c28fa2fb3191cfac8fceb1e4",
+  "eventManifestSha256": "026245d5ccce4f73be76c6645aac302471db620ee748f524f58280cf5ddd8626",
+  "budgetLockAbsent": true,
+  "baselineEntriesUnchanged": true,
+  "stageTotalsMatchBudgetReport": true,
+  "expectedUnresolvedRequests": 43,
+  "actualUnresolvedRequests": 43,
+  "ledgerOpenedByIndependentReadback": false,
+  "providerCalls": 0
+}

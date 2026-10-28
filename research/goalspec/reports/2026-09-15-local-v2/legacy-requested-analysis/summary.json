@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "label": "automated teacher-referenced requested-goal assessment",
+  "teacher": "gpt-5.4-2026-03-05",
+  "predictor": "gpt-4.1-mini-2025-04-14",
+  "checkpoints": 213,
+  "scoredCheckpoints": 213,
+  "unknownReferences": 0,
+  "checkpointReferencesHash": "53326eeb8b1781543408aac23bdb8fae457ca4ce73ded5466cb87cf4b8a41c20",
+  "failures": {},
+  "completeAnnotationAndGradingCoverage": true,
+  "goalTop1": 0.8028169014084507,
+  "goalTop3": 0.8028169014084507,
+  "goalTop1FamilyInterval": {
+    "estimate": 0.7737313165159274,
+    "ci95": [
+      0.6819410335167629,
+      0.8626363803530565
+    ],
+    "families": 14,
+    "domains": 2,
+    "weighting": "equal_domain_equal_family_equal_observation_within_family",
+    "bootstrapSamples": 2000,
+    "bootstrapSeed": 42
+  },
+  "goalTop3FamilyInterval": {
+    "estimate": 0.7737313165159274,
+    "ci95": [
+      0.6819410335167629,
+      0.8626363803530565
+    ],
+    "families": 14,
+    "domains": 2,
+    "weighting": "equal_domain_equal_family_equal_observation_within_family",
+    "bootstrapSamples": 2000,
+    "bootstrapSeed": 42
+  },
+  "limitations": [
+    "Teacher references and semantic matching are automated, not human ground truth.",
+    "Annotation and grading share one teacher model and may share systematic errors.",
+    "Only currently visible user requirements and public policy determine requested references.",
+    "Endpoint/oracle action labels are separate and do not enter annotation or requested-goal matching.",
+    "Predictor failures count as misses. Missing teacher annotations or grades remain unmeasured with explicit coverage.",
+    "Top-3 ranks include explicit unknown alongside up to three goal hypotheses."
+  ]
+}

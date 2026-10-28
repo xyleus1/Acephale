@@ -1,0 +1,412 @@
+{
+  "version": "goalspec-benchmark-bundle-input-v1",
+  "maximumUncompressedBytes": 2147483648,
+  "files": [
+    {
+      "path": "research/goalspec/reports/2026-09-16-official-benchmarks/report.json",
+      "role": "analysis",
+      "sha256": "5c8fe8a6df3cdfc9a337866f9bcfaeee75acafd36b95b35d62a092c1f48715fd"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-16-official-benchmarks/README.md",
+      "role": "analysis",
+      "sha256": "01d976b8336d832269579c85d40feebf115ba495e8a36a2ece45f3e8e502bf90"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-16-official-benchmarks/metrics.csv",
+      "role": "analysis",
+      "sha256": "18613b719d77c8c4ee47f222c2f1f8c5525a1cfbd446caa5751187ae4c3860f2"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-16-official-benchmarks/manifest.json",
+      "role": "analysis",
+      "sha256": "b8e67f1e1538571b46384c1047419b9e19ffc00b0c51471c16eb280a27200133"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-analysis-20260916/report.json",
+      "role": "analysis",
+      "sha256": "a94d0ad6cbba4281e24dab7fc28893d1a338c9e780ea4984ea7c9c8c80d38dd0"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-analysis-20260916/README.md",
+      "role": "analysis",
+      "sha256": "9c7804d50545406b89fac708ded3b2465485c30857ce4c16961e6adcfc601ec8"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-analysis-20260916/metrics.csv",
+      "role": "analysis",
+      "sha256": "07c9b5eeda5041f6e3c0ce27639ba1c69944c7ca604e86a0af44248c7c31b958"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-analysis-20260916/manifest.json",
+      "role": "analysis",
+      "sha256": "1fb56f2d59b5602cf6d63ffb8d08283ff5301570b3315c69e4ad15624f381f2e"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-failure-audit-20260916/diagnostic.json",
+      "role": "analysis",
+      "sha256": "330a3651b24d35878b041cae27e3bfaf9e17571b82309a7e0a6e8313bf3eba8d"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-failure-audit-20260916/README.md",
+      "role": "analysis",
+      "sha256": "84685e23ef4d2c4bce94c79c6fd6881d815c5a35a6c53b6e4436d1cd11487a69"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-integrity-20260916/receipt.json",
+      "role": "metadata",
+      "sha256": "5edc7a1295324b7bbbc837327407ae5439bef56d08ccedccea1219f8e9a05461"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-integrity-20260916/BFCL-LICENSE.txt",
+      "role": "metadata",
+      "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-analysis-20260916/report.json",
+      "role": "analysis",
+      "sha256": "7e4cebc42f2736dcab6fa213b6c8b157cb689ec50b2d366a70d8a1034ec8e57b"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-analysis-20260916/integrity-receipt.json",
+      "role": "analysis",
+      "sha256": "4d9bdbbc45f9004a6c03a775450d163414dbd216ec234fb1fbf5225fac75a245"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-analysis-20260916/error-audit.json",
+      "role": "analysis",
+      "sha256": "9c7b5573a997d99c6e196c0aa4d01a879719b770c2032f576461b520d0422e9e"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-apigen-controller-replay-20260916/report.json",
+      "role": "analysis",
+      "sha256": "c268b17d8d2b0d7fbc428edfe74cd47c4f9eeb3ada7001828a011818713e8a25"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-apigen-controller-replay-20260916/README.md",
+      "role": "analysis",
+      "sha256": "ebbc63d838dd5de3802c5523f18817c7445388957734b60f1ad322ea21ba7515"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-apigen-controller-replay-20260916/manifest.json",
+      "role": "analysis",
+      "sha256": "ad05f90b849d7676e1d9e2696f887214d31c83f9bb0d35f45b0d79e98766be60"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-apigen-controller-replay-20260916/validation.json",
+      "role": "analysis",
+      "sha256": "07fac32895f1ee70e345fd82c67b12d0b1d139bc7bd563b6d3aafb670ec49745"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-component-benchmark-20260916/latency.json",
+      "role": "component",
+      "sha256": "bd1491996dce639c80c781a1ec739f19cfd74d8a1cb8f20795729cae1a3395da"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-component-benchmark-20260916/context.json",
+      "role": "component",
+      "sha256": "b1b1765c8cc0fa1de18cdb44480b2fcfae790704fa873334cfa6e3d84588fd89"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-component-isolated-20260916/report.json",
+      "role": "component",
+      "sha256": "80a9e10364a03d1bbd9176438d983f806bd2225616cf84ec6644759745737b55"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-component-isolated-20260916/samples.jsonl",
+      "role": "component",
+      "sha256": "26e94107c8f5c034e695ef3d57d2154f88588e8c21e5810b5410eac0888fe55b"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-dataset-20260916-c/manifest.json",
+      "role": "component",
+      "sha256": "2b8df88f83f7ba33399708350a54525afc8f850997b13e802d945662d06c0371"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-dataset-20260916-c/checkpoints.jsonl",
+      "role": "component",
+      "sha256": "be7d1237253db6264ff43b306830a257735a80dd0b68ef5777e93dfce8e2d550"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-trained-20260916-b/controller.json",
+      "role": "component",
+      "sha256": "d677e4da70f9e60714c39a81df950cc962632dfb7d88e7d879cb40ab5f9f1fdd"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-action-kind-20260916/action-kind.json",
+      "role": "component",
+      "sha256": "2d607f78a80c2e11cd234c28b46284e48583c52b9fef5c86c03d1d31abacc1ad"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/selection.json",
+      "role": "selection",
+      "sha256": "104e5e5c4d68451d532d838ec621137ebd1f6c1633b53fa9f7bbc9c7be5563b0"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/README.md",
+      "role": "selection",
+      "sha256": "198877fb25cd02c29b9879666b24ec598de0845f6d491a9ea34831e6b0719e1a"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/coverage-audit.json",
+      "role": "selection",
+      "sha256": "32ee1745a297c5d96928a01e95398c7b6e97231d38e04426aa1bc54ad13f47d0"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/native-parity-verification.json",
+      "role": "selection",
+      "sha256": "623a44523fbef824340560991c6821c51bc684b4eef8014238ad41d912d3017a"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/build_selection.py",
+      "role": "selection",
+      "sha256": "275a30990f41c23827ee552c2f00efbb5b69555f930a48079696d2ca44abeffb"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/verify_selection.py",
+      "role": "selection",
+      "sha256": "1a463465cdddfe3f0b62e4a5dff32e5e8c7c09720bac342bf666b2653db7a999"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-selection-20260916/run_native_parity.py",
+      "role": "selection",
+      "sha256": "3c8475f47a5ad0edabfc0e337447a66a09450f7997d2eac909a7f2fdcf7fb516"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-plan-20260916/plan.json",
+      "role": "plan",
+      "sha256": "d1f095a81de5dc9bc811953483e4ce7ba11f3b6ea58bbd5e72494a7270f52516"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-plan-20260916/study.json",
+      "role": "plan",
+      "sha256": "f74df18ee4f1cd6122dbb1793faa44c6fcd40db42a077571894d4733837f08ff"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-plan-20260916/design.json",
+      "role": "plan",
+      "sha256": "4159fd5dc218416ad03e4d9e6100adeddc3046b40a27b05fe248799c74578f8e"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-plan-20260916/dispatch.json",
+      "role": "plan",
+      "sha256": "00199f2e4b8aa518a7ff86aeea4a4a3521f68cfae0aad42ca81e46d57f3d50f8"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-confirmation-20260916/public-contexts.json",
+      "role": "metadata",
+      "sha256": "f87d0a47d1a09bc3bf3c969db702dbe4d18ae328e39186fa710e49fccf488368"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-confirmation-20260916/service-readiness.json",
+      "role": "metadata",
+      "sha256": "73417caa2cbfa50ba191f9188d35cdac08b035f3fb4969b7344574afcbabf178"
+    },
+    {
+      "path": "research/goalspec/runs/local-official-v4-host-20260916/events.jsonl",
+      "role": "metadata",
+      "sha256": "d086e3c2da76b6a01d607a62e552eaa09b674b354e3783d05aa3be2f7d2f4794"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-dataset-20260916/dataset-manifest.json",
+      "role": "metadata",
+      "sha256": "f1f502e036eeb9455110b10f016c5fb0a518a0dd1fa303447db3378dc3830059"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-dataset-20260916/public-cases.json",
+      "role": "metadata",
+      "sha256": "f285a8aafddf2d456633666a41560268fbca24133f7dbecd8c8b2fb413774c2b"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-actor-20260916/dispatch-plan.json",
+      "role": "metadata",
+      "sha256": "502975dc429febc5a2416e024de00266b03b88dbf1f3a74a9622073e7181cdf3"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-actor-20260916/predictions.jsonl",
+      "role": "metadata",
+      "sha256": "99b42e499e8d7211cfd3f2f98cd5cd5df2086b2cbd2947139411f2c4ff5495cc"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-actor-20260916/provider-events.jsonl",
+      "role": "metadata",
+      "sha256": "4741a33da7cf643faca13871782e50df3361869ecc0a27ebf3f5275cc002cdc3"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-actor-20260916/summary.json",
+      "role": "metadata",
+      "sha256": "01af2c534f17e8c4facea3feee3e6c3b86fb5c2df693b795cfc2352ad2711b5e"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-host-20260916/events.jsonl",
+      "role": "metadata",
+      "sha256": "d74fbf24128e0ef7f310073db121d5a3967f4ceec69d04707e23ddd4d1f797e7"
+    },
+    {
+      "path": "research/goalspec/runs/local-bfcl-v4-dispatch-20260916.json",
+      "role": "plan",
+      "sha256": "502975dc429febc5a2416e024de00266b03b88dbf1f3a74a9622073e7181cdf3"
+    },
+    {
+      "path": "research/goalspec/runs/local-benchmarks-v4-budget-final-20260916.json",
+      "role": "budget",
+      "sha256": "89f908527c3ffcaab2d60740776a838daee45e6d1061c63a350564106fcf2133"
+    },
+    {
+      "path": "research/goalspec/runs/apigen-abc4a517d67c541f85f6470cbd8fd3186b36830e/acquisition.json",
+      "role": "metadata",
+      "sha256": "4bf48dd0a343f1979af33711834771fc4e65d361ae0a0a652bb5e9e7ec0a8063"
+    },
+    {
+      "path": "research/goalspec/runs/apigen-abc4a517d67c541f85f6470cbd8fd3186b36830e/ingested/manifest.json",
+      "role": "metadata",
+      "sha256": "3bf89a0527a2bd387e63d80c271d432c7a0f5f544288cd98b06bebbfaa8d3cae"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/bfcl-runner.test.ts",
+      "role": "helper",
+      "sha256": "d308a23187c29fea63bf16b9d3a3859012b281cc1970b447cf4a5c5f99eca896"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/bfcl-runner.ts",
+      "role": "helper",
+      "sha256": "930c50aee224608c96b9f952559ef7c17c07ae333d927a0c0bf5968dc8b5ae00"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/bfcl_subset.py",
+      "role": "helper",
+      "sha256": "6abe99dc64b60fc61a38385faa68b154a325b645bd707e1f9f65775e21179e78"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/final_report.py",
+      "role": "helper",
+      "sha256": "8a914a23dd82594de6f1b03cdcebb41a432d66a613dcdafe8104f998359295cc"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/package_results.py",
+      "role": "helper",
+      "sha256": "1b0a8526e76d06e5114b9df74ede6495c8ab6ea8b40a37ae3ccfd1238172a980"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/README.template.md",
+      "role": "helper",
+      "sha256": "7a91a545aabbc68eb0b08775ef0dd1452ab4a7c5c2b011abd242ff354aa8e44b"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/test_bfcl_subset.py",
+      "role": "helper",
+      "sha256": "fd5cab51ed36419dfef3687e4d802e5a7bb89daf0945a3c330a99cffdf7fb2a6"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/test_final_report.py",
+      "role": "helper",
+      "sha256": "4b460b0d809cae3d970b11d4c8b2ac93b1e6df29d437dab52a04191f9d7ba69c"
+    },
+    {
+      "path": "outputs/goalspec-benchmarks-tools/test_package_results.py",
+      "role": "helper",
+      "sha256": "1feec425bbc4c3f6ef5b096747469df4d166963dd08d59717343ab2c8992a776"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/controller_component_benchmark.ts",
+      "role": "helper",
+      "sha256": "98b4a7e29379b39fd0b32ab9b3b400ab291fb77b7fd6c23c1b56c26571be7458"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/official_native_v4.py",
+      "role": "helper",
+      "sha256": "72f61c5d6ce76744d5621557e63ed41784cca9ffccb2deb528e1342870411694"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/report_official_v4.py",
+      "role": "helper",
+      "sha256": "39482436b83df4f4e0e6efb9e2b66ab9e48567d136c0683dfad26430bff26b23"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/controller_apigen_report.py",
+      "role": "helper",
+      "sha256": "aa7c236b348a86dc4f3c9868b054449b83d3e36ec70220615088d208daf21389"
+    },
+    {
+      "path": "research/goalspec/scripts/prepare_official_native_v4.py",
+      "role": "helper",
+      "sha256": "75b9c3c0b32c3e2c9c2cfc6a83ed1029d7997aa19b46e905d45c1ae8ca91b9c7"
+    },
+    {
+      "path": "research/goalspec/scripts/run_official_native_v4.py",
+      "role": "helper",
+      "sha256": "713d79bd8b53e43c928edd1f31b19672b93291579f3525ca6a1c03a6c21f125a"
+    },
+    {
+      "path": "research/goalspec/scripts/report_official_native_v4.py",
+      "role": "helper",
+      "sha256": "7a3237a6533eebcfe99a28d5cadb52c56a5c3c2d058b9436a853acdec5130c91"
+    },
+    {
+      "path": "research/goalspec/tests/test_official_native_v4.py",
+      "role": "helper",
+      "sha256": "d8c58f3ddf7fd1a224e1625bfbf016e47e84a50783afa633c22b4042b97ecb5f"
+    },
+    {
+      "path": "research/goalspec/tests/test_report_official_v4.py",
+      "role": "helper",
+      "sha256": "4af8318571d84aa3e94f900a03ae4bc671d171283c41645725ef4eb9825bfc6c"
+    },
+    {
+      "path": "research/goalspec/tests/test_controller_apigen_report.py",
+      "role": "helper",
+      "sha256": "a1b04864b396171984bd22f0e47c2d62a60a826fcf6358aac67b91ad7130283e"
+    },
+    {
+      "path": "scripts/goalspec-controller-apigen-replay.ts",
+      "role": "helper",
+      "sha256": "702d38da9020a5815ff7428009722155e4721be9efe457ed23406ca724265dfe"
+    },
+    {
+      "path": "scripts/goalspec-controller-apigen-replay.test.ts",
+      "role": "helper",
+      "sha256": "ffa57552eedb2ecfce216de1e475de3e5d8e347df50e8e028d75bfac15a5c453"
+    },
+    {
+      "path": "docs/AI_HANDOFF.md",
+      "role": "metadata",
+      "sha256": "10d1061fe47b64a8aa5cb3594fdef769a573c16cd5e31c46eb376b697894848a"
+    },
+    {
+      "path": "docs/ENGINEERING_LOG.md",
+      "role": "metadata",
+      "sha256": "981979750fb1ea5a2f46ae4ade8586ff7e832f9946e5a1534cf607d8b0dd69b9"
+    }
+  ],
+  "tauAnalysis": "research/goalspec/runs/local-official-v4-analysis-20260916",
+  "native": {
+    "directory": "research/goalspec/runs/local-official-v4-confirmation-20260916",
+    "expectedTrials": 112,
+    "events": [
+      "research/goalspec/runs/local-evaluation-20260914/events-8ccee8e3-b319-48d9-802c-b0c40de3f59d.jsonl"
+    ],
+    "sourceArchive": "research/goalspec/runs/local-official-v4-plan-20260916/source.zip"
+  },
+  "externalInputs": [
+    {
+      "name": "sierra-research/tau2-bench native tau3 package 1.0.1",
+      "pin": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "reason": "Full upstream checkout, native datasets and installed dependencies are external; exact selected source/license snapshot remains in immutable source.zip and native per-trial fixtures are preserved."
+    },
+    {
+      "name": "BFCL official source/data/checker",
+      "pin": "f7cf7359b7ac615a0b294831c5ba2bc95ee4a000",
+      "reason": "Full BFCL checkout and environment dependencies are external. Selected 64 public cases, frozen runner, official-source hashes, original license and scored predictions are included."
+    },
+    {
+      "name": "Salesforce/APIGen-MT-5k",
+      "pin": "abc4a517d67c541f85f6470cbd8fd3186b36830e",
+      "reason": "Raw public corpus, 46,127 replay checkpoints and 92,254 score rows are external hash-pinned artifacts. Research-only CC BY-NC 4.0 lineage, acquisition, report, manifest and validation receipt are retained."
+    },
+    {
+      "name": "Node and Python installed dependencies",
+      "pin": "Exact package locks and pyproject snapshots in source.zip; CPU report records Node v22.16.0",
+      "reason": "node_modules, virtual environments, credentials and environment files are excluded. Provider-free analysis can be recreated after installing pinned dependencies and mapping original absolute paths in new input manifests."
+    }
+  ]
+}

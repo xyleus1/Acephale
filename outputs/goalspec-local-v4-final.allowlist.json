@@ -1,0 +1,849 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "path": "docs/AI_HANDOFF.md",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "docs/DECISIONS.md",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "docs/ENGINEERING_LOG.md",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "docs/goalspec/V4_CONTROLLER.md",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "docs/goalspec/V4_IMPLEMENTATION.md",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "outputs/goalspec-local-v4-final.allowlist.json",
+      "role": "artifact"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/README.md",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/build_package.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/hash_research_tables.mjs",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/prepare_allowlist.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/test_build_package.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "outputs/goalspec-v4-tools/verify_final_sources.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-16-local-v4",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/requirements-controller-v4.txt",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-action-kind-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-dataset-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-dataset-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-dataset-20260916-c",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-policy-parity-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-policy-parity-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-replay-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-trained-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-controller-v4-trained-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-2b0cbcda-e863-46d2-9848-39c4018fbd92.jsonl",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-4b3d28e6-c8df-487d-9fca-b364bcc2dd15.jsonl",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-5d3ddf24-7bac-46fb-b9e4-ea81d4dd07cc.jsonl",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-final-accounting-v4-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-library-v1-20260915",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-memory-v3-20260915",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-study-v4-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0000-f6a70e878c2e.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0001-49c31ebdc0bd.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0002-7ea17d156ea1.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0003-eb1644a95a8b.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0004-0704ba57b6e7.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0005-99102a2fe76b.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0006-bbf97424fe04.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0007-4f89e9b426ef.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0008-a7ff2bddd481.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0009-00c6eea89086.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0010-e8bc2b60871d.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0011-00323f5ff7b8.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0012-1977c4c8881e.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0013-a33e279c928d.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0014-d5d6cf351c66.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0015-07f9d5b04807.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0016-b2fd50a13236.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0017-1306d8d5bb97.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0018-8726e8b2773a.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0019-3592ad2746f4.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0020-5eb48247719c.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0021-09ef4bb9185b.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0022-a6de870800ed.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0023-ecadb66181db.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0024-17b2bd705312.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0025-033531468e3a.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0026-e5f9d981223a.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0027-15bfff319e45.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0028-f650018385b3.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0029-09b3f3184ff7.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0030-8da59094d546.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0031-3868cc8c2693.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0032-8d9c6a2ca8d3.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0033-dc3cc37003b9.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0034-923928dfe541.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0035-db655e37c9fa.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0036-7bf8538c3a94.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0037-9f9883e4f61c.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0038-3dfd047e7ce7.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0039-5b275e7425de.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0040-3584f50b685e.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0041-69a615acf5fa.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0042-caa24fd3e9c5.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0043-be8159ed6b69.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0044-0ff736939b67.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0045-d72c6974e139.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0046-c17cac44b5f2.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-training-v1-20260915/train-0047-63458ebc56ce.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0001-90d77ca612e0.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0004-c986537a7c4f.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0006-17c1bc7fe569.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0009-70098f7a2a48.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0014-335c305165a0.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0017-e72f49976e11.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0018-2ccc3fc6e0af.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-1-20260915/v2-df424bd6f3-development-1-0022-25a1e2ab7db5.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0002-05c8c6e80524.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0004-9a474f351152.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0008-8a78c302b7ce.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0011-085570d010b1.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0013-6e294418e7bf.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0016-347ef5317d36.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0018-cf1aed9cce54.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-development-2-20260915/v2-df424bd6f3-development-2-0022-15308d507db7.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0002-6ae7d315008a.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0005-5af7cceb2a6e.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0008-ab1afff93056.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0015-e4404cb50747.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0018-155215411d8d.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0021-b1e98d65360c.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0024-f21e54d8538e.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0031-bdffb2dfabec.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0034-d3fbacc7aecd.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0037-c8d51ba8e85e.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0040-e2dc85f802dc.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0047-763dc59ceabf.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0050-147663cb75bd.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0053-12c712953083.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0056-c2ccf49f29a1.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915/v3-df7d84cc89-confirmation-0063-c2919bcb35fd.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/requested-annotations.jsonl",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/requested-grades.jsonl",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/v3-df7d84cc89-development-1-0002-05cce33e1c76.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/v3-df7d84cc89-development-1-0005-1c558f65f6fa.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/v3-df7d84cc89-development-1-0008-a42b423dee3f.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-1-20260915/v3-df7d84cc89-development-1-0015-b53fc309afde.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/v3-df7d84cc89-development-2-0003-c0d4b66822b7.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/v3-df7d84cc89-development-2-0006-f4e1c7efcda9.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/v3-df7d84cc89-development-2-0009-b9c0b7ee32b7.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-2-20260915/v3-df7d84cc89-development-2-0012-8a0eb584964c.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/design.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/public-contexts.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/service-manifest.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/v3-df7d84cc89-development-3-0001-af1aeecc5a88.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/v3-df7d84cc89-development-3-0004-bec12f5e4d60.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/v3-df7d84cc89-development-3-0011-f94b2eb9851f.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-20260915/v3-df7d84cc89-development-3-0014-1490c627159c.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-archive-import-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-budget-after-development-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-budget-after-goals-a-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-budget-after-goals-b-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-budget-before-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-budget-final-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-candidate-audit-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-cleanup-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-controller-replay-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-controller-replay-20260916-inputs.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-failure-audit-20260916/README.md",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-failure-audit-20260916/build_audit.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-failure-audit-20260916/diagnostic.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-host-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-plan-20260916/plan.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-plan-20260916/source.zip",
+      "role": "executed-source-archive"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-confirmation-policy-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-analysis-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-analysis-20260916.plan.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-controller-replay-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-controller-replay-20260916-inputs.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-host-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-plan-20260916/plan.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-development-plan-20260916/source.zip",
+      "role": "executed-source-archive"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-final-report-20260916.plan.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-final-source-verification-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-host-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-host-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-host-20260916-c",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-20260916-c",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-plan-20260916-b.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-plan-20260916-b2.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-plan-20260916-c.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-goal-replay-plan-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-native-archive-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-native-archive-20260916-inputs.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-package-verification-20260916",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-package-verification-20260916-b",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/runs/local-v4-verification-20260916.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/scripts/evaluate_controller_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/scripts/export_native_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/scripts/import_native_archive_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/scripts/report_native_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/scripts/train_action_kind_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/scripts/train_controller_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/archive_import_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/archive_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/controller_native_v4_report.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/controller_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/src/goalspec/report_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/tests/test_archive_import_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/tests/test_archive_v4.py",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "research/goalspec/v4-confirmation.configuration.json",
+      "role": "artifact"
+    },
+    {
+      "path": "research/goalspec/v4-development.configuration.json",
+      "role": "artifact"
+    },
+    {
+      "path": "scripts/goalspec-controller-action-kind-generate.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-controller-benchmark.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-controller-dataset.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-controller-generate.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-controller-native-v4-replay.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-controller-replay.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-import-archive-v4.test.ts",
+      "role": "analysis-overlay"
+    },
+    {
+      "path": "scripts/goalspec-import-archive-v4.ts",
+      "role": "analysis-overlay"
+    }
+  ]
+}

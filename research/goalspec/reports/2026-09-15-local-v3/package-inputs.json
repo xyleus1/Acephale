@@ -1,0 +1,2094 @@
+{
+  "schemaVersion": 3,
+  "packageLabel": "GoalSpec official v3 pinned tau retail/airline subset; all failures retained",
+  "finalized": true,
+  "pending": [],
+  "finalSourceId": "confirmation-dispatched",
+  "recommendedOutput": "outputs/goalspec-local-v3-final.zip",
+  "mustBeAbsent": [
+    "research/goalspec/runs/local-evaluation-20260914/budget.jsonl.lock"
+  ],
+  "sourceArchives": [
+    {
+      "id": "development-1-dispatched",
+      "directory": "research/goalspec/runs/local-v3-development-1-source-20260915-b",
+      "sourceTreeHash": "a83044176b5a168c659dc4784e18060e7d96a7f93da8bb95f22aca69d7f046d5",
+      "manifestSha256": "becbba3de4c95f02b427251d76ed86dcd60c7e5d02b7f5a051b85e1c0b1f8ddd",
+      "sourceArchive": {
+        "path": "source.zip",
+        "sha256": "fb9283d62ac88669eb923ea633374558d69e41a81391b7b5328ac0f4ebefcf30",
+        "bytes": 2827439
+      },
+      "inputArchive": {
+        "path": "inputs.zip",
+        "sha256": "d9c51e9907caaf5c33cf5a2c68d37ba1b8cb8fb7d45a640dbde8092bdbebbe8c",
+        "bytes": 2032628
+      },
+      "nativeGitHead": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "expectedSourceMembers": 520,
+      "expectedInputMembers": 257,
+      "hashProvenance": "Original capture metadata independently verified against both archive bytes and exact manifest-bound source/input member sets after all phases closed"
+    },
+    {
+      "id": "development-2-dispatched",
+      "directory": "research/goalspec/runs/local-v3-development-2-source-20260915-b",
+      "sourceTreeHash": "2518e47ce2e64e8b6d71f4cc097efc83a7c0117468bcaa3f3e974838ad7e3884",
+      "manifestSha256": "ff72f953942d7b803cbac4a1de9fe9dfc905592a1d32777cabc60308ff6c909a",
+      "sourceArchive": {
+        "path": "source.zip",
+        "sha256": "2b70fd78fa7b73030d030987cf3bc82f417180811121414217c21973cfa80e99",
+        "bytes": 2857371
+      },
+      "inputArchive": {
+        "path": "inputs.zip",
+        "sha256": "d9c51e9907caaf5c33cf5a2c68d37ba1b8cb8fb7d45a640dbde8092bdbebbe8c",
+        "bytes": 2032628
+      },
+      "nativeGitHead": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "expectedSourceMembers": 525,
+      "expectedInputMembers": 257,
+      "hashProvenance": "Original capture metadata independently verified against both archive bytes and exact manifest-bound source/input member sets after all phases closed"
+    },
+    {
+      "id": "development-3-dispatched",
+      "directory": "research/goalspec/runs/local-v3-development-3-source-20260915",
+      "sourceTreeHash": "f351dafe41130607d3f20533452fb33c4bac23be0dc612adea815c272c7a7b89",
+      "manifestSha256": "db93aa85a8aec8b8fd287b73e624ee094ae2f17c5e92e5777bd21397e416bcde",
+      "sourceArchive": {
+        "path": "source.zip",
+        "sha256": "043075a4cbe26abaa5773e36e72c5311ac5f8e393fa2b3bb8199e290d42cc127",
+        "bytes": 2897410
+      },
+      "inputArchive": {
+        "path": "inputs.zip",
+        "sha256": "d9c51e9907caaf5c33cf5a2c68d37ba1b8cb8fb7d45a640dbde8092bdbebbe8c",
+        "bytes": 2032628
+      },
+      "nativeGitHead": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "expectedSourceMembers": 534,
+      "expectedInputMembers": 257,
+      "hashProvenance": "Original capture metadata independently verified against both archive bytes and exact manifest-bound source/input member sets after all phases closed"
+    },
+    {
+      "id": "confirmation-dispatched",
+      "directory": "research/goalspec/runs/local-v3-confirmation-source-20260915",
+      "sourceTreeHash": "39d7c7aaef4241d96fd9c274355862632eb45d6adec9882394fc7f45d6b8e022",
+      "manifestSha256": "cb4f6f1dda5039c8cc0597e0daa6d68f1fae80c39bb241abeb07385526f26c20",
+      "sourceArchive": {
+        "path": "source.zip",
+        "sha256": "aefd9b6c2b8b5d998d3900bd2967fae1914fc0e720c57cfae37d72a35d17d4d4",
+        "bytes": 2938282
+      },
+      "inputArchive": {
+        "path": "inputs.zip",
+        "sha256": "d9c51e9907caaf5c33cf5a2c68d37ba1b8cb8fb7d45a640dbde8092bdbebbe8c",
+        "bytes": 2032628
+      },
+      "nativeGitHead": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "expectedSourceMembers": 544,
+      "expectedInputMembers": 257,
+      "hashProvenance": "Original capture metadata independently verified against both archive bytes and exact manifest-bound source/input member sets after all phases closed"
+    }
+  ],
+  "phaseBindings": [
+    {
+      "stage": "development-1",
+      "declaredTrials": 16,
+      "arms": [
+        "base",
+        "paste",
+        "salesforce",
+        "goalspec"
+      ],
+      "sourceTreeHash": "a83044176b5a168c659dc4784e18060e7d96a7f93da8bb95f22aca69d7f046d5",
+      "nativeManifestHash": "f42a9a225a4b1ef725aa43774b0868956ce46be2a3e80bad97b5d083d59aea93",
+      "manifestHashProvenance": "closed original event manifest",
+      "state": "existing_closed"
+    },
+    {
+      "stage": "development-2",
+      "declaredTrials": 16,
+      "arms": [
+        "base",
+        "paste",
+        "salesforce",
+        "goalspec"
+      ],
+      "sourceTreeHash": "2518e47ce2e64e8b6d71f4cc097efc83a7c0117468bcaa3f3e974838ad7e3884",
+      "nativeManifestHash": "a0ef66921062492528e7f13a9973737f7f336c0694628e60c2a31c066ce5333f",
+      "manifestHashProvenance": "closed original event manifest",
+      "state": "existing_closed"
+    },
+    {
+      "stage": "development-3",
+      "declaredTrials": 16,
+      "arms": [
+        "base",
+        "paste",
+        "salesforce",
+        "goalspec"
+      ],
+      "sourceTreeHash": "f351dafe41130607d3f20533452fb33c4bac23be0dc612adea815c272c7a7b89",
+      "nativeManifestHash": "7e7a27b44c324e5ec664282ed2f925ab85f67100d6a9cf50957b0d383f97ea1a",
+      "manifestHashProvenance": "closed original event manifest",
+      "state": "existing_closed"
+    },
+    {
+      "stage": "confirmation",
+      "declaredTrials": 64,
+      "arms": [
+        "base",
+        "paste",
+        "salesforce",
+        "goalspec"
+      ],
+      "sourceTreeHash": "39d7c7aaef4241d96fd9c274355862632eb45d6adec9882394fc7f45d6b8e022",
+      "nativeManifestHash": "6520cab05726e4b13e4a8270047694009cc3978d93a42663e6d539be6fd433f9",
+      "manifestHashProvenance": "root supplied while live",
+      "state": "existing_closed"
+    }
+  ],
+  "groups": [
+    {
+      "name": "native_development-1",
+      "path": "research/goalspec/runs/local-v3-development-1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "summary.json",
+        "outcomes.jsonl",
+        "service-manifest.json",
+        "public-contexts.json",
+        "service-readiness.json",
+        "service.log"
+      ],
+      "recursive": false,
+      "minimumFiles": 23,
+      "state": "existing_closed"
+    },
+    {
+      "name": "events_development-1",
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-8ca64687-5f6c-402f-9e4b-3c6fab9a5bf1.jsonl",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "host_development-1",
+      "path": "research/goalspec/runs/local-v3-development-1-host-20260915",
+      "patterns": [
+        "events.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "native_development-2",
+      "path": "research/goalspec/runs/local-v3-development-2-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "summary.json",
+        "outcomes.jsonl",
+        "service-manifest.json",
+        "public-contexts.json",
+        "service-readiness.json",
+        "service.log"
+      ],
+      "recursive": false,
+      "minimumFiles": 23,
+      "state": "existing_closed"
+    },
+    {
+      "name": "events_development-2",
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-4ebc87c5-b942-4ef3-9386-83e7fe9a13a7.jsonl",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "host_development-2",
+      "path": "research/goalspec/runs/local-v3-development-2-host-20260915",
+      "patterns": [
+        "events.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "native_development-3",
+      "path": "research/goalspec/runs/local-v3-development-3-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "summary.json",
+        "outcomes.jsonl",
+        "service-manifest.json",
+        "public-contexts.json",
+        "service-readiness.json",
+        "service.log"
+      ],
+      "recursive": false,
+      "minimumFiles": 23,
+      "state": "existing_closed"
+    },
+    {
+      "name": "events_development-3",
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-3d79d988-168c-48e1-bc02-9ef107a8768f.jsonl",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "host_development-3",
+      "path": "research/goalspec/runs/local-v3-development-3-host-20260915",
+      "patterns": [
+        "events.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "native_confirmation",
+      "path": "research/goalspec/runs/local-v3-confirmation-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "summary.json",
+        "outcomes.jsonl",
+        "service-manifest.json",
+        "public-contexts.json",
+        "service-readiness.json",
+        "service.log"
+      ],
+      "recursive": false,
+      "minimumFiles": 71,
+      "state": "existing_closed"
+    },
+    {
+      "name": "events_confirmation",
+      "path": "research/goalspec/runs/local-evaluation-20260914/events-2b0cbcda-e863-46d2-9848-39c4018fbd92.jsonl",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "host_confirmation",
+      "path": "research/goalspec/runs/local-v3-confirmation-host-20260915",
+      "patterns": [
+        "events.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "frozen_study_and_dispatch_claims",
+      "path": "research/goalspec/runs/local-study-v3-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "study.json",
+        "development-1-design.json",
+        "development-1-claim.json",
+        "development-1-dispatch.json",
+        "development-1-complete.json",
+        "development-1-runtime-config.json",
+        "development-2-design.json",
+        "development-2-claim.json",
+        "development-2-dispatch.json",
+        "development-2-complete.json",
+        "development-2-runtime-config.json",
+        "development-3-design.json",
+        "development-3-claim.json",
+        "development-3-dispatch.json",
+        "development-3-complete.json",
+        "development-3-runtime-config.json",
+        "confirmation-design.json",
+        "confirmation-claim.json",
+        "confirmation-dispatch.json",
+        "confirmation-complete.json",
+        "confirmation-runtime-config.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 21,
+      "state": "existing_closed"
+    },
+    {
+      "name": "runtime_configurations",
+      "path": "research/goalspec/runs/local-v3-configuration-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "development-1.json",
+        "development-2.json",
+        "development-3.json",
+        "confirmation.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 4,
+      "state": "existing_closed"
+    },
+    {
+      "name": "frozen_experience_memory",
+      "path": "research/goalspec/runs/local-memory-v3-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "artifact.json",
+        "summary.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "frozen_pattern_library_publication",
+      "path": "research/goalspec/runs/local-library-v1-20260915",
+      "patterns": [
+        "*.json"
+      ],
+      "requiredFiles": [
+        "records.json",
+        "publication.json",
+        "summary.json",
+        "mined.json",
+        "omitted.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 5,
+      "state": "existing_closed"
+    },
+    {
+      "name": "training_source_trials",
+      "path": "research/goalspec/runs/local-training-v1-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "design.json",
+        "outcomes.jsonl",
+        "summary.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 3,
+      "state": "existing_closed"
+    },
+    {
+      "name": "training_verdict_corrections",
+      "path": "research/goalspec/runs/local-training-v2-verdicts-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "outcomes.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "training_native_fixtures",
+      "path": "research/goalspec/runs/fresh-native-v1-20260915",
+      "patterns": [
+        "fresh-tasks.json"
+      ],
+      "requiredFiles": [
+        "fresh-tasks.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "baseline_repository_export",
+      "path": "research/goalspec/runs/repository-final-export-v2-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.parquet",
+        "*.sha256"
+      ],
+      "requiredFiles": [
+        "manifest.json",
+        "jsonl-manifest.json",
+        "manifest.sha256"
+      ],
+      "recursive": true,
+      "minimumFiles": 47,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-1-report-20260915",
+      "path": "research/goalspec/runs/local-v3-development-1-report-20260915",
+      "patterns": [
+        "*.json",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "report.json",
+        "trials.csv",
+        "paired-differences.csv",
+        "manifest.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 5,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-2-report-20260915",
+      "path": "research/goalspec/runs/local-v3-development-2-report-20260915",
+      "patterns": [
+        "*.json",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "report.json",
+        "trials.csv",
+        "paired-differences.csv",
+        "manifest.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 5,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-3-analysis-20260915",
+      "path": "research/goalspec/runs/local-v3-development-3-analysis-20260915",
+      "patterns": [
+        "*.json",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "report.json",
+        "trials.csv",
+        "paired-differences.csv",
+        "native-summary.csv",
+        "manifest.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 6,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-confirmation-analysis-20260915",
+      "path": "research/goalspec/runs/local-v3-confirmation-analysis-20260915",
+      "patterns": [
+        "*.json",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "report.json",
+        "trials.csv",
+        "paired-differences.csv",
+        "native-summary.csv",
+        "manifest.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 6,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-1-policy-audit-20260915",
+      "path": "research/goalspec/runs/local-v3-development-1-policy-audit-20260915",
+      "patterns": [
+        "*.json",
+        "*.md",
+        "*.py"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "audit.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-2-diagnosis-20260915",
+      "path": "research/goalspec/runs/local-v3-development-2-diagnosis-20260915",
+      "patterns": [
+        "*.json",
+        "*.md",
+        "*.py"
+      ],
+      "requiredFiles": [
+        "ADMISSION_ORDER_AUDIT.md",
+        "TYPED_EDGE_PROPOSAL.md"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-2-retail13-audit-20260915",
+      "path": "research/goalspec/runs/local-v3-development-2-retail13-audit-20260915",
+      "patterns": [
+        "*.json",
+        "*.md",
+        "*.py"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "audit.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "local-v3-development-3-diagnosis-20260915",
+      "path": "research/goalspec/runs/local-v3-development-3-diagnosis-20260915",
+      "patterns": [
+        "*.json",
+        "*.md",
+        "*.py"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "diagnosis.json",
+        "timing-attribution.json",
+        "manifest.json",
+        "view_traces.py",
+        "finish_diagnosis.py"
+      ],
+      "recursive": false,
+      "minimumFiles": 6,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_replay",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "requiredFiles": [
+        "dispatch-plan.json",
+        "selection.json",
+        "manifest.json",
+        "predictions.jsonl",
+        "model-events.jsonl",
+        "provider-events.jsonl",
+        "requested-annotations.jsonl",
+        "annotations-frozen.json",
+        "requested-grades.jsonl",
+        "goal-summary.json",
+        "billing.json",
+        "summary.json",
+        "completion.json",
+        "execution-receipt.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 14,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_uncertainty_report",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915",
+      "patterns": [
+        "*.json",
+        "*.csv",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "report.json",
+        "report.md",
+        "metrics.csv",
+        "paired-differences.csv",
+        "analysis-receipt.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 5,
+      "state": "existing_closed"
+    },
+    {
+      "name": "validation_development-1",
+      "path": "research/goalspec/runs/local-v3-validation-development-1-20260915",
+      "patterns": [
+        "*.json",
+        "*.txt"
+      ],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "interim_accounting_development-1",
+      "path": "research/goalspec/runs/local-v3-accounting-development-1-20260915",
+      "patterns": [
+        "budget-report.json"
+      ],
+      "requiredFiles": [
+        "budget-report.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "validation_development-2",
+      "path": "research/goalspec/runs/local-v3-validation-development-2-20260915",
+      "patterns": [
+        "*.json",
+        "*.txt"
+      ],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "interim_accounting_development-2",
+      "path": "research/goalspec/runs/local-v3-accounting-development-2-20260915",
+      "patterns": [
+        "budget-report.json"
+      ],
+      "requiredFiles": [
+        "budget-report.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "validation_development-3",
+      "path": "research/goalspec/runs/local-v3-validation-development-3-20260915",
+      "patterns": [
+        "*.json",
+        "*.txt"
+      ],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "interim_accounting_development-3",
+      "path": "research/goalspec/runs/local-v3-accounting-development-3-20260915",
+      "patterns": [
+        "budget-report.json"
+      ],
+      "requiredFiles": [
+        "budget-report.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "confirmation_predispatch_validation",
+      "path": "research/goalspec/runs/local-v3-confirmation-validation-20260915",
+      "patterns": [
+        "*.json",
+        "*.txt"
+      ],
+      "requiredFiles": [
+        "prompt-regressions.txt",
+        "verification.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_00",
+      "path": "research/goalspec/runs/local-v3-archive-export-verification-20260915/verification.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_01",
+      "path": "research/goalspec/runs/local-v3-replay-staging-20260915/promotion-validation.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_02",
+      "path": "research/goalspec/runs/local-v3-network-retry-staging-20260915/promotion-verification.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_03",
+      "path": "research/goalspec/runs/local-v3-final-analysis-staging-20260915/promotion-receipt.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_04",
+      "path": "research/goalspec/runs/local-v3-final-analysis-staging-20260915/pytest.txt",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_05",
+      "path": "research/goalspec/runs/local-v3-final-analysis-staging-20260915/ruff.txt",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_06",
+      "path": "research/goalspec/runs/local-v3-final-analysis-staging-20260915/REPORT_PLAN.md",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_07",
+      "path": "research/goalspec/runs/local-v3-transport-diagnostic-staged-20260915/result-001.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_08",
+      "path": "research/goalspec/runs/local-v3-transport-diagnostic-staged-20260915/completed-audit.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "used_validation_receipt_09",
+      "path": "research/goalspec/runs/local-v3-final-visual-staging-20260915/plot_confirmation.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "actor_compiler_offline_benchmark",
+      "path": "research/goalspec/runs/local-v3-actor-compiler-benchmark-20260915",
+      "patterns": [
+        "*.json",
+        "*.md"
+      ],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "accounting_before_shuffled_correction",
+      "path": "research/goalspec/runs/local-final-accounting-v3-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "budget-report.json",
+        "budget-journal.jsonl",
+        "closure.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 3,
+      "state": "existing_closed"
+    },
+    {
+      "name": "portable_archive",
+      "path": "research/goalspec/runs/local-final-artifact-archive-v3-20260915-b",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.parquet",
+        "*.sha256"
+      ],
+      "requiredFiles": [
+        "cohort_manifest.jsonl",
+        "cohort_manifest.parquet",
+        "artifact_file.jsonl",
+        "artifact_file.parquet",
+        "artifact_record.jsonl",
+        "artifact_record.parquet",
+        "manifest.json",
+        "manifest.sha256",
+        "package-inventory.json",
+        "package-inventory.sha256"
+      ],
+      "recursive": false,
+      "minimumFiles": 10,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_repository_verification",
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915",
+      "patterns": [
+        "*.json",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "v3-archive-import.json",
+        "legacy-table-preservation.json",
+        "research-postgres-shutdown.json",
+        "legacy-preimport-comparison.json",
+        "importer-attempts.json",
+        "source-freeze-after-replay.json",
+        "source-freeze.json",
+        "source-freeze-final-pre-docs.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 8,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_legacy_repository_export",
+      "path": "research/goalspec/runs/repository-final-export-v3-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.parquet",
+        "*.sha256"
+      ],
+      "requiredFiles": [
+        "manifest.json",
+        "manifest.sha256",
+        "jsonl-manifest.json"
+      ],
+      "recursive": true,
+      "minimumFiles": 47,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_source_verification",
+      "path": "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_and_packager",
+      "path": "research/goalspec/reports/2026-09-15-local-v3",
+      "patterns": [
+        "*.md",
+        "*.py",
+        "*.json",
+        "*.csv",
+        "*.png",
+        "*.pdf",
+        "*.svg",
+        "*.ts"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "metrics.csv",
+        "report-manifest.json",
+        "build_package.py",
+        "test_build_package.py",
+        "package-inputs.json",
+        "archive-inputs.json",
+        "PACKAGE_BUILD.md",
+        "lineage-references.json",
+        "figures/confirmation.png",
+        "figures/confirmation.pdf",
+        "figures/confirmation.svg",
+        "figures/plot-data.json",
+        "closed-native-cohort-inventory.json",
+        "capture-category-audit.json",
+        "archive-native-inputs.json",
+        "archive-native-inputs-b.json",
+        "export_native_archive_postrun.py",
+        "test_export_native_archive_postrun.py",
+        "test_package_document_overlays.py",
+        "import_archive_postrun.ts",
+        "import_archive_postrun.test.ts",
+        "import_archive_postrun.test-receipt.json",
+        "tsconfig.import-archive-postrun.json",
+        "IMPORT_ARCHIVE_POSTRUN.md",
+        "native_execution_replay_v3.py",
+        "native_execution_replay_v3.ts",
+        "tsconfig.execution-replay.json",
+        "execution-replay-validation-final.json"
+      ],
+      "recursive": true,
+      "minimumFiles": 13,
+      "state": "existing_closed"
+    },
+    {
+      "name": "postconfirmation_package_validation",
+      "path": "research/goalspec/runs/local-v3-package-validation-20260915",
+      "patterns": [
+        "*.json",
+        "*.txt"
+      ],
+      "requiredFiles": [
+        "verification.json",
+        "pytest.txt",
+        "ruff.txt",
+        "amended-verification.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 4,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_preregistered_plan",
+      "path": "research/goalspec/runs/local-v3-prediction-plan-20260915/plan.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_host_events",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-host-20260915",
+      "patterns": [
+        "events.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "native_archive_scanner_amendment",
+      "path": "research/goalspec/runs/local-v3-native-archive-verification-20260915",
+      "patterns": [
+        "*.json",
+        "*.txt"
+      ],
+      "requiredFiles": [
+        "scanner-amendment.json",
+        "completion.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_parquet_derivatives",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-parquet-20260915",
+      "patterns": [
+        "*.parquet",
+        "*.json",
+        "*.sha256"
+      ],
+      "requiredFiles": [
+        "predictions.parquet",
+        "model-events.parquet",
+        "provider-events.parquet",
+        "requested-annotations.parquet",
+        "requested-grades.parquet",
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "recursive": false,
+      "minimumFiles": 7,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_parquet_helper_replay_parquet_v3",
+      "path": "research/goalspec/runs/local-v3-replay-parquet-staging-20260915/replay_parquet_v3.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "prediction_parquet_helper_test_replay_parquet_v3",
+      "path": "research/goalspec/runs/local-v3-replay-parquet-staging-20260915/test_replay_parquet_v3.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_overlay_0",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/build_final_report.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_overlay_1",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_native_slots.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_overlay_2",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/audit_confirmation.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "confirmation_failure_diagnosis",
+      "path": "research/goalspec/runs/local-v3-confirmation-diagnosis-20260915",
+      "patterns": [
+        "*.md",
+        "*.json",
+        "*.py"
+      ],
+      "requiredFiles": [
+        "README.md",
+        "audit.json",
+        "provider-attribution.json",
+        "manifest.json",
+        "view_failures.py"
+      ],
+      "recursive": false,
+      "minimumFiles": 5,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_overlay_fill_replay_slots",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_replay_slots.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "native_execution_replay",
+      "path": "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915-b",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.csv",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "adapter-source.json",
+        "candidate-source-audit.json",
+        "completion.json",
+        "execution-replay-metrics.csv",
+        "execution-replay-summary.md",
+        "replay-input.json",
+        "replay-method-manifest.json",
+        "replay-outcomes.jsonl",
+        "report.json",
+        "scheduler-events.jsonl",
+        "scheduler-summary.json",
+        "service.log"
+      ],
+      "recursive": false,
+      "minimumFiles": 12,
+      "state": "existing_closed"
+    },
+    {
+      "name": "execution_replay_initial_setup_failure",
+      "path": "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.csv",
+        "*.log"
+      ],
+      "requiredFiles": [
+        "completion.json",
+        "report.json",
+        "replay-outcomes.jsonl",
+        "service.log"
+      ],
+      "recursive": false,
+      "minimumFiles": 4,
+      "state": "existing_closed"
+    },
+    {
+      "name": "execution_replay_reader_amendment",
+      "path": "research/goalspec/runs/local-v3-execution-replay-reader-fix-20260915",
+      "patterns": [
+        "*.json",
+        "*.py",
+        "*.ts"
+      ],
+      "requiredFiles": [
+        "fix-receipt.json",
+        "first-attempt-adapter.py",
+        "first-attempt-adapter.ts"
+      ],
+      "recursive": false,
+      "minimumFiles": 3,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_replay_report_slots",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/replay-slots.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "confirmation_usage_audit",
+      "path": "research/goalspec/runs/local-v3-confirmation-cost-audit-20260915",
+      "patterns": [
+        "*.json",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "audit.json",
+        "README.md"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "shuffled_correction_validation",
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-validation-20260915",
+      "patterns": [
+        "dispatch-validation.json"
+      ],
+      "requiredFiles": [
+        "dispatch-validation.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "shuffled_control_availability_audit",
+      "path": "research/goalspec/runs/local-v3-replay-availability-audit-20260915",
+      "patterns": [
+        "audit.ts",
+        "diagnostic.json"
+      ],
+      "requiredFiles": [
+        "audit.ts",
+        "diagnostic.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 2,
+      "state": "existing_closed"
+    },
+    {
+      "name": "shuffled_correction_source",
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915",
+      "patterns": [
+        "*.ts",
+        "*.json",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "dispatch.ts",
+        "dispatch.test.ts",
+        "correction.ts",
+        "correction.test.ts",
+        "compact-candidates-corrected.ts",
+        "derived-replay.ts",
+        "derived-replay.test.ts",
+        "derived-replay-validation.json",
+        "smoke.ts",
+        "smoke-receipt.json",
+        "tsconfig.json",
+        "tsconfig.derived-replay.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 12,
+      "state": "existing_closed"
+    },
+    {
+      "name": "corrected_prediction_replay",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "dispatch-plan.json",
+        "selection.json",
+        "manifest.json",
+        "predictions.jsonl",
+        "model-events.jsonl",
+        "provider-events.jsonl",
+        "requested-annotations.jsonl",
+        "annotations-frozen.json",
+        "requested-grades.jsonl",
+        "goal-summary.json",
+        "billing.json",
+        "summary.json",
+        "completion.json",
+        "execution-receipt.json",
+        "derivation.json",
+        "derivation-receipt.json",
+        "assembly-validation.json",
+        "original-execution-receipt.json",
+        "original-dispatch-plan.json",
+        "original-billing.json",
+        "original-goal-summary.json",
+        "original-model-events.jsonl",
+        "original-provider-events.jsonl",
+        "correction-plan.json",
+        "correction-rows.jsonl",
+        "correction-model-events.jsonl",
+        "correction-provider-events.jsonl",
+        "correction-billing.json",
+        "correction-completion.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 29,
+      "state": "existing_closed"
+    },
+    {
+      "name": "corrected_prediction_analysis",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915",
+      "patterns": [
+        "*.json",
+        "*.md",
+        "*.csv"
+      ],
+      "requiredFiles": [
+        "report.json",
+        "report.md",
+        "metrics.csv",
+        "paired-differences.csv",
+        "analysis-receipt.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 5,
+      "state": "existing_closed"
+    },
+    {
+      "name": "corrected_prediction_parquet",
+      "path": "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915",
+      "patterns": [
+        "*.json",
+        "*.parquet",
+        "*.sha256"
+      ],
+      "requiredFiles": [
+        "predictions.parquet",
+        "model-events.parquet",
+        "provider-events.parquet",
+        "requested-annotations.parquet",
+        "requested-grades.parquet",
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "recursive": false,
+      "minimumFiles": 7,
+      "state": "existing_closed"
+    },
+    {
+      "name": "shuffled_correction_plan",
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-plan-20260915/plan.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "shuffled_correction_raw",
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-20260915",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "plan.json",
+        "correction-rows.jsonl",
+        "correction-summary.json",
+        "model-events.jsonl",
+        "provider-events.jsonl",
+        "billing.json",
+        "completion.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 7,
+      "state": "existing_closed"
+    },
+    {
+      "name": "shuffled_correction_host",
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-host-20260915",
+      "patterns": [
+        "events.jsonl"
+      ],
+      "requiredFiles": [
+        "events.jsonl"
+      ],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_accounting",
+      "path": "research/goalspec/runs/local-final-accounting-v3-20260915-b",
+      "patterns": [
+        "*.json",
+        "*.jsonl",
+        "*.md"
+      ],
+      "requiredFiles": [
+        "closure.json",
+        "budget-journal.jsonl",
+        "budget-report.json"
+      ],
+      "recursive": false,
+      "minimumFiles": 3,
+      "state": "existing_closed"
+    },
+    {
+      "name": "corrected_replay_report_slots",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/replay-corrected-slots.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "corrected_replay_report_formatter",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_corrected_replay_slots.py",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_00",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/final-assembly-plan.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_02",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-fill-manifest.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_03",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-metrics.csv",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_04",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-slots.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_05",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/README.template.md",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_06",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/report-source-overlays.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    },
+    {
+      "name": "final_report_assembly_input_07",
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/root-slots.json",
+      "patterns": [],
+      "requiredFiles": [],
+      "recursive": false,
+      "minimumFiles": 1,
+      "state": "existing_closed"
+    }
+  ],
+  "looseFiles": [
+    {
+      "path": "docs/goalspec/V3_SOURCE_AUDIT.md",
+      "purpose": "current_method_documentation"
+    },
+    {
+      "path": "docs/goalspec/V3_IMPLEMENTATION.md",
+      "purpose": "current_method_documentation"
+    },
+    {
+      "path": "docs/goalspec/OFFICIAL_V3_PROTOCOL.md",
+      "purpose": "current_method_documentation"
+    },
+    {
+      "path": "docs/goalspec/IMPLEMENTATION_STATUS.md",
+      "purpose": "current_method_documentation"
+    },
+    {
+      "path": "docs/goalspec/LOCAL_REPRODUCTION.md",
+      "purpose": "current_method_documentation"
+    },
+    {
+      "path": "research/goalspec/.benchmarks/tau3/LICENSE",
+      "purpose": "pinned_upstream_license_and_build_metadata"
+    },
+    {
+      "path": "research/goalspec/.benchmarks/tau3/README.md",
+      "purpose": "pinned_upstream_license_and_build_metadata"
+    },
+    {
+      "path": "research/goalspec/.benchmarks/tau3/pyproject.toml",
+      "purpose": "pinned_upstream_license_and_build_metadata"
+    },
+    {
+      "path": "research/goalspec/.benchmarks/tau3/uv.lock",
+      "purpose": "pinned_upstream_license_and_build_metadata"
+    },
+    {
+      "path": "docs/AI_HANDOFF.md",
+      "purpose": "explicit_postrun_documentation_overlay"
+    },
+    {
+      "path": "docs/ENGINEERING_LOG.md",
+      "purpose": "explicit_postrun_documentation_overlay"
+    },
+    {
+      "path": "docs/DECISIONS.md",
+      "purpose": "explicit_postrun_documentation_overlay"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v2/README.md",
+      "purpose": "Exact historical custom-task report referenced by final official-v3 report assembly; separate cohort, not a causal control"
+    }
+  ],
+  "expectedFileHashes": {
+    "research/goalspec/runs/local-v3-confirmation-validation-20260915/verification.json": "0674dd0c85220aeabe38692c88bd2149823d6f73885b7e33ab1c7b84c1282347",
+    "research/goalspec/.benchmarks/tau3/LICENSE": "74741b87a33d4704c6f33e5c71742542446c984233f7a7e4905bf36f4da5a33b",
+    "research/goalspec/.benchmarks/tau3/README.md": "361d60562046790fe83241d54c98dee2a72e5b549df0adb084f80afcb54b3f54",
+    "research/goalspec/.benchmarks/tau3/pyproject.toml": "dd2b96403c59e8829b910238aca120a65ad836b6555314ddd6c5a18d77deed8e",
+    "research/goalspec/.benchmarks/tau3/uv.lock": "4a655ca6eef9992c5a81cbc7307e7fc0fb812bf54c5b2daa6a8257b04e508d74",
+    "research/goalspec/runs/local-v3-archive-export-verification-20260915/verification.json": "2254f3b7085aceda40b97ef43b885a0cf82c55bc7290f096950ae4056b380e5c",
+    "research/goalspec/runs/local-v3-replay-staging-20260915/promotion-validation.json": "e85b6c22a0f9557cca8455c7cb5e8d8cf727e9219071cee29e6f17f13f387f17",
+    "research/goalspec/runs/local-v3-network-retry-staging-20260915/promotion-verification.json": "a4413467f20c1af7296a3dd87b2c4c60c6cc68db1feef4a508f5e1dec3074f12",
+    "research/goalspec/runs/local-v3-final-analysis-staging-20260915/promotion-receipt.json": "b4114659b718cfe64aa85c55c8dc4bc720f805533c81a7dfa2282a64217b30cc",
+    "research/goalspec/runs/local-v3-final-analysis-staging-20260915/pytest.txt": "373cb47a26d8458167f56c3d63c026e4d4cb8b6b218e43b3f47c638ccb3c9b9f",
+    "research/goalspec/runs/local-v3-final-analysis-staging-20260915/ruff.txt": "af352a86840ad0af3d37ea0d9197f868363a6dac6b1c2ef5d2722f6b41d2d9af",
+    "research/goalspec/runs/local-v3-final-analysis-staging-20260915/REPORT_PLAN.md": "ef9d1b8582f0f79d9788c49a3fa26a10cb2bf22ccc07d581aca1a7e668f1c042",
+    "research/goalspec/runs/local-v3-transport-diagnostic-staged-20260915/result-001.json": "903a4b0905bea36e0442815a7df3261b8ad6c24b397a54f96cc49904d93ba82e",
+    "research/goalspec/runs/local-v3-transport-diagnostic-staged-20260915/completed-audit.json": "8295f29afe419c00a7385628c0a675664b80f45da99fdcb7b83f1cf25c2f081c",
+    "research/goalspec/runs/local-v3-final-visual-staging-20260915/plot_confirmation.py": "b9b431ccee7f35d74c89ffe7517ba445027681f4a506cac128662af449b3cb44",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze.json": "060de6382bf603a19be24907701afd490d0a2655800e1fe90963af572ecab7ca",
+    "research/goalspec/reports/2026-09-15-local-v3/closed-native-cohort-inventory.json": "b8651a39e4e23f8b973b0d859a8ac38a8d93e4a5836d098175dac6a48bd025ff",
+    "research/goalspec/runs/local-v3-prediction-plan-20260915/plan.json": "6a48778883ccc6c79a71e4959e16a6f5260dfe9b99329ca22884ed0f38be6f6c",
+    "research/goalspec/runs/local-v3-native-archive-verification-20260915/completion.json": "635a3536f73304e7fb0eba4c42a7317b0d6471c6cafdf6d470ebcb9d3581baba",
+    "research/goalspec/runs/local-v3-package-validation-20260915/amended-verification.json": "2c4f1d2ed7bdee6656efb612ffb91d23263b8d40d6843bacee9d6190044cadc5",
+    "research/goalspec/runs/local-v3-confirmation-prediction-parquet-20260915/manifest.json": "7044f283e825ab993c23c22376782ea0fb6c3fbe697fee9d170f03a04b052d61",
+    "research/goalspec/runs/local-v3-confirmation-prediction-20260915/execution-receipt.json": "b0d91ddeed82e841723350bd0b8c5372cb6fa39be30dab0ea31b34ef81b84e95",
+    "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915/analysis-receipt.json": "957f0397e07983ff375964807c2de97d6b67a1b6f54c20a8c14362f630cd9f19",
+    "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915/report.json": "b0ae33146bdd92b4971155fec3d9d38de2ea8ac7411f2aae4910e84ba6f05051",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/replay-slots.json": "675d6e11d027c17e3ce5aece3fcf4717cdac41d231eb75751fd622ff1d4b5ce2",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze-after-replay.json": "fec1bd16df5efb5e9992031b35773e320b756c29b0106315764fa45755e1d904",
+    "research/goalspec/reports/2026-09-15-local-v3/import_archive_postrun.test-receipt.json": "228b0c9304df71bf391a3f995d5d88b793a239557875b02f544ec2cf2855f50f",
+    "research/goalspec/reports/2026-09-15-local-v3/execution-replay-validation-final.json": "8576c331cd788338265966e01e6e09658d95a045135d5eb2bb262388a88b7dd1",
+    "research/goalspec/runs/local-final-accounting-v3-20260915/budget-report.json": "5f1b0526b63836b52efbea5aa2d1decb851e85c9f3fb08a01ab2c802c29265ce",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/v3-archive-import.json": "589564e215eb0ea30b1140ec7aec238792791ad51b6b1ebea2a6cf3f84af8ad7",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/legacy-table-preservation.json": "7761f4b97863df7721a5d0346a6a0d05c2723a2c8a1af0ccc5f6c952bf09b9a6",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/research-postgres-shutdown.json": "95e6e4d5ecfe1073f3907f7d23367604059b0116d8e5fe0c28932d67351fd677",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/legacy-preimport-comparison.json": "823d82b1e1695cfdc77653227f68372f5561b3c7f9c7860b1e3722d397f8b0ef",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/importer-attempts.json": "d9dee52e6ae4e98bc2d2bf95a68ad038732766368f0e166a00e1f1d98fb2b9c1",
+    "research/goalspec/runs/repository-final-verification-v3-20260915/source-freeze-final-pre-docs.json": "e20b826ebe31231f34f54b6ea09215dc68566f38a3164f6fc05817d9f2bf55fc",
+    "research/goalspec/runs/repository-final-export-v3-20260915/manifest.json": "a50120ea6eaddcf13f137f75c0ef0ecc70e59d6056e58fb06ade3e01580fb86a",
+    "research/goalspec/runs/repository-final-export-v3-20260915/manifest.sha256": "9bfa502ebbccbc9d9e9186d2b26425297651a530535b38f519195e25156cee55",
+    "research/goalspec/runs/repository-final-export-v3-20260915/jsonl-manifest.json": "8c3c55f92ab0112dcf1abbca58f62f0ca1c7d76212160d5dce70ccae8e1a50a3",
+    "research/goalspec/runs/local-v3-confirmation-cost-audit-20260915/audit.json": "3b21eb2406103fd5699b844dba2636b142d0a02eb51b6be9fd4dfebe909f794f",
+    "research/goalspec/runs/local-v3-confirmation-cost-audit-20260915/README.md": "75328b0df04f106409266410b779b3f4a87e517592fcbfec893b6adf95f670dc",
+    "research/goalspec/runs/local-v3-shuffled-correction-validation-20260915/dispatch-validation.json": "f25649ef6f9b7d9f43c7f40194756b6e173ea4ef1b02a282f1deb8a65e958050",
+    "research/goalspec/runs/local-v3-replay-availability-audit-20260915/audit.ts": "86c01bce198ca0c2962ec7b0474626a4acb51ce5efed400c08965a755ddec670",
+    "research/goalspec/runs/local-v3-replay-availability-audit-20260915/diagnostic.json": "9a958ab4c9571198d60a64711e696074e97483d29ec8c34d5e99d57d254bff6a",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/dispatch.ts": "b5a2d0a394bb103f44742f510865f9e79fae88d1e642f80a2e6238ae1a343bbe",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/dispatch.test.ts": "15f97de504cb652f9ab75c933c74d71a3bb458708f46c65161dae79d6e51be80",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/correction.ts": "97b7751c609c91093c6a287b8e6b965758ab496d5e02ff4c1e1afffebf130ec7",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/correction.test.ts": "7039118b110c6e2316e67cdc1533a001b461b8bb07d912a3e70406fbc12b4e96",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/compact-candidates-corrected.ts": "09876a364f99ba87d6821430a3e663793310917e4ea4b74b8c83442e7a573094",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/derived-replay.ts": "ce12730e30b02d12981f0236bc057f47fd4020a47592dfb6ba112323a6200a31",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/derived-replay.test.ts": "ee710af5f10998e4cab33bc65f3df4cdc761edd6f8fbcb63c9d49691fc25fea0",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/derived-replay-validation.json": "1f8b02f0996a638c502a747fcc528e4495c0f81e9222b97b2da723522aab3aa4",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/smoke.ts": "718a095ac579998f1def794434d17203527de79fc50a3642876476263d2e3825",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/smoke-receipt.json": "67ddc526ff4579cbfe096eca9a9b4a3ffd671c3b97af28d8f93070b38d81445f",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/tsconfig.json": "b14675c658bc35ab1155d2930e54f3eb9e1a196334d0dc4bdcc26633e49d9d1a",
+    "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/tsconfig.derived-replay.json": "1f613188252e3449405cf0479d171154483e734eacea824f4b952ba9706328f7",
+    "research/goalspec/runs/local-v3-shuffled-correction-plan-20260915/plan.json": "6f02afd401697c5efd7cf540280021d05d035faeb5f174223470e7850fdc7026",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/plan.json": "6f02afd401697c5efd7cf540280021d05d035faeb5f174223470e7850fdc7026",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/correction-rows.jsonl": "69cab1d24ac9ab3d12077ea2b8d2295213c4f16ec497a68bab7c16e635329c28",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/correction-summary.json": "57ce0b521ceed071b5a5102e24488f03535d8de3f705b19345616f72d60329eb",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/model-events.jsonl": "c8cb6b47593754f93e331d9754e9c802a978be05f49d2d1d312e122a6e124a81",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/provider-events.jsonl": "4ab8b7936074c7cd70dbedae29143329d36a7adc59b1976e1fc96b2757cfe250",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/billing.json": "1c90718df5204cc4bdf6271b35b551fd4fe68e1ce324b0cd9116835bd43b31c8",
+    "research/goalspec/runs/local-v3-shuffled-correction-20260915/completion.json": "abafe5b212593383d18b7242388bfde86676c5f0f03321b7f16aaaa3160bec96",
+    "research/goalspec/runs/local-v3-shuffled-correction-host-20260915/events.jsonl": "7e15ae0a0c4f27904f2abe37f02063def24759cf2df138842fb5faa0beacec6d",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/dispatch-plan.json": "a6879a9ca0c277c8d95ccb2a86926497ba1e3baf927714deb0280f3596fb39ad",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/selection.json": "ee8b3d74ebd49733db8c900fcf616ba5e817445d1855587b99b7f574913499d8",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/manifest.json": "2974b1b4760fe3465fda23b9ce579c6010b74dd081e7230e4244d580cc7d4b1c",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/predictions.jsonl": "2617d3ac35051cf1b300a740d44072c8e22e0df9e3386c82f692b3766f1dd72f",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/model-events.jsonl": "960225643363fb12e14fc1d7de89dd7c7b445bb3264f87d6d65d803038018264",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/provider-events.jsonl": "462d5585e549dbd306596f26516d25663347ca49056461b0caf68e618748f0f9",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/requested-annotations.jsonl": "62e346454f7ea13c0621f6f253a26f1c731a202fa081f19539e252566ae4f64a",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/annotations-frozen.json": "54697606908fb8e39d730f33922ad7b269007945b01d83478c1aa1a2b7251f5a",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/requested-grades.jsonl": "2cc3659bf2890792979ffaa871dcdc70c26efe9e4fbd1db220ac408b2a4379fa",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/goal-summary.json": "73994464c67a5a328e9828279270fbae13c62fb20593fcc090c9bd42321ea19c",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/billing.json": "e0444b2fcdb63e1482d277936709e0e11dff17161a3e53045b42571a4f38710a",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/summary.json": "a53d583f05da0143851d6fa110b87007648a93f2abdfb79b2d0f9066a0b2176d",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/completion.json": "548f135447de3f4e3373243ec8a0021a1fd5e49e455de103ea2846f188dc409d",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/execution-receipt.json": "15df98c626e4550d4fe848d4b9fa14c81c89e8c92250ba048684fd2b2cd56def",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/derivation.json": "31d63164cb58c22589fc1bd80a403d3f2cbe89b63da3b18cb88a22b66c34ca5b",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/derivation-receipt.json": "d99f29e8712b77ef9b69ea977935e1615db47b23940fd3de43fb6a1a370e6fe3",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/assembly-validation.json": "c36d382b66dc71b8249178d4664329cb5e7c165fa876b57f752d93c7e51ba86c",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/original-execution-receipt.json": "b0d91ddeed82e841723350bd0b8c5372cb6fa39be30dab0ea31b34ef81b84e95",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/original-dispatch-plan.json": "6a48778883ccc6c79a71e4959e16a6f5260dfe9b99329ca22884ed0f38be6f6c",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/original-billing.json": "e8cd68595a5f6bbe0833b3e9d517d57c9839b79d4e23dc7cd15a2fa69ac9c2f4",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/original-goal-summary.json": "c81c39530972b23a50fc5a45dbd0c9cb85fcc484820dcdf0a3c9b8a195b9cb28",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/original-model-events.jsonl": "3cd2c780e716e493cff6c0edbfe0e2def5cf0e1ea18a55c168e3ba4395d9efbb",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/original-provider-events.jsonl": "92e97e7f7060a729cc3d6360847c3e636327cec044c1daa564371b569889629b",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/correction-plan.json": "6f02afd401697c5efd7cf540280021d05d035faeb5f174223470e7850fdc7026",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/correction-rows.jsonl": "69cab1d24ac9ab3d12077ea2b8d2295213c4f16ec497a68bab7c16e635329c28",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/correction-model-events.jsonl": "c8cb6b47593754f93e331d9754e9c802a978be05f49d2d1d312e122a6e124a81",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/correction-provider-events.jsonl": "4ab8b7936074c7cd70dbedae29143329d36a7adc59b1976e1fc96b2757cfe250",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/correction-billing.json": "1c90718df5204cc4bdf6271b35b551fd4fe68e1ce324b0cd9116835bd43b31c8",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-20260915/correction-completion.json": "abafe5b212593383d18b7242388bfde86676c5f0f03321b7f16aaaa3160bec96",
+    "research/goalspec/runs/local-final-accounting-v3-20260915-b/closure.json": "c19d7f834da947d2dc2a2740eedd30b9806fa86aa480a53a5d0ea9bf94eee67b",
+    "research/goalspec/runs/local-final-accounting-v3-20260915-b/budget-journal.jsonl": "b769fe115e4771ec4dafa3a0f706354b695470b0a218e616f819151a8ad272b2",
+    "research/goalspec/runs/local-final-accounting-v3-20260915-b/budget-report.json": "02c78d216e979cb3a4aee1306cebefa8333d82813d34078291b4b67f28aeb26f",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/analysis-receipt.json": "d9bf251fdee860a0f8d9dd81d9a5af8f0ec78470e5e3b4d2ee69dae6d5f42fb2",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/report.json": "786e88fc859a53af47e78a5b182c4c9b9cdb5ee7ec87a9d8a6d90dc9260e681a",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/manifest.json": "33034e5af39666e8e7470e2f613f9da517526a089d27e544d8195fce00d93027",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/replay-corrected-slots.json": "b384d7a7a36a96c7c3c4d98918428402c2641f226287e25bdaa91df817fce105",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_corrected_replay_slots.py": "dad5a3ab0389c9ec7afc92bdd0eb40e3f291a5bded36d8a21bd2f3e2b2db2f71",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/report.md": "db338bc7e821571e1a8090214a2caac4ef6ff16c0a57496c0c01f78ae49d2e01",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/metrics.csv": "c88b522d8c224bc029a1d68aa2547098d09a1a8ddabd5e504c58da6662ca8a8d",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-report-20260915/paired-differences.csv": "101fa8b96faed4ec55143e487f0e9de63d5f73c83e0a0d735872c655a4dd8592",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/predictions.parquet": "456c340995b5dfdeeeb22d2edd990dbaeaafb65e79d0470ad0e4b9e97000cf01",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/model-events.parquet": "faceca35ffdc9da49d641a1c5f2f5099f0773546f91911e662a86ceaf8ddb139",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/provider-events.parquet": "22631a6fd8e40eea6909fb9f9d0dd6626aecfbc8459346562ee4836060ed685f",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/requested-annotations.parquet": "f223d1a3d59027ebb0c6f4e08d3f1a200be9971125869b93ec7850dee4112b16",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/requested-grades.parquet": "c660953843709b22fcea535638cda64a23b49f476f4163a5de548f383a0bb875",
+    "research/goalspec/runs/local-v3-confirmation-prediction-corrected-parquet-20260915/manifest.sha256": "2752c35b94bf4e5bb0515f5936f7557bc76ba8b0de29b3a7b84b0dcda86e883c",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/final-assembly-plan.json": "b1650aa3e7c6ed11dae9475f8eb5e4ff1dbe3006f74a0a24436fe597990c59be",
+    "docs/goalspec/V3_SOURCE_AUDIT.md": "d9d41582ed57ce85a633602d7a2cfec951ec2879d9a5df93e0a129e6b4e2ac62",
+    "research/goalspec/reports/2026-09-15-local-v2/README.md": "58a4a89ca68db552bc0c9d85273cf8bc7c26843a31f2faae7d7fe4adce271452",
+    "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.png": "99c437cb8aab2e32959563efed474bb6cbae163afa003f73dbfe137031139c1f",
+    "research/goalspec/reports/2026-09-15-local-v3/figures/plot-data.json": "9844f4c8ee47f073753fb59cd367baa1fc375e31b2654bf390cfb9ef54baf689",
+    "research/goalspec/runs/local-final-artifact-archive-v3-20260915-b/manifest.json": "4cd7e85163b9cb2ae1ec9707fa452e2fee0c5e8bde3003c05f2b2b3165e17fa3",
+    "research/goalspec/runs/local-memory-v3-20260915/artifact.json": "2412c9a59610f130ac93a3bdbd6653181f0c9540b59e1aa18ff3b9e7ad39694b",
+    "research/goalspec/runs/local-study-v3-20260915/study.json": "3fa6c9f164c2a438244e29002696def72b7a86c914f6bbdcabac9910614ebaea",
+    "research/goalspec/runs/local-v3-confirmation-analysis-20260915/manifest.json": "09f892c22e53e193b184efba9685110a2b389178e1c482ea72dedecbb34049fc",
+    "research/goalspec/runs/local-v3-confirmation-analysis-20260915/report.json": "a7c577e774b77195ae790b3f6b10e1b1b6c13f11249f7c26b972014d2f6a6237",
+    "research/goalspec/runs/local-v3-confirmation-diagnosis-20260915/README.md": "deb2392a8cc27c4a0d3db50b46994eafac8aac7a3daec3fc3db8a8f08215bc01",
+    "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915/report.json": "86a9394cf548f3944040fb7a771199578cf7419382b1f69d1b3b244a3b7b8a17",
+    "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915-b/completion.json": "6cf7a1f27da748d9ee4f2550962bc8fa07d41407fc8277495ceaa24e8b87ef5c",
+    "research/goalspec/runs/local-v3-confirmation-execution-replay-20260915-b/execution-replay-summary.md": "78d6fd1f905104f7f21d964ef54515490cdc69031d453a3edfb1caa5a4a34ee8",
+    "research/goalspec/runs/local-v3-confirmation-prediction-report-20260915/report.md": "3355c33ef118ed73568a43f69523ac852e9e9fa9c36d2b8fd05907c82fdb378e",
+    "research/goalspec/runs/local-v3-confirmation-source-20260915/manifest.json": "cb4f6f1dda5039c8cc0597e0daa6d68f1fae80c39bb241abeb07385526f26c20",
+    "research/goalspec/runs/local-v3-development-3-diagnosis-20260915/README.md": "445bd3da5d0c8a0c1bfd9dd2ca26ef461d65714b2012502633e62bf06d22014e",
+    "research/goalspec/runs/local-v3-execution-replay-reader-fix-20260915/fix-receipt.json": "608cea84ffe62d1fe75918a706c460cf7c5e27122c5c91c0c1da5278abaec2b1",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/build_final_report.py": "9888358a191b8df0ffcdbc50f0856222cd41158f021aa2ca61d098f9440f6190",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_native_slots.py": "adbea8450265ce59649c09037e8be2956978e43a65ba976b9e15abff00c5b06f",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_replay_slots.py": "1a1be18c336ddf4df3f486ca1f80b0160e41f0ae1d10b49f99e3b6853d382073",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-fill-manifest.json": "c4433277979a8ba6656ee38f5b4bed7db17d596bdb4c3c64af8be55ce7056b9b",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-metrics.csv": "2647b86a12f3fb4d7da962bd8732b0c9097a94ba16aa1e44891666762a28b34f",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/native-slots.json": "6ccc7feaab7edb3ba80ff36d8e649444c8affd2de0481f66a1cb37b4ecadb882",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/README.template.md": "b70f56d2debedbab38e13a3ebc53dbfb5503cc7d9e9d63c4faadd0a7b67aed21",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/report-source-overlays.json": "e85f6d288aac64a93f1ecefe87caf6df46f0ada09791972e78aa1b4295410a73",
+    "research/goalspec/runs/local-v3-final-writeup-staging-20260915/root-slots.json": "fb2cf26a4ae0e8abd00acaaf9be54b5b00584058d41a395cb66ab1798e2ed793",
+    "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.pdf": "680925014036a3cc51055da177527e690eb48940638c29a6360ba32d0fb16298",
+    "research/goalspec/reports/2026-09-15-local-v3/figures/confirmation.svg": "e3bd3b7d0a5ab81a4bfb5896d068d1882a5fa7b158ec29e05f73d2f0e437b47c",
+    "research/goalspec/reports/2026-09-15-local-v3/README.md": "fa987ace22b429500ebe9cf99c6cda9535b3c409df10ac2106522f4a83c5462f",
+    "research/goalspec/reports/2026-09-15-local-v3/metrics.csv": "6885543aa177481cf5996d7d2cdb617cf336dd056de115965b628351589b8fae",
+    "research/goalspec/reports/2026-09-15-local-v3/report-manifest.json": "f7bd2908712bdf6b5cc9dc6831eba2c80afb6bcde6c572548eac771ee95f7129"
+  },
+  "currentAllowedSources": [
+    {
+      "path": "research/goalspec/scripts/archive_public_evidence.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "3e486b6b6af0b885aacc2eac4663a340a4b919db0f9a2d1fad0f26060ae0d38f",
+      "currentSha256": "3e486b6b6af0b885aacc2eac4663a340a4b919db0f9a2d1fad0f26060ae0d38f",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/archive_v1_validation.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "bb3e18a033b8bafbb0f010e4396652a6991de5753fa5dfdd2bdd2aa52c1f0360",
+      "currentSha256": "bb3e18a033b8bafbb0f010e4396652a6991de5753fa5dfdd2bdd2aa52c1f0360",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/audit_candidate_union.py",
+      "frozenCategory": "analysis",
+      "frozenSha256": "541d8a64ae28a12fa4fc590bdde31e370c01f4ff68317c08b2e020b87724e365",
+      "currentSha256": "541d8a64ae28a12fa4fc590bdde31e370c01f4ff68317c08b2e020b87724e365",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/evaluate_v1.py",
+      "frozenCategory": "analysis",
+      "frozenSha256": "f13b2bd9553792d235fd99289c25ac583bf4eea4935d8c682b5b2acd73041a98",
+      "currentSha256": "f13b2bd9553792d235fd99289c25ac583bf4eea4935d8c682b5b2acd73041a98",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/export_native_training.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "6798eb0488215a7d59f47cdc873b81914e77dd9d28de644057c682eb4e22402d",
+      "currentSha256": "6798eb0488215a7d59f47cdc873b81914e77dd9d28de644057c682eb4e22402d",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/export_otel.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "2aba2ea8caf64a71ba01ce7b237347d3cfdcbd079d0e57704ad3ce6b3d681f23",
+      "currentSha256": "2aba2ea8caf64a71ba01ce7b237347d3cfdcbd079d0e57704ad3ce6b3d681f23",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/export_parquet.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "8800f6a07b3b1c117b431f459638ce4e5e35ddf7b79d787517bbd7bc6ce5defe",
+      "currentSha256": "8800f6a07b3b1c117b431f459638ce4e5e35ddf7b79d787517bbd7bc6ce5defe",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/plot_public_results.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "f8fe2e5995f10949336d0cabb3342154da2daf41405ac8cd839ed8b088611947",
+      "currentSha256": "f8fe2e5995f10949336d0cabb3342154da2daf41405ac8cd839ed8b088611947",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/scripts/public_results.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "c9ac63772ba6e13a6aa9b48598e6f497dfeb553d2ec64a9aef44ef7b9b5f75a7",
+      "currentSha256": "c9ac63772ba6e13a6aa9b48598e6f497dfeb553d2ec64a9aef44ef7b9b5f75a7",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/src/goalspec/evaluation_v1.py",
+      "frozenCategory": "analysis",
+      "frozenSha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2",
+      "currentSha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/src/goalspec/metrics.py",
+      "frozenCategory": "analysis",
+      "frozenSha256": "8542f7eb33a87e4112e583ed980ab25c9cd7c5edff7efe16c109541892d4fc3f",
+      "currentSha256": "8542f7eb33a87e4112e583ed980ab25c9cd7c5edff7efe16c109541892d4fc3f",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/src/goalspec/reporting.py",
+      "frozenCategory": "analysis",
+      "frozenSha256": "ad57c00417de12564304f1c144e115913fa6c0cf4eedfed87e80756b9bf58ec4",
+      "currentSha256": "ad57c00417de12564304f1c144e115913fa6c0cf4eedfed87e80756b9bf58ec4",
+      "amendmentReason": null
+    },
+    {
+      "path": "research/goalspec/src/goalspec/training_export.py",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "9c052d32e8b4bd370a3a5634d1ed876e52c89ff2668ad0dc50fcb588c15fab27",
+      "currentSha256": "9c052d32e8b4bd370a3a5634d1ed876e52c89ff2668ad0dc50fcb588c15fab27",
+      "amendmentReason": null
+    },
+    {
+      "path": "scripts/goalspec-export-repository.ts",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "40a4019f9ff1cb36979d95d790af8c5a99c6d1034583ecb6be84aabf967c5f3b",
+      "currentSha256": "40a4019f9ff1cb36979d95d790af8c5a99c6d1034583ecb6be84aabf967c5f3b",
+      "amendmentReason": null
+    },
+    {
+      "path": "scripts/goalspec-telemetry.ts",
+      "frozenCategory": "artifact_export",
+      "frozenSha256": "e6ed57ae991f716cc5ce735f0cf4f5e2fdc9b057ce569849a074cf65a5a93ad8",
+      "currentSha256": "e6ed57ae991f716cc5ce735f0cf4f5e2fdc9b057ce569849a074cf65a5a93ad8",
+      "amendmentReason": null
+    }
+  ],
+  "sourceOverlays": [
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-diagnosis-20260915/view_traces.py",
+      "sha256": "dcd64d490510e9bc209338d78cdfc7d0417adfebdd1b60907b46f0690eadf55e",
+      "frozenSha256": null,
+      "reason": "Closed development-3 trace inspection helper; not confirmation execution"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-development-3-diagnosis-20260915/finish_diagnosis.py",
+      "sha256": "2db5fdfe8fda528b86a5381047bae5279462bf83de3febcce5c9f998c4d7803f",
+      "frozenSha256": null,
+      "reason": "Closed development-3 diagnostic aggregation helper; not confirmation execution"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-visual-staging-20260915/plot_confirmation.py",
+      "sha256": "b9b431ccee7f35d74c89ffe7517ba445027681f4a506cac128662af449b3cb44",
+      "frozenSha256": null,
+      "reason": "Offline final report plotting helper; not confirmation execution"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/build_package.py",
+      "sha256": "31ec3bf10892f70293f080bc5ba3ecfcc6cfb9e6af5cd456def4174ca9ce6049",
+      "frozenSha256": null,
+      "reason": "New offline final package builder; not confirmation execution"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/test_build_package.py",
+      "sha256": "cd8ddb2b651929c7c3c9e3ed3ac7ae23026c9ce14dcfce87f115d258f02c623d",
+      "frozenSha256": null,
+      "reason": "New synthetic package verification tests; not confirmation execution"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/export_native_archive_postrun.py",
+      "sha256": "3c1b479385ddfc3569eb1662608cc7d63e55bd017a43128d7fa8f002218dac5a",
+      "frozenSha256": null,
+      "reason": "New post-run offline exporter scanner boundary amendment and focused tests; captured exporter and original trial bytes unchanged"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/test_export_native_archive_postrun.py",
+      "sha256": "e3d620e103704fa5011a145f3622e7f4005b13305cf4100651a8b01909f8b330",
+      "frozenSha256": null,
+      "reason": "New post-run offline exporter scanner boundary amendment and focused tests; captured exporter and original trial bytes unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-replay-parquet-staging-20260915/replay_parquet_v3.py",
+      "sha256": "2896aa3c4991add32aa943639044a6c02b28cbd12a0f743510fd2f8abcc67911",
+      "frozenSha256": null,
+      "reason": "New post-run exact-byte replay Parquet helper and tests; no captured execution changes"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-replay-parquet-staging-20260915/test_replay_parquet_v3.py",
+      "sha256": "f73f364910f5c9f8f5350fa23ffb605f21e97240cd9bc4862ff7ded1ff478658",
+      "frozenSha256": null,
+      "reason": "New post-run exact-byte replay Parquet helper and tests; no captured execution changes"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/test_package_document_overlays.py",
+      "sha256": "1246eb358c4c58e11706ad8992592eeada67adb5938ee20525996c9f9164459f",
+      "frozenSha256": null,
+      "reason": "New post-run synthetic documentation-overlay tests; never native or prediction execution"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/build_final_report.py",
+      "sha256": "9888358a191b8df0ffcdbc50f0856222cd41158f021aa2ca61d098f9440f6190",
+      "frozenSha256": null,
+      "reason": "Post-closure report-only formatter/audit helper; never used by frozen native or paid prediction execution"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_native_slots.py",
+      "sha256": "adbea8450265ce59649c09037e8be2956978e43a65ba976b9e15abff00c5b06f",
+      "frozenSha256": null,
+      "reason": "Post-closure report-only formatter/audit helper; never used by frozen native or paid prediction execution"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/audit_confirmation.py",
+      "sha256": "30d90951facfb51b340d92323be5de0e4f04fb9773242923481e1985e440b119",
+      "frozenSha256": null,
+      "reason": "Post-closure report-only formatter/audit helper; never used by frozen native or paid prediction execution"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-confirmation-diagnosis-20260915/view_failures.py",
+      "sha256": "adf8ee7090ac93ae3b0a9786fae581d467d8811daf5a5b567e4ec69bd4025894",
+      "frozenSha256": null,
+      "reason": "New closed-confirmation read-only failure-audit helper; no execution data mutation"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_replay_slots.py",
+      "sha256": "1a1be18c336ddf4df3f486ca1f80b0160e41f0ae1d10b49f99e3b6853d382073",
+      "frozenSha256": null,
+      "reason": "Post-run replay report formatter; includes measured read-proposal coverage, never frozen execution"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/import_archive_postrun.ts",
+      "sha256": "be80454daf16c9b6544e251453c2ebbef39283465ba1d30ef98f61168db8d4fd",
+      "frozenSha256": null,
+      "reason": "New post-run bounded archival importer and synthetic tests; pinned original importer unchanged, no native or provider execution"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/import_archive_postrun.test.ts",
+      "sha256": "91429702e618de3238f268113f1512afce571569637e276650a46f94c2f571c9",
+      "frozenSha256": null,
+      "reason": "New post-run bounded archival importer and synthetic tests; pinned original importer unchanged, no native or provider execution"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/native_execution_replay_v3.py",
+      "sha256": "d16661244e2a184c8b16ccedbd566946455a7bfeef611660a3c49ac620b87f4d",
+      "frozenSha256": null,
+      "reason": "New post-run fixed-tape native execution replay adapter; zero provider calls, original cohort data unchanged"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v3/native_execution_replay_v3.ts",
+      "sha256": "44f86b4c890c0fa3617c11ce718a8ff675f354fe57e267a9add3908a8049d6a7",
+      "frozenSha256": null,
+      "reason": "New post-run fixed-tape native execution replay adapter; zero provider calls, original cohort data unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-execution-replay-reader-fix-20260915/first-attempt-adapter.py",
+      "sha256": "1910a4b9c24cd7423884dd03fdcde182f9de5e23375a84bb774a312549937bbf",
+      "frozenSha256": null,
+      "reason": "Preserved first post-run replay adapter from failed setup attempt; separate from the completed replay and native trial cohort"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-execution-replay-reader-fix-20260915/first-attempt-adapter.ts",
+      "sha256": "29765d9e2275bdc56c829bb80092ff1679dcccbd8f8ea18758422544e1b84c23",
+      "frozenSha256": null,
+      "reason": "Preserved first post-run replay adapter from failed setup attempt; separate from the completed replay and native trial cohort"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-replay-availability-audit-20260915/audit.ts",
+      "sha256": "86c01bce198ca0c2962ec7b0474626a4acb51ce5efed400c08965a755ddec670",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/dispatch.ts",
+      "sha256": "b5a2d0a394bb103f44742f510865f9e79fae88d1e642f80a2e6238ae1a343bbe",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/dispatch.test.ts",
+      "sha256": "15f97de504cb652f9ab75c933c74d71a3bb458708f46c65161dae79d6e51be80",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/correction.ts",
+      "sha256": "97b7751c609c91093c6a287b8e6b965758ab496d5e02ff4c1e1afffebf130ec7",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/correction.test.ts",
+      "sha256": "7039118b110c6e2316e67cdc1533a001b461b8bb07d912a3e70406fbc12b4e96",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/compact-candidates-corrected.ts",
+      "sha256": "09876a364f99ba87d6821430a3e663793310917e4ea4b74b8c83442e7a573094",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/derived-replay.ts",
+      "sha256": "ce12730e30b02d12981f0236bc057f47fd4020a47592dfb6ba112323a6200a31",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/derived-replay.test.ts",
+      "sha256": "ee710af5f10998e4cab33bc65f3df4cdc761edd6f8fbcb63c9d49691fc25fea0",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-shuffled-correction-source-20260915/smoke.ts",
+      "sha256": "718a095ac579998f1def794434d17203527de79fc50a3642876476263d2e3825",
+      "frozenSha256": null,
+      "reason": "Post-run shuffled-control audit/correction helper or focused test, separately source-pinned after frozen native and original replay closure; original results remain unchanged"
+    },
+    {
+      "path": "research/goalspec/runs/local-v3-final-writeup-staging-20260915/fill_corrected_replay_slots.py",
+      "sha256": "dad5a3ab0389c9ec7afc92bdd0eb40e3f291a5bded36d8a21bd2f3e2b2db2f71",
+      "frozenSha256": null,
+      "reason": "New post-correction final report formatter; preserves the original replay formatter/slots and identifies the separately corrected shuffled control; never frozen native or original prediction execution"
+    }
+  ],
+  "priorPackageReferences": [
+    {
+      "version": "v1",
+      "filename": "goalspec-local-v1-final.zip",
+      "sha256": "ce25a994a985597c5920eccd60e9361b341839d81a7d52269c2c22386c1da8b8",
+      "checksumFile": "outputs/goalspec-local-v1-final.zip.sha256",
+      "requiredSeparately": false,
+      "purpose": "Separate historical custom-task evidence; not an official-task control"
+    },
+    {
+      "version": "v2",
+      "filename": "goalspec-local-v2-final.zip",
+      "sha256": "cf3a5ef51e8d1a25f5fc69e56742ba198d286295b5c1d0add9b85a78eb09e3fb",
+      "checksumFile": "outputs/goalspec-local-v2-final.zip.sha256",
+      "requiredSeparately": false,
+      "purpose": "Separate historical custom-task evidence; not an official-task control"
+    }
+  ],
+  "lineageReferences": [
+    {
+      "id": "development-1-superseded-pre-dispatch",
+      "directory": "research/goalspec/runs/local-v3-development-1-source-20260915",
+      "sourceTreeHash": "30b19265c490aeb72897452af431b9ccc1579a923cb9517e8dc16a70068ab0e3",
+      "manifestSha256": "a2f6052ae503efe4c89ff7f48bf0146ab56a677f7d44cd4bdc5d1e9706274488",
+      "sourceArchive": {
+        "path": "source.zip",
+        "sha256": "ac2e5fb55b92abf39663c39bba9bab8f5a8ec5c1382467c4c9e7aaa2e1c2384a",
+        "bytes": 2826675
+      },
+      "inputArchive": {
+        "path": "inputs.zip",
+        "sha256": "d9c51e9907caaf5c33cf5a2c68d37ba1b8cb8fb7d45a640dbde8092bdbebbe8c",
+        "bytes": 2032628
+      },
+      "nativeGitHead": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "expectedSourceMembers": 520,
+      "expectedInputMembers": 257,
+      "hashProvenance": "declared capture metadata; byte verification deferred until closure",
+      "embedded": false,
+      "headlineExecutionSource": false,
+      "reason": "Superseded capture; the nominated dispatched capture is the -b directory. Not an additional trial cohort."
+    },
+    {
+      "id": "development-2-superseded-pre-dispatch",
+      "directory": "research/goalspec/runs/local-v3-development-2-source-20260915",
+      "sourceTreeHash": "df4f4c2bd517bd6aae7a119ed48db73216dfaa55c8217b1b3957be1bf19bb2ad",
+      "manifestSha256": "55bfd5e68d32c860d262d68701c546a3c033d00eff8e4cfaa1e54cff37ba9099",
+      "sourceArchive": {
+        "path": "source.zip",
+        "sha256": "34c01ca8cd55f9c58119acc3477d6b13b672128ff43d3fb841cbabe3b9067831",
+        "bytes": 2855287
+      },
+      "inputArchive": {
+        "path": "inputs.zip",
+        "sha256": "d9c51e9907caaf5c33cf5a2c68d37ba1b8cb8fb7d45a640dbde8092bdbebbe8c",
+        "bytes": 2032628
+      },
+      "nativeGitHead": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "expectedSourceMembers": 524,
+      "expectedInputMembers": 257,
+      "hashProvenance": "declared capture metadata; byte verification deferred until closure",
+      "embedded": false,
+      "headlineExecutionSource": false,
+      "reason": "Superseded capture; the nominated dispatched capture is the -b directory. Not an additional trial cohort."
+    }
+  ],
+  "accountingCopy": {
+    "journalPath": "research/goalspec/runs/local-final-accounting-v3-20260915-b/budget-journal.jsonl",
+    "sha256": "b769fe115e4771ec4dafa3a0f706354b695470b0a218e616f819151a8ad272b2",
+    "closureReceiptPath": "research/goalspec/runs/local-final-accounting-v3-20260915-b/closure.json",
+    "closureReceiptSha256": "c19d7f834da947d2dc2a2740eedd30b9806fa86aa480a53a5d0ea9bf94eee67b"
+  },
+  "portableArchive": {
+    "manifestPath": "research/goalspec/runs/local-final-artifact-archive-v3-20260915-b/manifest.json",
+    "manifestSha256": "4cd7e85163b9cb2ae1ec9707fa452e2fee0c5e8bde3003c05f2b2b3165e17fa3"
+  },
+  "exclusionPolicy": "No broad run globs, unused staging trees, superseded capture ZIPs, credentials, environment files, dependency installations, database runtime, temporary tests or prior package ZIPs",
+  "documentOverlays": [
+    {
+      "path": "docs/AI_HANDOFF.md",
+      "sha256": "b5e87dd39ad09c7e911247df49d8d0e58b07f65e7c98b4dd27611c0798fcc161",
+      "frozenSha256": "a4d2290fa71e6988b04d5f6f157b9638ad84fbee5253e64d2b212217adf8f89a",
+      "reason": "Authorized post-run update of results, costs, engineering decisions and reproduction handoff after frozen native/replay execution; original captured document bytes remain in source.zip"
+    },
+    {
+      "path": "docs/ENGINEERING_LOG.md",
+      "sha256": "95f47d057c8964c5aa95746e82bc77ae54beaec0b54bec222c15c1c3bc4359d9",
+      "frozenSha256": "d22378186313aa562998e87d33bf3d8e9368b77e5b77cc4f9dc4e3eebbf29be7",
+      "reason": "Authorized post-run update of results, costs, engineering decisions and reproduction handoff after frozen native/replay execution; original captured document bytes remain in source.zip"
+    },
+    {
+      "path": "docs/DECISIONS.md",
+      "sha256": "cf6074dd37745432f2c844903dbfcfffb1f6393f7c41fad363d6fd0f5e0913f8",
+      "frozenSha256": "921a254920bdcc602fd0329ab5b4f37937c879438a5a5a79d1d176d7eb44a361",
+      "reason": "Authorized post-run update of results, costs, engineering decisions and reproduction handoff after frozen native/replay execution; original captured document bytes remain in source.zip"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "files": [
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\preparation-20260915\\README.md",
+      "sha256": "d29fe38eadc8b3c3cd14c06d4cd92a8d13b42649b44413a0eb44b9ebe12a0f46",
+      "bytes": 941
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\preparation-20260915\\summary.json",
+      "sha256": "eba579745e414c64612287e5fddcae7023e9f37d3b2cdadc06e56b8c542f0dc1",
+      "bytes": 3066
+    }
+  ],
+  "sourceInputs": [
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\summarize_study.py",
+      "sha256": "bff1dec1b102419b1d6d9aa8db0969e2d9dd51023e962a12724b5d423efbc036",
+      "bytes": 29636
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\study.json",
+      "sha256": "0f1c125969627ec7b01cd26a322a3119958b9ce1e8b487bc0aaade48ff6eb7c4",
+      "bytes": 4450
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\src\\goalspec\\evaluation_v1.py",
+      "sha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2",
+      "bytes": 18824
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\src\\lib\\goalspec\\contracts\\v1.schema.json",
+      "sha256": "9ff166791e7b9d3d43f18200c88e836a19c1afab2960528760d8f85212ea40c1",
+      "bytes": 14414
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\manifest.json",
+      "sha256": "60caba723eced100877b26edd8edf58dd8efb90319c308a1990e33ba4a642a51",
+      "bytes": 390
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\queue.jsonl",
+      "sha256": "9dfcadd7237b12df92780e1f0cd63fd600f08096efd2122dbc89a65f547cc516",
+      "bytes": 126925
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\predictions\\requested-predictions.jsonl",
+      "sha256": "0ee8d7270a37b1b9bce9422101d957eaa4d0d974c748a6946030984f955382f3",
+      "bytes": 16593
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\grades\\requested-grades.jsonl",
+      "sha256": "17d4d2a12a97baba1fb18e0be6017fc81a87b41855ea01521dd7e40f68c738bc",
+      "bytes": 5776
+    }
+  ]
+}

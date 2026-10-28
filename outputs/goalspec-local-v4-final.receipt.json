@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "packagerVersion": "goalspec-v4-results-package-v1",
+  "status": "verified",
+  "zipSha256": "8f9c56e251b815e36e344a16a1d47dcf1e2eb2cb8d914f4b0efa65fc9e963924",
+  "zipBytes": 1232916650,
+  "manifestSha256": "a77e9182769b06f59d3120c4a4ee6dc267913f0efc0f7a77e42a2042a061b3a7",
+  "payloadFiles": 5204,
+  "payloadBytes": 1229789368,
+  "roundTripVerified": true
+}

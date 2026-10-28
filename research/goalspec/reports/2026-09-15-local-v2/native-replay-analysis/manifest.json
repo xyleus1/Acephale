@@ -1,0 +1,42 @@
+{
+  "sourceInputs": [
+    {
+      "path": "research/goalspec/runs/local-v2-confirmation-native-replay-20260915/method-report.json",
+      "sha256": "0729d2f2570d7d091070ef40596a4c5fa49b7fb9f3c24686ab8989fb3fbd6704"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-confirmation-native-replay-20260915/report.json",
+      "sha256": "290a8eb1d95c4e953a793abec0573f30b407944f8cf0ca52f1d2b1880fddad3a"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-confirmation-native-replay-20260915/scheduler-summary.json",
+      "sha256": "b8a107a977ee4092d6290fdc54026105ea989b09e1a882a9da7dea5fb95fe721"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-confirmation-native-replay-20260915/candidate-source-audit.json",
+      "sha256": "8d2038f050f53cd86abda0aa5faab004d65441c9ebe8dccf0963f925e8ad93ff"
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-confirmation-native-replay-20260915/replay-method-manifest.json",
+      "sha256": "623adbf2dbde29c333eb5f16d14573a516533cf226b94a94b4215c5e575f8844"
+    },
+    {
+      "path": "research/goalspec/reports/2026-09-15-local-v2/summarize_native_replay.py",
+      "sha256": "9f844cf72dfea221592d9bb1291d91eb1ce9fd2ec38ba3c39c1b41f1b409d9b8"
+    }
+  ],
+  "files": [
+    {
+      "path": "arms.csv",
+      "sha256": "4a73b0a4f46ac6de3777805f66d61c806646d0b2173cf98475db457f8d96cea1"
+    },
+    {
+      "path": "README.md",
+      "sha256": "218bf3298cebe2d9c4cd5095508fcedc654eb8126bfa866252f174a16c42ce79"
+    },
+    {
+      "path": "summary.json",
+      "sha256": "90ff81ee21945e3a53e45bb630234306e73713743d3ad35adb78033248929fb7"
+    }
+  ]
+}

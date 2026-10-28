@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": "research/goalspec/runs/local-heldout-analysis-v1-20260915",
+  "sourceHashes": {
+    "summary.json": "7b3ab3b268106a1f5aa739706c4764bfe474569c7c77a68c7ad4611d3f44f9f0",
+    "trial-results.jsonl": "16f980b658b5a4a19cd75889017b8d387fcef746a3038f77e324cb5c557ffbad"
+  },
+  "files": {
+    "build_live_figures.py": "eec8a2fc3615e2ce1ab689771db7c85f7d8f969faf3081b4a33f57111412e19d",
+    "heldout-latency.png": "42895e1b4e054e626d092974cbac9477eec932238e576dc02a47b17e038cd7ea",
+    "heldout-latency.svg": "431ae90b698e16d24bbfbd646a1ec79e0b243fb0fbfa60723dcf53e0e035138b",
+    "heldout-success.png": "ace61c1ee9cc0a3a2850030f8d01971ff20add4b2700a07f2c7be9b23fd0f87a",
+    "heldout-success.svg": "0aa8a247ccaaf37af822287e335270ca8a00651d22a5ed796c16878fa5d9ae3e"
+  },
+  "trials": 192,
+  "trialsPerArm": 64,
+  "allFailuresRetained": true,
+  "latencyUnit": "seconds",
+  "successIntervals": "exploratory_family_clustered_95_percent_bootstrap_stratified_by_domain",
+  "matplotlibVersion": "3.11.2"
+}

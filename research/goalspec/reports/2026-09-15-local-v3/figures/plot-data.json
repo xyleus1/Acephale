@@ -1,0 +1,93 @@
+{
+  "source": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v3-confirmation-analysis-20260915\\report.json",
+  "sourceSha256": "a7c577e774b77195ae790b3f6b10e1b1b6c13f11249f7c26b972014d2f6a6237",
+  "tasks": 8,
+  "trialsPerArm": {
+    "base": 16,
+    "paste": 16,
+    "salesforce": 16,
+    "goalspec": 16
+  },
+  "metrics": [
+    {
+      "arm": "base",
+      "metric": "successRate",
+      "estimate": 0.625,
+      "lower": 0.3125,
+      "upper": 0.875,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "base",
+      "metric": "liveTotalMeanSeconds",
+      "estimate": 47.3102018375007,
+      "lower": 39.28899020046934,
+      "upper": 54.79865868984417,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "paste",
+      "metric": "successRate",
+      "estimate": 0.8125,
+      "lower": 0.625,
+      "upper": 0.9375,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "paste",
+      "metric": "liveTotalMeanSeconds",
+      "estimate": 43.775009668750954,
+      "lower": 34.11324530515731,
+      "upper": 54.0558286965635,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "salesforce",
+      "metric": "successRate",
+      "estimate": 0.875,
+      "lower": 0.6875,
+      "upper": 1.0,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "salesforce",
+      "metric": "liveTotalMeanSeconds",
+      "estimate": 42.264062481250676,
+      "lower": 32.274846925000475,
+      "upper": 52.09198327406438,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "goalspec",
+      "metric": "successRate",
+      "estimate": 0.8125,
+      "lower": 0.625,
+      "upper": 0.9375,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    },
+    {
+      "arm": "goalspec",
+      "metric": "liveTotalMeanSeconds",
+      "estimate": 51.60805840625153,
+      "lower": 40.806024170470735,
+      "upper": 61.76271311250184,
+      "clusters": 8,
+      "bootstrapSamplesUsed": 5000,
+      "unavailableReason": null
+    }
+  ]
+}

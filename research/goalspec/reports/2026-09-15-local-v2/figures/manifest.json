@@ -1,0 +1,26 @@
+{
+  "sources": [
+    {
+      "path": "legacy-comparison\\summary.json",
+      "sha256": "8806749d52b3ed284d01f5c98f382ba924816cc29d7089d34a5bd8d7b25e603b"
+    },
+    {
+      "path": "final-three-stage-analysis\\summary.json",
+      "sha256": "f8f5fccfaeb2f92faccbec95fe364141e19daae9749e2b24ee501bba0b4d8719"
+    },
+    {
+      "path": "plot_results.py",
+      "sha256": "d840e88dfa71adac6e40769736899bd1089ac56caa3fe828629615946280179a"
+    }
+  ],
+  "files": [
+    {
+      "path": "goal-and-native-results.png",
+      "sha256": "874cbc1a3e62a9f199a0edc735b7204de39169daa48adc83152388e318858c27"
+    },
+    {
+      "path": "goal-and-native-results.svg",
+      "sha256": "df131ac79b1c88c9259ded7f125f3aa36ce7223728de7fbd8f1b572686688230"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+domain,tasks,labeled_tasks,families,annotation_status
+airline,50,27,50,automatic_semantic_proxy_requires_review
+banking_knowledge,97,95,93,automatic_semantic_proxy_requires_review
+retail,114,107,103,automatic_semantic_proxy_requires_review
+telecom,114,114,3,automatic_semantic_proxy_requires_review

@@ -1,0 +1,125 @@
+{
+  "files": [
+    {
+      "path": "paired-goal-checkpoints.csv",
+      "sha256": "4de4ca344400480da4088ea249c92d76593f70cfbb03fb926d29bcbe8c6bf486"
+    },
+    {
+      "path": "paired-nll-differences.csv",
+      "sha256": "bc72254ad4063b77f1fb180feb4c0c59756002cca8d1274d024c13cf5fc5288d"
+    },
+    {
+      "path": "paired-version-loss-differences.csv",
+      "sha256": "a68f2aa500ff04b6e5efa6f31804ec8f71a4928dcf6f4373793a6b969ea7ace4"
+    },
+    {
+      "path": "prediction-conditions.csv",
+      "sha256": "4d4cf692085998ca694623a988f08f4897d2f61d9b5c16f87e0bdf0a418e0baa"
+    },
+    {
+      "path": "README.md",
+      "sha256": "32b2c67b50504163d8c0a57d6ce47bcc1c6658e0a8b6d795a9a8138c340e5fb7"
+    },
+    {
+      "path": "summary.json",
+      "sha256": "8806749d52b3ed284d01f5c98f382ba924816cc29d7089d34a5bd8d7b25e603b"
+    }
+  ],
+  "sourceInputs": [
+    {
+      "label": "v1Queue",
+      "path": "research/goalspec/runs/local-requested-queue-v1-20260915/queue.jsonl",
+      "sha256": "55c4060bc52c8961d4d236fddbd6944b099b45250967ac08a300d95856b46359"
+    },
+    {
+      "label": "v2Queue",
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/queue.jsonl",
+      "sha256": "96c07d8375d206d3b175944f0521d3aaa46404fb2c15e0e71f08077aa9b244e9"
+    },
+    {
+      "label": "map",
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/checkpoint-map.jsonl",
+      "sha256": "cf6810157d549e1809cf67b17c3863650ab991268c40f23a9d8d5be66dd3548e"
+    },
+    {
+      "label": "v1Predictions",
+      "path": "research/goalspec/runs/local-requested-predict-v1-20260915/requested-predictions.jsonl",
+      "sha256": "4139d20d9d3c60ed4886001d36cc82dd99c8142f42569b9810dd13555f7d7916"
+    },
+    {
+      "label": "v2Predictions",
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/predictions/requested-predictions.jsonl",
+      "sha256": "9bbc1b19b0c1ef354effae0e15d0fccdb4e8de55d8a035090ea324cea4b9c753"
+    },
+    {
+      "label": "v1Grades",
+      "path": "research/goalspec/runs/local-requested-grade-v1-20260915/requested-grades.jsonl",
+      "sha256": "1332f18ad8de5ee7a7ac745c8761d87f0f81c566d7592cebc3ebc2068346748a"
+    },
+    {
+      "label": "v2Grades",
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/grades/requested-grades.jsonl",
+      "sha256": "dcd3975aef80d6f3d100387175521253c9fdb16f9bc8392975155b3591c341fc"
+    },
+    {
+      "label": "v1Annotations",
+      "path": "research/goalspec/runs/local-requested-annotate-v1-20260915/requested-annotations.jsonl",
+      "sha256": "c77446d93c6e00771a05fc290505c72c0410f5bc2b5f29fa9690b30cf3d5618e"
+    },
+    {
+      "label": "v2Annotations",
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/annotations/requested-annotations.jsonl",
+      "sha256": "c77446d93c6e00771a05fc290505c72c0410f5bc2b5f29fa9690b30cf3d5618e"
+    },
+    {
+      "label": "v1RequestedSummary",
+      "path": "research/goalspec/runs/local-requested-analysis-v1-20260915/summary.json",
+      "sha256": "c5f32afb532718d9c695c576004b87ca85620638be991e775cf0e1bf48f51dc6"
+    },
+    {
+      "label": "v2RequestedSummary",
+      "path": "research/goalspec/reports/2026-09-15-local-v2/legacy-requested-analysis/summary.json",
+      "sha256": "89a8ce854342d0739b70ebca5b3fc4a285477d115540cecd4de6b0b6b2418eaf"
+    },
+    {
+      "label": "v1PredictionRows",
+      "path": "research/goalspec/runs/local-prediction-analysis-v1-20260915/predictions.jsonl",
+      "sha256": "4b13c16b47293b769617c0a49f8311edacc1c6ac75bd79d4097b740c4fe046e0"
+    },
+    {
+      "label": "v2PredictionRows",
+      "path": "research/goalspec/reports/2026-09-15-local-v2/legacy-prediction-analysis/predictions.jsonl",
+      "sha256": "a7b75d794465a2a13fb714d7b2655b515994110bc5d6ed6ad483af884b9af905"
+    },
+    {
+      "label": "v1PredictionSummary",
+      "path": "research/goalspec/runs/local-prediction-analysis-v1-20260915/summary.json",
+      "sha256": "c398a8e95191f70f49ec63a36504bcb1050df6f52ced86298810f634fc425974"
+    },
+    {
+      "label": "v2PredictionSummary",
+      "path": "research/goalspec/reports/2026-09-15-local-v2/legacy-prediction-analysis/summary.json",
+      "sha256": "4265550b137acaf6260939c258d09259b1562797f1ca349affc52cc317256a29"
+    },
+    {
+      "label": "formatter",
+      "path": "research/goalspec/reports/2026-09-15-local-v2/summarize_legacy_comparison.py",
+      "sha256": "e7c55373424c24d9a03863bb610aecf79b088743b4dc7268c06c16925baedb43"
+    },
+    {
+      "label": "goalValidator",
+      "path": "research/goalspec/reports/2026-09-15-local-v2/summarize_study.py",
+      "sha256": "f9b850e6cbbdb76a6c0c337d29ccd1b79f9ec02ec07a03ccd28c0805ad08545f"
+    },
+    {
+      "label": "canonicalSchema",
+      "path": "src/lib/goalspec/contracts/v1.schema.json",
+      "sha256": "9ff166791e7b9d3d43f18200c88e836a19c1afab2960528760d8f85212ea40c1"
+    },
+    {
+      "label": "intervalAlgorithm",
+      "path": "research/goalspec/src/goalspec/evaluation_v1.py",
+      "sha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2"
+    }
+  ]
+}

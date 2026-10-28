@@ -1,0 +1,667 @@
+{
+  "files": [
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\final-three-stage-analysis\\arms.csv",
+      "sha256": "0ffda1462f623cc94f6470694f808c3adfcd515679a3bbf92a89602ed5314f64",
+      "bytes": 1460
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\final-three-stage-analysis\\paired-differences.csv",
+      "sha256": "64aa0e8f1bed7673a8ee9adc53ee71e10aa3904483d0ce90faf9bbe97616561d",
+      "bytes": 7035
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\final-three-stage-analysis\\README.md",
+      "sha256": "dd90933f3db1a6fef67bb9b4a9af47a04d91873a8a8205d8deb69cfa7929797f",
+      "bytes": 167538
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\final-three-stage-analysis\\summary.json",
+      "sha256": "f8f5fccfaeb2f92faccbec95fe364141e19daae9749e2b24ee501bba0b4d8719",
+      "bytes": 514691
+    }
+  ],
+  "sourceInputs": [
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\reports\\2026-09-15-local-v2\\summarize_study.py",
+      "sha256": "f9b850e6cbbdb76a6c0c337d29ccd1b79f9ec02ec07a03ccd28c0805ad08545f",
+      "bytes": 34929
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\study.json",
+      "sha256": "0f1c125969627ec7b01cd26a322a3119958b9ce1e8b487bc0aaade48ff6eb7c4",
+      "bytes": 4450
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\src\\goalspec\\evaluation_v1.py",
+      "sha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2",
+      "bytes": 18824
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\design.json",
+      "sha256": "77d5ed8e40ab2e44a3134bb659911f9e8f069980a3997741965dfef986a72806",
+      "bytes": 5910
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\outcomes.jsonl",
+      "sha256": "bcb9e69e7bd95580305c7b557100126aab6d927d718e171f732a535036ba2ef6",
+      "bytes": 34419
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\summary.json",
+      "sha256": "c5e0cf2dfe9b34e903c7154ae595b3663aa8e8c33b5ff27698fb983e95a3a9da",
+      "bytes": 1104
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-1-claim.json",
+      "sha256": "1c630ab990b5370315fd1673c4090d1280025f63bdad9dced6250182d9376929",
+      "bytes": 1150
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-1-design.json",
+      "sha256": "77d5ed8e40ab2e44a3134bb659911f9e8f069980a3997741965dfef986a72806",
+      "bytes": 5910
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-1-complete.json",
+      "sha256": "ff6d65a43dd20608470d359f2ef6a23f55076236daf97b856e9f113e29f8d59a",
+      "bytes": 665
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0000-232e70c787d9.json",
+      "sha256": "3519b0dc9786f93c032e210854c68e47e0e9ce29d924aa0a9d39c12f98a6e9e3",
+      "bytes": 16912
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0001-90d77ca612e0.json",
+      "sha256": "a3dba5ab293508e8fe2000c95f3b4b0ffcf116be4545759bcaf24bb624d10f58",
+      "bytes": 11415
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0002-4ccf06d7aeb0.json",
+      "sha256": "8a70a21d100b1d4a8ccd2642216d8c366b453abe9b63d593203dc11a4d7dd322",
+      "bytes": 11436
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0003-0276cefb527e.json",
+      "sha256": "d527d69346b90e5e778b2d98584e167e297e9c02e33b6dc1a2cf96c708583242",
+      "bytes": 12851
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0004-c986537a7c4f.json",
+      "sha256": "5278395273622ae7be9931e939996cd472b282e47385c46d598a282ec90d3727",
+      "bytes": 11415
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0005-4138f4123c08.json",
+      "sha256": "1e7994de44d6dd9e2b296f5db2127bd9e4991ed54aa62e1d0f9afbd02f7b04a0",
+      "bytes": 11432
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0006-17c1bc7fe569.json",
+      "sha256": "ff96c484e67b2fe16e8013329905d1c38ec14289645aee32a1f88c8132524f54",
+      "bytes": 17215
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0007-6302441e6cd1.json",
+      "sha256": "a0b1fc669022265750c6384a89d66b0510e33d11afe444c5390f57b872bfa871",
+      "bytes": 11478
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0008-93e85c73c1b9.json",
+      "sha256": "96ea37128803fc3a192d66edbb4a21601c00a1899fa2252ebfb4f2ce24e6692c",
+      "bytes": 11460
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0009-70098f7a2a48.json",
+      "sha256": "8d21ca110b47b2ca8e385bba28cfc70e0a73b3835a64762a20bb89ce8d2dfabd",
+      "bytes": 11458
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0010-7ce9cd989dc7.json",
+      "sha256": "ed118d161e6325138d272ec0b21db45a6297630d37f4ccf63c818498fac4e188",
+      "bytes": 11476
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0011-8dbe6571bb86.json",
+      "sha256": "e9aae329b4b148655c8d78d7cacf9a6f88c179d59640892bc384d6819f915a59",
+      "bytes": 11464
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0012-02a1d07517c7.json",
+      "sha256": "55c7a05abc7847605bb67556e27c7b4b70cf57f8b9431bd205048aa0bc5aab03",
+      "bytes": 7806
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0013-e9601944a030.json",
+      "sha256": "584520fe43ce217946ca8ae7734c73b37a88982e22d7150eefd1aa379e93cfcf",
+      "bytes": 7818
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0014-335c305165a0.json",
+      "sha256": "bd1b5c36dd52d28aa231919151697a4a56f273eee6a701011654da796f4aeca9",
+      "bytes": 7802
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0015-d2bb8bf9d3be.json",
+      "sha256": "31557a062af0ad2ea08a0801bbbacf62c43b11f4d38dbbd8b9c0386404a9b2b3",
+      "bytes": 7771
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0016-c10b51997e4d.json",
+      "sha256": "9eef1b8b7a62e5156e6dcf0229b425e6d19829059005a299af9be9838f0041c8",
+      "bytes": 7787
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0017-e72f49976e11.json",
+      "sha256": "78963977e74f6b643ef0e7c0b0d71a27aa00ff97dfc8af57935a604ced6da13f",
+      "bytes": 7766
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0018-2ccc3fc6e0af.json",
+      "sha256": "9f75a8e3dd203760cc690e449c0f71adf6b1bebf197ca2ffda5a830591451bfa",
+      "bytes": 8087
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0019-f9170edce972.json",
+      "sha256": "e8d803b113398b98fdc11fdb99fe4d80890cb207c0007121050f08657112e1dd",
+      "bytes": 8105
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0020-1eb307d3761a.json",
+      "sha256": "bc13bbd7c0af32a7b8e31bf6b9ee8f911b931d37ed9a15987fa0cfd902c144ea",
+      "bytes": 8085
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0021-784754162e52.json",
+      "sha256": "e958357f9434cc2a41b924a210c80f89dd1771675cba1fbaa92ef1a17933507a",
+      "bytes": 8086
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0022-25a1e2ab7db5.json",
+      "sha256": "2ead2c40389d02f26cc5605fb83ea8564323d28872aee4f1e9e5649d1a79de32",
+      "bytes": 8082
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-1-20260915\\v2-df424bd6f3-development-1-0023-d7715d29be9f.json",
+      "sha256": "d160a00c00cad9dc73d410bf7ebb5a84a911c18a97bee495cceab51780692841",
+      "bytes": 8102
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\design.json",
+      "sha256": "5411c236e4a0063558051193d142d99884ff791501d17f3dbc7bc434639bc88a",
+      "bytes": 5919
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\outcomes.jsonl",
+      "sha256": "aa7173556b996a491dc9e717a389744a4db916b31d9dd47622b1824fcca4d385",
+      "bytes": 34146
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\summary.json",
+      "sha256": "7743675dfec7f787f915a5739f470c1d074b2d5f168c879f49c13c0613205685",
+      "bytes": 1104
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-2-claim.json",
+      "sha256": "2bc7aa11445196e70176a8300a3d3b6fa44ae97847015307c6e5d7fb95ddf846",
+      "bytes": 1148
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-2-design.json",
+      "sha256": "5411c236e4a0063558051193d142d99884ff791501d17f3dbc7bc434639bc88a",
+      "bytes": 5919
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\development-2-complete.json",
+      "sha256": "25b99ec268b392436ef4bb96a1dd6678345207aba59e4c1869644de0703f4ee6",
+      "bytes": 666
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0000-695ee8fa9f3b.json",
+      "sha256": "bf8107db9a120751066c8b5fe085161b9459d51316d4d3eb40df9ea38da1ebf1",
+      "bytes": 54894
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0001-1f9611ecdc7b.json",
+      "sha256": "626645a5a80282efdb76f10b535e95395a512e2288ea051317f972a0529e444f",
+      "bytes": 58361
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0002-05c8c6e80524.json",
+      "sha256": "89aee0ed61955d34828703669955771d33eeab7d8d73e82ce7cd68a90d87001b",
+      "bytes": 62224
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0003-157f34350299.json",
+      "sha256": "cd97ee1f78be5d508c264422a848595e47e078b9a8faf86289ad01593f4dcb00",
+      "bytes": 62784
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0004-9a474f351152.json",
+      "sha256": "86799ea5677de4ce1b4c1a228420973fa7ff6ab3e2e7f887b4eae4069bcb117a",
+      "bytes": 56545
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0005-2f26c0a0a47f.json",
+      "sha256": "12ce20924668e1cd7bc74d649af37843d6221123bb48aeb6670bf12fc72bd908",
+      "bytes": 65104
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0006-a12de0d70ed8.json",
+      "sha256": "e00c0d06dcd607c51cbd1353a012f566d25b1838c1866b82c5fcd84b5a878b5f",
+      "bytes": 53734
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0007-163428b664bf.json",
+      "sha256": "c94156f6da0a3644957a40eab0109b08ea3b62429c7ee95b7f66aa11a6e20cfb",
+      "bytes": 68634
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0008-8a78c302b7ce.json",
+      "sha256": "db4c2d64eebad2b5450e18200c59efa8aed5589e0aebf11b2ffed61cb6bd0066",
+      "bytes": 67432
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0009-d3f5ce289d60.json",
+      "sha256": "b90720de3346047cd63e010c1bdf09b09322bf66cf7b5f5d04861f033cd293e8",
+      "bytes": 62024
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0010-f9834d434936.json",
+      "sha256": "08875c97e27d5a77254332e2be7d310bb977495bd5929960916d92dd7ae9ea85",
+      "bytes": 61470
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0011-085570d010b1.json",
+      "sha256": "b479dd73f0ccacec8ea508b4750e45f0a42caa96573f7f44bcc0e6b222c86862",
+      "bytes": 58654
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0012-edccac56851d.json",
+      "sha256": "d34ea4de5ec09b39fbd206e724c35d933892579e665292403044136aff0c854a",
+      "bytes": 39712
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0013-6e294418e7bf.json",
+      "sha256": "499bfd8b7abd6ea741e82fbc88e1214391e205273b08672272e7c87f70db6f14",
+      "bytes": 53225
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0014-f0438041e863.json",
+      "sha256": "065119f25924ebe278f453c077f561fa412fe5600a3fa5f4fd93b8d8c89a46ba",
+      "bytes": 61884
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0015-456993033b0a.json",
+      "sha256": "7d3e3be259faa75a0bc57859af7dee09757b655e91c07abaa25f096332e13263",
+      "bytes": 52976
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0016-347ef5317d36.json",
+      "sha256": "10520c14e091cf2a326af76003f16984d41cf86c9c3ba8ea0d5f5106bc396150",
+      "bytes": 58039
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0017-1ce332c4caa4.json",
+      "sha256": "b4ace6c9fbeb77860e5b7a875dd24e489361771579fb7c419a7b5d3dd682bd47",
+      "bytes": 44478
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0018-cf1aed9cce54.json",
+      "sha256": "51c7ec1838d700ae3deebd5dab9a38dc80dc2fcd3e6aaf6236e17ff733ae4be3",
+      "bytes": 43970
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0019-b4b558561a10.json",
+      "sha256": "9b09bed31b81aa6f103403e85c086b89d04be3ed66524dc910ed4fb0e2d62418",
+      "bytes": 68316
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0020-aa42f43f7cf6.json",
+      "sha256": "c8684d3ba8bde64be492d6db0d6eca9518a585159d3f6c33a308765c7fbf1a89",
+      "bytes": 62964
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0021-2004386839fd.json",
+      "sha256": "fe80c51de53ed72383a4d9b415bac078fbd92e0f93ac870a406301f6babc3090",
+      "bytes": 58251
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0022-15308d507db7.json",
+      "sha256": "c46e0a6e9839b9359f326fc5603d65e30277393fa058f8f89ecda7b9d41e86dc",
+      "bytes": 41654
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-development-2-20260915\\v2-df424bd6f3-development-2-0023-eb5d1f00ec38.json",
+      "sha256": "9a738413e73b7ca11c8d737dba04cf118bb279834ab54c88f158c85d7c5b5e88",
+      "bytes": 51523
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\design.json",
+      "sha256": "00ce529f4eb2f875c1d239ddc956a82fbdf569d830c5fcfb4a58d29cff11f526",
+      "bytes": 10659
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\outcomes.jsonl",
+      "sha256": "9647bf4a1f9bed7d845e9b5ebbb7746972a65ff10b45dc80c1d915df33b01565",
+      "bytes": 74210
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\summary.json",
+      "sha256": "3db7d566cbe1b8ae9cb71160d5ee3ba0b2a97d793680df591293329e3bffe374",
+      "bytes": 1135
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\confirmation-claim.json",
+      "sha256": "cdf18d7b8c6378d5ebaf57d1391a030c777a9d88c16de945133431b42b8b6aa3",
+      "bytes": 1639
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\confirmation-design.json",
+      "sha256": "00ce529f4eb2f875c1d239ddc956a82fbdf569d830c5fcfb4a58d29cff11f526",
+      "bytes": 10659
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-study-v2-20260915\\confirmation-complete.json",
+      "sha256": "8a573430780906bcb10717d977390ff7c880d17a58df39adc560be2bf87626bb",
+      "bytes": 663
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0000-849bf34bd540.json",
+      "sha256": "5dccd946b3873e87b8dafbb9dfd981c1edf85b2632fe8a2548ad4299486e47d4",
+      "bytes": 51575
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0001-72495b71454d.json",
+      "sha256": "75b21cde07090d39b65c5c8bb794b0470b7e73dd495a3efdcb07db41e77b20ad",
+      "bytes": 40946
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0002-6e19f5643049.json",
+      "sha256": "b05139c2b0b6e0a9e9939e5699c9c710b277e41ce7fe4f1ecf73a95ff2331661",
+      "bytes": 56443
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0003-e19bd25aca03.json",
+      "sha256": "461f48a6c96a6efa14343d615a621ee3840b52b2bcc90298ef37eade8fcff4b3",
+      "bytes": 59229
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0004-35d0c51e22c5.json",
+      "sha256": "d9841f2c85f64ae59bd7d07f6355519fa47432326eba294e8988a571b9af62da",
+      "bytes": 54874
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0005-a5cf1acab9a4.json",
+      "sha256": "2c3d1e87edf268ddd26c7ca79645f253c7cf73c0201f9b2e8060c5ae0e05a31f",
+      "bytes": 62780
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0006-6c62f74a5cbb.json",
+      "sha256": "225f9be6e7e961f3a47e71b51b08961b8cdbe530778ef932464f10f0dcd71dff",
+      "bytes": 53220
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0007-9ede7be7b13d.json",
+      "sha256": "8daa5eb7820ac0d657b9abf12457bfd927026232fab5f7ccc144c1037350f0d5",
+      "bytes": 53583
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0008-3b05a46e5e8c.json",
+      "sha256": "b828c59c95192e1668f0a2813a9bccd3d7ed3b5f805640486ee545638f4965c7",
+      "bytes": 59640
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0009-af63b6e4c065.json",
+      "sha256": "8655ddae6f4f76c24ae573dd7dd09de484462411a1ec6e200be08533f73267b4",
+      "bytes": 54460
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0010-f232bfb321a9.json",
+      "sha256": "de66ce3c7f4b0cb708cdc1065bec24cc34a2b11e7b30db49278dacdcb3faa16a",
+      "bytes": 48339
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0011-d43314e97dbd.json",
+      "sha256": "1a18c8f0b373cedfc267d1fbe3ec54f279d27bdd8bf09c99a52b1681d2876213",
+      "bytes": 49955
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0012-83e065d7b59d.json",
+      "sha256": "4179f2462a77c07a06406d4cce60795aada077681742a4119be650cb50bf16ef",
+      "bytes": 61499
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0013-2e3452bdc1fe.json",
+      "sha256": "95819a77a7ad545193a53a5d83363a8debb5600760b9997484cc1f6f383866f4",
+      "bytes": 64423
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0014-11b9ef7acd0b.json",
+      "sha256": "4d595446124d26d73af8bcabb4cd5bb5efb8ab86f10034be4549e9d37397f193",
+      "bytes": 65788
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0015-0754ce6cfd8a.json",
+      "sha256": "4f6063134ff1ef5542b5001786fb0c053b387030ae461ab257143c75adca7fd0",
+      "bytes": 65362
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0016-59706a7eb0ae.json",
+      "sha256": "35495ffa9ba1daa1179062a74d8d78d6b2fd02e6434c5c09cde411364f6b13f4",
+      "bytes": 61975
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0017-b6e85e2b03bb.json",
+      "sha256": "bba4c47e43eceff32ce1d205353998937d074b95cd8a08d61c266b213e1d13f2",
+      "bytes": 56933
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0018-9dbecfc71f12.json",
+      "sha256": "2c17e29b4447e6b1dabcf5584111f14aec9ae4c7310b466cac2677279b533bfe",
+      "bytes": 71301
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0019-73b48db03ba2.json",
+      "sha256": "f6ee79ed46b4e544f92b05b36f93ecacf499a28985c7755b8e9fa2816e1ac131",
+      "bytes": 63505
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0020-cf05eca91f34.json",
+      "sha256": "ec3d86e0de5bccc8ae9c27a9ebe439154a758fb8481b6d453bf8749d99b54757",
+      "bytes": 61929
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0021-a7ddf67629ca.json",
+      "sha256": "7f686075b8e9628efd08bd59dbeca082bfa46ca3b33ee732d5969c0dfc5c90ed",
+      "bytes": 62116
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0022-9006d95afe34.json",
+      "sha256": "3af0ba4d23ceef3aad1e29de503097bce69396082480fa73a097f23fcc28999e",
+      "bytes": 71890
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0023-5dffc0ee5e10.json",
+      "sha256": "9e86643c006155b3e2a7dab0043013e58115b685f69c1ec680c926dfe7032d90",
+      "bytes": 64149
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0024-23e6d4dee118.json",
+      "sha256": "2987fcc861811ccfd490d4b2ccaf83332576cd393bff571962a98ab80a821162",
+      "bytes": 71757
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0025-e99e47d7704f.json",
+      "sha256": "29aa40407f8d1e525488b68f1683bbe8c49dc1514ea375f5e8faf8d6945963fd",
+      "bytes": 72418
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0026-aac725dcdd1f.json",
+      "sha256": "193a0021e2c07d35772fd57c529301ec7eec967a233ef667d335e5bca4ce0aeb",
+      "bytes": 80104
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0027-4bd61a5576fd.json",
+      "sha256": "ce826039063643b04bf9c5c9d4c840a7197c01ab7866d1a118a1eee645bd9ec8",
+      "bytes": 73417
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0028-1ba7e12a19df.json",
+      "sha256": "b92d7312d3afd4a0f06ad7324822dea2198a95f2e07de9c5b78e95b833efda46",
+      "bytes": 69531
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0029-3d1f775da2fd.json",
+      "sha256": "49df2e749de0bc3cf8ba41d454668d8627138e73a31dc8aec0e51ff356ce8aeb",
+      "bytes": 89480
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0030-037a6c996d5b.json",
+      "sha256": "b4f25d901e836aa3340ca60046935b8c35b4d386f7b8cdb34e4c582bdd054223",
+      "bytes": 82218
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0031-786bfce8e177.json",
+      "sha256": "ee9b6f14ed6001f848c3fd79de0ccfd979ed8b702c8fd093a4ed0dfe99bf215f",
+      "bytes": 78842
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0032-c2f86f588d98.json",
+      "sha256": "3b1846aeb652866b986328d4da1201962fd2f94e0ed4056e44ca80b613e1cfe7",
+      "bytes": 69794
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0033-5e3c6e2e20f2.json",
+      "sha256": "84e4156f1f4c4be27a070133b754158aae525f1c49083434363fb521bc3968e4",
+      "bytes": 72285
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0034-b5f649b5f566.json",
+      "sha256": "b07a29a3fa7bc88ace56b5a6385a422eafe8a82a5bf7ec02401da590c5da0f12",
+      "bytes": 67363
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0035-71ef1481df86.json",
+      "sha256": "72f4ed0e9e167d2d72a2bc01563fc905f612f0a79d9f0e2046c0b5d498501299",
+      "bytes": 73668
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0036-356422b19ecf.json",
+      "sha256": "fb5ed461badb616feba55647b7ed49c18fc79b828e551c42afd0a38669ac60b2",
+      "bytes": 48770
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0037-bf224bea22fb.json",
+      "sha256": "22b432ceeb1c104d99ceaa911faefaf2c491a68b30daf46339b98bf3e014db21",
+      "bytes": 58836
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0038-056dfed1ff78.json",
+      "sha256": "9dfcc71869b21a0e21551e45ce6e4016e4f484ffc4895c7c0cc465d0bc27f668",
+      "bytes": 58799
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0039-ea44578f6ff6.json",
+      "sha256": "3c047d0d823264f95d8893d48d482c9ff23f6cdd40d113018966ff22366d41a1",
+      "bytes": 56622
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0040-4563aba2d0c5.json",
+      "sha256": "c3052e6452c59e084ff78fc9c1bdfcdb30b8809b24ae1125368dc71176fdfb8e",
+      "bytes": 49308
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0041-2528381936a8.json",
+      "sha256": "2592adb8abddb0d7ac817fe63f9e1e0ce4aa8df43865f5f9ae942cafa21dc40d",
+      "bytes": 38458
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0042-3e700590f212.json",
+      "sha256": "882c33fbea5979b75f1711e00c6e5729c8cc5841316d7e37cbf3746238d79dab",
+      "bytes": 40977
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0043-4239484ad0b8.json",
+      "sha256": "a872d9e071a0667e4f84f5c52445cc9e608ac693eed9233248dfe731c754b4bf",
+      "bytes": 49882
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0044-884d1431eef4.json",
+      "sha256": "cbd52106c18d4e158ae67e0f6a015d2462e0a420eef034e98ead68f85562a382",
+      "bytes": 49697
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0045-b723b61ba84e.json",
+      "sha256": "dd997d3045d5aafea7e020cc85fed04d4da531cf606c9ddebb588a752d6d5072",
+      "bytes": 46305
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0046-abb2485a44e9.json",
+      "sha256": "8c6354ddc149e3c0e84214a529874cdb167d7edef5ff4ba83d71868b7598900a",
+      "bytes": 45687
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-confirmation-20260915\\v2-df424bd6f3-confirmation-0047-8d14302ed43f.json",
+      "sha256": "94ff2493c18fd4e02c41cc64b346382f53e606b40126b446d77eadce943418fe",
+      "bytes": 48073
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\src\\lib\\goalspec\\contracts\\v1.schema.json",
+      "sha256": "9ff166791e7b9d3d43f18200c88e836a19c1afab2960528760d8f85212ea40c1",
+      "bytes": 14414
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-evaluation-20260914\\events-254eb9cf-cecf-45ca-8ba1-d3b5394cdd80.jsonl",
+      "snapshotBytes": 8022471,
+      "snapshotSha256": "d0585b3892d560b62e308a586cfb4169f2898cf432803c2c70edf8fc158677bb",
+      "completeRecords": 2590,
+      "partialTailIgnored": false,
+      "chainVerified": true
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-evaluation-20260914\\events-8d62260c-e4ab-46fc-976e-fc69d1182f4a.jsonl",
+      "snapshotBytes": 102195,
+      "snapshotSha256": "745057457698c5416f0b3a2ccedda18addeb9e38022916f082d1af0c02fc6db9",
+      "completeRecords": 32,
+      "partialTailIgnored": false,
+      "chainVerified": true
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-evaluation-20260914\\events-cf379b4d-6725-462c-8f3b-6c7afd22c92e.jsonl",
+      "snapshotBytes": 16334847,
+      "snapshotSha256": "cc76d60ff15993344c3158e08728b31cd1379b545a1ad56bd2a29ac05e338690",
+      "completeRecords": 5356,
+      "partialTailIgnored": false,
+      "chainVerified": true
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\manifest.json",
+      "sha256": "60caba723eced100877b26edd8edf58dd8efb90319c308a1990e33ba4a642a51",
+      "bytes": 390
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\queue.jsonl",
+      "sha256": "9dfcadd7237b12df92780e1f0cd63fd600f08096efd2122dbc89a65f547cc516",
+      "bytes": 126925
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\predictions\\requested-predictions.jsonl",
+      "sha256": "0ee8d7270a37b1b9bce9422101d957eaa4d0d974c748a6946030984f955382f3",
+      "bytes": 16593
+    },
+    {
+      "path": "C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\local-v2-protocol-smoke-b-20260915\\grades\\requested-grades.jsonl",
+      "sha256": "17d4d2a12a97baba1fb18e0be6017fc81a87b41855ea01521dd7e40f68c738bc",
+      "bytes": 5776
+    }
+  ],
+  "editorialAddendum": {
+    "file": "README.md",
+    "previousSha256": "ff7e48542c42c69b385844a1a032776894a28039202ed52398eea84f8b3448f6",
+    "reason": "Added completed 213-checkpoint post-fix development results; native measurements unchanged",
+    "requestedGoalSummary": "../legacy-requested-analysis/summary.json",
+    "requestedGoalSummarySha256": "89a8ce854342d0739b70ebca5b3fc4a285477d115540cecd4de6b0b6b2418eaf"
+  }
+}

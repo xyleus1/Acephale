@@ -1,0 +1,12 @@
+﻿{
+    "evaluation_scores_seen":  false,
+    "source_hash":  "1d386506a32f20144d64f806fd1a51e38af297b53be8b954fadc8eab5f5749a8",
+    "started_at_utc":  "2026-09-12T04:39:06.1988377Z",
+    "process_id":  9180,
+    "elapsed_seconds":  1159.4113694999999,
+    "reason":  "Repeated reference-map extraction scales poorly. Training-only bounded prototype proved byte-identical whole PatternPool with39.6x measured speedup. No mining, split, model, or evaluation hyperparameter changes.",
+    "stopped_at_utc":  "2026-09-12T04:58:25.6019665Z",
+    "status":  "stopped_for_semantics_preserving_performance_optimization",
+    "artifacts_published":  false,
+    "cpu_seconds":  983.859375
+}

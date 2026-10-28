@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "local-v2-legacy-replay-plan-1",
+  "status": "prepared_not_executed",
+  "scope": "development evidence for v2 on all previously observed v1 checkpoints; not fresh v2 confirmation",
+  "expectedCheckpoints": 213,
+  "expectedUniqueTeacherInputs": 109,
+  "expectedConditions": [
+    "stateless",
+    "local_paste",
+    "paste_memory",
+    "goalspec_no_memory",
+    "goalspec",
+    "oracle_goals",
+    "shuffled_goals",
+    "stateless__same_pool",
+    "local_paste__same_pool",
+    "paste_memory__same_pool",
+    "goalspec_no_memory__same_pool",
+    "goalspec__same_pool",
+    "oracle_goals__same_pool",
+    "shuffled_goals__same_pool"
+  ],
+  "expectedRowsPerCondition": 213,
+  "expectedTotalPredictionRows": 2982,
+  "frozenSnapshotHash": "f57b4150d201217f8b33084a0b575b48486e02b2f110ad9779acb956feac67bd",
+  "nllFloor": 1e-12,
+  "bootstrapSamples": 2000,
+  "bootstrapSeed": 42,
+  "models": {
+    "goal": "gpt-4.1-mini-2025-04-14",
+    "teacher": "gpt-5.4-2026-03-05"
+  },
+  "freshPaidInputsRequired": [
+    "predictions/requested-predictions.jsonl",
+    "predictions/frozen-goals.jsonl",
+    "grades/requested-grades.jsonl"
+  ],
+  "commands": [
+    {
+      "order": 1,
+      "kind": "offline_requested_goal_scoring",
+      "argv": [
+        "research/goalspec/.venv/Scripts/python.exe",
+        "research/goalspec/scripts/evaluate_v1.py",
+        "requested-goals",
+        "--queue",
+        "research/goalspec/runs/local-v2-legacy-replay-20260915/queue.jsonl",
+        "--predictions",
+        "research/goalspec/runs/local-v2-legacy-replay-20260915/predictions",
+        "--annotations",
+        "research/goalspec/runs/local-v2-legacy-replay-20260915/annotations",
+        "--grades",
+        "research/goalspec/runs/local-v2-legacy-replay-20260915/grades",
+        "--output",
+        "research/goalspec/reports/2026-09-15-local-v2/legacy-requested-analysis"
+      ]
+    },
+    {
+      "order": 2,
+      "kind": "offline_fourteen_condition_prediction_replay",
+      "dependsOn": "legacy-requested-analysis/summary.json",
+      "argv": [
+        "research/goalspec/.venv/Scripts/python.exe",
+        "research/goalspec/scripts/evaluate_v1.py",
+        "prediction",
+        "--training",
+        "research/goalspec/runs/local-training-export-v1-20260915/trajectories.jsonl",
+        "--heldout",
+        "research/goalspec/runs/local-heldout-export-v1-20260915/trajectories.jsonl",
+        "--goal-cache",
+        "research/goalspec/runs/local-v2-legacy-replay-20260915/predictions/frozen-goals.jsonl",
+        "--requested-goal-report",
+        "research/goalspec/reports/2026-09-15-local-v2/legacy-requested-analysis/summary.json",
+        "--output",
+        "research/goalspec/reports/2026-09-15-local-v2/legacy-prediction-analysis"
+      ]
+    }
+  ],
+  "immutableInputs": [
+    {
+      "path": "research/goalspec/scripts/evaluate_v1.py",
+      "sha256": "f13b2bd9553792d235fd99289c25ac583bf4eea4935d8c682b5b2acd73041a98",
+      "bytes": 4954
+    },
+    {
+      "path": "research/goalspec/src/goalspec/prediction_v1.py",
+      "sha256": "becdc8446b95988e399020e16d2f65ccf5c196bc3856bc8ad06e7e632c34c94a",
+      "bytes": 23216
+    },
+    {
+      "path": "research/goalspec/src/goalspec/requested_replay.py",
+      "sha256": "8d10beab25eccc0f11c12cd8ac8b3db88b87ced5d9f91a915f2423a92fb690ed",
+      "bytes": 9147
+    },
+    {
+      "path": "research/goalspec/src/goalspec/evaluation_v1.py",
+      "sha256": "4b9fd9460774fe87cfeefb3a9da31840adee67697ebc68a2fb597c76a80c78a2",
+      "bytes": 18824
+    },
+    {
+      "path": "research/goalspec/runs/local-training-export-v1-20260915/trajectories.jsonl",
+      "sha256": "3e2c5c17d1710b7614ce8b55f4adfc6a37fcbb02a130fcc7ca4db9163a702942",
+      "bytes": 1817649
+    },
+    {
+      "path": "research/goalspec/runs/local-heldout-export-v1-20260915/trajectories.jsonl",
+      "sha256": "403c496f2b2db57bc1eedb2c1682e7239de11aa222507ffa8045d82d83827818",
+      "bytes": 2580765
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/queue.jsonl",
+      "sha256": "96c07d8375d206d3b175944f0521d3aaa46404fb2c15e0e71f08077aa9b244e9",
+      "bytes": 2238441
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/annotations/requested-annotations.jsonl",
+      "sha256": "c77446d93c6e00771a05fc290505c72c0410f5bc2b5f29fa9690b30cf3d5618e",
+      "bytes": 154738
+    },
+    {
+      "path": "research/goalspec/runs/local-v2-legacy-replay-20260915/checkpoint-map.jsonl",
+      "sha256": "cf6810157d549e1809cf67b17c3863650ab991268c40f23a9d8d5be66dd3548e",
+      "bytes": 72506
+    },
+    {
+      "path": "research/goalspec/runs/local-prediction-analysis-v1-20260915/summary.json",
+      "sha256": "c398a8e95191f70f49ec63a36504bcb1050df6f52ced86298810f634fc425974",
+      "bytes": 25155
+    },
+    {
+      "path": "research/goalspec/runs/local-requested-analysis-v1-20260915/summary.json",
+      "sha256": "c5f32afb532718d9c695c576004b87ca85620638be991e775cf0e1bf48f51dc6",
+      "bytes": 1671
+    }
+  ],
+  "pairedComparisonKeys": [
+    "trajectoryId",
+    "seq",
+    "condition",
+    "rankingControl"
+  ],
+  "requiredConsistencyChecks": [
+    "All 213 checkpoint input hashes match v1 originals",
+    "All predictor failures remain in denominators",
+    "All 109 teacher references are unchanged",
+    "All 14 conditions cover identical scored decisions",
+    "CandidatePoolHash identical across same-pool conditions at each checkpoint",
+    "Non-goal-dependent baseline scores match v1",
+    "Do not combine requested-goal teacher scores with endpoint unknown matches"
+  ],
+  "providerCallsMadeByPlan": 0,
+  "newV2HeldoutInputsIncluded": false
+}
