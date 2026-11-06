@@ -1,3 +1,23 @@
+# 2026-11-06: Authorized GPU hourly ceiling increase
+
+- Applied the founder's explicit 2026-11-06 approval: changed only
+  `versions.json` `limits.hourlyUsd` from USD1.25 to USD2.50. Infrastructure USD35,
+  study USD500, contingency USD65, cumulative GPU-hours 24, session hours eight
+  and setup minutes 30 remain unchanged.
+- Updated current AWS runbooks and handoff/decision notes. Preserved historical
+  reports and the legacy Lambda controller's stricter USD1.25 check. The observed
+  AWS USD2.24208/hour compute rate fits; current quota, capacity, original-journal
+  reservations and real watchdog recovery are still separate execution gates.
+- This local configuration change made no cloud calls, budget reservations,
+  model calls or personal artifact regeneration. Code packages must be rendered
+  again against the new versions hash before execution.
+- Verification passed 24 lifecycle, 15 readiness and 23 bootstrap/recovery
+  tests, with exact-cap acceptance, above-cap rejection before dispatch and all
+  other execution gates retained. The full deployment-control suite passed all
+  121 tests with pinned Node and BLAS threads limited to one. Scoped Ruff and
+  whitespace checks passed. A
+  comparison against the previous JSON confirmed no other configuration change.
+
 # 2026-11-06: AWS lifecycle and native measurement completion
 
 - Added bounded AWS lifecycle tooling and a bridge into the original durable

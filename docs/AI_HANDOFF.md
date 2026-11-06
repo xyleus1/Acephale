@@ -1,3 +1,30 @@
+# 2026-11-06: Explicit authorization for USD2.50 GPU hourly cap
+
+The founder explicitly approved raising the gross GPU hourly ceiling from
+USD1.25 to USD2.50 and continuing routine setup. Only `limits.hourlyUsd` changed
+in `infra/goalspec-infra-v1/versions.json`. The USD35 infrastructure allocation,
+USD500 total, USD65 protected contingency, 24 cumulative GPU-hours, eight-hour
+session and 30-minute setup limits remain unchanged. The original journal and
+unknown reservations remain authoritative; credits do not discount gross limits.
+
+The earlier observed USD2.24208/hour G6e compute quote now fits the authorized
+rate ceiling. This does not establish current quota, capacity, model fit, budget
+availability or watchdog recovery. Re-render code packages and inspect their
+source/versions identities before execution. Do not reset an existing ledger to
+bypass a configuration-hash mismatch. Historical reports and earlier status
+entries retain the limits in effect at their time. The legacy Lambda controller
+continues enforcing its stricter USD1.25/hour check.
+
+This change performs no AWS calls, launches, original-journal reservations or
+personal artifact regeneration. Targeted offline checks passed: 24 lifecycle,
+15 readiness and 23 bootstrap/recovery tests. They admit USD2.24208 and exactly
+USD2.50 at the price gate, reject USD2.5000000001 before reservation/dispatch and
+retain the other execution gates. The full deployment-control suite also passed
+all 121 tests under the pinned Node environment with BLAS threads limited to one.
+Scoped Ruff and whitespace checks passed. A
+JSON comparison against the previous commit verified every other configuration
+field and limit is identical.
+
 # 2026-11-06: Bounded AWS lifecycle, observed inventory and native profiling
 
 Added an AWS controller with explicit account/role, region, image, network,
@@ -63,8 +90,9 @@ Separate account inspection verified the intended assumed-role read access and
 an EC2-eligible USD100 Free Tier credit. The YC referral/application remains a
 separate pending grant. The read-only inspector itself intentionally does not
 query billing. The inspected quota is zero of the required eight vCPUs, with an
-increase pending, and the observed USD2.24208/hour rate exceeds the unchanged
-USD1.25 cap. These external execution gates are not waived by successful tests.
+increase pending. At that inspection, the observed USD2.24208/hour rate exceeded
+the then-current USD1.25 cap; the later explicit hourly-only authorization above
+supersedes that price blocker. Other execution gates are not waived by tests.
 The separate gross watchdog cost plan proposes a USD3 overhead reservation for
 12 hours; it has not been reserved or deployed. Re-render the package for the
 actual approved coverage window before reserving and deploying it.

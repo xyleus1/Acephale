@@ -24,6 +24,6 @@
     "predictor": {"repository": "Qwen/Qwen3.5-0.8B", "revision": "2fc06364715b967f1860aea9cf38778875588b17", "directory": "predictor", "dtype": "bfloat16"},
     "predictor_capacity_ablation": {"repository": "Qwen/Qwen3.5-2B", "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc", "directory": "predictor-2b", "dtype": "bfloat16"}
   },
-  "limits": {"infrastructureUsd": 35, "hourlyUsd": 1.25, "cumulativeGpuHours": 24, "sessionHours": 8, "setupMinutes": 30, "protectedContingencyUsd": 65, "totalUsd": 500},
+  "limits": {"infrastructureUsd": 35, "hourlyUsd": 2.50, "cumulativeGpuHours": 24, "sessionHours": 8, "setupMinutes": 30, "protectedContingencyUsd": 65, "totalUsd": 500},
   "status": "source_pinned_not_deployment_verified"
 }

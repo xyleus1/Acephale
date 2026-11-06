@@ -1,3 +1,19 @@
+## 2026-11-06: Explicitly raise only the GPU hourly ceiling
+
+- The founder explicitly authorized increasing the gross GPU hourly cap from
+  USD1.25 to USD2.50 and continuing routine AWS setup. Record the change only in
+  `versions.json` at `limits.hourlyUsd`; no other limit is increased.
+- Preserve USD35 infrastructure, USD500 total study, USD65 protected contingency,
+  24 cumulative GPU-hours, eight-hour sessions, 30-minute setup and the original
+  journal's unresolved reservations. Credits never discount the gross rate gate.
+- The observed USD2.24208/hour AWS rate fits the new ceiling, subject to a fresh
+  live quote and all quota, budget, identity, cleanup and verification gates.
+  This approval does not establish GPU capacity or completed live evaluation.
+- Re-render code/configuration evidence after the pin changes. An existing ledger
+  mismatch must be reconciled, never reset to bypass old reservations. Preserve
+  historical reports under their original limits. The legacy Lambda controller
+  retains its stricter USD1.25/hour check.
+
 ## 2026-11-06: Bind AWS dispatch, observed identity and native measurements
 
 - AWS dispatch must reserve against the original study journal before the

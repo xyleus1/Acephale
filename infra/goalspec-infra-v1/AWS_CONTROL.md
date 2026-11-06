@@ -10,11 +10,14 @@ eight vCPUs and 64 GiB RAM. Live `DescribeInstanceTypes` must confirm that shape
 AWS reports this exact L40S shape as 45,776 MiB, consistent with its documented
 48 GB class. The checker recognizes that specific device/type combination and
 still requires actual simultaneous model fit. It does not admit arbitrary smaller GPUs.
-The published USD2.24208/hour rate observed during preparation exceeds the
-unchanged USD1.25 gross hourly cap. The controller rejects that rate before
-reserving or launching. Credits do not reduce the gross rate checked here.
-`versions.json` is unchanged: USD35 infrastructure, USD500 study, USD65 protected
-contingency, 24 cumulative GPU-hours, eight hours/session, 30 minutes/setup.
+On 2026-11-06, the founder explicitly approved raising the gross GPU hourly cap
+from USD1.25 to USD2.50. The observed USD2.24208/hour compute rate fits that cap;
+the controller still requires a fresh live quote and all other execution gates.
+Credits do not reduce the gross rate checked here. Only `limits.hourlyUsd` changed
+in `versions.json`: USD35 infrastructure, USD500 study, USD65 protected
+contingency, 24 cumulative GPU-hours, eight hours/session and 30 minutes/setup
+remain unchanged. Previously rendered package and ledger hashes must not be
+treated as evidence for the changed configuration.
 
 For the complete two-region serverless deployment, original-journal overhead
 reservation, bounded first-recovery canaries and actual recovery-evidence import,

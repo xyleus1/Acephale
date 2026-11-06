@@ -86,11 +86,30 @@ class AWSReadinessTests(unittest.TestCase):
         self.assertTrue(report["inspection"]["checks"]["hardware"]["candidateHardwareChecksPassed"])
         self.assertFalse(report["readyToProvision"])
         self.assertFalse(report["readyForGpuExecution"])
-        self.assertFalse(report["hourlyGrossLimitSatisfied"])
-        self.assertIn("live_ec2_compute_price_exceeds_existing_hourly_gross_limit", report["blockers"])
+        self.assertTrue(report["hourlyGrossLimitSatisfied"])
+        self.assertNotIn("live_ec2_compute_price_exceeds_existing_hourly_gross_limit", report["blockers"])
         self.assertIsNone(report["credits"]["balanceUsd"])
         self.assertIn("aws_lifecycle_controller_not_live_verified", report["blockers"])
         self.assertIsNone(report["inspection"]["checks"]["quota"]["availableVcpus"])
+
+    def test_exact_authorized_250_boundary_never_removes_other_execution_gates(self):
+        for hourly, within in (("2.50", True), ("2.5000000001", False)):
+            with self.subTest(hourly=hourly):
+                data = fixtures()
+                data[("pricing", "get-products")] = price_response(hourly)
+                report = aws.readiness(inspect=True, profile="company", region="us-east-1",
+                                       runner=lambda command, data=data: data[tuple(command[1:3])])
+                self.assertEqual(report["hourlyGrossLimitSatisfied"], within)
+                self.assertEqual("live_ec2_compute_price_exceeds_existing_hourly_gross_limit" in report["blockers"], not within)
+                self.assertFalse(report["readyToProvision"])
+                self.assertFalse(report["readyForGpuExecution"])
+                self.assertIn("original_study_and_infrastructure_ledgers_not_reconciled_or_reserved", report["blockers"])
+                self.assertIn("two_independent_aws_watchdogs_not_verified", report["blockers"])
+                self.assertEqual(report["grossLimits"]["infrastructureUsd"], 35)
+                self.assertEqual(report["grossLimits"]["totalUsd"], 500)
+                self.assertEqual(report["grossLimits"]["cumulativeGpuHours"], 24)
+                self.assertEqual(report["grossLimits"]["sessionHours"], 8)
+                self.assertEqual(report["grossLimits"]["protectedContingencyUsd"], 65)
 
     def test_price_filters_separate_target_region_from_api_endpoint(self):
         command = aws.read_commands("company", "us-west-2", "g6e.2xlarge")["pricing"]

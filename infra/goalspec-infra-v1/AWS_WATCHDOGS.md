@@ -51,7 +51,8 @@ assumes free-tier eligibility or that credits eliminate gross charges. Price the
 actual two execution regions, reserve the overhead under the original study's
 USD35 infrastructure allocation, and retain the reservation through reconciliation.
 Do this before creating/uploading paid storage or activating functions/schedules.
-Do not reset the original study journal or change the USD1.25 GPU hourly cap.
+Do not reset the original study journal. The founder explicitly raised only the
+GPU hourly cap to USD2.50 on 2026-11-06; all other gross limits remain unchanged.
 
 The concrete reservation path works before either controller is enrolled and
 does not call AWS. Use the single original-checkpoint-bound slice initialized by
@@ -194,8 +195,10 @@ review both templates; do not silently extend a lease deadline.
 requirement for two already-recovered controllers. It requires two actual fresh
 `armed.json` receipts from the deployed A/B functions, exact code/window overhead
 reservation, current account/AMI/network/price/quota evidence and the same
-original budget caps. It cannot start an experiment. At the observed
-USD2.24208/hour rate and unchanged USD1.25 cap, **it currently cannot launch**.
+original budget caps except the explicitly authorized hourly increase. It cannot
+start an experiment. The observed USD2.24208/hour compute rate fits the USD2.50
+cap authorized on 2026-11-06. A fresh quote, sufficient actual quota, the original
+budget reservation and both live armed controllers remain mandatory.
 
 When those external prerequisites have actually been satisfied:
 

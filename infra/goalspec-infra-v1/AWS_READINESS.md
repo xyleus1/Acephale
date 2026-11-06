@@ -83,11 +83,14 @@ unit. See [EC2 quota documentation](https://docs.aws.amazon.com/AWSEC2/latest/Us
   redemption is not an applied AWS credit balance. This tool leaves credits
   unverified; it does not apply for credits or accept investment terms.
 - Reconcile and reserve against the original study and infrastructure journals.
-  Preserve the $500 overall, $35 infrastructure, $1.25 gross hourly, 24 cumulative
+  Preserve the $500 overall, $35 infrastructure, $2.50 gross hourly, 24 cumulative
   GPU-hour and eight-hour session limits. Credits do not reduce the gross price
   used for these limits. If the live quote exceeds the hourly cap, stop; a credit
   balance does not authorize changing the cap. Storage, IPv4, transfer, tax and
   other services require their own allowance in the total reservation.
+  The founder explicitly authorized the hourly-only increase from $1.25 to $2.50
+  on 2026-11-06. All other limits, including the $65 protected contingency and
+  30-minute setup deadline, remain unchanged.
 - Review and live-verify the implemented [AWS lifecycle controller](AWS_CONTROL.md),
   including its original-study reservation binding and unknown-response recovery.
   Enroll and exercise two independent, always-on AWS watchdogs and verify the

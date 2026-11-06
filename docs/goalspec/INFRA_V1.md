@@ -147,8 +147,11 @@ They cover exact model downloads, image locks, private Compose services,
 Grafana/Prometheus/Tempo/Loki/Alloy, price preflight, guarded Lambda lifecycle,
 independent watchdog enrollment and verified artifact export.
 
-Infrastructure is capped by the approved $35 slice, at most $1.25 per GPU-hour
-and at most 24 cumulative GPU-hours. Provider/control-plane failure can prevent
+Infrastructure is capped by the approved $35 slice, at most $2.50 per GPU-hour
+and at most 24 cumulative GPU-hours. The founder explicitly approved the hourly
+increase from $1.25 on 2026-11-06; every other limit remains unchanged.
+The legacy Lambda controller retains its stricter $1.25 limit; the AWS controller
+uses the authoritative `versions.json` cap. Provider/control-plane failure can prevent
 an automatic termination; the watchdog tooling does not promise a physically
 impossible unconditional billing guarantee. The infrastructure slice must be
 reserved in the original $500 study ledger before any rental is dispatched.

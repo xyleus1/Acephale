@@ -154,10 +154,21 @@ class AWSTests(unittest.TestCase):
         self.assertNotIn("UserData", payload)
         self.assertEqual(payload["NetworkInterfaces"][0]["Groups"], [self.plan["securityGroupId"]])
 
-    def test_real_public_g6e_rate_blocks_before_reservation_or_mutation(self):
-        self.provider.data[("pricing", "get-products")] = price_response("2.24208")
+    def test_rate_above_authorized_250_cap_blocks_before_reservation_or_mutation(self):
+        self.provider.data[("pricing", "get-products")] = price_response("2.5000000001")
         with self.assertRaisesRegex(ValueError, "hourly cap"):
             self.launch()
+        self.assertEqual(self.budget.reservations, {})
+        self.assertEqual(self.writes(), [])
+        self.assertEqual(aws.read_json(self.ledger)["leases"], [])
+
+    def test_current_g6e_rate_and_exact_authorized_cap_pass_only_quote_gate(self):
+        for hourly in ("2.24208", "2.50"):
+            with self.subTest(hourly=hourly):
+                self.provider.data[("pricing", "get-products")] = price_response(hourly)
+                quote = aws.quote(self.provider, self.plan, NOW)
+                self.assertEqual(quote["hourlyUsd"], hourly)
+                self.assertFalse(quote["capacityGuaranteed"])
         self.assertEqual(self.budget.reservations, {})
         self.assertEqual(self.writes(), [])
         self.assertEqual(aws.read_json(self.ledger)["leases"], [])

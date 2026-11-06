@@ -228,17 +228,28 @@ class BootstrapRecoveryTests(unittest.TestCase):
             self.launch(watchdog_paths=self.watchdogs[:1])
         self.assertEqual(self.provider.calls, [])
 
-    def test_canary_keeps_original_hourly_price_and_quota_limits(self):
+    def test_canary_keeps_authorized_hourly_price_and_original_quota_limits(self):
         self.reserve()
-        self.provider.data[("pricing", "get-products")] = price_response("2.24208")
+        self.provider.data[("pricing", "get-products")] = price_response("2.5000000001")
         with self.assertRaisesRegex(ValueError, "hourly cap"):
             self.launch()
-        self.provider.data[("pricing", "get-products")] = price_response("1.20")
+        self.provider.data[("pricing", "get-products")] = price_response("2.24208")
         self.provider.data[("service-quotas", "get-service-quota")]["Quota"]["Value"] = 0
         with self.assertRaisesRegex(ValueError, "headroom"):
             self.launch()
         self.assertEqual(self.budget.reservations, {OVERHEAD: 1_000_000})
         self.assertEqual(self.writes(), [])
+
+    def test_canary_exact_authorized_rate_reserves_full_cleanup_margin(self):
+        self.reserve()
+        self.provider.data[("pricing", "get-products")] = price_response("2.50")
+        self.launch()
+        lease = aws.read_json(self.ledger)["leases"][0]
+        self.assertEqual(lease["quote"]["hourlyUsd"], "2.50")
+        self.assertEqual(lease["reservedHours"], 10 / 60)
+        self.assertEqual(lease["reservedMicrodollars"], 1_416_667)
+        self.assertEqual(self.budget.reservations[LEASE], 1_416_667)
+        self.assertFalse(lease["inferenceAllowed"])
 
     def test_canary_counts_prior_and_terminated_gpu_hours_toward_24(self):
         self.reserve()

@@ -106,8 +106,11 @@ Review validation errors and the actual resource pins before attachment. The
 renderer performs structural offline checks; it does not claim IAM authorization
 has been tested in AWS. The optional `research-put-launch-policy.json` payload is
 for `iam put-role-policy` only after all launch prerequisites and the spending
-decision are resolved. The current USD2.24208/hour rate still exceeds the unchanged
-USD1.25/hour cap. Producing a policy is not permission to raise that cap.
+decision are resolved. On 2026-11-06 the founder explicitly approved the increase
+of the gross hourly cap to USD2.50; the observed USD2.24208/hour compute rate fits.
+The USD35 infrastructure and USD500 overall budgets and every other limit remain
+unchanged. Policy rendering alone does not verify current quota, credits,
+watchdog recovery or live launch readiness.
 
 The launch policy limits RunInstances to the pinned image/owner, root snapshot,
 key, subnet and security group. Only `g6e.2xlarge`, On-Demand/default tenancy,

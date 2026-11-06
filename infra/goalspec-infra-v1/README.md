@@ -164,7 +164,10 @@ The supplied regional firewall ruleset and existing global rules must permit onl
 TCP port 22 from restricted CIDRs (IPv4 /24 or narrower; IPv6 /64 or narrower).
 The tool does not change existing account-wide rules. A broad existing rule blocks
 launch and must be resolved independently without disrupting other workloads.
-Maximum price is $1.25/hour; maximum session is eight hours; cumulative reservations
+This legacy Lambda controller retains its stricter maximum price of $1.25/hour.
+The AWS controller uses the $2.50/hour cap explicitly authorized on 2026-11-06
+and recorded in `versions.json`; see [AWS_CONTROL.md](AWS_CONTROL.md).
+For either provider, maximum session is eight hours; cumulative reservations
 cannot exceed 24 GPU-hours or $35. At least $1 per session is reserved for tax,
 billing lag and related overhead. Choose an allowance covering the actual account's
 taxes and charges; it is not an automatic invoice estimate. Unknown launch charges
