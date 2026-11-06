@@ -3,8 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "goalspec:generate": "node --import tsx scripts/goalspec-generate.ts && node --import tsx scripts/goalspec-controller-generate.ts && node --import tsx scripts/goalspec-controller-action-kind-generate.ts",
-    "goalspec:check": "node --import tsx scripts/goalspec-generate.ts --check && node --import tsx scripts/goalspec-controller-generate.ts --check && node --import tsx scripts/goalspec-controller-action-kind-generate.ts --check && tsc --project tsconfig.goalspec.json --noEmit",
+    "goalspec:generate": "node --import tsx scripts/goalspec-generate.ts && node --import tsx scripts/goalspec-controller-generate.ts && node --import tsx scripts/goalspec-controller-action-kind-generate.ts && node --import tsx scripts/goalspec-infra-generate.ts",
+    "goalspec:check": "node --import tsx scripts/goalspec-generate.ts --check && node --import tsx scripts/goalspec-controller-generate.ts --check && node --import tsx scripts/goalspec-controller-action-kind-generate.ts --check && node --import tsx scripts/goalspec-infra-generate.ts --check && tsc --project tsconfig.goalspec.json --noEmit",
     "test:goalspec": "node --import tsx --test --test-concurrency=1 scripts/goalspec-runtime.test.ts scripts/goalspec-model.test.ts scripts/goalspec-gateway.test.ts scripts/goalspec-budget.test.ts scripts/goalspec-worker.test.ts scripts/goalspec-compiler.test.ts scripts/goalspec-derya-bootstrap.test.ts scripts/goalspec-build-library.test.ts scripts/goalspec-prediction-replay.test.ts scripts/goalspec-derya-server.test.ts scripts/goalspec-compact-goals.test.ts scripts/goalspec-session-v2.test.ts scripts/goalspec-compact-candidates.test.ts scripts/goalspec-actor-v3.test.ts scripts/goalspec-bootstrap-v3.test.ts scripts/goalspec-experience-memory.test.ts scripts/goalspec-native-read-policy.test.ts scripts/goalspec-session-v3.test.ts scripts/goalspec-provider-v3.test.ts scripts/goalspec-model-retry-v3.test.ts scripts/goalspec-derya-continuity.test.ts scripts/goalspec-native-bindings.test.ts scripts/goalspec-native-v3-integration.test.ts scripts/goalspec-transport-v3.test.ts scripts/goalspec-prediction-v3.test.ts scripts/goalspec-prediction-v3-run.test.ts scripts/goalspec-import-archive-v3.test.ts scripts/goalspec-replay-concurrency.test.ts scripts/goalspec-goal-state.test.ts scripts/goalspec-native-graph-v4.test.ts scripts/goalspec-controller.test.ts scripts/goalspec-session-v4.test.ts scripts/goalspec-controller-action-kind.test.ts scripts/goalspec-goal-state-protocol-v4.test.ts scripts/goalspec-goal-state-protocol-v4c.test.ts",
     "test:goalspec-v5": "node --import tsx --test --test-concurrency=1 scripts/goalspec-actor-v5.test.ts scripts/goalspec-controller-v5.test.ts scripts/goalspec-session-v5.test.ts scripts/goalspec-memory-v5.test.ts scripts/goalspec-annotation-v5.test.ts scripts/goalspec-derya-v5.test.ts scripts/goalspec-derya-context-v5.test.ts",
     "goalspec:service": "node --import tsx scripts/goalspec-service.ts",
@@ -277,7 +277,12 @@
     "test:world-getlead-db": "tsx scripts/world-getlead-database.test.ts",
     "test:world-db": "tsx scripts/world-database.test.ts",
     "test:supply-os-connectors": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-connectors.test.ts",
-    "test:integrations-surface": "node --import tsx scripts/integrations-surface.test.ts"
+    "test:integrations-surface": "node --import tsx scripts/integrations-surface.test.ts",
+    "test:goalspec-infra": "node --import tsx --test --test-concurrency=1 scripts/goalspec-infra-annotate.test.ts scripts/goalspec-infra-candidates.test.ts scripts/goalspec-infra-derya.test.ts scripts/goalspec-infra-document-runner.test.ts scripts/goalspec-infra-documents.test.ts scripts/goalspec-infra-memory.test.ts scripts/goalspec-infra-model.test.ts scripts/goalspec-infra-native-worker.test.ts scripts/goalspec-infra-native.test.ts scripts/goalspec-infra-predict.test.ts scripts/goalspec-infra-predictors.test.ts scripts/goalspec-infra-session.test.ts scripts/goalspec-infra-telemetry.test.ts",
+    "goalspec:infra": "node --import tsx scripts/goalspec-infra-run.ts",
+    "goalspec:infra-native": "node --import tsx scripts/goalspec-infra-native.ts",
+    "goalspec:infra-predict": "node --import tsx scripts/goalspec-infra-predict.ts",
+    "goalspec:infra-annotate": "node --import tsx scripts/goalspec-infra-annotate.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",

@@ -1,3 +1,25 @@
+# 2026-11-05: GoalSpec tool-calling infrastructure profile
+
+- Added fixed open-weight actor/predictor serving contracts and exact deployment
+  pins without training or changing the primary actor's tools or prompt.
+- Implemented nonblocking prediction, grounded workflow bindings, calibration
+  provenance checks, native exact promotion, immutable HTTP receipts, and full
+  Derya projection revalidation. Preserve native mutation batches and fail closed
+  on ownership or authorization changes.
+- Added immutable data/pilot/memory/calibration/report CLIs, bounded teacher
+  dispatch through the original spending ledger, and shared TypeScript/Python
+  manifest fixtures. Actual historical replay is 25/62 exact Top-1, 30/62 Top-3;
+  missing candidates account for 32/62 eligible next-read decisions.
+- Added bounded JSONL/OTLP/Prometheus telemetry and private non-AWS deployment
+  definitions with provider preflight, export verification and watchdog tooling.
+- Verified 514 research Python tests, 21 deployment control tests and the core/v5/
+  infrastructure Node suites, plus real independent-connection PostgreSQL freshness
+  checks. Exact counts, skips and local-vs-target versions are recorded in the
+  implementation report. No running container/GPU deployment or green full CI is
+  implied by static checks.
+- New paid expenditure is zero. Fresh live Qwen/native scores await secure serving
+  and API configuration, real calibration artifacts and human label review.
+
 # 2026-10-03: Prepare dedicated GoalSpec repository
 
 - Cloned the published branch at `086b98535829eb36b338528be4a7f0dc6f2a6ceb` into a separate `goalspec` directory; prepared local `main` and renamed the original remote `upstream`.

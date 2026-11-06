@@ -12,12 +12,17 @@ and existing relative paths remain intact.
 
 - [Checkout, verification, and reproduction limits](docs/goalspec/GITHUB_CHECKOUT.md)
 - [Closed v5 benchmark results](research/goalspec/reports/2026-09-16-v5-local/README.md)
+- [New infrastructure runtime, local model serving, and commands](docs/goalspec/INFRA_V1.md)
+- [Infrastructure implementation and measured replay results](research/goalspec/reports/2026-11-05-infra-v1/README.md)
 - [GoalSpec runtime](src/lib/goalspec)
 - [Research implementation](research/goalspec)
 
 V5 is experimental and opt-in. Results were mixed and did not establish an overall
 accuracy or latency improvement. The selected live configuration disabled
-goal-conditioned ranking and started no speculative reads. V6 remains deferred.
+goal-conditioned ranking and started no speculative reads. The new infrastructure
+profile adds asynchronous Qwen prediction, grounded workflow binding, exact read
+promotion, native and document runners, and observability. Its deterministic tests
+and historical replay do not establish a fresh Qwen task score or latency gain.
 Raw traces, local databases, credentials, and large evaluation archives are excluded;
 see the checkout guide for the exact publication scope and known test limitations.
 

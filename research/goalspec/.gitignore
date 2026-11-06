@@ -7,4 +7,5 @@ runs/
 .benchmarks/
 dist/
 .pytest-tmp-*/
+.pytest-infra-*/
 .archive-test-*/

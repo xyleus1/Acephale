@@ -1,3 +1,32 @@
+## 2026-11-05: Fixed-model GoalSpec infrastructure profile
+
+- Change tool execution infrastructure with a fixed Qwen3.5-9B actor and a separate
+  Qwen3.5-0.8B predictor. Pin exact repository revisions and serving images. No actor
+  fine-tuning or implicit model substitution belongs to this implementation.
+- Primary base, neutral-memory/prefetch and goal-conditioned arms share actor
+  messages, tool catalog, instances and seeds. Goals condition candidate ranking;
+  speculative results enter only through actual matching tool calls after validation.
+- Compile one current-grounded native candidate pool for raw calibration and live
+  admission. Keep neutral and goal-conditioned pools identical. Preserve NO_READ
+  and READ_UNCOVERED. Current source references, tool-schema compatibility and
+  server-owned authorization remain mandatory.
+- Calibration is training-only with separate development validation and exact model,
+  prompt, candidate-compiler and frozen-memory provenance. Goal reliability comes
+  from an independent human audit and graded agreement, with uncertainty attenuation.
+  Shared neutral calibration does not prove conditional probability calibration.
+- Derya early reads require current office-wide authorization and full scoped
+  projection rereads in separate read-only transactions. Count all validation work.
+  Immutable document content instead uses exact receipt and content-hash validation.
+  Neither mechanism grants permission for speculative writes.
+- Keep raw trajectories, future labels, independent outcomes and model-visible
+  prefixes separate. Historical replay, scripted integrations, adapter latency and
+  fresh live native scores are distinct evidence. Do not promote from the first
+  three or promise improvement across all metrics.
+- Use non-AWS GPU infrastructure only after secure credentials, current provider
+  price, reconciled original-ledger reservations and independent watchdog enrollment.
+  Preserve the cumulative $500 ceiling, protected contingency and uncertain charges.
+  Static manifests and smoke fixtures are not proof of a deployed model or watchdog.
+
 ## 2026-09-17 UTC: Keep v5 experimental after mixed and negative confirmation
 
 - Do not promote v5 or enable Derya verified reuse from these results. The selected literal-context policy had lower observed native accuracy and higher mean latency than Base and legacy v4. Fewer aggregate calls, a small memory-ranking gain, source integrity and correctness tests do not establish improvement on all requested metrics. The existing performance gate remains binding.

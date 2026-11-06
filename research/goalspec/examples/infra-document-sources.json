@@ -1,0 +1,8 @@
+{
+  "id": "pinned-paste-serving-documents-v1",
+  "documents": [
+    {"id":"paste-overview","title":"PASTE reproduction overview","snippet":"Architecture setup reproduction tools experiments","familyId":"paste-overview","url":"https://raw.githubusercontent.com/Wisley1998/PASTE-Qwen-DR/ed312dd3b76c17375996ba28fd560a4a3c11296f/README.md"},
+    {"id":"paste-model-config","title":"PASTE model serving configuration","snippet":"Model revision precision GPU context parallelism settings","familyId":"paste-serving","url":"https://raw.githubusercontent.com/Wisley1998/PASTE-Qwen-DR/ed312dd3b76c17375996ba28fd560a4a3c11296f/reproduction/configs/model.env.example"},
+    {"id":"paste-speculator","title":"Qwen speculative action baseline","snippet":"Speculative action predictor baseline top three reproduction settings","familyId":"paste-speculator","url":"https://raw.githubusercontent.com/Wisley1998/PASTE-Qwen-DR/ed312dd3b76c17375996ba28fd560a4a3c11296f/reproduction/SPECULATIVE_ACTION_QWEN3_BASELINE.md"}
+  ]
+}

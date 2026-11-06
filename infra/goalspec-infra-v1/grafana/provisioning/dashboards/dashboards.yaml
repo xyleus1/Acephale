@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: GoalSpec
+    orgId: 1
+    folder: GoalSpec
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

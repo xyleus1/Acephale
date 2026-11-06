@@ -1,3 +1,41 @@
+# 2026-11-05: GoalSpec infrastructure v1 implementation
+
+Implemented the infrastructure profile on `codex/goalspec-infra-v1` from
+`2e1a78c268dccfbca29dc4400671c9682651147d`. Start with
+`docs/goalspec/INFRA_V1.md` and the measured implementation report at
+`research/goalspec/reports/2026-11-05-infra-v1/README.md`.
+
+The new path holds actor weights, messages and tools fixed across arms. It adds a
+versioned local Qwen model port, asynchronous goal/candidate prediction, bounded
+context compilation, symbolic workflow binding, calibrated admission, exact read
+promotion, native gateway workers, immutable document reads and opt-in Derya
+revalidation. Non-AWS deployment definitions include model pins, private services,
+Prometheus/Grafana/Tempo/Loki/Alloy and guarded rental/export/watchdog tooling.
+Production activation remains off. The legacy v1-v5 sources and results are retained.
+
+Historical data preparation produced 375 public checkpoints, 100 teacher inputs,
+20 pending audit rows and 191 runtime memory episodes. Symbolic development replay
+matched 25/62 exact next invocations at Top-1 and 30/62 at Top-3. This is a historical
+baseline, not a new Qwen or live native task score. Public aggregate JSON accompanies
+the report; raw trajectories, ledgers and memory stay in ignored local run directories.
+
+Node validation passed 280 core, 49 v5 and 86 infrastructure tests; optional
+prerequisite skips are documented in the report. Research Python validation passed
+514 tests with five documented skips. Both Derya
+database freshness suites passed against a disposable PostgreSQL 17 cluster, which
+has been stopped. TypeScript/schema, core/v5/infra and deployment verification are
+documented in the report. The pre-existing repository-wide Ruff debt remains; new
+Python modules pass scoped Ruff.
+
+No paid call, GPU rental, model download or actor training occurred. This machine
+has no available CUDA/Docker runtime or process-level OpenAI/Lambda credentials.
+Next execution requires a secure model host, reconciled reservations in the original
+$500 ledger, actual serving smoke receipts, teacher labeling and the 20-example
+human audit. Then collect fresh Qwen trajectories, freeze calibration/opportunity
+artifacts, and run the predeclared paired native and document trials. Do not fabricate
+those artifacts from fixtures, overwrite historical failures, or infer live gains
+from the adapter profile. See the deployment guide for the non-AWS lifecycle gates.
+
 # 2026-10-03: Prepare dedicated GoalSpec repository
 
 Cloned the published GoalSpec branch at

@@ -26,6 +26,9 @@ export interface ReadExecutor {
   // Explicit discrimination avoids interpreting arbitrary tool JSON as a proof.
   // A denial is terminal for this invocation, including authoritative promotion.
   validateFreshness?(invocation: Invocation, previous: Observation, signal: AbortSignal): Promise<ReadValidation>;
+  // Immutable receipt checks can perform zero physical reads. Existing adapters
+  // retain their conservative one-call validation accounting.
+  validationPhysicalCalls?(invocation: Invocation): number;
 }
 export type RuntimeEvent = { type: string; at: number; runId: string; key: string; details: Record<string, string | number | boolean> };
 type Job = {
@@ -137,7 +140,9 @@ export class SpeculationScheduler {
     const start = Date.now();
     const timer = setTimeout(() => job.controller.abort(), this.deadlineMs);
     try {
-      job.physicalCalls++;
+      const physicalCalls = this.executor.validationPhysicalCalls?.(copy(job.invocation)) ?? 1;
+      if (!Number.isSafeInteger(physicalCalls) || physicalCalls < 0) throw new Error("Invalid validation call accounting");
+      job.physicalCalls += physicalCalls;
       const validation: ReadValidation = this.executor.validateFreshness
         ? await this.executor.validateFreshness(copy(job.invocation), prior, job.controller.signal)
         : { status: "verified", observation: await this.executor.validate(copy(job.invocation), prior, job.controller.signal) };
@@ -173,7 +178,12 @@ export class SpeculationScheduler {
   authoritative(invocation: Invocation, execute: () => Promise<Observation>): Promise<Observation> {
     return this.track(this.runAuthoritative(invocation, execute));
   }
-  private async runAuthoritative(invocation: Invocation, execute: () => Promise<Observation>): Promise<Observation> {
+  // Native orchestration owns fallback execution. A miss must not manufacture
+  // an authoritative attempt or a function result inside the Node process.
+  promoteOnly(invocation: Invocation): Promise<{ observation: Observation } | undefined> {
+    return this.track(this.promoteExisting(invocation));
+  }
+  private async promoteExisting(invocation: Invocation): Promise<{ observation: Observation } | undefined> {
     validateContract("Invocation", invocation);
     if (this.closed) throw new Error("Run is closed");
     const key = invocationKey(invocation);
@@ -185,12 +195,18 @@ export class SpeculationScheduler {
       const evidence = await job.promotion;
       if (evidence && !this.closed && !this.suspended && job.epoch === this.epoch) {
         job.state = "consumed"; this.event("useful", key);
-        return copy(evidence.observation);
+        return { observation: copy(evidence.observation) };
       }
     }
     if (job) { await job.completion; if (job.promotion) await job.promotion; }
     if (job?.denial !== undefined) throw new ReadAuthorizationDeniedError(job.denial);
     if (this.closed) throw new Error("Run is closed");
+    return undefined;
+  }
+  private async runAuthoritative(invocation: Invocation, execute: () => Promise<Observation>): Promise<Observation> {
+    const promoted = await this.promoteExisting(invocation);
+    if (promoted) return promoted.observation;
+    const key = invocationKey(invocation);
     this.event("authoritative_started", key);
     return this.track(execute());
   }

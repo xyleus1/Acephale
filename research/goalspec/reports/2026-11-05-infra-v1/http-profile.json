@@ -1,0 +1,33 @@
+{
+  "actorExecuted": false,
+  "corpusHash": "a8ae9bfdf923742a3956baa0a8cd1946752ca14139d8e05902e6cd6bee2a1ebd",
+  "kind": "real-http-adapter-profile",
+  "physicalReads": 3,
+  "samples": [
+    {
+      "documentId": "paste-overview",
+      "observationHash": "401a261ab19b1d14e2d7a45bdb389f1959155aba1a2b51d0ae7e966dd5b96541",
+      "readMs": 649.0187000000001,
+      "success": true,
+      "validationMs": 1.9652999999998428
+    },
+    {
+      "documentId": "paste-model-config",
+      "observationHash": "a0159085a9c40c55006b683aec34bc988e43a8565a97205fdc7350355e2a2a05",
+      "readMs": 37.46979999999985,
+      "success": true,
+      "validationMs": 0.9665999999997439
+    },
+    {
+      "documentId": "paste-speculator",
+      "observationHash": "54b7b3bff2eb66315fdcadfe7a3cd9b4c3bef1746c222af6ebe34b6cae2a514e",
+      "readMs": 26.75960000000032,
+      "success": true,
+      "validationMs": 1.3530000000000655
+    }
+  ],
+  "speedupMeasured": false,
+  "taskSuccessMeasured": false,
+  "validationQueries": 0,
+  "version": 1
+}

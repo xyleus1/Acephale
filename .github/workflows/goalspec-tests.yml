@@ -7,6 +7,7 @@ on:
       - "src/lib/goalspec/**"
       - "src/lib/goalspec-adapters/**"
       - "services/goalspec-runtime/**"
+      - "infra/goalspec-infra-v1/**"
       - "scripts/goalspec-*"
       - "package*.json"
       - "src/lib/agent-chat.ts"
@@ -20,6 +21,7 @@ on:
       - "src/lib/goalspec/**"
       - "src/lib/goalspec-adapters/**"
       - "services/goalspec-runtime/**"
+      - "infra/goalspec-infra-v1/**"
       - "scripts/goalspec-*"
       - "package*.json"
       - "src/lib/agent-chat.ts"
@@ -33,7 +35,7 @@ permissions:
 jobs:
   deterministic-research:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17.6
@@ -69,17 +71,20 @@ jobs:
         working-directory: .
         env:
           DATABASE_URL: postgresql://fixture@127.0.0.1/goalspec_ci
-      - run: npm run goalspec:check && npm run test:goalspec && npm run test:goalspec-v5
+      - run: npm run goalspec:check && npm run test:goalspec && npm run test:goalspec-v5 && npm run test:goalspec-infra
         working-directory: .
       - run: |
           npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script --output /tmp/goalspec-schema.sql
           psql "$GOALSPEC_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /tmp/goalspec-schema.sql
           npm run test:goalspec-db
+          node --import tsx --test scripts/goalspec-infra-derya.test.ts
         working-directory: .
         env:
           DATABASE_URL: postgresql://goalspec_owner:fixture@127.0.0.1:5432/goalspec_ci
           GOALSPEC_TEST_DATABASE_URL: postgresql://goalspec_owner:fixture@127.0.0.1:5432/goalspec_ci
       - run: uv sync --frozen --extra analysis --group dev
       - run: uv run --frozen --extra analysis pytest
+      - run: python infra/goalspec-infra-v1/test_control.py
+        working-directory: .
       - run: uv run --frozen --extra analysis goalspec demo --output runs/ci-demo --groups 10 --bootstrap-samples 100
       - run: uv run --frozen --extra analysis ruff check src tests
