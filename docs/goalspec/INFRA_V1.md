@@ -46,6 +46,13 @@ or the tool catalog. Historical v1-v5 artifacts remain unchanged.
 
 ## Commands
 
+For the current completion path, use [native preparation and launch](INFRA_NATIVE_LAUNCH.md),
+[fresh data and admission artifacts](INFRA_ADMISSION.md), and
+[AWS account and host readiness](../../infra/goalspec-infra-v1/AWS_READINESS.md).
+The native preparation command freezes official task bytes and a checkpoint of
+the original budget. The Python launcher owns its gateway and starts the new
+fixed-Qwen runtime. Neither preparation nor calibration fine-tunes actor weights.
+
 Run commands from the repository root unless stated otherwise. Output directories
 must be new; immutable experiment directories cannot be overwritten.
 
@@ -103,21 +110,23 @@ test rows. It never executes predicted tools. Fit calibration from a closed repl
 in the research environment:
 
 ```text
-python -m goalspec.infra_cli fit-calibration --bundle PILOT_DIRECTORY --predictions RAW_PREDICTION_DIRECTORY --condition neutral --output NEW_OUTPUT
+python -m goalspec.infra_cli fit-calibration --bundle DATASET_DIRECTORY --predictions RAW_PREDICTION_DIRECTORY --condition both --output NEW_OUTPUT
 ```
 
 The fitter uses training rows only, reports separate development scores, and binds
 the result to the exact model, prompt/compiler, candidate compiler and memory.
-Runtime admission requires calibration from the pinned neutral predictor contract.
-The same mapping is applied to conditional scores before reliability weighting;
-this does not establish that conditional probabilities are independently calibrated.
+Runtime admission requires calibration from the pinned predictor contract.
+Neutral and conditional rankings have separate fitted mappings, retained under
+one artifact hash. Goal-conditioned execution rejects a missing conditional map.
 Predictor compilation preserves mandatory policy, requirements and exact current
 binding slices before optional whole observations and retrieved examples. The
 served tokenizer determines the final input budget and omissions are recorded.
 
-The native CLI requires GOALSPEC_GATEWAY_URL and GOALSPEC_GATEWAY_TOKEN for a
-running Python-owned gateway. It does not replace native Python orchestration or
-silently change the user simulator. Live configs require real frozen manifests;
+The low-level Node native CLI requires GOALSPEC_GATEWAY_URL and
+GOALSPEC_GATEWAY_TOKEN for a running Python-owned gateway. The new
+`goalspec.infra_native_runner` launcher creates that gateway, injects its token,
+checks the service readiness identity and retains native orchestration and the
+fixed user simulator. Live configs require real frozen manifests;
 non-base trials additionally require compatible memory, calibration and measured
 opportunity artifacts. Goal-conditioned trials require audited reliability.
 
@@ -132,7 +141,8 @@ until accounting supplies actual cost; missing cost is never converted to zero.
 
 ## Deployment and budgets
 
-See [the non-AWS deployment instructions](../../infra/goalspec-infra-v1/README.md).
+See [the deployment instructions](../../infra/goalspec-infra-v1/README.md) and
+[AWS readiness](../../infra/goalspec-infra-v1/AWS_READINESS.md).
 They cover exact model downloads, image locks, private Compose services,
 Grafana/Prometheus/Tempo/Loki/Alloy, price preflight, guarded Lambda lifecycle,
 independent watchdog enrollment and verified artifact export.
@@ -152,8 +162,9 @@ tests, and unexecuted live-model evaluation. No actor or predictor was fine-tune
 The new model weights were not downloaded, and no paid request or rental was
 made during this implementation.
 
-The local machine has no NVIDIA runtime or Docker command available, and the
-process environment has no Lambda/OpenAI API credentials. GPU smoke tests,
+The local machine has no NVIDIA runtime or Docker command available. Configure
+credentials through an external secret store into the executing process; an API
+authentication check does not establish a credit balance. GPU smoke tests,
 teacher execution, the 20-example human audit, fresh Qwen trajectory collection,
 calibration on those outputs, and live paired native trials remain external
 execution prerequisites. Production activation remains off. Two-hop speculation,

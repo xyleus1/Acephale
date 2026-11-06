@@ -12,17 +12,19 @@ import { aggregateInfraMetrics } from "../services/goalspec-runtime/infra-metric
 import { DocumentReadExecutor, DOCUMENT_TOOLS, documentCandidates, validateDocumentBinding, verifyDocumentCorpus, type DocumentCorpus } from "../services/goalspec-runtime/document-adapter";
 import { documentFrame, runDocumentTrial, type DocumentTask, type DocumentTrialResult } from "../services/goalspec-runtime/infra-document-runner";
 import { localActorDecision } from "../services/goalspec-runtime/local-actor";
-import { InfraLocalPredictors, validateInfraCalibration } from "../services/goalspec-runtime/infra-predictors";
+import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH, validateInfraCalibration } from "../services/goalspec-runtime/infra-predictors";
 import { validateMemoryArtifact } from "../src/lib/goalspec/experience-memory";
 import { SpeculationScheduler } from "../src/lib/goalspec/scheduler";
 import { validateInfraGoalReliabilityArtifact, validateInfraOpportunityArtifact } from "../services/goalspec-runtime/infra-artifacts";
 import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-compiler-identity";
+import { closeDocumentCollection, verifyDocumentBundle } from "./goalspec-infra-document-data";
 
 async function json<T = unknown>(file: string): Promise<T> { return JSON.parse(await readFile(file, "utf8")) as T; }
 async function exclusiveJson(file: string, value: unknown) { await writeFile(file, JSON.stringify(value, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
 interface RunConfiguration {
   version: 1; stage: "collection" | "development" | "heldout"; manifestPath: string; ledgerCheckpointPath: string; corpusPath: string; tasksPath: string;
   actorBaseUrl: string; predictorBaseUrl?: string; calibrationPath?: string; memoryPath?: string; opportunityPath?: string; goalReliabilityPath?: string;
+  calibrationDatasetPath?: string;
   schedule: { taskId: string; arm: InfraSessionPolicy["arm"]; seed: number }[];
   maximumLifetimeSeconds: number; maxSteps: number;
 }
@@ -42,12 +44,12 @@ export async function runLive(configurationPath: string, output: string) {
       || !Array.isArray(task.expectedDocuments) || !task.expectedDocuments.length || task.expectedDocuments.some(id => !corpus.documents.some(doc => doc.id === id)))) throw new Error("Invalid independently verified task fixtures");
   if (hash(tasks) !== manifest.data.datasetHash || hash(DOCUMENT_TOOLS) !== manifest.data.toolSchemaHash || corpus.contentHash !== manifest.data.environmentRevision
     || hash(config.schedule) !== manifest.protocol.scheduleHash) throw new Error("Frozen dataset, tool or schedule mismatch");
-  const families = config.stage === "collection" ? manifest.data.trainingFamilies : config.stage === "development" ? manifest.data.developmentFamilies : manifest.data.heldoutFamilies;
-  const expectedSplit = config.stage === "collection" ? "train" : config.stage === "development" ? "development" : "test";
+  const families = config.stage === "collection" ? [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies] : config.stage === "development" ? manifest.data.developmentFamilies : manifest.data.heldoutFamilies;
+  const expectedSplits = config.stage === "collection" ? ["train", "development"] : config.stage === "development" ? ["development"] : ["test"];
   const blocks = new Map<string, Set<string>>();
   for (const row of config.schedule) {
     const task = tasks.find(task => task.id === row.taskId);
-    if (!task || task.split !== expectedSplit || !families.includes(task.familyId) || !manifest.seeds.includes(row.seed)
+    if (!task || !expectedSplits.includes(task.split) || !families.includes(task.familyId) || !manifest.seeds.includes(row.seed)
       || !["base", "neutral_memory_prefetch", "goalspec"].includes(row.arm)) throw new Error("Task family or seed outside frozen schedule");
     const key = `${row.taskId}:${row.seed}`, block = blocks.get(key) ?? new Set<string>();
     if (block.has(row.arm)) throw new Error("Duplicate trial identity"); block.add(row.arm); blocks.set(key, block);
@@ -64,23 +66,31 @@ export async function runLive(configurationPath: string, output: string) {
     contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024 });
   const directory = resolve(output); await mkdir(directory, { recursive: false });
   await exclusiveJson(join(directory, "frozen-run.json"), { configuration: config, manifest, corpusHash: corpus.contentHash, taskHash: hash(tasks), inputConfigurationHash: hash(config) });
+  await exclusiveJson(join(directory, "tasks.json"), tasks); await exclusiveJson(join(directory, "corpus.json"), corpus);
   const telemetry = await InfraTelemetry.create(directory, process.env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  let completedCohort = false;
   try {
     const actor = new LocalChatModelPort({ baseUrl: config.actorBaseUrl, model: manifest.actor.servedModel, record: event => telemetry.record(event) });
     if (usesPrediction) {
-      if (!config.predictorBaseUrl || !config.memoryPath || !config.calibrationPath || !config.opportunityPath || !config.goalReliabilityPath) throw new Error("Prediction needs frozen memory, calibration, measured opportunity and audited reliability");
+      if (!config.predictorBaseUrl || !config.memoryPath || !config.calibrationPath || !config.opportunityPath || !config.goalReliabilityPath || !config.calibrationDatasetPath) throw new Error("Prediction needs frozen memory, calibration dataset, calibration, measured opportunity and audited reliability");
+      const dataset = verifyDocumentBundle(resolve(dirname(resolve(configurationPath)), config.calibrationDatasetPath));
+      if (dataset.lineage.taskHash !== hash(tasks) || dataset.lineage.corpusHash !== corpus.contentHash
+        || Object.entries(dataset.split.families).some(([family, split]) => !(split === "train" ? manifest.data.trainingFamilies : split === "development" ? manifest.data.developmentFamilies : manifest.data.heldoutFamilies).includes(family))) throw new Error("Document calibration dataset differs from frozen tasks or corpus");
       const memory = validateMemoryArtifact(await artifact(config.memoryPath));
       const calibration = validateInfraCalibration(await artifact(config.calibrationPath));
-      if (memory.contentHash !== manifest.data.memoryHash || calibration.contentHash !== manifest.data.calibrationHash || calibration.sourceDatasetHash !== manifest.data.datasetHash
+      if (config.schedule.some(row => row.arm === "goalspec") && !calibration.conditionalCalibration) throw new Error("Goal-conditioned execution requires separate conditional calibration");
+      if (memory.contentHash !== manifest.data.memoryHash || calibration.contentHash !== manifest.data.calibrationHash || calibration.sourceDatasetHash !== dataset.manifest.bundle_hash
         || calibration.fittingFamilies.some(family => !manifest.data.trainingFamilies.includes(family))
         || calibration.validationFamilies.some(family => !manifest.data.developmentFamilies.includes(family))
         || memory.runs.some(run => run.split !== "train" || !manifest.data.trainingFamilies.includes(run.familyId))) throw new Error("Memory or calibration provenance mismatch");
       snapshotId = memory.repositorySnapshotId;
-      const provenance = { datasetHash: manifest.data.datasetHash, allowedFamilies: [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies], excludedFamilies: manifest.data.heldoutFamilies };
+      const provenance = { datasetHash: dataset.manifest.bundle_hash, allowedFamilies: [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies], excludedFamilies: manifest.data.heldoutFamilies };
       const opportunity = validateInfraOpportunityArtifact(await artifact(config.opportunityPath), provenance);
       if (opportunity.sampleCount < 10) throw new Error("Insufficient measured opportunity samples");
       estimate = opportunity.estimate; expectedInfraSaving(1, estimate);
-      const audit = validateInfraGoalReliabilityArtifact(await artifact(config.goalReliabilityPath), provenance);
+      const audit = validateInfraGoalReliabilityArtifact(await artifact(config.goalReliabilityPath), { ...provenance, allowedFamilies: manifest.data.trainingFamilies,
+        predictor: { model: { repository: manifest.predictor.repository, revision: manifest.predictor.revision }, memoryHash: memory.contentHash,
+          predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash: infraCandidateCompilerHash("documents") } });
       reliability = audit.reliability;
       predictors = new InfraLocalPredictors(new LocalChatModelPort({ baseUrl: config.predictorBaseUrl, model: manifest.predictor.servedModel,
         contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record: event => telemetry.record(event) }), {
@@ -122,8 +132,12 @@ export async function runLive(configurationPath: string, output: string) {
       speculative_starts: result.speculativeStarts, useful_speculations: result.useful,
       actor_config_hash: hash(manifest.actor), memory_snapshot_hash: manifest.data.memoryHash,
     })).join("\n") + "\n", { flag: "wx", mode: 0o600 });
+    completedCohort = true;
     return { output: directory, trials: results.length, succeeded: results.filter(result => result.success).length };
-  } finally { await telemetry.close(); }
+  } finally {
+    await telemetry.close();
+    if (completedCohort && config.stage === "collection") closeDocumentCollection(directory, config.schedule.length);
+  }
 }
 
 export async function profileCorpus(corpusPath: string, output: string) {

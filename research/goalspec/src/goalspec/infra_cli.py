@@ -1,4 +1,4 @@
-"""Offline commands for goalspec-infra-v1. No provider requests are made here."""
+"""GoalSpec infrastructure commands; only the explicit native command launches paid work."""
 
 from __future__ import annotations
 
@@ -82,11 +82,25 @@ def main(argv: list[str] | None = None) -> None:
     calibration = commands.add_parser("fit-calibration")
     calibration.add_argument("--bundle", type=Path, required=True)
     calibration.add_argument("--predictions", type=Path, required=True)
-    calibration.add_argument("--condition", choices=["neutral", "conditional"], default="neutral")
+    calibration.add_argument("--condition", choices=["neutral", "conditional", "both"], default="neutral")
     calibration.add_argument("--output", type=Path, required=True)
+    opportunity = commands.add_parser("build-opportunity")
+    opportunity.add_argument("--bundle", type=Path, required=True)
+    opportunity.add_argument("--measurements", type=Path, required=True)
+    opportunity.add_argument("--output", type=Path, required=True)
+    reliability = commands.add_parser("build-goal-reliability")
+    for field in ("bundle", "predictions", "annotations", "pilot", "reviews", "grades", "output"):
+        reliability.add_argument(f"--{field}", type=Path, required=True)
+    native = commands.add_parser("native")
+    for field in ("config", "tasks", "output", "budget-directory", "upstream-root"):
+        native.add_argument(f"--{field}", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "verify":
         result = verify_bundle(args.directory)
+    elif args.command == "native":
+        from goalspec.infra_native_runner import run_native
+
+        result = run_native(args.config, args.tasks, args.output, args.budget_directory, args.upstream_root)
     elif args.command == "import-v5":
         from goalspec.infra_import_v5 import import_v5
 
@@ -97,10 +111,23 @@ def main(argv: list[str] | None = None) -> None:
         report, rows = replay_patterns(args.trajectories, args.bundle, args.memory)
         result = publish_bundle(args.output, {"report.json": report, "predictions.jsonl": rows}, parquet=True)
     elif args.command == "fit-calibration":
-        from goalspec.infra_calibration import fit_calibration
+        from goalspec.infra_calibration import fit_calibration, fit_paired_calibration
 
-        calibration, report, observations = fit_calibration(args.bundle, args.predictions, condition=args.condition)
+        if args.condition == "both":
+            calibration, report, observations = fit_paired_calibration(args.bundle, args.predictions)
+        else:
+            calibration, report, observations = fit_calibration(args.bundle, args.predictions, condition=args.condition)
         result = publish_bundle(args.output, {"calibration.json": calibration, "report.json": report, "joined-scores.jsonl": observations}, parquet=True)
+    elif args.command == "build-opportunity":
+        from goalspec.infra_admission import build_opportunity
+
+        artifact, report, observations = build_opportunity(args.bundle, args.measurements)
+        result = publish_bundle(args.output, {"opportunity.json": artifact, "report.json": report, "measurements.jsonl": observations}, parquet=True)
+    elif args.command == "build-goal-reliability":
+        from goalspec.infra_admission import build_goal_reliability
+
+        artifact, report, observations = build_goal_reliability(args.bundle, args.predictions, args.annotations, args.pilot, args.reviews, args.grades)
+        result = publish_bundle(args.output, {"goal-reliability.json": artifact, "report.json": report, "graded-goals.jsonl": observations}, parquet=True)
     elif args.command == "export":
         result = export_dataset(args.trajectories, args.metadata, args.split, args.output, parquet=args.parquet)
     elif args.command in {"split", "memory"}:

@@ -5,7 +5,7 @@ import json
 import pytest
 
 from goalspec.contracts_v1 import hash_v1
-from goalspec.infra_calibration import fit_calibration
+from goalspec.infra_calibration import fit_calibration, fit_paired_calibration
 from goalspec.infra_cli import main
 from goalspec.infra_data import publish_bundle
 
@@ -77,6 +77,20 @@ def test_wrong_public_hash_or_missing_result_rejected(tmp_path):
         fit_calibration(bundle, directory)
 
 
+@pytest.mark.parametrize("status", ["failed", "not_dispatched"])
+def test_failed_and_unstarted_rows_are_retained_without_fabricated_scores(tmp_path, status):
+    bundle, directory, predictions = fixture(tmp_path)
+    predictions[0] = {key: value for key, value in predictions[0].items() if key not in {"candidates", "neutral", "conditional"}}
+    predictions[0]["status"] = status
+    (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
+    (directory / "receipt.json").write_text(json.dumps({"declared": 4, "completed": 3, "failed": 1, "liveActorExecuted": False, "toolExecutionPerformed": False}), encoding="utf-8")
+    _, report, rows = fit_calibration(bundle, directory)
+    assert report["declaredCheckpoints"] == 4
+    assert report["failedCheckpoints"] == ["train-0"]
+    assert report["notDispatchedCheckpoints"] == (["train-0"] if status == "not_dispatched" else [])
+    assert len(rows) == 3 and all(row["checkpoint_id"] != "train-0" for row in rows)
+
+
 @pytest.mark.parametrize("defect", ["heldout", "cross_family"])
 def test_contamination_fails_closed(tmp_path, defect):
     bundle, directory, _ = fixture(tmp_path, **{defect: True})
@@ -116,3 +130,39 @@ def test_calibration_cli_emits_exclusive_artifact(tmp_path, capsys):
     with pytest.raises(FileExistsError):
         main(arguments)
     assert "bundle_hash" in capsys.readouterr().out
+
+
+def test_paired_calibration_fits_separate_conditions_and_binds_both_hashes(tmp_path):
+    bundle, directory, predictions = fixture(tmp_path)
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    manifest.pop("contentHash")
+    manifest["inferGoals"] = True
+    manifest["contentHash"] = hash_v1(manifest)
+    (directory / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    for row in predictions:
+        # No references would be invalid, so use the existing empty-source
+        # fixture's current user event as public evidence for the conditional run.
+        row["goals"] = {"schemaVersion": 1, "revisionHash": hash_v1({}), "unknown": 0,
+                        "hypotheses": [{"id": "goal", "objective": "Read documents", "probability": 1,
+                                        "constraints": [], "sources": [{"sourceId": "requirement:0", "path": []}]}]}
+        row["conditional"] = {"action": "READ", "scores": [{"candidateId": "candidate", "probability": .2}]}
+    public = [json.loads(line) for line in (bundle / "public.jsonl").read_text(encoding="utf-8").splitlines()]
+    labels = [json.loads(line) for line in (bundle / "labels.jsonl").read_text(encoding="utf-8").splitlines()]
+    for prefix, label, prediction in zip(public, labels, predictions, strict=True):
+        prefix["input"]["events"] = [{"kind": "message", "role": "user", "seq": 0, "content": "Read documents"}]
+        prefix["input_hash"] = hash_v1(prefix["input"])
+        label["input_hash"] = prediction["input_hash"] = prefix["input_hash"]
+    new_bundle = tmp_path / "conditional-bundle"
+    new_manifest = publish_bundle(new_bundle, {"public.jsonl": public, "labels.jsonl": labels})
+    manifest.pop("contentHash")
+    manifest["sourceDatasetHash"] = new_manifest["bundle_hash"]
+    manifest["contentHash"] = hash_v1(manifest)
+    (directory / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
+    artifact, report, joined = fit_paired_calibration(new_bundle, directory)
+    conditional = artifact["conditionalCalibration"]
+    assert conditional["bins"] != artifact["bins"]
+    assert conditional["provenance"]["condition"] == "conditional"
+    assert conditional["contentHash"] == hash_v1({key: value for key, value in conditional.items() if key != "contentHash"})
+    assert artifact["contentHash"] == hash_v1({key: value for key, value in artifact.items() if key != "contentHash"})
+    assert len(joined) == 8 and report["heldoutClaim"] is False

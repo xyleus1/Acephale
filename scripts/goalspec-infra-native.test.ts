@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -11,6 +11,8 @@ import { LocalChatModelPort } from "../src/lib/goalspec/infra-model";
 import type { InfraExperimentManifestV2 } from "../src/lib/goalspec/infra-manifest";
 import { buildMemoryArtifact } from "../src/lib/goalspec/experience-memory";
 import { NativeGateway } from "../services/goalspec-runtime/gateway-client";
+import { INFRA_PREDICTOR_CONTRACT_HASH } from "../services/goalspec-runtime/infra-predictors";
+import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-compiler-identity";
 import { buildInfraNativeWorkers, infraNativeToolsHash, loadInfraNativeConfiguration, runInfraNativeService,
   validateInfraNativeConfiguration, type InfraNativeArtifacts, type InfraNativeConfiguration } from "./goalspec-infra-native";
 
@@ -31,19 +33,26 @@ function speculative() {
   configuration.stage = "development";
   configuration.predictorBaseUrl = "http://localhost:8001";
   configuration.runs[0].familyId = "dev";
-  configuration.runs = (["base", "neutral_memory_prefetch", "goalspec"] as const).map(arm => ({ ...configuration.runs[0], arm, runId: `run:${arm}` }));
+  configuration.runs = (["base", "neutral_memory_prefetch", "goalspec"] as const).map(arm => ({ ...configuration.runs[0], arm, runId: `run-${arm}` }));
   artifacts.manifest.protocol.scheduleHash = hash(configuration.runs);
   artifacts.memory = buildMemoryArtifact({ repositorySnapshotId: configuration.snapshotId, sourceFiles: [], runs: [], episodes: [], misses: [] }, { profile: "v5" });
-  const calibration = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, fittingFamilies: ["train"], validationFamilies: ["dev"], bins: [{ upper: 1, probability: 0.5, count: 20 }] };
-  artifacts.calibration = { ...calibration, contentHash: hash(calibration) };
+  const provenance = { model: { repository: "fixture", revision: "a".repeat(40) }, memoryHash: artifacts.memory.contentHash,
+    predictorContractHash: "b".repeat(64), candidateCompilerHash: "c".repeat(64), condition: "neutral" };
+  const calibration = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, fittingFamilies: ["train"], validationFamilies: ["dev"], bins: [{ upper: 1, probability: 0.5, count: 20 }], provenance };
+  const conditional = { ...calibration, provenance: { ...provenance, condition: "conditional" } };
+  const paired = { ...calibration, conditionalCalibration: { ...conditional, contentHash: hash(conditional) } };
+  artifacts.calibration = { ...paired, contentHash: hash(paired) };
   artifacts.manifest.data.memoryHash = artifacts.memory.contentHash;
   artifacts.manifest.data.calibrationHash = artifacts.calibration.contentHash;
   const opportunity = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, families: ["dev"], sampleCount: 20,
     estimate: { toolMs: 0.2, actorLeadMs: 100, predictionMs: 3, schedulingMs: 1, validationMs: 1, contentionMs: 0 } };
   artifacts.opportunity = { ...opportunity, contentHash: hash(opportunity) };
   const z = 1.959963984540054, p = 18 / 20;
-  const audit = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, families: ["dev"], annotationHash: "c".repeat(64),
+  const audit = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, families: ["train"], annotationHash: "c".repeat(64),
     auditedCount: 20, acceptedCount: 18, unsupportedBindings: 0, gradedCount: 20, agreedCount: 18,
+    provenance: { model: { repository: artifacts.manifest.predictor.repository, revision: artifacts.manifest.predictor.revision },
+      memoryHash: artifacts.memory.contentHash, predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
+      candidateCompilerHash: infraCandidateCompilerHash("native") },
     reliability: (p + z * z / 40 - z * Math.sqrt(p * (1 - p) / 20 + z * z / 1600)) / (1 + z * z / 20) };
   artifacts.goalReliability = { ...audit, contentHash: hash(audit) };
   return { configuration, artifacts };
@@ -70,20 +79,37 @@ test("native speculative configuration requires measured matching artifacts", ()
   }
   const tampered = copy(artifacts); tampered.opportunity!.estimate.toolMs = 1000;
   assert.throws(() => validateInfraNativeConfiguration(configuration, tampered), /hash/);
+  const swapped = copy(artifacts);
+  const { contentHash: _hash, ...body } = swapped.calibration!;
+  const conditional = { ...body.conditionalCalibration!, fittingFamilies: ["dev"], validationFamilies: ["train"] };
+  const { contentHash: _conditionalHash, ...conditionalBody } = conditional;
+  const changed = { ...body, fittingFamilies: ["dev"], validationFamilies: ["train"],
+    conditionalCalibration: { ...conditionalBody, contentHash: hash(conditionalBody) } };
+  swapped.calibration = { ...changed, contentHash: hash(changed) };
+  swapped.manifest.data.calibrationHash = swapped.calibration.contentHash;
+  assert.throws(() => validateInfraNativeConfiguration(configuration, swapped), /contamination/);
 });
 
 test("goal conditioning cannot use unsupported or fabricated audit reliability", () => {
   const { configuration, artifacts } = speculative();
+  const provenance = artifacts.goalReliability!.provenance;
   delete artifacts.goalReliability;
   assert.throws(() => validateInfraNativeConfiguration(configuration, artifacts), /audited reliability/);
-  const reliability = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, families: ["dev"], annotationHash: "c".repeat(64),
-    auditedCount: 20, acceptedCount: 18, unsupportedBindings: 0, gradedCount: 20, agreedCount: 18, reliability: 0.9 };
+  const reliability = { version: 1 as const, sourceDatasetHash: artifacts.manifest.data.datasetHash, families: ["train"], annotationHash: "c".repeat(64),
+    auditedCount: 20, acceptedCount: 18, unsupportedBindings: 0, gradedCount: 20, agreedCount: 18, reliability: 0.9, provenance };
   artifacts.goalReliability = { ...reliability, contentHash: hash(reliability) };
   assert.throws(() => validateInfraNativeConfiguration(configuration, artifacts), /independent audit/);
   const z = 1.959963984540054, p = 18 / 20;
   reliability.reliability = (p + z * z / 40 - z * Math.sqrt(p * (1 - p) / 20 + z * z / 1600)) / (1 + z * z / 20);
   artifacts.goalReliability = { ...reliability, contentHash: hash(reliability) };
   validateInfraNativeConfiguration(configuration, artifacts);
+  const devReliability = { ...reliability, families: ["dev"] };
+  artifacts.goalReliability = { ...devReliability, contentHash: hash(devReliability) };
+  assert.throws(() => validateInfraNativeConfiguration(configuration, artifacts), /independent audit/);
+  artifacts.goalReliability = { ...reliability, provenance: { ...provenance!, memoryHash: "0".repeat(64) }, contentHash: "" };
+  const { contentHash: _, ...stale } = artifacts.goalReliability;
+  artifacts.goalReliability.contentHash = hash(stale);
+  assert.throws(() => validateInfraNativeConfiguration(configuration, artifacts), /frozen predictor and memory/);
 });
 
 test("heldout native execution refuses incomplete or mismatched paired blocks", () => {
@@ -111,17 +137,34 @@ test("loader verifies canonical budget checkpoint and rejects modified manifests
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("credential-bearing model URLs fail before creating any service artifact", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "infra-native-url-"));
+  try {
+    const { configuration, artifacts } = configured();
+    await writeFile(join(directory, "manifest.json"), JSON.stringify(artifacts.manifest));
+    await writeFile(join(directory, "checkpoint.json"), JSON.stringify({ fixture: true }));
+    for (const field of ["actorBaseUrl", "predictorBaseUrl"] as const) {
+      const unsafe = { ...configuration, [field]: "http://user:secret@localhost:8000" };
+      await writeFile(join(directory, "config.json"), JSON.stringify(unsafe));
+      await assert.rejects(runInfraNativeService(join(directory, "config.json"), join(directory, "output"),
+        { gatewayUrl: "http://127.0.0.1:1", gatewayToken: "x".repeat(32) }), /credential-free/);
+      await assert.rejects(stat(join(directory, "output")), /ENOENT/);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("native service runs a real loopback gateway decision and clean close without provider calls", async () => {
   const directory = await mkdtemp(join(tmpdir(), "goalspec-infra-native-service-"));
   const { configuration, artifacts } = configured();
-  let next = 0;
+  let next = 0, ready = false;
   const responses: Record<string, unknown>[] = [];
   const server = createServer((req, res) => {
     let raw = ""; req.on("data", chunk => { raw += chunk; });
     req.on("end", () => {
       const body = JSON.parse(raw || "{}"); res.setHeader("content-type", "application/json");
-      if (["/next", "/respond", "/status"].includes(req.url ?? "") && req.headers.authorization !== `Bearer ${"x".repeat(32)}`) { res.statusCode = 401; res.end("{}"); return; }
-      if (req.url === "/tokenize") res.end(JSON.stringify({ count: 8, max_model_len: 32768, tokens: Array(8).fill(1) }));
+      if (["/next", "/respond", "/status", "/ready"].includes(req.url ?? "") && req.headers.authorization !== `Bearer ${"x".repeat(32)}`) { res.statusCode = 401; res.end("{}"); return; }
+      if (req.url === "/ready") { assert.equal(body.manifestHash, hash(configuration)); assert.equal(body.experimentManifestHash, hash(artifacts.manifest)); ready = true; res.end('{"ready":true}'); }
+      else if (req.url === "/tokenize") { assert.equal(ready, true); res.end(JSON.stringify({ count: 8, max_model_len: 32768, tokens: Array(8).fill(1) })); }
       else if (req.url === "/v1/chat/completions") res.end(JSON.stringify({ model: "actor", choices: [{ index: 0,
         message: { role: "assistant", content: "done" }, finish_reason: "stop" }], usage: { prompt_tokens: 8, completion_tokens: 1, total_tokens: 9 } }));
       else if (req.url === "/next") res.end(JSON.stringify(next++ === 0 ? { runId: "run", boundaryId: "first", public: {
@@ -142,6 +185,7 @@ test("native service runs a real loopback gateway decision and clean close witho
     const output = join(directory, "output");
     const result = await runInfraNativeService(join(directory, "config.json"), output, { gatewayUrl: url, gatewayToken: "x".repeat(32) });
     assert.deepEqual(result, { decisions: 2, aborted: false });
+    assert.equal(ready, true);
     assert.equal(responses.length, 2);
     assert.equal((responses[0].response as Record<string, unknown>).content, "done");
     const trace = (await readFile(join(output, "public-boundaries.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));

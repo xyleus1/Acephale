@@ -11,6 +11,9 @@ test("public replay reconstructs only current sources and rejects changed or fut
   const frame = publicInfraFrame(row, "snapshot");
   assert.equal(frame.requestedObjective, "Find my order"); assert.equal(frame.scope.tenantId, "tenant"); assert.equal(frame.goals.unknown, 1);
   assert.equal(frame.sources["requirement:0"], "Find my order"); assert.equal(frame.sources["event:0"], "Find my order");
+  const capturedSchemaHash = hash({ capturedOpenAITools: [] });
+  assert.equal(publicInfraFrame({ ...row, runtime_tool_schema_hash: capturedSchemaHash }, "snapshot").scope.toolSchemaHash, capturedSchemaHash);
+  assert.throws(() => publicInfraFrame({ ...row, runtime_tool_schema_hash: "not-a-hash" }, "snapshot"), /provenance/);
   assert.throws(() => publicInfraFrame({ ...row, input_hash: "0".repeat(64) }, "snapshot"), /provenance/);
   const future = { ...input, events: [{ ...input.events[0], seq: 1 }] };
   assert.throws(() => publicInfraFrame({ ...row, input: future, input_hash: hash(future) }, "snapshot"), /provenance/);

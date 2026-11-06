@@ -1,3 +1,30 @@
+## 2026-11-06: Complete fresh collection plumbing and allow AWS preparation
+
+- The founder explicitly requested AWS as an alternative to Lambda and authorized
+  preparing a new company AWS account. This supersedes the earlier non-AWS-only
+  provider preference, not the fixed actor, model pins, research isolation or
+  spending limits. Cloud credit eligibility is distinct from an awarded balance.
+  No equity, SAFE or investment-for-credit agreement is authorized.
+- Preserve the original $500 study ledger and all unknown reservations. The
+  $35 infrastructure allocation, $1.25 gross hourly limit, 24 cumulative GPU-hours,
+  eight-hour session limit and protected contingency remain unchanged. Credits do
+  not silently raise gross reservation caps. AWS lifecycle operations need their
+  own implementation and verification; the Lambda controller cannot manage EC2.
+- Native preparation freezes unchanged official task bytes, declared family
+  partitions, a clean source revision, measured deployment identity and the
+  original ledger checkpoint. The new Python launcher owns the authenticated
+  gateway and keeps the hosted user simulator and independent judge fixed.
+- Fresh native and document exports retain all failures and unknown outcomes.
+  Only independently verified successful training episodes enter workflow memory.
+  Public prefixes, future labels, grading evidence and raw costs remain separate.
+- Fit neutral and conditional probability maps separately under one artifact hash.
+  Reject fitting/validation partition swaps and stale model, compiler, prompt,
+  dataset or memory identities. Goal reliability requires independent training
+  grades and the declared human audit. No missing measured cost becomes zero.
+- This phase collects traces and fits memory/calibration. It does not fine-tune
+  actor weights or establish live task-success or latency improvements. Production
+  activation remains off until the declared live evaluation has been completed.
+
 ## 2026-11-05: Fixed-model GoalSpec infrastructure profile
 
 - Change tool execution infrastructure with a fixed Qwen3.5-9B actor and a separate

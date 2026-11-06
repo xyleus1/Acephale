@@ -14,7 +14,7 @@ export interface AnnotationSourceRow {
   checkpoint_id: string; input_hash: string; request_revision: string;
   input: { policy: string; tools: unknown[]; events: unknown[]; sources: Source[] };
 }
-interface PublicRow extends AnnotationSourceRow { schema_version: string; episode_id: string; family_id: string; split: string }
+export interface AnnotationPublicRow extends AnnotationSourceRow { schema_version: string; episode_id: string; family_id: string; split: string }
 interface Metadata { episode_id: string; family_id: string; verification_tier: string; [key: string]: unknown }
 interface Split { schema_version: string; families: Record<string, string>; episodes: Record<string, string>; metadata_hash: string }
 interface Declaration {
@@ -22,6 +22,8 @@ interface Declaration {
   checkpoints: { checkpoint_id: string; input_hash: string }[];
   audit: { checkpoint_id: string; reason: string }[];
   source_dataset_hash?: string; source_split_hash?: string;
+  expansion?: { originalPilotBundleHash: string; predictionManifestHash: string;
+    originalCount: number; addedCount: number; auditMembershipUnchanged: boolean };
 }
 
 function verifiedManifest(directory: string, required: string[]): Manifest {
@@ -38,15 +40,9 @@ function verifiedManifest(directory: string, required: string[]): Manifest {
 }
 
 /** No evaluator results or future action labels are returned to the teacher. */
-export function verifyInfraAnnotationSource(pilotDirectory: string, datasetDirectory = pilotDirectory) {
-  const manifest = verifiedManifest(pilotDirectory, ["pilot.json", "annotation-inputs.jsonl"]);
+export function verifyInfraPublicDataset(datasetDirectory: string) {
   const dataset = verifiedManifest(datasetDirectory, ["public.jsonl", "split.json", "metadata.jsonl"]);
-  const declaration = json(join(pilotDirectory, "pilot.json")) as Declaration;
   const split = json(join(datasetDirectory, "split.json")) as Split;
-  const splitHash = hash(split);
-  const separate = resolve(pilotDirectory) !== resolve(datasetDirectory);
-  if ((separate || declaration.source_dataset_hash !== undefined) && declaration.source_dataset_hash !== dataset.bundle_hash
-    || (separate || declaration.source_split_hash !== undefined) && declaration.source_split_hash !== splitHash) throw new Error("Pilot source dataset or split binding mismatch");
   const metadata = jsonl(join(datasetDirectory, "metadata.jsonl")) as Metadata[];
   const episodes = new Map(metadata.map(row => [row.episode_id, row]));
   if (split.schema_version !== VERSION || !split.episodes || !split.families || episodes.size !== metadata.length
@@ -55,15 +51,34 @@ export function verifyInfraAnnotationSource(pilotDirectory: string, datasetDirec
     || canonical(split.episodes) !== canonical(Object.fromEntries(metadata.map(row => [row.episode_id, row.family_id])))
     || canonical(Object.keys(split.families).sort()) !== canonical([...new Set(metadata.map(row => row.family_id))].sort())
     || Object.values(split.families).some(value => !["train", "development", "test"].includes(value))) throw new Error("Annotation family split or metadata changed");
-  const publicRows = jsonl(join(datasetDirectory, "public.jsonl")) as PublicRow[];
+  const publicRows = jsonl(join(datasetDirectory, "public.jsonl")) as AnnotationPublicRow[];
   const publicById = new Map(publicRows.map(row => [row.checkpoint_id, row]));
   if (publicById.size !== publicRows.length || publicRows.some(row => row.schema_version !== VERSION
     || !row.checkpoint_id || row.input_hash !== hash(row.input) || !row.request_revision
     || episodes.get(row.episode_id)?.family_id !== row.family_id || split.families[row.family_id] !== row.split)) throw new Error("Public prefix hash or split mismatch");
+  return { manifest: dataset, split, metadata, episodes, publicRows, publicById };
+}
+
+export function verifyInfraAnnotationSource(pilotDirectory: string, datasetDirectory = pilotDirectory) {
+  const manifest = verifiedManifest(pilotDirectory, ["pilot.json", "annotation-inputs.jsonl"]);
+  const { manifest: dataset, split, episodes, publicById } = verifyInfraPublicDataset(datasetDirectory);
+  const declaration = json(join(pilotDirectory, "pilot.json")) as Declaration;
+  const splitHash = hash(split);
+  const separate = resolve(pilotDirectory) !== resolve(datasetDirectory);
+  if ((separate || declaration.source_dataset_hash !== undefined) && declaration.source_dataset_hash !== dataset.bundle_hash
+    || (separate || declaration.source_split_hash !== undefined) && declaration.source_split_hash !== splitHash) throw new Error("Pilot source dataset or split binding mismatch");
   const rows = jsonl(join(pilotDirectory, "annotation-inputs.jsonl")) as AnnotationSourceRow[];
-  if (declaration.schema_version !== VERSION || !rows.length || rows.length > 100 || rows.length !== declaration.pilot_count
+  // Expanded replay coverage may exceed the original 100-row pilot. The
+  // dispatcher still enforces the unchanged five-dollar annotation cap.
+  if (declaration.schema_version !== VERSION || !rows.length || rows.length > 1000 || rows.length !== declaration.pilot_count
     || canonical(rows.map(row => ({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash }))) !== canonical(declaration.checkpoints)
     || new Set(rows.map(row => row.checkpoint_id)).size !== rows.length) throw new Error("Annotation cohort declaration mismatch");
+  if (rows.length > 100 && (!declaration.expansion || declaration.expansion.auditMembershipUnchanged !== true
+    || !/^[a-f0-9]{64}$/.test(declaration.expansion.originalPilotBundleHash)
+    || !/^[a-f0-9]{64}$/.test(declaration.expansion.predictionManifestHash)
+    || !Number.isSafeInteger(declaration.expansion.originalCount) || declaration.expansion.originalCount < 1 || declaration.expansion.originalCount > 100
+    || !Number.isSafeInteger(declaration.expansion.addedCount) || declaration.expansion.addedCount < 1
+    || declaration.expansion.originalCount + declaration.expansion.addedCount !== rows.length)) throw new Error("More than 100 annotations require an explicit expanded replay cohort");
   for (const row of rows) {
     const original = publicById.get(row.checkpoint_id);
     if (!original || original.split !== "train") throw new Error("Annotation checkpoint must belong to a declared training family");

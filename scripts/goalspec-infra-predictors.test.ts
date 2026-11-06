@@ -5,7 +5,7 @@ import type { Candidate, ExecutionFrame, GoalSet } from "../src/lib/goalspec/con
 import { LocalChatModelPort } from "../src/lib/goalspec/infra-model";
 import { buildMemoryArtifact, type MemoryEpisode, type MemoryRun } from "../src/lib/goalspec/experience-memory";
 import { compileInfraWorkflows } from "../src/lib/goalspec/infra-workflows";
-import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/goalspec-runtime/infra-predictors";
+import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH, validateInfraCalibration } from "../services/goalspec-runtime/infra-predictors";
 import { prepareInfraPredictorInput } from "../services/goalspec-runtime/infra-predictor-input";
 import { INFRA_MODEL_PINS } from "../src/lib/goalspec/infra-manifest";
 
@@ -83,6 +83,29 @@ test("calibrated execution rejects stale compiler, model, prompt and memory iden
     assert.throws(() => new InfraLocalPredictors(fake.port, { ...options, calibration: { ...changed, contentHash: hash(changed) } }), /not bound/);
   }
   assert.equal(fake.requests.length, 0);
+});
+
+test("neutral and conditional predictions use independently fitted bins and reject absent or stale pairs before dispatch", async () => {
+  const library = memory(), compilerHash = hash("current candidate compiler");
+  const body = { version: 1 as const, fittingFamilies: ["train"], validationFamilies: ["dev"], sourceDatasetHash: hash("dataset"),
+    bins: [{ upper: 1, probability: 0.2, count: 10 }], provenance: { model: INFRA_MODEL_PINS.predictor,
+      memoryHash: library.contentHash, condition: "neutral", predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash: compilerHash } };
+  const conditionalBody = { ...body, bins: [{ upper: 1, probability: 0.7, count: 10 }], provenance: { ...body.provenance, condition: "conditional" } };
+  const pairedBody = { ...body, conditionalCalibration: { ...conditionalBody, contentHash: hash(conditionalBody) } };
+  const calibration = { ...pairedBody, contentHash: hash(pairedBody) };
+  const fake = model({ action: "READ", scores: [{ candidateId: "candidate-order", probability: 0.9 }] });
+  const options = { calibration, memory: library, expectedCandidateCompilerHash: compilerHash };
+  const current = frame(), signal = new AbortController().signal;
+  const goals: GoalSet = { schemaVersion: 1, revisionHash: hash({}), unknown: 0, hypotheses: [{ id: "goal", objective: "Find order", probability: 1,
+    sources: [{ sourceId: "requirement:1", path: [] }], constraints: [] }] };
+  const predictor = new InfraLocalPredictors(fake.port, options);
+  assert.equal((await predictor.rank(current, [candidate()], current.goals, signal)).scores[0].probability, 0.2);
+  assert.equal((await predictor.rank(current, [candidate()], goals, signal)).scores[0].probability, 0.7);
+  await assert.rejects(new InfraLocalPredictors(fake.port, { ...options, calibration: { ...body, contentHash: hash(body) } }).rank(current, [candidate()], goals, signal), /separate conditional/);
+  assert.equal(fake.requests.length, 2);
+  const staleBody = { ...conditionalBody, provenance: { ...conditionalBody.provenance, memoryHash: hash("other memory") } };
+  const stalePair = { ...body, conditionalCalibration: { ...staleBody, contentHash: hash(staleBody) } };
+  assert.throws(() => validateInfraCalibration({ ...stalePair, contentHash: hash(stalePair) }), /same frozen replay/);
 });
 
 test("predictor drops oversized old evidence and memory while preserving policy, requirements, candidate IDs and exact binding paths", async () => {

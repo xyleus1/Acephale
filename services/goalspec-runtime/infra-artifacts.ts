@@ -9,8 +9,14 @@ export interface InfraGoalReliabilityArtifact {
   version: 1; sourceDatasetHash: string; families: string[]; annotationHash: string;
   auditedCount: number; acceptedCount: number; unsupportedBindings: number;
   gradedCount: number; agreedCount: number; reliability: number; contentHash: string;
+  provenance?: { model: { repository: string; revision: string }; memoryHash: string;
+    predictorContractHash: string; candidateCompilerHash: string; [key: string]: unknown };
 }
-export interface InfraArtifactScope { datasetHash: string; allowedFamilies: string[]; excludedFamilies?: string[] }
+export interface InfraArtifactScope {
+  datasetHash: string; allowedFamilies: string[]; excludedFamilies?: string[];
+  predictor?: { model: { repository: string; revision: string }; memoryHash: string;
+    predictorContractHash: string; candidateCompilerHash: string };
+}
 export function checkedArtifact<T extends { contentHash: string }>(value: T): T {
   if (!value || typeof value !== "object") throw new Error("Missing experiment artifact");
   const { contentHash, ...body } = value;
@@ -46,6 +52,13 @@ export function validateInfraGoalReliabilityArtifact(value: InfraGoalReliability
     || !Number.isSafeInteger(artifact.agreedCount) || artifact.agreedCount < 0 || artifact.agreedCount > artifact.gradedCount
     || !Number.isFinite(artifact.reliability) || Math.abs(artifact.reliability - wilsonLower(artifact.agreedCount, artifact.gradedCount)) > 1e-12) {
     throw new Error("Goal reliability lacks a valid independent audit/calibration");
+  }
+  if (scope.predictor && (!artifact.provenance
+    || hash(artifact.provenance.model) !== hash(scope.predictor.model)
+    || artifact.provenance.memoryHash !== scope.predictor.memoryHash
+    || artifact.provenance.predictorContractHash !== scope.predictor.predictorContractHash
+    || artifact.provenance.candidateCompilerHash !== scope.predictor.candidateCompilerHash)) {
+    throw new Error("Goal reliability is not bound to this frozen predictor and memory");
   }
   return artifact;
 }

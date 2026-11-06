@@ -12,10 +12,30 @@ from typing import Any, Literal
 from jsonschema import Draft202012Validator
 
 from goalspec.contracts_v1 import hash_v1
+from goalspec.infra_admission import validate_predicted_goals
 from goalspec.infra_data import read_jsonl, verify_bundle
 from goalspec.storage import file_hash
 
 BOUNDS = tuple(index / 10 for index in range(1, 11))
+
+
+def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    """Keep the two independently fitted maps under one experiment artifact hash."""
+    neutral, neutral_report, neutral_rows = fit_calibration(bundle_directory, prediction_directory)
+    conditional, conditional_report, conditional_rows = fit_calibration(bundle_directory, prediction_directory, condition="conditional")
+    for field in ("fittingFamilies", "validationFamilies", "sourceDatasetHash"):
+        if neutral[field] != conditional[field]:
+            raise ValueError("Paired calibration needs the same fitting and validation families")
+    for field in ("model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "predictionManifestHash", "predictionRowsHash"):
+        if neutral["provenance"][field] != conditional["provenance"][field]:
+            raise ValueError("Replay changed between calibration conditions")
+    body = {key: value for key, value in neutral.items() if key != "contentHash"}
+    body["conditionalCalibration"] = conditional
+    artifact = {**body, "contentHash": hash_v1(body)}
+    report = {"version": "goalspec-infra-paired-calibration-report-v1", "calibrationHash": artifact["contentHash"],
+              "neutral": neutral_report, "conditional": conditional_report, "heldoutClaim": False}
+    rows = [{**row, "condition": condition} for condition, records in (("neutral", neutral_rows), ("conditional", conditional_rows)) for row in records]
+    return artifact, report, rows
 
 
 def _digest(value: Any) -> bool:
@@ -69,7 +89,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         raise ValueError("Prediction cohort is not closed or receipt differs")
     family_partitions: dict[str, set[str]] = defaultdict(set)
     joined = []
-    failures, empty = [], []
+    failures, not_dispatched, empty, unknown_goals, unobserved_actions = [], [], [], [], []
     for row in predictions:
         key = row["checkpoint_id"]
         if key not in public:
@@ -80,11 +100,21 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         if row.get("family_id") != prefix["family_id"] or row.get("split") != prefix["split"] or prefix["split"] not in {"train", "development"}:
             raise ValueError("Family mismatch or held-out contamination")
         family_partitions[prefix["family_id"]].add(prefix["split"])
-        if row.get("status") == "failed":
+        if label.get("status") == "no_returned_actor_response":
+            unobserved_actions.append(key)
+            continue
+        if row.get("status") in {"failed", "not_dispatched"}:
             failures.append(key)
+            if row["status"] == "not_dispatched":
+                not_dispatched.append(key)
             continue
         if row.get("status") != "completed":
             raise ValueError("Unknown prediction status")
+        if condition == "conditional":
+            validate_predicted_goals(row.get("goals", {}), prefix)
+            if not row["goals"]["hypotheses"]:
+                unknown_goals.append(key)
+                continue
         raw = row.get(condition)
         if not isinstance(raw, dict) or raw.get("action") not in {"READ", "NO_READ", "READ_UNCOVERED"} or not isinstance(raw.get("scores"), list) or len(raw["scores"]) > 3:
             raise ValueError("Missing or invalid raw predictor output")
@@ -92,7 +122,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         candidates = {candidate["id"]: candidate for candidate in candidates_list}
         if len(candidates) != len(candidates_list) or len(candidates) > 128:
             raise ValueError("Invalid candidate universe")
-        expected_scope = {"tenantId": prefix["scope"]["tenant_id"], "principalId": prefix["scope"]["principal_id"], "authorizationVersion": prefix["scope"]["authorization_revision"], "environmentVersion": prefix["environment_version"], "toolSchemaHash": prefix["tool_schema_hash"]}
+        expected_scope = {"tenantId": prefix["scope"]["tenant_id"], "principalId": prefix["scope"]["principal_id"], "authorizationVersion": prefix["scope"]["authorization_revision"], "environmentVersion": prefix["environment_version"], "toolSchemaHash": prefix.get("runtime_tool_schema_hash", prefix["tool_schema_hash"])}
         tools = {tool["name"]: tool for tool in prefix["input"]["tools"]}
         invocation_ids = set()
         for candidate in candidates_list:
@@ -156,7 +186,9 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
     report = {
         "version": "goalspec-infra-calibration-report-v1", "condition": condition,
         "calibrationHash": calibration["contentHash"], "declaredCheckpoints": len(predictions),
-        "failedCheckpoints": failures, "completedWithoutCandidateScores": empty,
+        "failedCheckpoints": failures, "notDispatchedCheckpoints": not_dispatched, "completedWithoutCandidateScores": empty,
+        "unknownOnlyGoalsExcluded": unknown_goals,
+        "unobservedActorActionsExcluded": unobserved_actions,
         "fit": {field: _metrics(fitting, field) for field in ("raw_probability", "calibrated_probability", "runtime_probability")},
         "development": {field: _metrics(validation, field) for field in ("raw_probability", "calibrated_probability", "runtime_probability")},
         "calibrationBins": bins, "validationUsedForFit": False, "heldoutClaim": False,

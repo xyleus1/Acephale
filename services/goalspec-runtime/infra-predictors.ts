@@ -24,10 +24,12 @@ export const INFRA_PREDICTOR_CONTRACT_HASH = hash({ compilerVersion: INFRA_PREDI
 export interface InfraProbabilityCalibration {
   version: 1; fittingFamilies: string[]; validationFamilies: string[]; sourceDatasetHash: string;
   bins: { upper: number; probability: number; count: number }[]; contentHash: string;
+  conditionalCalibration?: InfraProbabilityCalibration;
   provenance?: { model: { repository: string; revision: string }; memoryHash: string; condition: string;
     predictorContractHash: string; candidateCompilerHash: string; [key: string]: unknown };
 }
 export function validateInfraCalibration(value: InfraProbabilityCalibration) {
+  if (!value || typeof value !== "object") throw new Error("Invalid probability calibration provenance");
   const { contentHash, ...body } = value;
   if (value.version !== 1 || hash(body) !== contentHash || !/^[a-f0-9]{64}$/.test(value.sourceDatasetHash)
     || !value.fittingFamilies.length || !value.validationFamilies.length
@@ -39,6 +41,20 @@ export function validateInfraCalibration(value: InfraProbabilityCalibration) {
       || !Number.isFinite(bin.probability) || bin.probability < 0 || bin.probability > 1
       || !Number.isSafeInteger(bin.count) || bin.count < 1) throw new Error("Invalid probability calibration bin");
     last = bin.upper;
+  }
+  if (value.conditionalCalibration) {
+    const conditional = value.conditionalCalibration;
+    if (conditional.conditionalCalibration) throw new Error("Nested conditional calibration is invalid");
+    validateInfraCalibration(conditional);
+    const neutralProvenance = value.provenance, conditionalProvenance = conditional.provenance;
+    if (neutralProvenance?.condition !== "neutral" || conditionalProvenance?.condition !== "conditional"
+      || conditional.sourceDatasetHash !== value.sourceDatasetHash
+      || hash([...conditional.fittingFamilies].sort()) !== hash([...value.fittingFamilies].sort())
+      || hash([...conditional.validationFamilies].sort()) !== hash([...value.validationFamilies].sort())
+      || ["model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "predictionManifestHash", "predictionRowsHash"]
+        .some(key => hash(neutralProvenance[key] ?? null) !== hash(conditionalProvenance[key] ?? null))) {
+      throw new Error("Conditional calibration is not bound to the same frozen replay");
+    }
   }
   return copy(value);
 }
@@ -102,11 +118,15 @@ export class InfraLocalPredictors {
   }
   async rank(frame: ExecutionFrame, candidates: Candidate[], goals: GoalSet, signal: AbortSignal): Promise<InfraDecision> {
     if (!this.calibration) throw new Error("Uncalibrated replay predictions cannot enter execution admission");
+    const condition = goals.hypotheses.length ? "conditional" : "neutral";
+    const calibration = condition === "conditional" ? this.calibration.conditionalCalibration : this.calibration;
+    if (!calibration) throw new Error("Goal-conditioned execution requires separate conditional calibration");
     const raw = await this.rawRank(frame, candidates, goals, signal);
-    const mapped = raw.scores.map(score => ({ ...score, probability: this.calibration!.bins.find(bin => score.probability <= bin.upper)!.probability }));
+    const mapped = raw.scores.map(score => ({ ...score, probability: calibration.bins.find(bin => score.probability <= bin.upper)!.probability }));
     const total = mapped.reduce((sum, score) => sum + score.probability, 0);
     const scores = mapped.map(score => ({ ...score, probability: score.probability / Math.max(1, total) }));
-    this.options.record?.({ type: "infra_predictor_calibration", calibrationHash: this.calibration.contentHash, raw, calibrated: scores });
+    this.options.record?.({ type: "infra_predictor_calibration", calibrationHash: this.calibration.contentHash,
+      conditionCalibrationHash: calibration.contentHash, condition, raw, calibrated: scores });
     return { action: raw.action, scores };
   }
 }

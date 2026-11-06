@@ -71,6 +71,7 @@ jobs:
         working-directory: .
         env:
           DATABASE_URL: postgresql://fixture@127.0.0.1/goalspec_ci
+      - run: uv sync --frozen --extra analysis --group dev
       - run: npm run goalspec:check && npm run test:goalspec && npm run test:goalspec-v5 && npm run test:goalspec-infra
         working-directory: .
       - run: |
@@ -82,9 +83,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://goalspec_owner:fixture@127.0.0.1:5432/goalspec_ci
           GOALSPEC_TEST_DATABASE_URL: postgresql://goalspec_owner:fixture@127.0.0.1:5432/goalspec_ci
-      - run: uv sync --frozen --extra analysis --group dev
       - run: uv run --frozen --extra analysis pytest
-      - run: python infra/goalspec-infra-v1/test_control.py
+      - run: python -m unittest discover -s infra/goalspec-infra-v1 -p 'test_*.py' -v
         working-directory: .
       - run: uv run --frozen --extra analysis goalspec demo --output runs/ci-demo --groups 10 --bootstrap-samples 100
       - run: uv run --frozen --extra analysis ruff check src tests

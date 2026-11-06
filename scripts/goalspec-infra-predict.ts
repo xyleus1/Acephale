@@ -12,10 +12,16 @@ import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-c
 import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/goalspec-runtime/infra-predictors";
 import { NativeReadPolicy } from "../services/goalspec-runtime/native-read-policy";
 import { verifyInfraPilotBundle } from "./goalspec-infra-memory";
+import { documentPublicInput, verifyDocumentBundle } from "./goalspec-infra-document-data";
+import { documentFrame } from "../services/goalspec-runtime/infra-document-runner";
+import { DOCUMENT_TOOLS, documentCandidates } from "../services/goalspec-runtime/document-adapter";
+import type { PublicBoundary } from "../services/goalspec-runtime/actor";
 
 interface PublicRow {
   checkpoint_id: string; input_hash: string; episode_id: string; family_id: string; split: string; domain: string; through_seq: number;
-  environment_version: string; tool_schema_hash: string;
+  environment_version: string; tool_schema_hash: string; runtime_tool_schema_hash?: string;
+  checkpoint_number?: number;
+  document_boundary?: PublicBoundary;
   scope: { tenant_id: string; principal_id: string; authorization_revision: string };
   input: { policy: string; sources: { id: string; kind: string; value: Json }[];
     events: { kind: string; seq: number; role?: string; content?: string; tool?: string; status?: string; [key: string]: unknown }[];
@@ -39,7 +45,18 @@ export function selectInfraReplayRows<T extends { split: string; family_id: stri
   return selected;
 }
 export function publicInfraFrame(row: PublicRow, snapshotId: string): ExecutionFrame {
+  if (row.domain === "documents") {
+    if (hash(row.input) !== row.input_hash || !["train", "development"].includes(row.split) || !row.document_boundary
+      || !Number.isSafeInteger(row.checkpoint_number) || row.checkpoint_number! < 0
+      || hash(row.document_boundary.tools) !== hash(DOCUMENT_TOOLS) || row.runtime_tool_schema_hash !== hash(DOCUMENT_TOOLS)) throw new Error("Invalid document replay provenance");
+    const frame = documentFrame(row.document_boundary, `replay:${row.episode_id}`, row.checkpoint_number!, {
+      tenantId: row.scope.tenant_id, principalId: row.scope.principal_id, authorizationVersion: row.scope.authorization_revision,
+      environmentVersion: row.environment_version, toolSchemaHash: row.runtime_tool_schema_hash }, snapshotId);
+    if (hash(documentPublicInput(row.document_boundary, frame)) !== row.input_hash) throw new Error("Document replay prefix differs from declared public input");
+    validateContract("ExecutionFrame", frame); return frame;
+  }
   if (hash(row.input) !== row.input_hash || !["train", "development", "test"].includes(row.split)
+    || row.runtime_tool_schema_hash !== undefined && !/^[a-f0-9]{64}$/.test(row.runtime_tool_schema_hash)
     || !["retail", "airline"].includes(row.domain) || !Array.isArray(row.input.sources) || row.input.events.some(event => event.seq > row.through_seq)) throw new Error("Invalid public checkpoint provenance");
   const sources: Record<string, Json> = Object.fromEntries(row.input.sources.map(source => [source.id, copy(source.value)]));
   const requirements = row.input.events.filter(event => event.kind === "message" && event.role === "user" && typeof event.content === "string");
@@ -52,18 +69,21 @@ export function publicInfraFrame(row: PublicRow, snapshotId: string): ExecutionF
   sources._signatures = row.input.events.filter(event => event.kind === "tool_result").map(event => `${event.tool}:${event.status}`);
   const frame: ExecutionFrame = { schemaVersion: 1, runId: `replay:${row.episode_id}`, boundary: row.through_seq + 1,
     scope: { tenantId: row.scope.tenant_id, principalId: row.scope.principal_id, authorizationVersion: row.scope.authorization_revision,
-      environmentVersion: row.environment_version, toolSchemaHash: row.tool_schema_hash }, snapshotId,
+      environmentVersion: row.environment_version, toolSchemaHash: row.runtime_tool_schema_hash ?? row.tool_schema_hash }, snapshotId,
     requestedObjective: requirements.map(event => event.content).join("\n") || "No requested objective is visible at this checkpoint.",
     policy: row.input.policy, sources, goals: { schemaVersion: 1, hypotheses: [], unknown: 1, revisionHash: hash({}) } };
   validateContract("ExecutionFrame", frame); return frame;
 }
 export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean }) {
-  const pilot = verifyInfraPilotBundle(input.bundle);
+  const inventory = JSON.parse(await readFile(join(input.bundle, "manifest.json"), "utf8"));
+  const documents = !!inventory.files?.["document-lineage.json"];
+  const pilot = documents ? verifyDocumentBundle(input.bundle) : verifyInfraPilotBundle(input.bundle);
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 1000) throw new Error("Invalid replay bound");
   const memory = validateMemoryArtifact(JSON.parse(await readFile(input.memory, "utf8")));
   const rows = selectInfraReplayRows((await readFile(join(input.bundle, "public.jsonl"), "utf8")).split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line) as PublicRow), input.limit);
   const output = resolve(input.output); await mkdir(output, { recursive: false });
-  const candidateCompilerHash = infraCandidateCompilerHash("native");
+  if (documents && memory.repositorySnapshotId !== `infra-documents:${pilot.manifest.bundle_hash}`) throw new Error("Document memory belongs to another dataset");
+  const candidateCompilerHash = infraCandidateCompilerHash(documents ? "documents" : "native");
   const lineage = { version: 1, kind: "uncalibrated_prediction_replay", model: INFRA_MODEL_PINS.predictor, memoryHash: memory.contentHash,
     predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash,
     sourceDatasetHash: pilot.manifest.bundle_hash, limit: input.limit, selection: "family-partition-round-robin-v1", inferGoals: input.inferGoals, rowIds: rows.map(row => row.checkpoint_id), executionAllowed: false };
@@ -72,12 +92,12 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   let completed = 0;
   const lifetime = AbortSignal.timeout(2 * 3600 * 1000);
   for (const row of rows) {
+    const expiredBeforeRow = lifetime.aborted;
     try {
     lifetime.throwIfAborted();
     const frame = publicInfraFrame(row, memory.repositorySnapshotId), tools = Object.fromEntries(row.input.tools.map(tool => [tool.name, tool.parameters]));
-    const reads = new NativeReadPolicy(row.domain as "retail" | "airline", frame.scope); reads.updateFrame(frame);
-    const pool = createInfraNativeCandidates(memory, tools, invocation => reads.eligible(invocation), { excludeFamilies: [row.family_id], allowedFamilies: pilot.expected });
-    const candidates = pool.candidates(frame);
+    const reads = documents ? null : new NativeReadPolicy(row.domain as "retail" | "airline", frame.scope); reads?.updateFrame(frame);
+    const candidates = documents ? documentCandidates(frame) : createInfraNativeCandidates(memory, tools, invocation => reads!.eligible(invocation), { excludeFamilies: [row.family_id], allowedFamilies: pilot.expected }).candidates(frame);
     const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: pilot.expected, excludeFamilies: [row.family_id] });
     const signal = AbortSignal.any([lifetime, AbortSignal.timeout(120000)]);
       const goals: GoalSet = input.inferGoals ? await predictor.inferGoals(frame, signal) : frame.goals;
@@ -87,7 +107,7 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
         split: row.split, candidates, goals, neutral, conditional, status: "completed" }) + "\n"); completed++;
     } catch (error) {
       await appendFile(join(output, "predictions.jsonl"), canonical({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash, family_id: row.family_id,
-        split: row.split, status: lifetime.aborted ? "not_dispatched" : "failed", errorType: error instanceof Error ? error.name : "Error" }) + "\n");
+        split: row.split, status: expiredBeforeRow ? "not_dispatched" : "failed", errorType: error instanceof Error ? error.name : "Error" }) + "\n");
     }
   }
   const receipt = { declared: rows.length, completed, failed: rows.length - completed, liveActorExecuted: false, toolExecutionPerformed: false };

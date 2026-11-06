@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonical, copy, hash } from "../src/lib/goalspec/canonical";
@@ -11,11 +12,15 @@ import { createInfraNativeCandidates } from "../services/goalspec-runtime/infra-
 import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-compiler-identity";
 import { NativeGateway, NativeReadExecutor } from "../services/goalspec-runtime/gateway-client";
 import { NativeReadPolicy } from "../services/goalspec-runtime/native-read-policy";
-import { InfraLocalPredictors, validateInfraCalibration, type InfraProbabilityCalibration } from "../services/goalspec-runtime/infra-predictors";
+import { INFRA_PREDICTOR_CONTRACT_HASH, InfraLocalPredictors, validateInfraCalibration, type InfraProbabilityCalibration } from "../services/goalspec-runtime/infra-predictors";
 import { InfraNativeBoundaryWorker } from "../services/goalspec-runtime/infra-native-worker";
 import { localActorMessages } from "../services/goalspec-runtime/local-actor";
 import { InfraTelemetry } from "../services/goalspec-runtime/infra-telemetry";
 import { ResearchService, type BoundaryWorker } from "../services/goalspec-runtime/service";
+import { DurableBudget } from "../services/goalspec-runtime/durable-budget";
+import { ImmutableEventLog } from "../services/goalspec-runtime/artifacts";
+import { attachInfraHostedWorkers, validateInfraHosted, validateInfraLedgerCheckpoint,
+  type InfraHostedConfiguration } from "../services/goalspec-runtime/infra-hosted-workers";
 import type { PublicBoundary } from "../services/goalspec-runtime/actor";
 import { validateInfraOpportunityArtifact, validateInfraGoalReliabilityArtifact,
   type InfraOpportunityArtifact, type InfraGoalReliabilityArtifact } from "../services/goalspec-runtime/infra-artifacts";
@@ -36,6 +41,7 @@ export interface InfraNativeConfiguration {
   manifestPath: string; ledgerCheckpointPath: string; actorBaseUrl: string; predictorBaseUrl?: string;
   memoryPath?: string; calibrationPath?: string; opportunityPath?: string; goalReliabilityPath?: string;
   snapshotId: string; runs: InfraNativeRun[]; maximumLifetimeSeconds: number; stream: boolean;
+  taskBundleHash?: string; hosted?: InfraHostedConfiguration;
 }
 export interface InfraNativeArtifacts {
   manifest: InfraExperimentManifestV2;
@@ -55,19 +61,29 @@ export function infraNativeToolsHash(runs: InfraNativeRun[]) {
 }
 export function validateInfraNativeConfiguration(configuration: InfraNativeConfiguration, artifacts: InfraNativeArtifacts): void {
   const { manifest } = freezeInfraManifest(artifacts.manifest);
+  // Validate before the Python launcher or Node service persists configuration.
+  // Construction is local-only and sends no request.
+  new LocalChatModelPort({ baseUrl: configuration.actorBaseUrl, model: manifest.actor.servedModel });
+  if (configuration.predictorBaseUrl) new LocalChatModelPort({ baseUrl: configuration.predictorBaseUrl,
+    model: manifest.predictor.servedModel });
   if (configuration.version !== 1 || !["collection", "development", "heldout"].includes(configuration.stage)
     || !configuration.snapshotId || !Array.isArray(configuration.runs) || !configuration.runs.length
     || typeof configuration.stream !== "boolean" || !Number.isSafeInteger(configuration.maximumLifetimeSeconds)
     || configuration.maximumLifetimeSeconds < 1 || configuration.maximumLifetimeSeconds > 8 * 3600) throw new Error("Invalid native service configuration");
-  const families = configuration.stage === "collection" ? manifest.data.trainingFamilies
+  if (configuration.hosted) {
+    validateInfraHosted(configuration.hosted, configuration.stage);
+    if (!/^[a-f0-9]{64}$/.test(configuration.taskBundleHash ?? "")) throw new Error("Hosted native runs require a frozen task bundle");
+  }
+  const families = configuration.stage === "collection" ? [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies]
     : configuration.stage === "development" ? manifest.data.developmentFamilies : manifest.data.heldoutFamilies;
   const runIds = new Set<string>();
   for (const run of configuration.runs) {
-    if (!run.runId || !run.taskId || runIds.has(run.runId) || !families.includes(run.familyId)
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(run.runId) || !run.taskId || runIds.has(run.runId) || !families.includes(run.familyId)
       || !["retail", "airline"].includes(run.domain) || !["base", "neutral_memory_prefetch", "goalspec"].includes(run.arm)
       || !manifest.seeds.includes(run.seed) || !Number.isSafeInteger(run.maxBoundaries) || run.maxBoundaries < 1 || run.maxBoundaries > 1000
       || !Array.isArray(run.tools) || !run.tools.length || new Set(run.tools.map(tool => tool.function.name)).size !== run.tools.length) throw new Error("Invalid native run or split identity");
     if (configuration.stage === "collection" && run.arm !== "base") throw new Error("Training collection must be demand-only");
+    if (configuration.hosted && run.maxBoundaries < configuration.hosted.maxSteps) throw new Error("Native boundary budget is below the declared step limit");
     runIds.add(run.runId);
   }
   if (manifest.data.environmentRevision !== ENVIRONMENT || manifest.data.toolSchemaHash !== infraNativeToolsHash(configuration.runs)
@@ -95,10 +111,18 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
   const heldout = new Set(manifest.data.heldoutFamilies);
   const learning = new Set(learningFamilies);
   if (memory.runs.some(run => !manifest.data.trainingFamilies.includes(run.familyId) || run.split !== "train")
+    || calibration.fittingFamilies.some(family => !manifest.data.trainingFamilies.includes(family))
+    || calibration.validationFamilies.some(family => !manifest.data.developmentFamilies.includes(family))
     || [...calibration.fittingFamilies, ...calibration.validationFamilies, ...opportunity.families].some(family => heldout.has(family) || !learning.has(family))) throw new Error("Native held-out contamination");
   if (configuration.runs.some(run => run.arm === "goalspec")) {
+    if (!calibration.conditionalCalibration) throw new Error("Goal conditioning requires separate conditional calibration");
     if (!artifacts.goalReliability) throw new Error("Goal conditioning requires an audited reliability artifact");
-    validateInfraGoalReliabilityArtifact(artifacts.goalReliability, artifactScope);
+    validateInfraGoalReliabilityArtifact(artifacts.goalReliability, { ...artifactScope,
+      allowedFamilies: manifest.data.trainingFamilies, predictor: {
+      model: { repository: manifest.predictor.repository, revision: manifest.predictor.revision },
+      memoryHash: memory.contentHash, predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
+      candidateCompilerHash: infraCandidateCompilerHash("native"),
+    } });
   }
 }
 
@@ -160,7 +184,7 @@ export function buildInfraNativeWorkers(configuration: InfraNativeConfiguration,
 }
 
 export async function runInfraNativeService(configurationPath: string, artifactDirectory: string, options: {
-  gatewayUrl: string; gatewayToken: string; signal?: AbortSignal;
+  gatewayUrl: string; gatewayToken: string; signal?: AbortSignal; budgetDirectory?: string;
 }) {
   const { configuration, artifacts } = await loadInfraNativeConfiguration(configurationPath);
   const directory = resolve(artifactDirectory);
@@ -176,9 +200,25 @@ export async function runInfraNativeService(configurationPath: string, artifactD
   if (options.signal?.aborted) controller.abort();
   const timer = setTimeout(stop, configuration.maximumLifetimeSeconds * 1000);
   let decisions = 0;
+  let budget: DurableBudget | undefined, costs: ImmutableEventLog | undefined;
   try {
     const runs = buildInfraNativeWorkers(configuration, artifacts, gateway, telemetry.record);
-    for (const { runId, worker } of runs) service.register(runId, {
+    let workers = runs;
+    if (configuration.hosted) {
+      if (!options.budgetDirectory) throw new Error("Original budget directory required for hosted native workers");
+      const ledgerPath = resolve(options.budgetDirectory, "budget.jsonl");
+      const ledgerStat = await stat(ledgerPath);
+      if (!ledgerStat.isFile() || ledgerStat.size === 0) throw new Error("Original nonempty budget journal is required");
+      budget = new DurableBudget(ledgerPath);
+      const checkpoint = JSON.parse(await readFile(resolve(dirname(configurationPath), configuration.ledgerCheckpointPath), "utf8"));
+      validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath);
+      costs = new ImmutableEventLog(join(resolve(options.budgetDirectory), `events-${randomUUID()}.jsonl`));
+      costs.append({ type: "research_manifest", manifestHash: hash(configuration), experimentManifestHash: hash(artifacts.manifest),
+        actor: artifacts.manifest.actor, predictor: artifacts.manifest.predictor, accountingScope: "hosted_native_user_and_judge" });
+      workers = attachInfraHostedWorkers(runs, configuration.hosted, budget.ledger, event => costs!.append(event));
+    }
+    const actorIds = new Set(runs.map(run => run.runId));
+    for (const { runId, worker } of workers) service.register(runId, !actorIds.has(runId) ? worker : {
       close: () => worker.close(),
       decision: async (boundary, boundaryId) => {
         const publicInput = { runId, boundaryId, policy: boundary.policy, messages: localActorMessages(boundary), tools: boundary.tools };
@@ -189,7 +229,11 @@ export async function runInfraNativeService(configurationPath: string, artifactD
       },
     });
     telemetry.record({ type: "infra_native_service_started", configurationHash: hash(configuration), manifestHash: hash(artifacts.manifest), runs: runs.map(run => run.runId) });
-    const limit = configuration.runs.reduce((sum, run) => sum + run.maxBoundaries + 1, 0);
+    // Acknowledgment occurs only after all actor, simulator, judge and budget
+    // workers have been initialized. Native timers must start after this receipt.
+    await gateway.request("/ready", { manifestHash: hash(configuration), experimentManifestHash: hash(artifacts.manifest) }, controller.signal);
+    const limit = configuration.runs.reduce((sum, run) => sum + run.maxBoundaries + 1
+      + (configuration.hosted ? 2 * (configuration.hosted.maxSteps + 1) : 0), 0);
     while (!controller.signal.aborted && decisions < limit) {
       if (await service.step(controller.signal)) decisions++;
       else if ((await gateway.request<{ closed: boolean }>("/status", {}, controller.signal)).closed) break;
@@ -200,18 +244,46 @@ export async function runInfraNativeService(configurationPath: string, artifactD
   finally {
     clearTimeout(timer); options.signal?.removeEventListener("abort", stop);
     try { await service.close(); }
-    finally { telemetry.record({ type: "infra_native_service_closed", decisions, aborted: controller.signal.aborted }); await telemetry.close(); }
+    finally {
+      try { costs?.append({ type: "service_closed", decisions, aborted: controller.signal.aborted }); costs?.close(); }
+      finally {
+        budget?.close();
+        telemetry.record({ type: "infra_native_service_closed", decisions, aborted: controller.signal.aborted }); await telemetry.close();
+      }
+    }
   }
 }
 
+export async function writeInfraLedgerCheckpoint(ledgerPath: string, output: string) {
+  const path = resolve(ledgerPath), metadata = await stat(path);
+  if (!metadata.isFile() || metadata.size === 0) throw new Error("Existing nonempty original budget journal required; replacement ledgers are forbidden");
+  const budget = new DurableBudget(path);
+  try {
+    const entries = budget.ledger.snapshot();
+    const checkpoint = { version: 1, ledgerPathHash: hash(path), entriesHash: hash(entries), entries };
+    await writeFile(resolve(output), canonical(checkpoint) + "\n", { flag: "wx", mode: 0o600 });
+    return { checkpointHash: hash(checkpoint), reservations: entries.length };
+  } finally { budget.close(); }
+}
+
 async function main() {
+  if (process.argv[2] === "checkpoint") {
+    const [, ledgerPath, output] = process.argv.slice(2);
+    if (!ledgerPath || !output) throw new Error("Usage: goalspec-infra-native checkpoint <original-budget.jsonl> <new-checkpoint.json>");
+    console.log(JSON.stringify(await writeInfraLedgerCheckpoint(ledgerPath, output))); return;
+  }
   const [configurationPath, artifactDirectory] = process.argv.slice(2);
   if (!configurationPath || !artifactDirectory) throw new Error("Usage: goalspec-infra-native <configuration.json> <new-artifact-directory>");
   const gatewayUrl = process.env.GOALSPEC_GATEWAY_URL, gatewayToken = process.env.GOALSPEC_GATEWAY_TOKEN;
   if (!gatewayUrl || !gatewayToken) throw new Error("Configure native gateway URL and token securely in the process environment");
   const controller = new AbortController(), stop = () => controller.abort();
   process.once("SIGINT", stop); process.once("SIGTERM", stop);
-  try { console.log(JSON.stringify(await runInfraNativeService(configurationPath, artifactDirectory, { gatewayUrl, gatewayToken, signal: controller.signal }))); }
+  try {
+    const result = await runInfraNativeService(configurationPath, artifactDirectory, { gatewayUrl, gatewayToken,
+      budgetDirectory: process.env.GOALSPEC_BUDGET_DIRECTORY, signal: controller.signal });
+    console.log(JSON.stringify(result));
+    if (result.aborted) process.exitCode = 1;
+  }
   finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

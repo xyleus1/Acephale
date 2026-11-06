@@ -1,3 +1,52 @@
+# 2026-11-06: GoalSpec fresh collection and AWS preparation
+
+Prepared `codex/goalspec-aws-readiness-20261106` from `2504afe`. The fixed-Qwen
+native launcher now owns the Python gateway and starts the new Node runtime with
+an identity-bound readiness handshake, original-ledger cohort reservations, fixed
+hosted simulator/judge, retained failures and unsuccessful timeout exits. Offline
+preparation produces real official task bundles and collection configuration from
+an observed deployment inventory and clean source commit. See
+`docs/goalspec/INFRA_NATIVE_LAUNCH.md` for exact commands.
+
+Fresh native/document exports connect closed collections to public prediction
+inputs, verified training-only memory and separate annotation pilots. Document
+collection now closes its receipt after telemetry drains. Paired calibration fits
+neutral and conditional scores separately. Opportunity and audited goal-reliability
+builders bind the dataset, family partitions and exact model/compiler/memory.
+An annotation-expansion command preserves the original 20 audit rows while adding
+missing training replay rows. The budgeted independent grader retains all failures
+under the original journal and unchanged USD5 phase limit.
+
+`docs/goalspec/INFRA_ADMISSION.md` covers the new measured document profiler. It
+retains actual actor/predictor/read/validation clocks, paired contention differences
+and unsuccessful observations. It refuses native trace-only profiling: native
+speculation still requires real Python gateway/freshness-lease measurements.
+Neither fixture tests nor historical replay establish current task success or speedup.
+
+The founder authorized AWS as an alternative to Lambda. The new read-only AWS
+checker inspects identity, GPU hardware, regional offering, quota and pricing only
+when explicitly requested. It does not inspect credits or implement EC2 launch,
+termination or watchdogs. See `infra/goalspec-infra-v1/AWS_READINESS.md`.
+All gross budget limits remain. Public AWS G6e candidates checked for this work
+exceed the existing hourly cap. No limit was silently raised and no GPU instance
+was created. Account signup and actual credit approval remain external prerequisites.
+Credential values and account-application details stay outside this repository.
+
+Verification: schema generation and final TypeScript compilation passed; the
+infrastructure suite passed 101 tests with one optional database skip; the full
+Python suite passed 565 with five documented historical-data/Torch skips; all
+34 deployment/AWS readiness tests passed. Scoped Python Ruff, whitespace checks
+and added-source credential/em-dash scans passed. Initial parallel verification
+hit OS/OpenBLAS memory pressure; serial runs with BLAS threads limited passed.
+A temporary 1GB Node heap cap was removed for compilation. The final compiler
+also caught grader type errors, which were fixed with checked schema narrowing.
+The known pre-existing repository-wide lint debt is not claimed resolved.
+Real pinned tau initialization verified retail16/airline14 tool schemas without
+executing tasks or model calls. The original journal was independently checked
+read-only: USD79.537568 known usage, USD166.891414 spent/reserved, 56 unresolved
+requests preserved. No actor weights, production behavior or historic results changed.
+No paid model request, model download or GPU rental occurred during this work.
+
 # 2026-11-05: GoalSpec tool-calling infrastructure profile
 
 - Added fixed open-weight actor/predictor serving contracts and exact deployment
