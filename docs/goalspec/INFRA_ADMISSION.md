@@ -97,10 +97,12 @@ fallback. At least ten complete observations are still required by aggregation;
 the failure count remains visible and rejecting negative excess can make cost
 estimates more conservative. The profile is not a task-success or speedup result.
 
-Native component profiling explicitly refuses to reuse closed-trace durations as
-freshness-lease evidence. Native base collection is available; speculative native
-admission still needs actual Python gateway read/validation measurements. This
-document profiler does not satisfy that native prerequisite.
+Native component profiling uses the separate
+[native gateway profiling command](INFRA_NATIVE_PROFILE.md). It reconstructs
+verified public prefixes in ephemeral pinned tau environments, measures actual
+snapshot reads and freshness-lease refreshes, and retains the same paired actor
+and predictor evidence. Closed-trace durations cannot substitute for those
+measurements. The document profiler continues to refuse native inputs.
 
 ```sh
 python -m goalspec.infra_cli fit-calibration --bundle DATASET --predictions PREDICTIONS --condition both --output NEW_CALIBRATION

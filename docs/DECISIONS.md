@@ -1,3 +1,51 @@
+## 2026-11-06: Bind AWS dispatch, observed identity and native measurements
+
+- AWS dispatch must reserve against the original study journal before the
+  provider request. Unknown launch and termination responses retain reservations.
+  A new dispatch cannot reuse an existing reservation. One durable study pointer
+  binds the AWS slice path and deployment identity so a second slice cannot reset
+  cumulative GPU hours. Credits do not change the gross limits or contingency.
+- Provider cleanup uses observed instance identity and tag-discovered deadlines
+  on two independent always-on controllers. A malformed historical record must
+  not suppress cleanup of another due lease. Failed or unverified cleanup cannot
+  renew readiness evidence. Normal termination requires verified export; emergency
+  termination preserves evidence of the exception and unknown charges.
+- Serverless watchdog overhead belongs to the original infrastructure allocation
+  and must reserve the exact code package and bounded coverage window before
+  deployment. Regional schedules and role separation do not remove their shared
+  AWS account and target control-plane failure domains. A recovery canary is a
+  narrow bootstrap operation with two armed controllers, a hard deadline and
+  reserved cleanup margin; it must never run inference or become a ready host.
+  Normal launch requires actual successful recovery from both controllers,
+  unchanged tested code/window and fresh operator/heartbeat evidence. Template
+  validation, fixture receipts and mere termination requests do not qualify.
+- Generate observed deployment identity from actual verified files, package
+  inventories, resident processes and hardware. A schema fixture, source pin,
+  manually copied version or model container without a GPU allocation cannot
+  stand in for observed identity. Hash inputs remain auditable. Inventory does
+  not establish successful inference, telemetry ingestion or watchdog recovery.
+- The Windows orchestrator keeps the original path-bound journal and OpenAI key.
+  A separate observed orchestrator receipt supplies actual Node/Python, platform,
+  dependency-lock and package facts to the Linux GPU inventory collector. Both
+  receipts must match the same clean source commit and pins. The manifest runtime
+  distinguishes benchmark Node/Python from serving vLLM/Torch/CUDA, and hardware
+  describes the GPU host. Bind both hosts in retained evidence without copying,
+  reinitializing or silently migrating the original journal.
+- Split execution requires strict SSH host-key verification and the exact
+  inventory-bound remote instance/container identities. Private model and OTLP
+  forwards are guard-owned; stale, degraded or substituted health must stop native
+  dispatch. Use the local orchestrator clock for heartbeat freshness and verify
+  the actual executing Node/Python versions. Keep provider termination watchdogs
+  independent. Collector HTTP acceptance alone does not establish indexed
+  telemetry; live smoke evidence must verify storage and retrieval separately.
+- Native timing evidence requires replay of the exact captured public prefix
+  into private pinned benchmark state, followed by real gateway read and
+  freshness-lease work. Future actions, labels, rewards and private task data
+  cannot select the profiled read or enter actor input. Keep model inputs fixed,
+  preserve both clocks and failed rows, and refuse aggregation when cleanup is
+  unresolved. Paired component timing is an admission heuristic, not a benchmark
+  score, causal speedup estimate or authorization to promote production behavior.
+
 ## 2026-11-06: Complete fresh collection plumbing and allow AWS preparation
 
 - The founder explicitly requested AWS as an alternative to Lambda and authorized

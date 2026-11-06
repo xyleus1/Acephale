@@ -1,3 +1,51 @@
+# 2026-11-06: AWS lifecycle and native measurement completion
+
+- Added bounded AWS lifecycle tooling and a bridge into the original durable
+  study journal. Preserve unknown charges, require a new reservation per dispatch
+  and bind one infrastructure slice to the original study. Verify actual account,
+  role, instance identity, network and storage before marking the host ready.
+  Added offline scoped identity/network policy rendering. Rendered files do not
+  establish that IAM, networking or independent watchdog hosts have been deployed.
+- Added independent tag-discovered watchdog cleanup. Review found and corrected
+  historical-record failure blocking cleanup of a live expired lease. Unverified
+  termination prevents readiness-heartbeat renewal.
+- Added deterministic serverless packaging and two regional CloudFormation
+  deployments with disabled schedules, separate evidence stores and scoped
+  cleanup. Bind overhead reservations to the exact code and coverage window in
+  the original journal. Bounded recovery canaries reserve cleanup margin, run no
+  inference and cannot become ready experiment hosts. Import actual controller
+  termination evidence before normal launch. Final templates passed read-only
+  AWS validation; the launch policy returned zero findings. No watchdog resources
+  or recovery canaries were deployed. See `infra/goalspec-infra-v1/AWS_WATCHDOGS.md`.
+- Added a read-only host inventory collector that assembles deployment metadata
+  from actual verified files, installed packages, local Docker and NVIDIA
+  process observations, and provider identity matched to Linux DMI. Retain every
+  hash input and explicitly distinguish observed identity from smoke readiness.
+  Split collection preserves actual Windows benchmark runtime/lock/package facts
+  and Linux GPU-serving identity under one evidence hash, with no journal or key
+  transfer and no schema substitution.
+- Added a local split-host guard with strict SSH host verification, inventory-bound
+  instance/container checks, private actor/predictor/OTLP forwards and locally
+  clocked health publications. Fixed the Python/Node readiness payload mismatch,
+  checked actual runtime versions and wired explicit remote telemetry with
+  acceptance receipts. HTTP acceptance is separate from indexed telemetry proof.
+- Added native gateway component profiling from exact public-prefix replay in
+  ephemeral pinned tau state. Measure real read/freshness operations and paired
+  actor contention, retain failures and prevent incomplete cleanup from producing
+  aggregatable measurements. Newly proposed actor calls are not executed.
+- Added the AWS-budget, native-profile and split-guard Node tests to the serial infrastructure
+  suite and connected the readiness/launch runbooks. Serial checks under verified
+  portable Node 22.23.4 passed schema generation/TypeScript and 111 infrastructure
+  tests with one optional database skip. Full research Python passed 578 with
+  five retained historical-data/Torch skips; 31 focused native/profile/gateway
+  tests also passed. All 118 deployment tests passed, including final serverless
+  overhead/canary recovery and inventory hash compatibility. Scoped Python lint
+  and whitespace checks passed. CI now selects the exact Node 22.23.4 pin.
+- No model weights, model pins, production behavior or historic results changed.
+  Implementation and offline tests did not call a model, provision a GPU, download
+  models or mutate the original study budget. Live deployment and performance
+  evidence remain separate prerequisites.
+
 # 2026-11-06: GoalSpec fresh collection and AWS preparation
 
 Prepared `codex/goalspec-aws-readiness-20261106` from `2504afe`. The fixed-Qwen

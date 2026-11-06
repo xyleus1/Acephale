@@ -29,7 +29,7 @@ ALLOWED_READS = frozenset({
 OUTSTANDING_GATES = [
     "account_credit_grant_balance_expiry_and_ec2_eligibility_unverified",
     "original_study_and_infrastructure_ledgers_not_reconciled_or_reserved",
-    "aws_lifecycle_controller_not_implemented",
+    "aws_lifecycle_controller_not_live_verified",
     "two_independent_aws_watchdogs_not_verified",
     "aws_iam_network_storage_and_export_plan_not_verified",
     "current_quota_usage_and_launch_capacity_not_verified",
@@ -140,7 +140,12 @@ def hardware_report(response, instance_type):
         blockers.append("one_nvidia_gpu_required_by_current_compose")
     else:
         gpu_memory = _positive_integer(gpus[0].get("MemoryInfo", {}).get("SizeInMiB"), "gpu_memory")
-        if gpu_memory < 46000:
+        # EC2 reports its documented 48 GB L40S as 45,776 MiB (decimal GB),
+        # not 49,152 MiB. Admit that exact known shape, not arbitrary smaller GPUs.
+        l40s_decimal_48gb = (instance_type == "g6e.2xlarge" and gpus[0].get("Name") == "L40S" and gpu_memory >= 45776)
+        if instance_type == "g6e.2xlarge" and gpus[0].get("Name") != "L40S":
+            blockers.append("approved_g6e_l40s_identity_mismatch")
+        if gpu_memory < 46000 and not l40s_decimal_48gb:
             blockers.append("single_gpu_memory_below_48gb_class")
     if cpu < 8 or memory < 65536:
         blockers.append("below_conservative_8vcpu_64gib_stack_candidate")

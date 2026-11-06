@@ -8,6 +8,23 @@ The commands below prepare and run a base-only collection. They do not fine-tune
 actor weights. Follow fresh import, annotation, audit and calibration before a
 separate three-arm comparison. Production activation stays off.
 
+For an AWS host, first follow [candidate readiness](../../infra/goalspec-infra-v1/AWS_READINESS.md)
+and the [bounded AWS controller](../../infra/goalspec-infra-v1/AWS_CONTROL.md).
+Use the [offline identity/network templates](../../infra/goalspec-infra-v1/AWS_BOOTSTRAP.md)
+for the account configuration required by the controller.
+The [serverless watchdog runbook](../../infra/goalspec-infra-v1/AWS_WATCHDOGS.md)
+covers the two regional deployments, original-journal overhead reservation,
+bounded recovery canaries and actual evidence enrollment required before launch.
+Credits do not change the original gross spending or GPU-hour limits.
+For the Windows-orchestrated deployment, keep the original journal and OpenAI key
+local. Use [split host inventory](../../infra/goalspec-infra-v1/HOST_INVENTORY.md#split-windows-orchestration-and-linux-gpu-serving)
+to bind the actual local Node/Python environment to the Linux model host. Run
+preparation and native execution below on Windows through guarded SSH forwards.
+The [split-host runbook](INFRA_SPLIT_HOST.md) binds the guard to the observed
+instance and container inventory, starts the three private forwards, and supplies
+locally clocked health and explicit OTLP transport. Use its guard configuration
+and the same activated runtime environment for all commands below.
+
 ## Required local inputs
 
 - A clean committed GoalSpec checkout and the exact tau checkout
@@ -17,9 +34,13 @@ separate three-arm comparison. Production activation stays off.
   journal's exclusive lock and does not create new spending reservations.
 - An observed deployment inventory: `version: 1`, `observed: true`, and the
   `actor`, `predictor`, `runtime`, `hardware` objects defined by
-  `src/lib/goalspec/contracts/infra-manifest-v2.schema.json`. Record actual model
-  file, tokenizer/template, dependency-lock and package-inventory hashes and the
-  actual serving host. The schema fixture is not deployment evidence.
+  `src/lib/goalspec/contracts/infra-manifest-v2.schema.json`. Generate this with
+  [the read-only host collector](../../infra/goalspec-infra-v1/HOST_INVENTORY.md)
+  on the actual GPU host, consuming the separately observed local orchestrator
+  receipt. It hashes verified model and tokenizer/template files, retains local
+  lock/package facts and checks resident Docker/NVIDIA processes. The generated
+  inventory is distinct from live smoke readiness.
+  The schema fixture is not deployment evidence.
 - A small collection plan with explicit task IDs, family/split assignments,
   seeds and endpoint. Every task comes unchanged from the pinned official files.
   Predeclare train, development and test families. Test tasks are kept in the
@@ -113,6 +134,12 @@ Next generate teacher annotations, review the declared 20 examples, measure
 timings, fit separate neutral and conditional calibration and freeze a new
 comparison configuration. These steps require observed evidence, not fixture
 values or the historical symbolic replay score.
+
+Use the [native gateway component profiler](INFRA_NATIVE_PROFILE.md) for actual
+native read and freshness-lease measurements after a closed fresh collection.
+It reconstructs verified public prefixes in private ephemeral state and retains
+both gateway-inclusive Node clocks and independent Python operation evidence.
+Failed or incompletely drained work cannot become valid admission evidence.
 
 ## Cover replay labels and grade goals
 

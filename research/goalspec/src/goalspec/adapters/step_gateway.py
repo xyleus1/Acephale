@@ -25,7 +25,7 @@ class Boundary:
 
 
 class StepBroker:
-    def __init__(self, expected_manifest_hash: str | None = None):
+    def __init__(self, expected_manifest_hash: str | None = None, expected_experiment_manifest_hash: str | None = None):
         self.pending: queue.Queue[Boundary] = queue.Queue()
         self.active: dict[tuple[str, str], Boundary] = {}
         self.lock = threading.Lock()
@@ -33,13 +33,18 @@ class StepBroker:
         if expected_manifest_hash is not None and (len(expected_manifest_hash) != 64 or any(c not in "0123456789abcdef" for c in expected_manifest_hash)):
             raise ValueError("Invalid readiness manifest hash")
         self.expected_manifest_hash = expected_manifest_hash
+        if expected_experiment_manifest_hash is not None and (expected_manifest_hash is None
+                or len(expected_experiment_manifest_hash) != 64 or any(c not in "0123456789abcdef" for c in expected_experiment_manifest_hash)):
+            raise ValueError("Invalid experiment readiness manifest hash")
+        self.expected_experiment_manifest_hash = expected_experiment_manifest_hash
         self.ready = threading.Event()
         self.ready_at = None
 
-    def mark_ready(self, manifest_hash: str):
+    def mark_ready(self, manifest_hash: str, experiment_manifest_hash: str | None = None):
         """Accept readiness only for this process's authenticated immutable manifest."""
         with self.lock:
-            if self.closed or self.expected_manifest_hash is None or manifest_hash != self.expected_manifest_hash:
+            if self.closed or self.expected_manifest_hash is None or manifest_hash != self.expected_manifest_hash \
+                    or experiment_manifest_hash != self.expected_experiment_manifest_hash:
                 raise ValueError("Unexpected service readiness manifest")
             if self.ready_at is None:
                 self.ready_at = time.perf_counter()
@@ -279,9 +284,10 @@ def server(broker: StepBroker, token: str, host: str = "127.0.0.1", port: int = 
                 elif self.path == "/status":
                     result = {"closed": broker.closed}
                 elif self.path == "/ready":
-                    if set(payload) != {"manifestHash"}:
+                    expected_fields = {"manifestHash", "experimentManifestHash"} if broker.expected_experiment_manifest_hash else {"manifestHash"}
+                    if set(payload) != expected_fields:
                         raise ValueError("Invalid readiness payload")
-                    result = broker.mark_ready(payload["manifestHash"])
+                    result = broker.mark_ready(payload["manifestHash"], payload.get("experimentManifestHash"))
                 elif self.path == "/respond":
                     broker.respond(payload["runId"], payload["boundaryId"], payload["response"])
                     result = {"ok": True}

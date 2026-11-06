@@ -9,7 +9,21 @@ a live host test. See [AWS G6e specifications](https://aws.amazon.com/ec2/instan
 
 The existing `control.py` launch, termination and watchdog operations manage
 Lambda Cloud only. Do not point them at an AWS account or treat a local shutdown
-as verified EC2 termination. This readiness tool adds no AWS lifecycle controller.
+as verified EC2 termination. The additive [AWS controller](AWS_CONTROL.md) now
+implements reservations, bounded launch, reconciliation, private service access,
+verified export/termination and two independent watchdog enrollment gates. Its
+tests use mocked AWS responses. No live AWS deployment or watchdog recovery has
+been verified. This readiness inspection remains read-only.
+
+The [two-region serverless watchdog package](AWS_WATCHDOGS.md) supplies disabled
+deployment templates, original-journal overhead reservations and bounded recovery
+canaries. Real deployed recovery evidence is still required before experiment
+launch; generated templates and mocked tests do not satisfy that gate.
+
+After the actual pinned stack is running, use the
+[read-only host inventory collector](HOST_INVENTORY.md) to generate the observed
+deployment metadata used by [native preparation](../../docs/goalspec/INFRA_NATIVE_LAUNCH.md).
+Identity inventory does not replace inference, telemetry or watchdog smoke checks.
 
 ## No-network inspection
 
@@ -33,6 +47,11 @@ company account using a named profile, run:
 ```text
 python infra/goalspec-infra-v1/aws_readiness.py --inspect-account --profile derya-research --region us-east-1 --instance-type g6e.2xlarge --output research/goalspec/runs/aws-readiness.json
 ```
+
+The [offline AWS bootstrap templates](AWS_BOOTSTRAP.md) prepare scoped role,
+operator and network-policy artifacts from explicitly observed identifiers.
+Rendering templates does not install policies, create resources or establish
+working credentials; verify the applied account configuration separately.
 
 The output path must be new, with an existing parent directory. No key value or
 provider error body is printed. The command performs only these five read APIs:
@@ -69,9 +88,10 @@ unit. See [EC2 quota documentation](https://docs.aws.amazon.com/AWSEC2/latest/Us
   used for these limits. If the live quote exceeds the hourly cap, stop; a credit
   balance does not authorize changing the cap. Storage, IPv4, transfer, tax and
   other services require their own allowance in the total reservation.
-- Implement and review AWS-specific bounded launch and termination with durable
-  reservations, idempotency, unknown-response handling and state verification.
-  Verify two independent, always-on AWS watchdogs and the 30-minute setup cutoff.
+- Review and live-verify the implemented [AWS lifecycle controller](AWS_CONTROL.md),
+  including its original-study reservation binding and unknown-response recovery.
+  Enroll and exercise two independent, always-on AWS watchdogs and verify the
+  30-minute setup cutoff. Offline fixture tests do not satisfy these host gates.
 - Freeze the account, region, image, restricted IAM role, network, encrypted
   storage, export destination and cleanup rules. Keep model and telemetry
   listeners private and preserve the original research isolation.

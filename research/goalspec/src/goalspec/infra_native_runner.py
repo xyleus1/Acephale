@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import secrets
 import subprocess
@@ -92,6 +93,13 @@ def verify_sources(manifest: dict, upstream_root: Path):
     _verify_checkout(ROOT, manifest["sourceCommit"], ["src/lib/goalspec", "services/goalspec-runtime",
         "scripts", "research/goalspec/src", "package-lock.json", "research/goalspec/uv.lock"])
     _verify_checkout(upstream_root, REVISION)
+
+
+def verify_runtime_identity(manifest: dict):
+    """Inventorying a portable binary must not leave dispatch on another PATH runtime."""
+    actual_node = subprocess.check_output(["node", "-p", "process.versions.node"], cwd=ROOT, text=True).strip()
+    if actual_node != manifest["runtime"]["node"] or platform.python_version() != manifest["runtime"]["python"]:
+        raise ValueError("Actual benchmark Node/Python differs from observed runtime inventory")
 
 
 class NativeTauExecutor:
@@ -276,7 +284,7 @@ def _run_cohort(configuration: dict, manifest: dict, bundle: dict, output: Path,
     write(output / "tasks.json", bundle)
     write(output / "design.json", {"version": 1, "stage": configuration["stage"], "runs": configuration["runs"],
         **{key: manifest["data"][key] for key in ("trainingFamilies", "developmentFamilies", "heldoutFamilies")}})
-    broker = StepBroker(expected_manifest_hash=hash_v1(configuration))
+    broker = StepBroker(expected_manifest_hash=hash_v1(configuration), expected_experiment_manifest_hash=hash_v1(manifest))
     token, reads = secrets.token_hex(32), {}
     telemetry, gateway, gateway_started = None, None, False
     process, ready_at, startup_failure, rows = None, None, None, []
@@ -373,7 +381,7 @@ def run_native(configuration: Path, tasks: Path, output: Path, budget_directory:
     budget_directory, upstream_root = budget_directory.resolve(), upstream_root.resolve()
     config = read(configuration)
     # Freeze absolute artifact paths into the exact service readiness identity.
-    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath"):
+    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath"):
         if config.get(field):
             config[field] = str((configuration.parent / config[field]).resolve())
     manifest, bundle = read(Path(config["manifestPath"])), read(tasks)
@@ -384,8 +392,11 @@ def run_native(configuration: Path, tasks: Path, output: Path, budget_directory:
     # no model, reads no credential files and performs no network request.
     script = "const fs=require('node:fs'); const {loadInfraNativeConfiguration}=require('./scripts/goalspec-infra-native.ts'); loadInfraNativeConfiguration(process.argv[1]).catch(e=>{console.error(e.message);process.exitCode=1});"
     subprocess.run(["node", "--import", "tsx", "-e", script, str(configuration)], cwd=ROOT, check=True)
+    def verify_runtime():
+        verify_sources(manifest, upstream_root)
+        verify_runtime_identity(manifest)
     return _run_cohort(config, manifest, bundle, output, budget_directory,
-        lambda: NativeTauExecutor(config, indexed, upstream_root), lambda: verify_sources(manifest, upstream_root))
+        lambda: NativeTauExecutor(config, indexed, upstream_root), verify_runtime)
 
 
 def main(argv=None):

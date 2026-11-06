@@ -63,7 +63,7 @@ jobs:
           cache-dependency-glob: research/goalspec/uv.lock
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "22"
+          node-version: "22.23.4"
           cache: npm
       - run: npm ci --ignore-scripts
         working-directory: .

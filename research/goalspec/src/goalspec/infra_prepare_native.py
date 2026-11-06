@@ -83,6 +83,9 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
                   "timeoutSeconds": plan.get("timeoutSeconds", 600)}}
     if plan.get("predictorBaseUrl"):
         config["predictorBaseUrl"] = plan["predictorBaseUrl"]
+    for field in ("otlpBaseUrl", "splitGuardPath"):
+        if plan.get(field):
+            config[field] = plan[field]
     manifest = {"version": 2, "profile": "goalspec-infra-v1", "experimentId": plan["experimentId"],
                 "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"), "sourceCommit": source_commit,
                 **{key: deployment[key] for key in ("actor", "predictor", "runtime", "hardware")},

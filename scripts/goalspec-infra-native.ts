@@ -16,6 +16,7 @@ import { INFRA_PREDICTOR_CONTRACT_HASH, InfraLocalPredictors, validateInfraCalib
 import { InfraNativeBoundaryWorker } from "../services/goalspec-runtime/infra-native-worker";
 import { localActorMessages } from "../services/goalspec-runtime/local-actor";
 import { InfraTelemetry } from "../services/goalspec-runtime/infra-telemetry";
+import { nativeSplitGuard } from "../services/goalspec-runtime/infra-split-guard";
 import { ResearchService, type BoundaryWorker } from "../services/goalspec-runtime/service";
 import { DurableBudget } from "../services/goalspec-runtime/durable-budget";
 import { ImmutableEventLog } from "../services/goalspec-runtime/artifacts";
@@ -42,6 +43,7 @@ export interface InfraNativeConfiguration {
   memoryPath?: string; calibrationPath?: string; opportunityPath?: string; goalReliabilityPath?: string;
   snapshotId: string; runs: InfraNativeRun[]; maximumLifetimeSeconds: number; stream: boolean;
   taskBundleHash?: string; hosted?: InfraHostedConfiguration;
+  otlpBaseUrl?: string; splitGuardPath?: string;
 }
 export interface InfraNativeArtifacts {
   manifest: InfraExperimentManifestV2;
@@ -66,6 +68,12 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
   new LocalChatModelPort({ baseUrl: configuration.actorBaseUrl, model: manifest.actor.servedModel });
   if (configuration.predictorBaseUrl) new LocalChatModelPort({ baseUrl: configuration.predictorBaseUrl,
     model: manifest.predictor.servedModel });
+  if (configuration.otlpBaseUrl) {
+    const endpoint = new URL(configuration.otlpBaseUrl);
+    if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash
+      || endpoint.protocol === "http:" && !["127.0.0.1", "localhost", "alloy"].includes(endpoint.hostname)) throw new Error("Native OTLP destination must be credential-free TLS or private loopback");
+  }
+  if (configuration.splitGuardPath && (!configuration.otlpBaseUrl || !configuration.predictorBaseUrl)) throw new Error("Split native execution requires model and OTLP tunnel destinations");
   if (configuration.version !== 1 || !["collection", "development", "heldout"].includes(configuration.stage)
     || !configuration.snapshotId || !Array.isArray(configuration.runs) || !configuration.runs.length
     || typeof configuration.stream !== "boolean" || !Number.isSafeInteger(configuration.maximumLifetimeSeconds)
@@ -140,6 +148,7 @@ export async function loadInfraNativeConfiguration(path: string) {
   validateInfraNativeConfiguration(configuration, artifacts);
   const checkpoint = await json(configuration.ledgerCheckpointPath);
   if (hash(checkpoint) !== artifacts.manifest.budgets.ledgerCheckpointHash) throw new Error("Budget checkpoint does not match the frozen manifest");
+  nativeSplitGuard(configuration, artifacts.manifest, resolve(path));
   return { configuration, artifacts };
 }
 
@@ -187,18 +196,29 @@ export async function runInfraNativeService(configurationPath: string, artifactD
   gatewayUrl: string; gatewayToken: string; signal?: AbortSignal; budgetDirectory?: string;
 }) {
   const { configuration, artifacts } = await loadInfraNativeConfiguration(configurationPath);
+  const guard = nativeSplitGuard(configuration, artifacts.manifest, resolve(configurationPath));
+  const guardIdentity = guard?.();
   const directory = resolve(artifactDirectory);
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, "configuration.json"), canonical(configuration) + "\n", { flag: "wx", mode: 0o600 });
   await writeFile(join(directory, "manifest.json"), canonical(artifacts.manifest) + "\n", { flag: "wx", mode: 0o600 });
   const publicTrace = join(directory, "public-boundaries.jsonl");
   await writeFile(publicTrace, "", { flag: "wx", mode: 0o600 });
-  const telemetry = await InfraTelemetry.create(directory);
+  const telemetry = await InfraTelemetry.create(directory, configuration.otlpBaseUrl);
   const gateway = new NativeGateway(options.gatewayUrl, options.gatewayToken), service = new ResearchService(gateway);
   const controller = new AbortController(), stop = () => controller.abort();
   options.signal?.addEventListener("abort", stop, { once: true });
   if (options.signal?.aborted) controller.abort();
   const timer = setTimeout(stop, configuration.maximumLifetimeSeconds * 1000);
+  let guardClosing: Promise<void> | undefined;
+  const guardTimer = guard ? setInterval(() => {
+    try { guard(); } catch {
+      if (!guardClosing) {
+        telemetry.record({ type: "infra_split_guard_interruption" }); controller.abort();
+        guardClosing = service.close(); void guardClosing.catch(() => {});
+      }
+    }
+  }, 500) : undefined;
   let decisions = 0;
   let budget: DurableBudget | undefined, costs: ImmutableEventLog | undefined;
   try {
@@ -228,7 +248,8 @@ export async function runInfraNativeService(configurationPath: string, artifactD
         return response;
       },
     });
-    telemetry.record({ type: "infra_native_service_started", configurationHash: hash(configuration), manifestHash: hash(artifacts.manifest), runs: runs.map(run => run.runId) });
+    telemetry.record({ type: "infra_native_service_started", configurationHash: hash(configuration), manifestHash: hash(artifacts.manifest), runs: runs.map(run => run.runId),
+      ...(guardIdentity ? { splitGuard: guardIdentity } : {}), otlpDestination: configuration.otlpBaseUrl ?? null });
     // Acknowledgment occurs only after all actor, simulator, judge and budget
     // workers have been initialized. Native timers must start after this receipt.
     await gateway.request("/ready", { manifestHash: hash(configuration), experimentManifestHash: hash(artifacts.manifest) }, controller.signal);
@@ -242,13 +263,15 @@ export async function runInfraNativeService(configurationPath: string, artifactD
     return { decisions, aborted: controller.signal.aborted };
   } catch (error) { if (!controller.signal.aborted) throw error; return { decisions, aborted: true }; }
   finally {
-    clearTimeout(timer); options.signal?.removeEventListener("abort", stop);
-    try { await service.close(); }
+    clearTimeout(timer); if (guardTimer) clearInterval(guardTimer); options.signal?.removeEventListener("abort", stop);
+    try { await Promise.all([service.close(), guardClosing]); }
     finally {
       try { costs?.append({ type: "service_closed", decisions, aborted: controller.signal.aborted }); costs?.close(); }
       finally {
         budget?.close();
         telemetry.record({ type: "infra_native_service_closed", decisions, aborted: controller.signal.aborted }); await telemetry.close();
+        await writeFile(join(directory, "telemetry-export-receipt.json"), canonical(telemetry.exportSummary()) + "\n", { flag: "wx", mode: 0o600 });
+        if (configuration.otlpBaseUrl && telemetry.exportSummary().failed) throw new Error("Native telemetry export was not accepted by the configured collector");
       }
     }
   }

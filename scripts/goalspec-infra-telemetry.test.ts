@@ -1,4 +1,6 @@
 import test from "node:test";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm, utimes, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -65,5 +67,25 @@ test("telemetry rejects high-cardinality labels and drains event files", async (
     telemetry.record({ type: "test_event" });
     assert.equal(await telemetry.span("unit", "run", { arm: "base" }, async () => "ok"), "ok");
     await telemetry.close(); assert.throws(() => telemetry.record({ type: "late" }), /closed/);
+  });
+});
+
+test("OTLP receipts distinguish actual collector acceptance from partial rejection", async () => {
+  await fixture(async root => {
+    const requests: string[] = [];
+    const server = createServer((req, res) => {
+      req.resume(); req.on("end", () => {
+        requests.push(req.url!); res.setHeader("content-type", "application/json");
+        res.end(req.url === "/v1/traces" ? JSON.stringify({ partialSuccess: { rejectedSpans: "1" } }) : "{}");
+      });
+    }).listen(0, "127.0.0.1");
+    await once(server, "listening"); const address = server.address(); assert.ok(address && typeof address !== "string");
+    try {
+      const telemetry = await InfraTelemetry.create(join(root, "run"), `http://127.0.0.1:${address.port}`);
+      await telemetry.span("actual-local-fixture", "run", {}, async () => "ok");
+      await telemetry.close();
+      assert.deepEqual(requests, ["/v1/traces", "/v1/metrics"]);
+      assert.deepEqual(telemetry.exportSummary(), { endpoint: `http://127.0.0.1:${address.port}`, spans: 1, tracesAccepted: 0, metricsAccepted: 1, failed: 1 });
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
   });
 });

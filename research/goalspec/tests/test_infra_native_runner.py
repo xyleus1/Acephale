@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import secrets
 import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
+from goalspec.adapters.step_gateway import StepBroker, server
 from goalspec.contracts_v1 import hash_v1
 from goalspec.infra_data import read_jsonl, verify_bundle
 from goalspec.infra_import_fresh import ACTOR, import_fresh
@@ -177,3 +183,76 @@ def test_source_freeze_rejects_untracked_executable_files(tmp_path):
     (tmp_path / "injected.py").write_text("pass\n")
     with pytest.raises(ValueError, match="untracked"):
         _verify_checkout(tmp_path, revision)
+
+
+def test_real_python_gateway_new_node_runtime_handshake_and_otlp_export(tmp_path):
+    root = Path(__file__).resolve().parents[3]
+    manifest = json.loads((root / "research/goalspec/examples/infra-manifest-v2.fixture.json").read_text())
+    received = []
+
+    class FakeServing(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if self.path == "/tokenize":
+                result = {"count": 8, "max_model_len": 32768, "tokens": [1] * 8}
+            elif self.path == "/v1/chat/completions":
+                result = {"model": body["model"], "choices": [{"index": 0, "message": {"role": "assistant", "content": "done"}, "finish_reason": "stop"}],
+                          "usage": {"prompt_tokens": 8, "completion_tokens": 1, "total_tokens": 9}}
+            elif self.path in {"/v1/traces", "/v1/metrics"}:
+                received.append((self.path, body))
+                result = {}
+            else:
+                self.send_error(404)
+                return
+            payload = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    model = ThreadingHTTPServer(("127.0.0.1", 0), FakeServing)
+    threading.Thread(target=model.serve_forever, daemon=True).start()
+    tools = [{"type": "function", "function": {"name": "list_all_airports", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}}]
+    url = f"http://127.0.0.1:{model.server_port}"
+    config = {"version": 1, "stage": "collection", "manifestPath": "manifest.json", "ledgerCheckpointPath": "checkpoint.json",
+              "actorBaseUrl": url, "otlpBaseUrl": url, "snapshotId": "fixture", "stream": False, "maximumLifetimeSeconds": 30,
+              "runs": [{"runId": "run", "taskId": "task", "familyId": "train", "domain": "airline", "arm": "base", "seed": 0, "maxBoundaries": 2, "tools": tools}]}
+    manifest["data"].update(environmentRevision=REVISION, toolSchemaHash=hash_v1([{"domain": "airline", "tools": tools}]))
+    manifest["protocol"]["scheduleHash"] = hash_v1(config["runs"])
+    manifest["budgets"]["ledgerCheckpointHash"] = hash_v1({"fixture": True})
+    for name, document in (("configuration.json", config), ("manifest.json", manifest), ("checkpoint.json", {"fixture": True})):
+        (tmp_path / name).write_text(json.dumps(document))
+    broker = StepBroker(hash_v1(config), hash_v1(manifest))
+    with pytest.raises(ValueError):
+        broker.mark_ready(hash_v1(config), "0" * 64)
+    token = secrets.token_hex(32)
+    gateway = server(broker, token)
+    threading.Thread(target=gateway.serve_forever, daemon=True).start()
+    output = tmp_path / "output"
+    process = subprocess.Popen(service_command(tmp_path / "configuration.json", output), cwd=root,
+                               env={**os.environ, "GOALSPEC_GATEWAY_URL": f"http://127.0.0.1:{gateway.server_port}", "GOALSPEC_GATEWAY_TOKEN": token},
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        broker.wait_ready(timeout=25)
+        response = broker.exchange("run", {"policy": "List airports", "tools": tools, "messages": [{"role": "user", "content": "List airports"}]}, timeout=15)
+        assert response["content"] == "done"
+        broker.finish("run", timeout=5)
+        broker.close()
+        stdout, stderr = process.communicate(timeout=15)
+        assert process.returncode == 0, stderr + stdout
+        receipt = json.loads((output / "telemetry-export-receipt.json").read_text())
+        assert receipt["tracesAccepted"] == receipt["metricsAccepted"] == 1 and receipt["failed"] == 0
+        assert {path for path, _ in received} == {"/v1/traces", "/v1/metrics"}
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        broker.close()
+        gateway.shutdown()
+        gateway.server_close()
+        model.shutdown()
+        model.server_close()

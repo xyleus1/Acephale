@@ -59,11 +59,15 @@ export class InfraTelemetry {
   private pendingBytes = 0;
   private lifecycle: string[] = [];
   private closed = false;
+  private spanCount = 0;
+  private spanDurationSeconds = 0;
+  private exportCounts = { tracesAccepted: 0, metricsAccepted: 0, failed: 0 };
   private constructor(readonly directory: string, private otlpUrl?: string) {}
   static async create(directory: string, otlpUrl?: string) {
     if (otlpUrl) {
       const url = new URL(otlpUrl);
-      if (url.protocol !== "https:" && !["localhost", "127.0.0.1", "alloy"].includes(url.hostname)) throw new Error("OTLP requires TLS or private collector");
+      if (url.username || url.password || url.search || url.hash || !["http:", "https:"].includes(url.protocol)
+        || url.protocol !== "https:" && !["localhost", "127.0.0.1", "alloy"].includes(url.hostname)) throw new Error("OTLP requires a credential-free TLS or private collector URL");
     }
     await mkdir(directory, { recursive: true });
     await mkdir(join(directory, "logs"), { recursive: true });
@@ -104,19 +108,40 @@ export class InfraTelemetry {
     try { const result = await operation(); success = true; return result; }
     finally {
       const durationMs = performance.now() - started;
+      this.spanCount++; this.spanDurationSeconds += durationMs / 1000;
+      this.metrics.observe("goalspec_runtime_span_seconds", { outcome: success ? "success" : "failed" }, durationMs / 1000);
       this.record({ type: "span_completed", name, traceId, spanId, durationMs, success });
       if (this.otlpUrl) {
         const payload = { resourceSpans: [{ resource: { attributes: [{ key: "service.name", value: { stringValue: "goalspec-infra-v1" } }] }, scopeSpans: [{ scope: { name: "goalspec" }, spans: [{ traceId, spanId, name, kind: 1, startTimeUnixNano, endTimeUnixNano: (BigInt(startTimeUnixNano) + BigInt(Math.round(durationMs * 1000000))).toString(), attributes: Object.entries(attributes).map(([key, value]) => ({ key, value: { stringValue: String(value) } })), status: { code: success ? 1 : 2 } }] }] }] };
         // Export is drained at close but does not block the authoritative result.
-        const request = fetch(new URL("/v1/traces", this.otlpUrl), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(2000) })
-          .then(response => { if (!response.ok) throw new Error("OTLP rejected"); }).catch(() => { this.metrics.increment("goalspec_telemetry_exports_total", { outcome: "failed" }); });
+        const request = this.exportOtlp("traces", payload);
         this.exports.add(request); void request.finally(() => this.exports.delete(request));
       }
     }
   }
+  private async exportOtlp(kind: "traces" | "metrics", payload: unknown) {
+    const startedAt = new Date().toISOString(), payloadHash = hash(payload);
+    let accepted = false;
+    try {
+      const response = await fetch(new URL(`/v1/${kind}`, this.otlpUrl!), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(2000) });
+      if (!response.ok) throw new Error("OTLP rejected");
+      const body = await response.json() as { partialSuccess?: { rejectedSpans?: number | string; rejectedDataPoints?: number | string } };
+      if (Number(body.partialSuccess?.rejectedSpans ?? 0) > 0 || Number(body.partialSuccess?.rejectedDataPoints ?? 0) > 0) throw new Error("OTLP partially rejected data");
+      accepted = true; this.exportCounts[kind === "traces" ? "tracesAccepted" : "metricsAccepted"]++;
+    } catch { this.exportCounts.failed++; this.metrics.increment("goalspec_telemetry_exports_total", { outcome: "failed" }); }
+    this.record({ type: "telemetry_export_receipt", kind, endpoint: this.otlpUrl, payloadHash, startedAt, completedAt: new Date().toISOString(), collectorAccepted: accepted });
+  }
+  exportSummary() { return { endpoint: this.otlpUrl ?? null, spans: this.spanCount, ...this.exportCounts }; }
   private exports = new Set<Promise<void>>();
   async close() {
     if (this.closed) return; clearInterval(this.timer);
-    await this.flush(); await Promise.allSettled([...this.exports]); await this.flush(); this.closed = true;
+    await this.flush(); await Promise.allSettled([...this.exports]);
+    if (this.otlpUrl && this.spanCount) {
+      const timeUnixNano = (BigInt(Date.now()) * 1000000n).toString();
+      const metrics = [["goalspec_runtime_spans_total", this.spanCount], ["goalspec_runtime_span_duration_seconds_total", this.spanDurationSeconds]].map(([name, value]) => ({ name,
+        sum: { aggregationTemporality: 2, isMonotonic: true, dataPoints: [{ timeUnixNano, asDouble: value }] } }));
+      await this.exportOtlp("metrics", { resourceMetrics: [{ resource: { attributes: [{ key: "service.name", value: { stringValue: "goalspec-infra-v1" } }] }, scopeMetrics: [{ scope: { name: "goalspec" }, metrics }] }] });
+    }
+    await this.flush(); this.closed = true;
   }
 }

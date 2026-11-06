@@ -44,6 +44,19 @@ def fixtures():
 
 
 class AWSReadinessTests(unittest.TestCase):
+    def test_exact_aws_l40s_decimal_memory_remains_48gb_class_without_claiming_fit(self):
+        value = fixtures()[("ec2", "describe-instance-types")]
+        gpu = value["InstanceTypes"][0]["GpuInfo"]["Gpus"][0]
+        gpu["MemoryInfo"]["SizeInMiB"] = 45776
+        report = aws.hardware_report(value, "g6e.2xlarge")
+        self.assertTrue(report["candidateHardwareChecksPassed"])
+        self.assertFalse(report["actualModelFitVerified"])
+        gpu["MemoryInfo"]["SizeInMiB"] = 45775
+        self.assertIn("single_gpu_memory_below_48gb_class", aws.hardware_report(value, "g6e.2xlarge")["blockers"])
+        gpu["MemoryInfo"]["SizeInMiB"] = 45776
+        gpu["Name"] = "other GPU"
+        self.assertFalse(aws.hardware_report(value, "g6e.2xlarge")["candidateHardwareChecksPassed"])
+
     def test_default_does_not_run_aws_or_any_network_command(self):
         forbidden = Mock(side_effect=AssertionError("No external operation allowed"))
         with patch.object(aws.subprocess, "run", forbidden):
@@ -76,7 +89,7 @@ class AWSReadinessTests(unittest.TestCase):
         self.assertFalse(report["hourlyGrossLimitSatisfied"])
         self.assertIn("live_ec2_compute_price_exceeds_existing_hourly_gross_limit", report["blockers"])
         self.assertIsNone(report["credits"]["balanceUsd"])
-        self.assertIn("aws_lifecycle_controller_not_implemented", report["blockers"])
+        self.assertIn("aws_lifecycle_controller_not_live_verified", report["blockers"])
         self.assertIsNone(report["inspection"]["checks"]["quota"]["availableVcpus"])
 
     def test_price_filters_separate_target_region_from_api_endpoint(self):

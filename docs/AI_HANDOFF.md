@@ -1,3 +1,88 @@
+# 2026-11-06: Bounded AWS lifecycle, observed inventory and native profiling
+
+Added an AWS controller with explicit account/role, region, image, network,
+storage, price and quota checks; original-study reservations; unknown-launch
+reconciliation; verified export/termination; and independent watchdog gates.
+The original journal owns one infrastructure-slice pointer, and a new dispatch
+cannot reuse an existing study reservation. Watchdogs continue other cleanup
+after a malformed historical record, while failed cleanup prevents renewal of
+the readiness heartbeat. See `infra/goalspec-infra-v1/AWS_CONTROL.md`.
+Offline bootstrap rendering supplies scoped operator/role and restricted network
+policy artifacts without account calls; see `infra/goalspec-infra-v1/AWS_BOOTSTRAP.md`.
+
+The serverless package now supplies deterministic controller code and separate
+regional CloudFormation stacks with disabled schedules, retained evidence and
+scoped termination. Overhead reservations bind the exact package and coverage
+window to the original study journal. A bounded recovery canary permits only
+provider recovery verification, reserves cleanup margin, never marks the host
+ready and cannot run inference. Normal launch still requires both controllers'
+actual successful recovery evidence and fresh observations. See
+`infra/goalspec-infra-v1/AWS_WATCHDOGS.md`. The final templates were accepted by
+AWS read-only validation and the exact launch policy had zero validation findings;
+no stacks, schedules or canaries were deployed.
+
+The new read-only host collector generates `observed-deployment.json` directly
+from verified pinned model files, actual package and lock inventories, local
+Docker image/process/mount identity, resident NVIDIA allocations and Linux
+hardware. AWS DescribeInstances evidence must match the host's DMI instance ID.
+It rejects changed containers or lost residency and retains all aggregate-hash
+inputs. `observed: true` is identity evidence, not a passed deployment smoke gate.
+Split inventory binds the Windows benchmark runtime and package/lock evidence to
+the Linux GPU host at the same source commit. The original path-bound journal and
+OpenAI key remain local; no copy, migration or replacement journal is implied.
+See `infra/goalspec-infra-v1/HOST_INVENTORY.md`.
+
+The split guard owns strict-host-key SSH forwards for both models and OTLP,
+verifies the exact inventory-bound instance/container identities, and publishes
+local-clock health for native dispatch. The Python/Node readiness handshake now
+binds both configuration and experiment identities. Native telemetry explicitly
+exports spans and aggregate metrics through the tunnel, retains acceptance
+receipts and fails the service on rejected exports. Collection/profiling verify
+their actual executing Node/Python versions. See `docs/goalspec/INFRA_SPLIT_HOST.md`.
+
+Native component profiling now reconstructs each verified public prefix in a
+private pinned tau environment and measures actual gateway read/freshness work
+alongside unchanged seeded Qwen inputs. It retains both Node and Python clocks,
+paired order, raw responses and every declared failure. Unresolved cleanup blocks
+publication of aggregatable measurements. This closes the native measurement
+implementation gap; it does not establish task success or latency improvement.
+See `docs/goalspec/INFRA_NATIVE_PROFILE.md`.
+
+The infrastructure npm test command includes AWS-budget, native-profile and split-guard
+tests. Shared readiness and launch guides link the new runbooks. Under the
+verified portable Node 22.23.4, schema generation/TypeScript passed and the
+infrastructure suite passed 111 tests with one optional database skip. The full
+research Python suite passed 578 with five retained historical-data/Torch skips.
+The 31 focused native/profile/gateway tests also passed, including real pinned
+tau and loopback Python/Node/OTLP integration with mocked models. The complete
+deployment suite passed 118 tests, including serverless recovery, gross overhead
+reservations and Python/TypeScript inventory hash compatibility. Scoped Python
+lint and whitespace checks passed. CI uses the exact Node 22.23.4 runtime pin.
+
+Separate account inspection verified the intended assumed-role read access and
+an EC2-eligible USD100 Free Tier credit. The YC referral/application remains a
+separate pending grant. The read-only inspector itself intentionally does not
+query billing. The inspected quota is zero of the required eight vCPUs, with an
+increase pending, and the observed USD2.24208/hour rate exceeds the unchanged
+USD1.25 cap. These external execution gates are not waived by successful tests.
+The separate gross watchdog cost plan proposes a USD3 overhead reservation for
+12 hours; it has not been reserved or deployed. Re-render the package for the
+actual approved coverage window before reserving and deploying it.
+
+The local environment helper at
+`C:\Users\apexs\.config\goalspec\Enter-ResearchEnvironment.ps1` selects verified
+portable Node 22.23.4, the named AWS profile and actual pinned benchmark Python.
+Only its explicit `-WithOpenAI` option loads the protected API key. Collect the
+orchestrator receipt after committing the source, then use that same commit on
+the GPU host; inventory requires clean source and actual installed environments.
+
+All original gross spending, contingency and GPU-hour limits, fixed model pins,
+unchanged actor policy and production-off state remain in force. No model call,
+model download, GPU launch or original-ledger mutation was performed by this
+engineering implementation. Real serving, two independent watchdog recovery
+tests, measured profiling, human annotation audit and the frozen live comparison
+remain execution gates.
+
 # 2026-11-06: GoalSpec fresh collection and AWS preparation
 
 Prepared `codex/goalspec-aws-readiness-20261106` from `2504afe`. The fixed-Qwen
