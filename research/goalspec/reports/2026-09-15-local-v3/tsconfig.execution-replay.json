@@ -1,6 +1,0 @@
-{
-  "extends": "../../../../tsconfig.json",
-  "compilerOptions": { "incremental": false, "plugins": [] },
-  "include": ["native_execution_replay_v3.ts"],
-  "exclude": []
-}

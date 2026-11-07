@@ -1,4 +1,0 @@
-stage,arm,trials,successes,successRate,successCiLow,successCiHigh,latencyMsMean,totalTrialSecondsMean,serviceDrainSecondsMean,latencyMsN,totalTrialSecondsN,serviceDrainSecondsN,knownUsageSubtotalUsd,unknownCostTrials,physicalReads,speculativeReads,exactCallPromotions,schedulerRejections
-development-1,base,8,0,0.0,0.0,0.0,5372.242474999439,5.401205912499336,0.028960287499558035,8,8,8,0.010841,0,0,0,0,0
-development-1,neutral_memory_prefetch,8,0,0.0,0.0,0.0,24.33249999921827,0.05644618749965957,0.032110375000229396,8,8,8,0.0,0,0,0,0,0
-development-1,goalspec,8,0,0.0,0.0,0.0,10766.88280000144,10.798836212499737,0.031950087499353685,8,8,8,0.013314,0,0,0,0,0

@@ -1,0 +1,5 @@
+{"groups":[{"name":"acephale-integrity","rules":[
+  {"alert":"AcephaleBudgetExhausted","expr":"sum(acephale_spend_usd) + sum(acephale_reserved_usd) >= 435","for":"10s","labels":{"severity":"critical"},"annotations":{"summary":"Protected $65 contingency reached; stop new dispatch"}},
+  {"alert":"AcephaleRuntimeUnavailable","expr":"up{job=\"acephale\"} == 0","for":"1m","labels":{"severity":"warning"},"annotations":{"summary":"Runtime unavailable or runtime profile not started"}},
+  {"alert":"AcephaleInferenceQueueGrowing","expr":"vllm:num_requests_waiting > 8","for":"1m","labels":{"severity":"warning"},"annotations":{"summary":"Inference queue exceeds initial workload bounds"}}
+]}]}

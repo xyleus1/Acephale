@@ -1,0 +1,51 @@
+logging {
+  level = "warn"
+}
+
+otelcol.receiver.otlp "runtime" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  http { endpoint = "0.0.0.0:4318" }
+  output {
+    traces = [otelcol.processor.batch.runtime.input]
+    metrics = [otelcol.processor.batch.runtime.input]
+    logs = [otelcol.processor.batch.runtime.input]
+  }
+}
+
+otelcol.processor.batch "runtime" {
+  timeout = "1s"
+  send_batch_size = 128
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.runtime.input]
+    logs = [otelcol.exporter.loki.runtime.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls { insecure = true }
+  }
+}
+
+otelcol.exporter.prometheus "runtime" {
+  forward_to = [prometheus.remote_write.runtime.receiver]
+}
+
+prometheus.remote_write "runtime" {
+  endpoint { url = "http://prometheus:9090/api/v1/write" }
+}
+
+otelcol.exporter.loki "runtime" {
+  forward_to = [loki.write.runtime.receiver]
+}
+
+loki.source.file "runtime" {
+  targets = [{__path__ = "/artifacts/**/logs/lifecycle.jsonl", job = "acephale"}]
+  forward_to = [loki.write.runtime.receiver]
+}
+
+loki.write "runtime" {
+  endpoint { url = "http://loki:3100/loki/api/v1/push" }
+}

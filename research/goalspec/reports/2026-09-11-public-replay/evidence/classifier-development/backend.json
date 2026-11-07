@@ -1,1 +1,0 @@
-{"backend":"cached_llm","cache_sha256":"0d2591b4a6a8cc00a4c213983b8272c5f3413145925821a505477f3905d3d23c","cached_predictions":"C:\\Users\\apexs\\derya-crm-memory-main-20260908\\research\\goalspec\\runs\\public-pilot-20260911\\classifier-development\\capture.json","calibration_temperature":1.0,"model":"gpt-5.6-sol","retrieval_engine":"numpy","update_policy":"initial"}

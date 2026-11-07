@@ -1,5 +1,0 @@
-run,partition,labeled_trials,macro_domain_top1,macro_domain_top3,top1,top3,trials,weighting
-lexical-development,development,184,0.3412037037037037,0.5199074074074074,0.3423913043478261,0.5489130434782609,204,trial_micro_with_separate_macro_domain_task_equal
-llm-development,development,184,0.6069444444444444,0.9120370370370371,0.657608695652174,0.8858695652173914,204,trial_micro_with_separate_macro_domain_task_equal
-lexical-test,test,196,0.355,0.4666666666666666,0.29081632653061223,0.44387755102040816,224,trial_micro_with_separate_macro_domain_task_equal
-llm-test,test,196,0.6416666666666666,0.8516666666666667,0.6326530612244898,0.7959183673469388,224,trial_micro_with_separate_macro_domain_task_equal

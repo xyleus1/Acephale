@@ -1,0 +1,179 @@
+# Acephale methods
+
+Acephale tests whether source-grounded goal information helps a PASTE-inspired
+prefetcher select useful read-only tool invocations. It extracts workflow and
+episodic memory from agent trajectories, binds possible future calls to current
+public evidence, ranks them and executes admitted reads during actor inference.
+The actor retains the same weights, prompt, available tools and step limits. A
+prefetched result enters the normal tool response only after the actor requests
+that exact invocation and validation succeeds.
+
+The hypothesis is empirical. Inferred goals can be wrong, retrieval can distract
+the predictor and speculation can increase backend work or contention. Transparent
+prefetch does not logically imply better task reward or fewer actor tool calls.
+
+## Models and serving
+
+The complete source pins live in
+[`versions.json`](../infra/acephale-infra-v1/versions.json). Default weights are:
+
+| Role | Model | Exact revision |
+| --- | --- | --- |
+| Actor | `Qwen/Qwen3.5-9B` | `c202236235762e1c871ad0ccb60c8ee5ba337b9a` |
+| Predictor | `Qwen/Qwen3.5-0.8B` | `2fc06364715b967f1860aea9cf38778875588b17` |
+| Optional capacity ablation | `Qwen/Qwen3.5-2B` | `15852e8c16360a2fea060d615a32b45270f8a8fc` |
+
+The default models use bfloat16 with vLLM 0.32.0, pinned image digest, PyTorch
+2.13.0/CUDA 13.0.3, `qwen3_xml` tool parsing and `qwen3` reasoning parsing. Thinking
+is disabled for this profile. Actor context is 32,768 tokens: 28,672 input plus
+4,096 output. Predictor context is 8,192: 7,168 plus 1,024. No weight training,
+adapter merging or model substitution is part of the primary study.
+
+The official OpenAI SDK targets local compatible endpoints through
+`LocalChatModelPort`. It preserves real tool-call IDs and assistant continuation,
+checks parsed arguments and records usage, refusal/incomplete status, streaming
+timing and input hashes. The served tokenizer controls compilation. Policy,
+requirements, tool contracts and current argument-binding evidence precede optional
+history/examples; omissions are recorded rather than silently truncating fields.
+
+## Data and causal labels
+
+Each trajectory separates public messages/tools from future actions, hidden task
+data and independent outcomes. Families are assigned to training, development and
+test before annotation or mining. Requested-goal annotations see only the public
+checkpoint. Native state, user simulation and reward evaluation stay in Python.
+
+Base collection may enable shadow prediction. Shadow requests use an existing
+frozen training memory or a valid empty bootstrap snapshot. They cannot admit
+tools or alter actor messages. A prediction qualifies as causal only if its
+recorded completion precedes `actor_generated` for the same run, checkpoint,
+frame and public-input identity. Labels use the actual generated calls, before
+promotion or execution. Retrospective replay errors are not causal training errors.
+
+Verified successful training endpoints support executable workflows. Verified
+failed endpoints can supply contrastive episodes. Unknown/censored/provider-failed
+outcomes remain in reports but are excluded from known-outcome memory. Every
+memory publication is immutable, including additions of causal misses/confusions.
+Changing the snapshot requires new compatible downstream artifacts.
+
+## Workflow and episodic memory
+
+Bounded pattern mining records observed ordering, argument dependencies and
+verified endpoints. Deterministic binding resolves fields or indices from current
+visible sources. Historical entities are examples, never authority to construct
+current arguments. Unsafe or unsupported bindings abstain.
+
+Optional episodic retrieval uses a dedicated PostgreSQL 17.11 database with
+pgvector 0.8.7 through direct `pg` SQL. Frozen embeddings use
+`text-embedding-3-small`, 1,536 dimensions and an explicit encoder-version
+descriptor. Their public-only projection includes requirements, previous tool and
+the last six prefix items, capped at 1,900 code points. The artifact binds model,
+projection, memory, episode, text and vector hashes.
+
+Full-text and exact cosine retrieval apply compatibility filters before ranking:
+memory/version, authorization, tool schema, environment, policy, training families,
+current-run exclusions and heldout-family exclusions. At most 32 hits per channel
+feed reciprocal-rank fusion with constant 60. The prompt admits at most four
+examples, including at most one negative, and 16,000 characters. The 100 ms
+deadline permits lexical fallback on unavailability, while integrity failures
+fail closed. Replay freezes one completed result per checkpoint for both
+conditions, including fallback; late dense results cannot change the second arm.
+
+## Candidate ranking and admission
+
+Graph and workflow proposals deduplicate exact invocations, keep valid current
+bindings and interleave sources/tools up to 128 candidates. A goal-neutral
+token-budget compiler freezes the common window before goal conditioning.
+`InfraSession` makes one ranking request per checkpoint and retains at most three
+selected candidates. It uses source-valid ready goals when an independent audited
+Wilson agreement lower bound is positive; otherwise it ranks neutrally. This is
+an enable gate, not a high-confidence task-accuracy guarantee. Goal refresh is
+asynchronous and lower priority; there are no sequential neutral and conditional
+ranking calls on the primary runtime path.
+
+Candidate scores are independent probabilities of exact invocation occurrence
+anywhere in the immediately next authoritative batch. Several may be positive;
+they need not sum to one. `READ`, `NO_READ` and `READ_UNCOVERED` describe prediction
+states without changing which tools the actor is allowed to request.
+
+Eligibility defaults to denied. Admitted tools must be audited reads with current
+authorization and source-bound arguments. Defaults are at most two concurrent
+speculative reads per run, four globally, twelve starts per run, one-hop lookahead
+and a five-second deadline. Authoritative work retains priority and reserved
+capacity. Exact invocations join/promote an existing managed job. Duplicates await
+confirmed cancellation; mutations invalidate pending evidence; shutdown drains
+work and fences late results.
+
+Native reads run against isolated Python-owned snapshots and freshness leases.
+Document reads use immutable allowlisted content and exact receipts. A successful
+validation result is required for consumption. A rejection is never represented
+as an authoritative observation. Every speculative, wasted and validation call
+counts as physical work even when the actor's logical call count stays unchanged.
+
+## Calibration and deployment profiles
+
+Calibration v2 binds `independent_next_batch_hit`, `selected_candidates`, exact
+model/revision, memory, retrieval, prompt and compiler. Training labels fit separate
+neutral and conditional maps using fixed deciles, forward merging of empty bins
+and Laplace(1,1) smoothing. Development results are diagnostics; test labels never
+fit a map. A missing or incompatible artifact fails closed.
+
+Goal conditioning additionally requires an annotation pilot and independent
+review: the declared design is 100 annotations with at least 20 human-reviewed
+examples, at least 90% semantic acceptance and zero unsupported bindings.
+Independently graded training predictions provide agreement evidence. Agreement
+with a teacher is not the native success metric.
+
+Opportunity v2 binds eight hashes: hardware, serving/stream/concurrency, model,
+memory, compiler, retrieval, prompt and protocol. At least ten complete measured
+rows are required; failed rows remain. Paired actor inputs/seeds are identical.
+The concurrent arm makes one neutral rank; once it returns, background goal refresh
+starts alongside the scheduler-managed read. `predictionMs` ends at rank completion.
+The separate `goalRefreshSpan` is recorded and drained, while concurrent actor
+duration measures observed contention. Both actor outputs must request the exact
+profiled read; proposed actor actions are not executed.
+
+Six measured components are `actorLeadMs`, `contentionMs`, `predictionMs`,
+`schedulingMs`, `toolMs`, `validationMs`. Aggregation uses p10 tool/lead benefits and
+p90 costs, rejects negative paired actor excess and retains raw receipts/profile
+hashes. This conservative admission heuristic is not a causal speedup result.
+Changed deployment, stream setting, memory or retrieval requires new measurements.
+
+## Evaluation and reporting
+
+The paired live arms are base actor, neutral-memory prefetch and goal-conditioned
+memory prefetch. All use the same actor, tasks, trial seeds, tools, budgets and
+step limits; order is randomized within paired blocks. Repository memory and
+calibration stay frozen. Failures, censored runs and undispatched reserved slots
+are retained according to the declared design, never replaced with easier tasks.
+
+Separate fixed-panel replay freezes up to three common candidates before goal
+inference and requests a score for every ID. Both conditions use identical panels
+and any-next-batch binary labels. Closed receipts are verified before private
+labels are joined. Report binary log loss, Brier score, panel coverage,
+missing/failed predictions and family-clustered paired intervals. These are not
+full-action cross entropy or true conditional entropy. A test partition alone
+does not prove untouched preregistered heldout evaluation.
+
+Live reporting separates native reward/pass1, constraints, two-trial consistency,
+logical actor calls, physical read/prefetch/revalidation calls, total latency,
+tail sample counts, model overhead and billed costs. Exact argument matches and
+speculative consumption rates are prediction/execution metrics, not task success.
+Native task subsets disclose their denominator and pinned environment. Generated
+tasks are a custom tau-compatible pilot. Neither is an official full-suite score
+unless that complete benchmark was actually run under its stated protocol.
+
+## Relationship to prior methods
+
+[PASTE](https://arxiv.org/abs/2603.18897v3) motivates overlapping tool execution
+with generation, symbolic invocation prediction, exact matching and cost-aware
+scheduling. [Speculate with Memory](https://arxiv.org/abs/2607.12236v1) motivates
+transition, episodic and prediction-error memory. Acephale studies adding
+source-grounded goal conditioning to these infrastructure ideas. It does not
+claim to reproduce every author implementation, engine hook or published result.
+
+vLLM supplies serving, the SDK supplies protocol transport, PostgreSQL/pgvector
+supply storage/retrieval, and OpenTelemetry with Grafana/Prometheus/Tempo/Loki/Alloy
+supplies observability. The experimental binding, admission, provenance and
+evaluation contracts remain Acephale code. No vLLM engine-level co-scheduler,
+observation-conditioned actor prelaunch or general tool decoder is claimed.

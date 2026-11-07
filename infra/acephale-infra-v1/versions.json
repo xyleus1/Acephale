@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "profile": "acephale-infra-v1",
+  "verifiedAt": "2026-11-05",
+  "images": {
+    "vllm": "vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+    "node": "node:22.23.4-bookworm-slim",
+    "python": "python:3.12.16-slim-bookworm",
+    "postgres": "pgvector/pgvector:0.8.7-pg17",
+    "grafana": "grafana/grafana:13.3.0",
+    "prometheus": "prom/prometheus:v3.15.1",
+    "tempo": "grafana/tempo:3.1.1",
+    "loki": "grafana/loki:3.7.9",
+    "alloy": "grafana/alloy:v1.21.3"
+  },
+  "requiredPostgresVersion": "17.11",
+  "requiredVectorVersion": "0.8.7",
+  "minimumDriverMajor": 580,
+  "servingTorch": "2.13.0",
+  "servingCuda": "13.0.3",
+  "downloadPackage": "huggingface_hub==2.4.0",
+  "models": {
+    "actor": {"repository": "Qwen/Qwen3.5-9B", "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a", "directory": "actor", "dtype": "bfloat16"},
+    "predictor": {"repository": "Qwen/Qwen3.5-0.8B", "revision": "2fc06364715b967f1860aea9cf38778875588b17", "directory": "predictor", "dtype": "bfloat16"},
+    "predictor_capacity_ablation": {"repository": "Qwen/Qwen3.5-2B", "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc", "directory": "predictor-2b", "dtype": "bfloat16"}
+  },
+  "limits": {"infrastructureUsd": 35, "hourlyUsd": 2.50, "cumulativeGpuHours": 24, "sessionHours": 8, "setupMinutes": 30, "protectedContingencyUsd": 65, "totalUsd": 500},
+  "status": "source_pinned_not_deployment_verified"
+}

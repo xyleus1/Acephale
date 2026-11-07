@@ -1,9 +1,0 @@
-{
-  "inputHashes": {
-    "research\\goalspec\\runs\\local-v2-legacy-replay-20260915\\queue.jsonl": "96c07d8375d206d3b175944f0521d3aaa46404fb2c15e0e71f08077aa9b244e9",
-    "research\\goalspec\\runs\\local-v2-legacy-replay-20260915\\predictions\\requested-predictions.jsonl": "9bbc1b19b0c1ef354effae0e15d0fccdb4e8de55d8a035090ea324cea4b9c753",
-    "research\\goalspec\\runs\\local-v2-legacy-replay-20260915\\annotations\\requested-annotations.jsonl": "c77446d93c6e00771a05fc290505c72c0410f5bc2b5f29fa9690b30cf3d5618e",
-    "research\\goalspec\\runs\\local-v2-legacy-replay-20260915\\grades\\requested-grades.jsonl": "dcd3975aef80d6f3d100387175521253c9fdb16f9bc8392975155b3591c341fc"
-  },
-  "summaryHash": "af27be34e814e688a14b560c24be234bc3cd889f6d8ec3224fcd79c176b0e850"
-}

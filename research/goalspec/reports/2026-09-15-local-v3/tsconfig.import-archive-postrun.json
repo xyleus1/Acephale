@@ -1,9 +1,0 @@
-{
-  "extends": "../../../../tsconfig.goalspec.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "incremental": false
-  },
-  "include": ["import_archive_postrun.ts", "import_archive_postrun.test.ts"],
-  "exclude": []
-}

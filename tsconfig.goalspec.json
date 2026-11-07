@@ -1,5 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "incremental": false },
-  "include": ["src/lib/goalspec/**/*.ts", "src/lib/goalspec-adapters/**/*.ts", "services/goalspec-runtime/**/*.ts", "scripts/goalspec-*.ts"]
-}

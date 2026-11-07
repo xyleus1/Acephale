@@ -1,0 +1,16 @@
+[Unit]
+Description=Acephale provider lifecycle watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=acephale-controller
+WorkingDirectory=/opt/acephale
+EnvironmentFile=/etc/acephale/controller.env
+ExecStart=/usr/bin/python3 /opt/acephale/infra/acephale-infra-v1/control.py watchdog --ledger /var/lib/acephale/infra-ledger.json
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/acephale
+TimeoutStartSec=180

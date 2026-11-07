@@ -1,100 +1,60 @@
-# GoalSpec
+# Acephale
 
-GoalSpec learns reusable tool-use sequences from agent traces, tracks source-grounded
-user goals, retrieves compatible workflows, and predicts useful read-only tool calls.
-Its scheduler can execute admitted reads early, validate their freshness and
-permissions, and expose verified evidence to the assistant before its next model call.
+Acephale is a standalone study of **goal-conditioned tool prefetching inspired by
+PASTE**. It collects agent traces, builds frozen workflow and episodic memory,
+infers source-grounded goals from the current public context, and predicts which
+read-only tool invocations the agent will need. An admitted read runs while the
+actor is generating. Its result is reused only if the actor requests the exact
+invocation and freshness and authorization checks pass.
 
-This dedicated repository contains the published GoalSpec v1-v5 TypeScript runtime,
-Derya integration, Python research tools, tests, controller weights, and benchmark
-summaries. It retains the Derya application scaffold and Git history so the integration
-and existing relative paths remain intact.
+The experiment changes tool-calling infrastructure. Actor weights, prompts, tool
+catalog and task limits stay fixed across the primary comparison arms. Goal
+conditioning affects the predictor and scheduler. It does not train the actor
+or guarantee improvements in task accuracy, logical tool-call count or latency.
 
-- [Checkout, verification, and reproduction limits](docs/goalspec/GITHUB_CHECKOUT.md)
-- [Closed v5 benchmark results](research/goalspec/reports/2026-09-16-v5-local/README.md)
-- [New infrastructure runtime, local model serving, and commands](docs/goalspec/INFRA_V1.md)
-- [Prepare and launch fresh fixed-Qwen native data collection](docs/goalspec/INFRA_NATIVE_LAUNCH.md)
-- [Fresh data, annotation and admission calibration](docs/goalspec/INFRA_ADMISSION.md)
-- [AWS credit, account and GPU readiness](infra/goalspec-infra-v1/AWS_READINESS.md)
-- [Infrastructure implementation and measured replay results](research/goalspec/reports/2026-11-05-infra-v1/README.md)
-- [GoalSpec runtime](src/lib/goalspec)
-- [Research implementation](research/goalspec)
+- [Methods and experimental controls](docs/METHODS.md)
+- [Collection, memory, calibration and evaluation commands](docs/RUNBOOK.md)
+- [Current verification, execution gates and limitations](docs/STATE.md)
+- [Research Python package](research/acephale/README.md)
+- [Pinned serving and deployment configuration](infra/acephale-infra-v1/README.md)
 
-V5 is experimental and opt-in. Results were mixed and did not establish an overall
-accuracy or latency improvement. The selected live configuration disabled
-goal-conditioned ranking and started no speculative reads. The new infrastructure
-profile adds asynchronous Qwen prediction, grounded workflow binding, exact read
-promotion, native and document runners, and observability. Its deterministic tests
-and historical replay do not establish a fresh Qwen task score or latency gain.
-Raw traces, local databases, credentials, and large evaluation archives are excluded;
-see the checkout guide for the exact publication scope and known test limitations.
+## Local checks
 
-## Derya integration context
+Use the versions pinned in
+[`versions.json`](infra/acephale-infra-v1/versions.json). From the repository root:
 
-The original application README is preserved below for integration setup. For GoalSpec
-checks, start with the checkout guide above.
-
----
-
-# Derya Freight OS
-
-Automated freight forwarding & procurement platform. Captures customer RFQs, parses them with AI, sources rates from carriers/agents, builds quotes, tracks jobs from booking through delivery — with a CRM sub-module for customer relationships.
-
-## Project context
-
-- Vision & status: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md)
-- Roadmap to automated forwarding office: [`docs/PRODUCTIZATION_ROADMAP.md`](docs/PRODUCTIZATION_ROADMAP.md)
-
-## Tech
-
-- Web: Next.js 15 (App Router) + TypeScript, Server Components + Server Actions
-- DB: SQLite (local demo) / Postgres-ready
-- ORM: Prisma
-- Auth: Cookie-based credentials
-- AI: OpenAI GPT-5.6 via the Responses API
-
-## Prereqs
-
-- Node.js 20+
-
-## Getting started
-
-1) Create `.env` from `.env.example` (set `OPENAI_API_KEY` for AI features)
-2) Install deps:
-
-```bash
-npm install
+```text
+npm ci --ignore-scripts
+npm run check
+npm test
 ```
 
-3) Push schema + seed:
+Python research checks run from `research/acephale`:
 
-```bash
-npm run db:push
-npm run db:seed
-npx tsx prisma/seed-jobs.ts   # seeds demo jobs, RFQs, carrier quotes, milestones
+```text
+uv sync --python 3.12.14 --frozen --group dev --extra analysis
+uv run --frozen --extra analysis pytest
 ```
 
-4) Start dev server:
+These checks are separate from GPU serving, database integration and paid model
+evaluation. Configure credentials and the existing external study budget through
+the execution environment. Never create a replacement budget to repeat a run.
+Python 3.12.14 is the local/CI unit-test interpreter; observed live deployment
+continues to require its independently pinned runtime, including Python 3.12.16.
 
-```bash
-npm run dev
-```
+## Study structure
 
-## Demo logins
+| Component | Location |
+| --- | --- |
+| Contracts, binding, workflow memory and scheduler | `src/lib/acephale` |
+| Local model ports, native/document adapters and telemetry | `services/acephale-runtime` |
+| Data preparation, native environments, private evaluation and statistics | `research/acephale` |
+| Reproducible commands and offline tests | `scripts` |
+| Pinned GPU serving, research database and observability | `infra/acephale-infra-v1` |
 
-- `admin@demo.local / admin1234`
-- `sales1@demo.local / sales1234`
-
-## Key routes
-
-- `/dashboard` — control workbench for the focused load/RFQ
-- `/dashboard/inbox` — email triage, load-linked threads, and RFQ intake
-- `/dashboard/jobs` — RFQ → pricing → booked/waiting cargo → en route → delivered pipeline
-- `/dashboard/pricing` — target price capture and forwarder quote comparison
-- `/dashboard/rfq/[id]` — RFQ qualification and maturity gate
-- `/dashboard/settings/email` — Gmail/Outlook/IMAP setup
-- `/dashboard/customers` — CRM
-- `/dashboard/customer-portal`: staff company and customer-user management with scoped workspace preview
-- `/portal`: customer username and password sign-in to the company-scoped Supply OS
-- `/customer`: public design sandbox with fictional data only, never live customer records
-- `/api/jobs/[id]/quote-pdf` — printable customer quote
+The primary comparison is base actor, neutral-memory prefetch and goal-conditioned
+memory prefetch on paired tasks/seeds. No new live accuracy or latency gain has
+been established for this standalone checkout. Earlier reports remain unchanged
+in the original checkout and Git history; they are neither current results nor
+automatically eligible training data. The implementation is paper-based research,
+not a verified reproduction of every PASTE or Salesforce serving component.

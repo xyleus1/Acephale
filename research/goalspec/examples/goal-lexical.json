@@ -1,6 +1,0 @@
-{
-  "backend": "lexical",
-  "model": null,
-  "calibration_temperature": 1.0,
-  "retrieval_engine": "numpy"
-}

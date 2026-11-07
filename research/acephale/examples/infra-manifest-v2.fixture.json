@@ -1,0 +1,110 @@
+{
+  "version": 2,
+  "profile": "acephale-infra-v1",
+  "experimentId": "schema-fixture-only-not-a-measured-run",
+  "createdAt": "2026-11-05T00:00:00Z",
+  "sourceCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "actor": {
+    "servedModel": "actor",
+    "weightsHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tokenizerHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "chatTemplateHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "precision": "bfloat16",
+    "temperature": 0,
+    "topP": 1,
+    "thinking": false,
+    "weightsFrozen": true,
+    "repository": "Qwen/Qwen3.5-9B",
+    "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    "contextWindow": 32768,
+    "inputBudget": 28672,
+    "outputCap": 4096
+  },
+  "predictor": {
+    "servedModel": "predictor",
+    "weightsHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tokenizerHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "chatTemplateHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "precision": "bfloat16",
+    "temperature": 0,
+    "topP": 1,
+    "thinking": false,
+    "weightsFrozen": true,
+    "repository": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contextWindow": 8192,
+    "inputBudget": 7168,
+    "outputCap": 1024
+  },
+  "runtime": {
+    "imageDigest": "vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+    "vllm": "0.32.0",
+    "torch": "2.13.0",
+    "cuda": "13.0.3",
+    "transformers": "5.16.1-fixture",
+    "node": "22.23.4",
+    "python": "3.12.16",
+    "dependencyLockHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "packageInventoryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "toolParser": "qwen3_xml"
+  },
+  "hardware": {
+    "provider": "fixture",
+    "instanceType": "fixture",
+    "imageId": "fixture",
+    "gpu": "fixture",
+    "gpuCount": 1,
+    "gpuMemoryBytes": 51539607552,
+    "driver": "580-fixture",
+    "cpu": "fixture",
+    "ramBytes": 107374182400
+  },
+  "data": {
+    "datasetHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "splitHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "memoryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "calibrationHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "toolSchemaHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "environmentRevision": "fixture",
+    "trainingFamilies": [
+      "train"
+    ],
+    "developmentFamilies": [
+      "dev"
+    ],
+    "heldoutFamilies": [
+      "test"
+    ]
+  },
+  "arms": [
+    "demand-only",
+    "goal-neutral",
+    "goal-conditioned"
+  ],
+  "seeds": [
+    0,
+    1
+  ],
+  "budgets": {
+    "totalCeilingMicrodollars": 500000000,
+    "trancheMicrodollars": 150000000,
+    "infrastructureMicrodollars": 35000000,
+    "protectedContingencyMicrodollars": 65000000,
+    "maximumGpuHours": 24,
+    "ledgerCheckpointHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "protocol": {
+    "actorContext": "none",
+    "exposeEvidence": false,
+    "frozenMemory": true,
+    "sameCandidatePool": true,
+    "lookaheadHops": 1,
+    "rankedCandidates": 3,
+    "perRunConcurrency": 2,
+    "globalConcurrency": 4,
+    "startsPerRun": 12,
+    "deadlineMs": 5000,
+    "cachePolicy": "fixture-only-disabled",
+    "scheduleHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}
