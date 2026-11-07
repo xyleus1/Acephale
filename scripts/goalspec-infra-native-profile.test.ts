@@ -1,10 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { hash } from "../src/lib/goalspec/canonical";
 import type { Candidate } from "../src/lib/goalspec/contracts/generated";
 import type { PublicBoundary } from "../services/goalspec-runtime/actor";
 import type { ReadExecutor } from "../src/lib/goalspec/scheduler";
-import { measureNativePair } from "./goalspec-infra-native-profile";
+import { measureNativePair, nativeProfileJournalPrefix } from "./goalspec-infra-native-profile";
+
+test("native profiling preserves the original journal prefix across appended costs", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "goalspec-profile-prefix-")), file = join(directory, "budget.jsonl");
+  try {
+    await writeFile(file, "original-journal-record\n");
+    const original = await nativeProfileJournalPrefix(file);
+    await appendFile(file, "new-profiling-charge\n");
+    assert.deepEqual(await nativeProfileJournalPrefix(file, original.bytes), original);
+    await writeFile(file, "replaced-journal-record\nnew-profiling-charge\n");
+    assert.notDeepEqual(await nativeProfileJournalPrefix(file, original.bytes), original);
+    await writeFile(file, "truncated\n");
+    await assert.rejects(nativeProfileJournalPrefix(file, original.bytes), /truncated/);
+    await assert.rejects(nativeProfileJournalPrefix(file, 0), /missing/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 const boundary: PublicBoundary = { policy: "Read", tools: [{ type: "function", function: { name: "get_user_details", parameters: { type: "object" } } }],
   messages: [{ role: "user", content: "Read U1" }] };
@@ -34,6 +52,25 @@ test("native pair measures actual read and validation, keeps IDs and alternates 
       if (key !== "contentionMs") { assert.ok(span.clockId); assert.ok(span.endMs > span.startMs); }
     }
   }
+});
+
+test("one ranking opens the read window while goal refresh runs and drains separately", async () => {
+  const order: string[] = [];
+  let releaseRead!: () => void;
+  const readStarted = new Promise<void>(resolve => { releaseRead = resolve; });
+  const measured = await measureNativePair({ boundary, candidate, checkpointId: "point", ordinal: 0, seed: 0,
+    signal: AbortSignal.timeout(1000),
+    executor: { eligible: () => true, read: async () => { order.push("read"); releaseRead(); return { id: "U1" }; }, validate: async (_, prior) => prior },
+    actor: async suffix => { await delay(suffix === "concurrent" ? 40 : 2); return response(); },
+    prediction: async () => { order.push("rank-returned"); return {}; },
+    refreshGoals: async () => { order.push("goals-started"); await readStarted; await delay(10); order.push("goals-drained"); return {}; },
+  });
+  assert.equal(measured.status, "completed");
+  assert.deepEqual(order, ["rank-returned", "goals-started", "read", "goals-drained"]);
+  assert.equal(measured.goalRefresh.status, "completed");
+  assert.ok(measured.goalRefreshSpan.endMs >= measured.goalRefreshSpan.startMs);
+  assert.equal(Object.keys(measured.spans).length, 6);
+  assert.equal(measured.spans.goalRefreshMs, undefined);
 });
 
 test("native profile drains a slow read after actor failure and preserves the failure", async () => {

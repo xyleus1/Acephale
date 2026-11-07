@@ -2,7 +2,7 @@ import test from "node:test";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, utimes, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, utimes, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { aggregateInfraMetrics } from "../services/goalspec-runtime/infra-metrics-store";
@@ -19,7 +19,7 @@ test("aggregator sums counters and histograms but selects latest gauge", async (
     one.observe("goalspec_task_duration_seconds", { arm: "base" }, 0.5); one.gauge("goalspec_reserved_usd", { category: "infra" }, 10);
     const two = new InfraMetrics(); two.increment("goalspec_tasks_total", { arm: "base", outcome: "success" }, 3);
     two.observe("goalspec_task_duration_seconds", { arm: "base" }, 1.5); two.gauge("goalspec_reserved_usd", { category: "infra" }, 5);
-    const old = await save("first", one.render()), latest = await save("second", two.render());
+    const old = await save("first", await one.render()), latest = await save("second", await two.render());
     await utimes(old, 1000, 1000); await utimes(latest, 2000, 2000);
     const output = await aggregateInfraMetrics(root);
     assert.equal(output.files, 2); assert.equal(output.skipped, 0);
@@ -67,6 +67,22 @@ test("telemetry rejects high-cardinality labels and drains event files", async (
     telemetry.record({ type: "test_event" });
     assert.equal(await telemetry.span("unit", "run", { arm: "base" }, async () => "ok"), "ok");
     await telemetry.close(); assert.throws(() => telemetry.record({ type: "late" }), /closed/);
+  });
+});
+
+test("independent telemetry instances preserve unique clocks and ordered journals", async () => {
+  await fixture(async root => {
+    const left = await InfraTelemetry.create(join(root, "left")), right = await InfraTelemetry.create(join(root, "right"));
+    left.record({ type: "prediction", runId: "a", sequence: 999, processClockId: "forged" });
+    right.record({ type: "prediction", runId: "b" });
+    left.record({ type: "actor_generated", runId: "a" });
+    await Promise.all([left.close(), right.close()]);
+    const events = async (name: string) => (await readFile(join(root, name, "events.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const a = await events("left"), b = await events("right");
+    assert.deepEqual(a.map(row => row.sequence), [0, 1]);
+    assert.equal(a[0].processClockId, a[1].processClockId);
+    assert.notEqual(a[0].processClockId, b[0].processClockId);
+    assert.notEqual(a[0].processClockId, "forged");
   });
 });
 

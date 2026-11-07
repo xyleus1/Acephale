@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 
 import pytest
 
@@ -8,6 +9,7 @@ from goalspec.contracts_v1 import hash_v1
 from goalspec.infra_calibration import fit_calibration, fit_paired_calibration
 from goalspec.infra_cli import main
 from goalspec.infra_data import publish_bundle
+from goalspec.infra_evaluation import score_fixed_panel_replay
 
 
 def fixture(tmp_path, *, reverse_development=False, heldout=False, cross_family=False):
@@ -27,10 +29,10 @@ def fixture(tmp_path, *, reverse_development=False, heldout=False, cross_family=
     bundle_manifest = publish_bundle(bundle, {"public.jsonl": public, "labels.jsonl": labels})
     prediction_directory = tmp_path / "predictions"
     prediction_directory.mkdir()
-    body = {"version": 1, "kind": "uncalibrated_prediction_replay", "executionAllowed": False,
+    body = {"version": 2, "probabilitySemantics": "independent_next_batch_hit", "predictionMode": "selected_candidates", "kind": "uncalibrated_prediction_replay", "executionAllowed": False,
             "model": {"repository": "test/model", "revision": "b" * 40}, "memoryHash": "c" * 64,
             "sourceDatasetHash": bundle_manifest["bundle_hash"], "inferGoals": False,
-            "predictorContractHash": "d" * 64, "candidateCompilerHash": "e" * 64,
+            "predictorContractHash": "d" * 64, "candidateCompilerHash": "e" * 64, "retrievalHash": "f" * 64,
             "rowIds": [row["checkpoint_id"] for row in predictions]}
     (prediction_directory / "manifest.json").write_text(json.dumps({**body, "contentHash": hash_v1(body)}), encoding="utf-8")
     (prediction_directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
@@ -46,6 +48,8 @@ def test_bins_fit_training_only_and_preserve_runtime_wire_hash(tmp_path):
     assert calibration["validationFamilies"] == ["family-development"]
     assert calibration["contentHash"] == hash_v1({key: value for key, value in calibration.items() if key != "contentHash"})
     assert calibration["provenance"]["condition"] == "neutral"
+    assert calibration["version"] == 2
+    assert calibration["probabilitySemantics"] == "independent_next_batch_hit"
     assert calibration["provenance"]["model"]["revision"] == "b" * 40
     assert report["validationUsedForFit"] is False
     assert report["development"]["runtime_probability"]["samples"] == 2
@@ -166,3 +170,71 @@ def test_paired_calibration_fits_separate_conditions_and_binds_both_hashes(tmp_p
     assert conditional["contentHash"] == hash_v1({key: value for key, value in conditional.items() if key != "contentHash"})
     assert artifact["contentHash"] == hash_v1({key: value for key, value in artifact.items() if key != "contentHash"})
     assert len(joined) == 8 and report["heldoutClaim"] is False
+
+
+def test_independent_multihit_scores_are_not_normalized(tmp_path):
+    bundle, directory, predictions = fixture(tmp_path)
+    for row in predictions:
+        second = deepcopy(row["candidates"][0])
+        second["id"] = "second"
+        second["invocation"]["arguments"] = {"id": "second"}
+        row["candidates"].append(second)
+        row["neutral"]["scores"].append({"candidateId": "second", "probability": .9})
+    labels = [json.loads(line) for line in (bundle / "labels.jsonl").read_text(encoding="utf-8").splitlines()]
+    for row in labels:
+        row["eligible_reads"].append({"tool": "get", "arguments": {"id": "second"}})
+    public = [json.loads(line) for line in (bundle / "public.jsonl").read_text(encoding="utf-8").splitlines()]
+    multihit_bundle = tmp_path / "multihit"
+    data_manifest = publish_bundle(multihit_bundle, {"public.jsonl": public, "labels.jsonl": labels})
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    manifest.pop("contentHash")
+    manifest["sourceDatasetHash"] = data_manifest["bundle_hash"]
+    (directory / "manifest.json").write_text(json.dumps({**manifest, "contentHash": hash_v1(manifest)}), encoding="utf-8")
+    (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
+    _, _, joined = fit_calibration(multihit_bundle, directory)
+    first = [row for row in joined if row["checkpoint_id"] == "train-0"]
+    assert all(row["exact_match"] == 1 for row in first)
+    assert sum(row["raw_probability"] for row in first) > 1
+    assert sum(row["runtime_probability"] for row in first) > 1
+    assert all(row["runtime_probability"] == row["calibrated_probability"] for row in joined)
+
+
+def test_fixed_panel_replay_joins_private_labels_after_prediction_and_preserves_failures(tmp_path, capsys):
+    bundle, directory, predictions = fixture(tmp_path)
+    path = directory / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest.pop("contentHash")
+    manifest["predictionMode"] = "fixed_panel"
+    path.write_text(json.dumps({**manifest, "contentHash": hash_v1(manifest)}), encoding="utf-8")
+    for row in predictions:
+        row["candidatePanel"] = ["candidate"]
+        row["panelHash"] = hash_v1(["candidate"])
+    predictions[0]["status"] = "failed"
+    del predictions[0]["neutral"]
+    (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
+    (directory / "receipt.json").write_text(json.dumps({"declared": 4, "completed": 3, "failed": 1, "liveActorExecuted": False, "toolExecutionPerformed": False}), encoding="utf-8")
+    report, joined = score_fixed_panel_replay(bundle, directory)
+    assert report["conditions"]["neutral"]["declared_checkpoints"] == 4
+    assert report["conditions"]["neutral"]["scored_checkpoints"] == 3
+    assert report["heldout_claim"] is False
+    assert len(joined) == 4 and joined[0]["probabilities"] is None
+    output = tmp_path / "panel-report"
+    main(["score-panel-replay", "--bundle", str(bundle), "--predictions", str(directory), "--output", str(output)])
+    assert (output / "prediction-report.json").is_file()
+    assert (output / "joined-panels.parquet").is_file()
+    assert "bundle_hash" in capsys.readouterr().out
+    predictions[1]["neutral"]["scores"] = []
+    (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
+    with pytest.raises(ValueError, match="explicit independent score"):
+        score_fixed_panel_replay(bundle, directory)
+
+
+def test_legacy_categorical_calibration_cannot_be_relabelled_as_v2(tmp_path):
+    bundle, directory, _ = fixture(tmp_path)
+    path = directory / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest.pop("contentHash")
+    manifest["version"] = 1
+    path.write_text(json.dumps({**manifest, "contentHash": hash_v1(manifest)}), encoding="utf-8")
+    with pytest.raises(ValueError, match="semantics"):
+        fit_calibration(bundle, directory)

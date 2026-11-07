@@ -55,3 +55,13 @@ test("candidate compiler identity is repeatable and separates native and documen
   const native = infraCandidateCompilerHash("native"), documents = infraCandidateCompilerHash("documents");
   assert.match(native, /^[a-f0-9]{64}$/); assert.equal(infraCandidateCompilerHash("native"), native); assert.notEqual(native, documents);
 });
+
+test("large graph lanes cannot starve workflow candidates or other tool names", () => {
+  const bulk = Array.from({ length: 140 }, (_, index) => candidate(`graph-${index}`, `${index}@example.com`));
+  const other = candidate("other-tool"); other.invocation.tool = "get_order_details";
+  const workflow = candidate("workflow-only", "new@example.com");
+  const pool = mergeInfraNativeCandidates([...bulk, other], [workflow], () => true);
+  assert.equal(pool.length, 128);
+  assert.deepEqual(pool.slice(0, 3).map(item => item.id), ["graph-0", "workflow-only", "other-tool"]);
+  assert.deepEqual(pool, mergeInfraNativeCandidates([...bulk, other], [workflow], () => true));
+});

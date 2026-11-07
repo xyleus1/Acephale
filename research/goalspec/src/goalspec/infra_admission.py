@@ -25,6 +25,15 @@ from goalspec.infra_data import (
 from goalspec.storage import file_hash
 
 COMPONENTS = ("actorLeadMs", "contentionMs", "predictionMs", "schedulingMs", "toolMs", "validationMs")
+OPPORTUNITY_PROFILE_KEYS = ("hardwareHash", "servingHash", "modelHash", "memoryHash", "compilerHash", "retrievalHash", "promptHash", "protocolHash")
+
+
+def validate_opportunity_profile(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict) or set(value) != set(OPPORTUNITY_PROFILE_KEYS) or any(
+        not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in value.values()
+    ):
+        raise ValueError("Opportunity requires the complete measured deployment and predictor profile")
+    return dict(value)
 
 
 def validate_predicted_goals(goals: dict[str, Any], prefix: dict[str, Any]) -> None:
@@ -125,10 +134,13 @@ A measured zero is explicit, not an omitted field. Retain raw evidence locally.
     dataset_hash, public = _dataset(bundle_directory)
     input_sha = file_hash(measurements_path)
     document = _hashed(_json(measurements_path))
-    if document.get("version") != 1 or document.get("kind") != "measured_infra_opportunity" or document.get("sourceDatasetHash") != dataset_hash:
+    if document.get("version") != 2 or document.get("kind") != "measured_infra_opportunity" or document.get("sourceDatasetHash") != dataset_hash:
         raise ValueError("A measured opportunity cohort for this dataset is required")
     if not isinstance(document.get("protocol"), str) or not document["protocol"].strip():
         raise ValueError("Measurement protocol must define the recorded intervals")
+    profile = validate_opportunity_profile(document.get("profile"))
+    if profile["protocolHash"] != hash_v1(document["protocol"]):
+        raise ValueError("Opportunity protocol identity differs from its recorded interval definition")
     rows = document.get("rows", [])
     _closed_rows(document, rows)
     observations, failures, raw_hashes = [], [], {}
@@ -151,6 +163,8 @@ A measured zero is explicit, not an omitted field. Retain raw evidence locally.
         raw_hashes[source] = evidence["sha256"]
         if raw.get("kind") != "observed_infra_timing" or raw.get("checkpoint_id") != row["checkpoint_id"] or raw.get("spans") != row["spans"]:
             raise ValueError("Measurement intervals differ from retained raw timing evidence")
+        if raw.get("profileHash") != hash_v1(profile) or row.get("profileHash") != hash_v1(profile):
+            raise ValueError("Measurement profile differs from retained raw timing evidence")
         durations = {}
         for name in COMPONENTS:
             durations[name] = measured_duration(row["spans"][name], comparison=name == "contentionMs")
@@ -158,7 +172,7 @@ A measured zero is explicit, not an omitted field. Retain raw evidence locally.
     if len(observations) < 10:
         raise ValueError("At least ten complete measured checkpoints are required")
     estimate = {name: _quantile([row[name] for row in observations], .1 if name in {"toolMs", "actorLeadMs"} else .9) for name in COMPONENTS}
-    body = {"version": 1, "sourceDatasetHash": dataset_hash, "families": sorted({row["family_id"] for row in observations}),
+    body = {"version": 2, "profile": profile, "sourceDatasetHash": dataset_hash, "families": sorted({row["family_id"] for row in observations}),
             "sampleCount": len(observations), "estimate": estimate,
             "provenance": {"measurementHash": document["contentHash"], "measurementFileHash": input_sha,
                            "method": "nearest_rank_lower_benefits_p10_upper_costs_p90", "protocol": document["protocol"],
@@ -191,7 +205,7 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
     if manifest.get("kind") != "uncalibrated_prediction_replay" or manifest.get("executionAllowed") is not False or manifest.get("inferGoals") is not True or manifest.get("sourceDatasetHash") != dataset_hash:
         raise ValueError("Actually executed goal replay for this dataset is required")
     model = manifest.get("model", {})
-    if not model.get("repository") or not re.fullmatch(r"[0-9a-f]{40}", model.get("revision", "")) or any(not re.fullmatch(r"[0-9a-f]{64}", manifest.get(field, "")) for field in ("memoryHash", "predictorContractHash", "candidateCompilerHash")):
+    if not model.get("repository") or not re.fullmatch(r"[0-9a-f]{40}", model.get("revision", "")) or any(not re.fullmatch(r"[0-9a-f]{64}", manifest.get(field, "")) for field in ("memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash")):
         raise ValueError("Frozen model, prompt, compiler and memory identities required")
     predictions = read_jsonl(paths[1])
     _closed_rows(manifest, predictions)
@@ -268,7 +282,7 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
             "unsupportedBindings": audit["unsupported_bindings"], "gradedCount": len(eligible), "agreedCount": agreed,
             "reliability": wilson_lower(agreed, len(eligible)),
             "provenance": {"model": model, "memoryHash": manifest["memoryHash"], "predictorContractHash": manifest["predictorContractHash"],
-                           "candidateCompilerHash": manifest["candidateCompilerHash"], "predictionManifestHash": manifest["contentHash"],
+                           "candidateCompilerHash": manifest["candidateCompilerHash"], "retrievalHash": manifest["retrievalHash"], "predictionManifestHash": manifest["contentHash"],
                            "predictionRowsHash": hashes[str(paths[1])], "pilotHash": file_hash(pilot_path), "reviewsHash": file_hash(reviews_path),
                            "gradesHash": file_hash(grades_path), "method": "training_replay_full_cohort_wilson_lower_95"}}
     if any(file_hash(path) != hashes[str(path)] for path in paths):

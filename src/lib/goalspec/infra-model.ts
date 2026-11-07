@@ -1,4 +1,5 @@
 import Ajv2020 from "ajv/dist/2020";
+import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
 import { canonical, copy, hash } from "./canonical";
 
@@ -117,6 +118,7 @@ export class LocalChatModelPort {
   private readonly timeoutMs: number;
   private readonly maxOutputTokens: number;
   private readonly stream: boolean;
+  private readonly client: OpenAI;
   constructor(private readonly configuration: LocalChatModelConfiguration) {
     this.endpoint = new URL(configuration.baseUrl);
     if (!["http:", "https:"].includes(this.endpoint.protocol) || this.endpoint.username || this.endpoint.password
@@ -132,6 +134,8 @@ export class LocalChatModelPort {
       || !safeInteger(this.maxOutputTokens, 1) || this.inputBudget + this.maxOutputTokens > this.contextWindow
       || !safeInteger(this.timeoutMs, 1)) fail("configuration", "Invalid model context or deadline configuration");
     this.transport = configuration.fetch ?? globalThis.fetch;
+    this.client = new OpenAI({ apiKey: "local-no-secret", baseURL: this.url("/v1"),
+      maxRetries: 0, timeout: this.timeoutMs, fetch: this.transport });
   }
 
   private emit(id: string, type: string, detail: Record<string, unknown> = {}) {
@@ -139,6 +143,28 @@ export class LocalChatModelPort {
       utc: new Date().toISOString(), monotonicNs: process.hrtime.bigint().toString() });
   }
   private url(path: string) { return `${this.endpoint.toString().replace(/\/$/, "")}${path}`; }
+
+  /** Uses the serving tokenizer and frozen template; does not dispatch generation. */
+  async measureInputTokens(messages: InfraChatMessage[], signal?: AbortSignal, tools: InfraFunctionTool[] = []): Promise<number> {
+    validateInfraMessages(messages);
+    const requestId = `measure:${randomUUID()}`, started = process.hrtime.bigint();
+    const deadline = AbortSignal.timeout(this.timeoutMs);
+    const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    combined.throwIfAborted();
+    this.emit(requestId, "model_tokenizer_started", { purpose: "candidate_window" });
+    const response = await this.transport(this.url("/tokenize"), { method: "POST", signal: combined,
+      headers: { "content-type": "application/json" }, body: JSON.stringify({ model: this.model, messages,
+        ...(tools.length ? { tools } : {}), add_generation_prompt: true, add_special_tokens: false,
+        chat_template_kwargs: { enable_thinking: false } }) });
+    if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
+    const value: unknown = await response.json();
+    if (!isObject(value) || !safeInteger(value.count) || !safeInteger(value.max_model_len, 1)
+      || !Array.isArray(value.tokens) || value.tokens.length !== value.count
+      || value.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
+    if (value.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
+    this.emit(requestId, "model_tokenizer_completed", { purpose: "candidate_window", inputTokens: value.count, latencyMs: milliseconds(started) });
+    return value.count;
+  }
 
   async complete(request: InfraModelRequest): Promise<InfraModelResult> {
     const started = process.hrtime.bigint();
@@ -217,10 +243,19 @@ export class LocalChatModelPort {
       const dispatchStart = process.hrtime.bigint();
       this.emit(request.id, "model_dispatch", { inputHash, inputTokens, omittedGroups, attempt: 0 });
       dispatched = true;
-      const response = await this.transport(this.url("/v1/chat/completions"), { method: "POST", signal: controller.signal,
-        headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      // The supported SDK owns HTTP transport. Keep the bounded protocol parser,
+      // including terminal SSE and real call-ID validation, on its raw response.
+      let response: Response;
+      try {
+        response = await this.client.chat.completions.create(body as OpenAI.Chat.ChatCompletionCreateParams,
+          { signal: controller.signal }).asResponse();
+      } catch (error) {
+        if (error instanceof OpenAI.APIError && error.status) fail("model_http", `Model returned HTTP ${error.status}`);
+        throw error;
+      }
       const dispatchToHeadersMs = milliseconds(dispatchStart);
-      this.emit(request.id, "model_response_headers", { status: response.status, latencyMs: dispatchToHeadersMs });
+      const providerRequestId = response.headers.get("x-request-id");
+      this.emit(request.id, "model_response_headers", { status: response.status, providerRequestId, latencyMs: dispatchToHeadersMs });
       if (!response.ok) fail("model_http", `Model returned HTTP ${response.status}`);
       let firstTokenMs: number | null = null;
       const firstToken = () => {
@@ -258,7 +293,8 @@ export class LocalChatModelPort {
         refusals, status: "completed", inputHash, inputTokens,
         compiler: { version: "goalspec-local-input-v1", selectedMessageIndexes: [...selected], omittedGroups, tokenizerCalls },
         timing: { totalMs: milliseconds(started), tokenizerMs, dispatchToHeadersMs, firstTokenMs, generationMs } };
-      this.emit(request.id, "model_completed", { inputHash, inputTokens, usage: result.usage, timing: result.timing });
+      this.emit(request.id, "model_completed", { inputHash, inputTokens, providerRequestId,
+        responseHash: hash(result.continuation), usage: result.usage, timing: result.timing });
       return result;
     } catch (error) {
       const code = controller.signal.aborted ? timedOut ? "timeout" : "cancelled"

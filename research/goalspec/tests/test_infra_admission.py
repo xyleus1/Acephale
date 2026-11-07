@@ -9,6 +9,7 @@ import pytest
 from goalspec.contracts_v1 import hash_v1
 from goalspec.infra_admission import (
     COMPONENTS,
+    OPPORTUNITY_PROFILE_KEYS,
     build_goal_reliability,
     build_opportunity,
     measured_duration,
@@ -34,6 +35,8 @@ def sealed(path, body):
 @pytest.fixture
 def evidence(tmp_path):
     public, predictions, annotations, reviews, grades, measurements = [], [], [], [], [], []
+    profile = {key: hash_v1(key) for key in OPPORTUNITY_PROFILE_KEYS}
+    profile["protocolHash"] = hash_v1("synthetic fixture only")
     for index in range(22):
         key = f"fixture-{index}"
         partition = "train" if index < 20 else "development"
@@ -47,8 +50,8 @@ def evidence(tmp_path):
         predictions.append({**identity, "status": "completed", "goals": goals})
         spans = {name: {"clockId": "fixture-clock", "startMs": 1, "endMs": index + 2 if name in {"toolMs", "actorLeadMs"} else index + 1} for name in COMPONENTS}
         raw = tmp_path / f"raw-{index}.json"
-        write(raw, {"kind": "observed_infra_timing", "checkpoint_id": key, "spans": spans})
-        measurements.append({**identity, "status": "completed", "spans": spans, "evidence": {"path": raw.name, "sha256": file_hash(raw)}})
+        write(raw, {"kind": "observed_infra_timing", "checkpoint_id": key, "spans": spans, "profileHash": hash_v1(profile)})
+        measurements.append({**identity, "status": "completed", "spans": spans, "profileHash": hash_v1(profile), "evidence": {"path": raw.name, "sha256": file_hash(raw)}})
         if partition == "train":
             annotation = {"checkpoint_id": key, "input_hash": prefix["input_hash"], "request_revision": "request-1",
                           "annotation_version": "fixture-v1", "teacher_model": "fixture-teacher", "goals": [], "unknown_probability": 1}
@@ -64,7 +67,7 @@ def evidence(tmp_path):
     directory.mkdir()
     manifest = {"version": 1, "kind": "uncalibrated_prediction_replay", "executionAllowed": False, "inferGoals": True,
                 "sourceDatasetHash": dataset["bundle_hash"], "model": {"repository": "fixture-predictor", "revision": "a" * 40},
-                "memoryHash": "b" * 64, "predictorContractHash": "c" * 64, "candidateCompilerHash": "d" * 64,
+                "memoryHash": "b" * 64, "predictorContractHash": "c" * 64, "candidateCompilerHash": "d" * 64, "retrievalHash": "e" * 64,
                 "rowIds": [row["checkpoint_id"] for row in predictions]}
     sealed(directory / "manifest.json", manifest)
     lines(directory / "predictions.jsonl", predictions)
@@ -74,7 +77,7 @@ def evidence(tmp_path):
     pilot = {"source_dataset_hash": dataset["bundle_hash"], "checkpoints": [{"checkpoint_id": row["checkpoint_id"], "input_hash": row["input_hash"]} for row in annotations],
              "audit": [{"checkpoint_id": row["checkpoint_id"]} for row in annotations]}
     write(tmp_path / "pilot.json", pilot)
-    timing = {"version": 1, "kind": "measured_infra_opportunity", "sourceDatasetHash": dataset["bundle_hash"],
+    timing = {"version": 2, "profile": profile, "kind": "measured_infra_opportunity", "sourceDatasetHash": dataset["bundle_hash"],
               "protocol": "synthetic fixture only", "rowIds": [row["checkpoint_id"] for row in measurements], "rows": measurements}
     sealed(tmp_path / "measurements.json", timing)
     return tmp_path, public, predictions, grades, reviews, timing
@@ -89,6 +92,7 @@ def test_opportunity_uses_lower_benefits_upper_costs_and_retains_source_hash(evi
     artifact, report, observations = build_opportunity(root / "bundle", root / "measurements.json")
     assert artifact["estimate"] == {name: 3 if name in {"toolMs", "actorLeadMs"} else 19 for name in COMPONENTS}
     assert artifact["sampleCount"] == 22
+    assert artifact["version"] == 2 and artifact["profile"] == timing["profile"]
     assert artifact["contentHash"] == hash_v1({key: value for key, value in artifact.items() if key != "contentHash"})
     assert len(observations) == 22 and report["heldoutClaim"] is False
 
@@ -105,7 +109,7 @@ def test_paired_contention_uses_two_observed_intervals_without_zero_fallback():
         measured_duration(comparison, comparison=True)
 
 
-@pytest.mark.parametrize("defect", ["missing_cost", "raw_changed", "short_cohort", "unretained", "heldout", "negative"])
+@pytest.mark.parametrize("defect", ["missing_cost", "raw_changed", "short_cohort", "unretained", "heldout", "negative", "legacy", "profile_changed", "profile_missing", "protocol_changed", "row_profile_changed"])
 def test_opportunity_rejects_unmeasured_or_contaminated_inputs(evidence, defect):
     root, *_, timing = evidence
     if defect == "missing_cost":
@@ -119,6 +123,16 @@ def test_opportunity_rejects_unmeasured_or_contaminated_inputs(evidence, defect)
         timing["rows"].pop()
     elif defect == "heldout":
         timing["rows"][0]["split"] = "test"
+    elif defect == "legacy":
+        timing["version"] = 1
+    elif defect == "profile_changed":
+        timing["profile"]["hardwareHash"] = hash_v1("another accelerator")
+    elif defect == "profile_missing":
+        del timing["profile"]["servingHash"]
+    elif defect == "protocol_changed":
+        timing["protocol"] = "changed interval semantics"
+    elif defect == "row_profile_changed":
+        timing["rows"][0]["profileHash"] = hash_v1("other")
     else:
         timing["rows"][0]["spans"]["predictionMs"]["endMs"] = -1
     sealed(root / "measurements.json", timing)

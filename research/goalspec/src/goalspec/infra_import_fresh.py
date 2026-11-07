@@ -1,7 +1,8 @@
 """Publish a closed, fixed-Qwen collection as causal replay and runtime memory inputs.
 
-No model calls occur here. Declared failures remain in the dataset; only independently
-verified successful training endpoints with measured zero violations enter memory.
+No model calls occur here. Declared failures remain in the dataset and verified
+task failures enter contrastive runtime memory. Positive pattern mining uses only
+successful training endpoints with measured zero violations.
 """
 
 from __future__ import annotations
@@ -155,12 +156,16 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
         violations = verdict.get("constraintViolations")
         independently_verified = verdict.get("evaluationValid") is True and isinstance(verdict.get("passed"), bool)
         success = row.get("success") is True
+        if independently_verified and verdict["passed"] != success:
+            raise ValueError("Fresh verdict contradicts the recorded outcome")
         if success and (not independently_verified or verdict["passed"] is not True or not messages):
             raise ValueError("Fresh success requires independent endpoint evidence and public messages")
-        eligible = success and independently_verified and type(violations) is int and violations == 0
         termination = row.get("termination")
         if not isinstance(termination, str) or not termination or not isinstance(row.get("success"), bool):
             raise ValueError("Fresh outcome requires explicit success and termination")
+        censored = bool(re.search(r"budget|censor|deadline|timeout|cancel|provider|transport|host|execution_error|not_started", termination, re.IGNORECASE))
+        eligible = success and independently_verified and type(violations) is int and violations == 0 and not censored
+        contrastive = independently_verified and not success and type(violations) is int and violations >= 0 and not censored
         trajectory = Trajectory(
             trajectory_id=key, benchmark="custom-tau", domain=domain, task_id=configured["taskId"],
             group_id=family, trial=row.get("trial", 0), source_kind="benchmark", benchmark_revision=TAU_REVISION,
@@ -181,7 +186,7 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
             scope=Scope(tenant_id=scope["tenantId"], principal_id=scope["principalId"], authorization_revision=scope["authorizationVersion"]),
             request_revision=hash_v1([key, hash_v1(captured)]), environment_version=TAU_REVISION,
             tool_schema_hash=hash_v1(projection["tools"]), public_context_hash=hash_v1(projection),
-            captured_before_execution=True, verification_tier="native_verified" if eligible else "source_reported",
+            captured_before_execution=True, verification_tier="native_verified" if independently_verified else "source_reported",
             license="MIT", source_revision=TAU_REVISION,
         )
         trajectories.append(trajectory)
@@ -189,6 +194,8 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
                              "policyHash": hash_v1(context.policy), "success": success,
                              "outcomeVerified": independently_verified, "constraintViolations": violations,
                              "memoryEligible": eligible and families[family] == "train", "termination": termination,
+                             "contrastiveEligible": contrastive and families[family] == "train",
+                             "outcomeClass": "success" if eligible else "task_failure" if contrastive else "censored_or_unknown",
                              "messages": _runtime_messages(messages), "rawSha256": inventory[f"{key}.json"]})
         sources[key] = {"raw_sha256": inventory[f"{key}.json"], "original_public_capture_hash": hash_v1(captured),
                         "original_tool_schema_hash": scope["toolSchemaHash"]}
@@ -200,7 +207,7 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
     public, labels, verdicts = export_rows(trajectories, metadata, split)
     for checkpoint in public:
         checkpoint["runtime_tool_schema_hash"] = sources[checkpoint["episode_id"]]["original_tool_schema_hash"]
-    memory = build_memory(trajectories, metadata, split)
+    memory = build_memory(trajectories, metadata, split, eligible_episode_ids={row["id"] for row in runtime_rows if row["memoryEligible"]})
     lineage = {"version": LINEAGE_VERSION, "fresh_qwen_traces": True, "fresh_heldout": False,
                "label": "Fresh fixed-Qwen base collection; no heldout result or latency-improvement claim",
                "actor": ACTOR, "cohort_receipt_sha256": file_hash(cohort / "cohort-receipt.json"), "cohort_receipt_hash": hash_v1(receipt),

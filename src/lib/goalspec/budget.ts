@@ -62,10 +62,21 @@ export class BudgetLedger {
     if (actual > reservation.maximum) throw new Error("Cost exceeded reserved maximum");
   }
   snapshot() { return [...this.entries].map(([id, r]) => ({ id, ...r })); }
+  remaining(allocation: Allocation): number {
+    const committed = [...this.entries.values()].filter(row => row.allocation === allocation && !row.parentId)
+      .reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
+    return Math.max(0, ALLOCATIONS[allocation] - committed);
+  }
 }
 
-export function heldoutSize(developmentCosts: number[], censored: boolean) {
+export function heldoutSize(developmentCosts: number[], censored: boolean, remainingUsd = 240) {
   if (!developmentCosts.length || developmentCosts.some(c => !Number.isFinite(c) || c < 0)) throw new Error("Completed development costs required");
+  if (!Number.isFinite(remainingUsd) || remainingUsd < 0 || remainingUsd > 240) throw new Error("Invalid remaining heldout allocation");
   const allowance = Math.ceil(Math.max(1.25, censored ? 2.5 : 0, 1.25 * Math.max(...developmentCosts)) * 4) / 4;
-  return { allowance, families: Math.min(16, 2 * Math.floor(240 / (24 * allowance))) };
+  return { allowance, families: Math.min(16, 2 * Math.floor(remainingUsd / (24 * allowance))) };
+}
+
+/** New studies use recovered remaining funds, never a fresh allocation ceiling. */
+export function heldoutSizeFromLedger(ledger: BudgetLedger, developmentCosts: number[], censored: boolean) {
+  return heldoutSize(developmentCosts, censored, ledger.remaining("heldout") / 1_000_000);
 }

@@ -1,5 +1,8 @@
 # Infrastructure data, calibration and admission artifacts
 
+The [v2 methods runbook](INFRA_METHODS_V2.md) specifies the current probability
+semantics, compatible artifact identities and complete execution sequence.
+
 These commands prepare fixed-model inference experiments. They do not update Qwen
 weights. Source collections, predictor replay, teacher annotations, human reviews
 and live timing measurements remain distinct evidence. Synthetic test outputs must
@@ -79,13 +82,16 @@ node --import tsx scripts/goalspec-infra-profile.ts PROFILE_CONFIG.json NEW_MEAS
 ```
 
 For each selected train/development prefix with an eligible visible read, the
-profiler runs the same seeded actor input alone and concurrently with actual goal,
-neutral and conditional predictor calls plus one scheduler-managed immutable
-read. Pair order alternates by predeclared ordinal. It measures scheduler admission,
+profiler runs the same seeded actor input alone and concurrently with one neutral
+ranking request. When ranking returns, background goal refresh and one
+scheduler-managed immutable read start concurrently. Pair order alternates by
+predeclared ordinal. It measures scheduler admission,
 the read and freshness validation with one process monotonic clock. `actorLeadMs`
 ends when the baseline actor decision returns and a proposed tool request becomes
-available, not when the actor request is initially sent. `predictionMs` includes
-goal inference and both ranks, a conservative cost for the neutral arm.
+available, not when the actor request is initially sent. `predictionMs` ends when
+the single rank returns. Goal refresh has a separate retained `goalRefreshSpan`,
+is fully drained, and is not added to the six admission spans. Concurrent actor
+duration measures observed contention during the overlapping work.
 
 Both actor decisions must actually request the profiled exact read; otherwise the
 row is retained as failed with no admission estimate. Contention uses
@@ -115,12 +121,20 @@ probability maps. Development outcomes are diagnostics only. Both maps live unde
 one `calibration.json` hash; goal-conditioned execution rejects a missing or stale
 conditional map. Goal reliability uses the Wilson lower bound over independently
 graded training predictions, including failed predictions. This is label agreement,
-not task-success probability; family dependence limits its interpretation.
+not task-success probability; family dependence limits its interpretation. It
+enables conditional ranking rather than mixing two separately generated rankings.
+Calibration v2 records `independent_next_batch_hit` and `selected_candidates`;
+each exact invocation can independently be present in the next authoritative
+batch, so scores need not sum to one. It also binds the actual retrieval profile.
 
 Opportunity aggregation requires at least ten complete measured checkpoints and
-retains failed measurement rows. Its input has `version: 1`,
+retains failed measurement rows. Its input has `version: 2`,
 `kind: "measured_infra_opportunity"`, `sourceDatasetHash`, a written `protocol`,
-ordered `rowIds`, `rows`, and a canonical `contentHash`. Each row binds
+ordered `rowIds`, `rows`, a canonical `contentHash`, and `profile`. The profile
+binds hardware, serving/stream/concurrency, model, memory, compiler, retrieval,
+prompt and protocol hashes. Each completed row and retained raw evidence carry
+that profile's `profileHash`. Runtime admission rejects a changed or v1 profile.
+Each row binds
 `checkpoint_id`, `input_hash`, `family_id` and `split` to the dataset. A completed
 row has all six `spans`: `actorLeadMs`, `contentionMs`, `predictionMs`,
 `schedulingMs`, `toolMs`, `validationMs`. An ordinary span has a monotonic `clockId`,
@@ -144,3 +158,11 @@ bind the dataset bundle hash. Startup checks the dataset's task/corpus lineage,
 family partitions, frozen memory, model revision, prompt and candidate compiler
 before dispatch. Keep the original budget, runtime/model pins and independent GPU
 watchdogs in force.
+
+Optional profiler `episodicEmbeddingsPath` and `budgetDirectory` enable frozen
+hybrid retrieval through the dedicated `GOALSPEC_RESEARCH_DATABASE_URL`. Query
+embeddings use the original journal's development allowance. Replay accepts a
+separate optional episodic configuration and freezes one completed retrieval
+result per checkpoint for both conditions. See the v2 runbook for exact commands
+and fixed-panel binary log-loss/Brier evaluation; neither metric is full-action
+entropy.

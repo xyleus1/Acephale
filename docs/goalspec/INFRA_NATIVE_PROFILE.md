@@ -1,9 +1,14 @@
 # Native gateway component profiling
 
+Use the [v2 methods runbook](INFRA_METHODS_V2.md) for the current artifact profile,
+causal memory, retrieval and evaluation sequence.
+
 The native profiler supplies measured opportunity inputs after a closed fresh
 base collection and runtime-memory export. It does not train model weights or
 execute a new official task. Run it on the guarded GPU host with the unchanged
-pinned Qwen actor and predictor serving. OpenAI is not called by this phase.
+pinned Qwen actor and predictor serving. Lexical-only profiling makes no hosted
+model calls. Optional episodic retrieval can call the hosted embedding provider
+through the original development budget.
 
 The Python process reconstructs each selected public prefix in a new in-memory
 retail or airline environment from the exact pinned tau source. It reapplies the
@@ -28,6 +33,7 @@ configuration. This is a shape example, not runnable measurement evidence:
   "budgetDirectory": "ORIGINAL_BUDGET_DIRECTORY",
   "actorBaseUrl": "http://127.0.0.1:8000",
   "predictorBaseUrl": "http://127.0.0.1:8001",
+  "stream": true,
   "limit": 30,
   "seed": 0,
   "maximumLifetimeSeconds": 3600
@@ -41,8 +47,11 @@ chosen manifest seed. Preserve the source collection's immutable manifest. The
 new manifest source commit must identify a clean committed checkout containing
 the profiling implementation. The ledger checkpoint must still match the
 nonempty original journal at its original path. The profiler verifies that journal
-under its exclusive lock; it neither creates a replacement nor reserves hosted API
-spend. GPU charges remain governed by the existing infrastructure reservation,
+under its exclusive lock and freezes its existing byte prefix for sequential
+workers; it never creates a replacement. Optional `episodicEmbeddingsPath` selects
+the frozen corpus and requires secure `GOALSPEC_RESEARCH_DATABASE_URL`. Embedding
+requests reserve and settle against the original development allocation. GPU
+charges remain governed by the existing infrastructure reservation,
 gross hourly cap, cumulative/session limits and independent provider watchdogs.
 
 From the repository root, using the installed pinned tau Python environment:
@@ -64,9 +73,11 @@ and its existing ID are frozen before any new inference. For each declared row:
 
 1. Verify its captured public messages and schema against the closed collection.
 2. Reconstruct the native state and verify all prior tool observations.
-3. Run the identical seeded actor input alone and concurrently with actual goal,
-   neutral-rank and conditional-rank prediction plus one scheduler-managed native
-   read. Pair order alternates by the declared ordinal.
+3. Run the identical seeded actor input alone and concurrently with one neutral
+   ranking request. As ranking returns, start background goal refresh concurrently
+   with the scheduler-managed native read. Pair order alternates by the declared
+   ordinal. `predictionMs` ends at rank completion; `goalRefreshSpan` remains a
+   separate recorded span, fully drained and excluded from the six admission spans.
 4. Perform the actual projection-copy read through `NativeReadExecutor` and the
    Python gateway, then the actual server-side freshness-lease refresh. Preserve
    both Node gateway-inclusive intervals and independent Python operation clocks.
@@ -96,6 +107,12 @@ The main output is `NEW_NATIVE_MEASUREMENTS/measurements.json`:
 ```text
 python -m goalspec.infra_cli build-opportunity --bundle FRESH_NATIVE_DATASET --measurements NEW_NATIVE_MEASUREMENTS/measurements.json --output NEW_NATIVE_OPPORTUNITY
 ```
+
+Version 2 measurements and raw rows bind the actual hardware, serving settings
+(including `stream`, which defaults to true), models, memory, compiler, retrieval,
+prompt and profiling protocol. Runtime must match all eight profile hashes. The
+actual retrieval factory determines its hash. Changing the deployment or frozen
+memory requires new compatible measurements, not editing an existing artifact.
 
 At least ten completed rows are required for aggregation; failed rows remain in
 the denominator. More declared rows are not permission to retry the same failed

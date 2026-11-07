@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
+from itertools import combinations
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field, model_validator
 
 from goalspec.contracts_v1 import hash_v1
+from goalspec.infra_data import read_jsonl, verify_bundle
 from goalspec.schemas import Record
+from goalspec.storage import file_hash
 
 ARMS = ("base", "neutral_memory_prefetch", "goalspec")
 Arm = Literal["base", "neutral_memory_prefetch", "goalspec"]
@@ -157,7 +162,9 @@ def report_trials(design: TrialDesign, results: list[TrialResult], *, seed: int 
                 metrics["latency_ms_difference"][family].append(right.latency_ms - left.latency_ms)
             if left.physical_calls is not None and right.physical_calls is not None:
                 metrics["physical_calls_difference"][family].append(right.physical_calls - left.physical_calls)
-        comparisons.append({"baseline": baseline, "treatment": treatment, "metrics": {metric: _paired_interval(metrics[metric], seed=seed, samples=bootstrap_samples) for metric in ("success_difference", "latency_ms_difference", "physical_calls_difference")}})
+            if left.logical_calls is not None and right.logical_calls is not None:
+                metrics["logical_calls_difference"][family].append(right.logical_calls - left.logical_calls)
+        comparisons.append({"baseline": baseline, "treatment": treatment, "metrics": {metric: _paired_interval(metrics[metric], seed=seed, samples=bootstrap_samples) for metric in ("success_difference", "latency_ms_difference", "logical_calls_difference", "physical_calls_difference")}})
     return {
         "schema_version": design.schema_version, "measurement_kind": design.measurement_kind,
         "label": design.label, "design_hash": hash_v1(design.model_dump(mode="json")),
@@ -165,6 +172,189 @@ def report_trials(design: TrialDesign, results: list[TrialResult], *, seed: int 
         "arms": summaries, "paired_comparisons": comparisons,
         "limitations": ["Usage-derived costs are not invoice-reconciled", "Missing telemetry is never imputed as zero", "Execution replay timing is not live latency", "Task success and exact-read prediction use different denominators"],
     }
+
+
+def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootstrap_samples: int = 2000) -> dict[str, Any]:
+    """Score independent exact-read hit marginals on identical fixed panels.
+
+    A positive is membership anywhere in the immediate next authoritative
+    batch. Multiple positives are valid. Missing predictions stay in the
+    declared cohort and receive no fabricated probability or log loss.
+    """
+    if not rows:
+        raise ValueError("A declared fixed-panel cohort is required")
+    groups: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    identities: dict[str, str] = {}
+    partitions: dict[str, str] = {}
+    scored: dict[tuple[str, str], dict[str, float]] = {}
+    for row in rows:
+        condition, checkpoint = row.get("condition"), row.get("checkpoint_id")
+        if not isinstance(condition, str) or not condition or not isinstance(checkpoint, str) or not checkpoint:
+            raise ValueError("Condition and checkpoint identity required")
+        if checkpoint in groups[condition]:
+            raise ValueError("Duplicate condition/checkpoint")
+        if row.get("probability_semantics") != "independent_next_batch_hit":
+            raise ValueError("Independent next-batch hit semantics required")
+        family, split = row.get("family_id"), row.get("split")
+        if not isinstance(family, str) or not family or split not in {"train", "development", "test"}:
+            raise ValueError("Family and declared partition required")
+        if partitions.setdefault(family, split) != split:
+            raise ValueError("A family crosses evaluation partitions")
+        panel, actual = row.get("candidate_panel"), row.get("actual_reads")
+        for values in (panel, actual):
+            if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values) or len(set(values)) != len(values):
+                raise ValueError("Unique exact invocation identities required")
+        if len(panel) > 3 or row.get("panel_hash") != hash_v1(sorted(panel)):
+            raise ValueError("Fixed panel hash or size differs")
+        identity = hash_v1({"family": family, "split": split, "panel": sorted(panel), "panel_available": row.get("panel_available", True), "actual": sorted(actual)})
+        if identities.setdefault(checkpoint, identity) != identity:
+            raise ValueError("Conditions must share identical panels, labels and checkpoint identities")
+        status = row.get("status")
+        if status not in {"completed", "failed", "not_dispatched", "unobserved_actor_action"}:
+            raise ValueError("Unknown fixed-panel prediction status")
+        probabilities = row.get("probabilities")
+        if row.get("panel_available", True) is not True:
+            if status not in {"failed", "not_dispatched", "unobserved_actor_action"} or panel:
+                raise ValueError("Unavailable panels must remain attributed failed or unobserved checkpoints")
+        if status == "completed":
+            if not isinstance(probabilities, dict) or set(probabilities) != set(panel):
+                raise ValueError("Scores must cover every fixed panel candidate, including low scores")
+            if any(type(value) not in {int, float} or not math.isfinite(value) or not 0 <= value <= 1 for value in probabilities.values()):
+                raise ValueError("Invalid independent hit probability")
+            if panel:
+                losses = [-math.log(max(1e-12, probabilities[key] if key in actual else 1 - probabilities[key])) for key in panel]
+                briers = [(probabilities[key] - int(key in actual)) ** 2 for key in panel]
+                rank = sorted(panel, key=lambda key: (-probabilities[key], key))
+                scored[condition, checkpoint] = {"binary_log_loss_nats": float(np.mean(losses)), "brier": float(np.mean(briers)),
+                                                 "exact_top1_any_hit": float(bool(set(rank[:1]) & set(actual))),
+                                                 "exact_top3_any_hit": float(bool(set(rank[:3]) & set(actual)))}
+        elif probabilities not in (None, {}):
+            raise ValueError("Failed or unobserved predictions cannot carry fabricated scoring probabilities")
+        groups[condition][checkpoint] = row
+    checkpoint_sets = [set(values) for values in groups.values()]
+    if any(values != checkpoint_sets[0] for values in checkpoint_sets[1:]):
+        raise ValueError("Every condition must retain every declared checkpoint including failures")
+    summaries = {}
+    for condition, values in groups.items():
+        available = [scored[condition, key] for key in values if (condition, key) in scored]
+        observed = [row for row in values.values() if row["status"] != "unobserved_actor_action"]
+        eligible = [row for row in observed if row["actual_reads"]]
+        known_panels = [row for row in eligible if row.get("panel_available", True)]
+        summaries[condition] = {
+            "declared_checkpoints": len(values), "scored_checkpoints": len(available),
+            "scored_candidates": sum(len(row["candidate_panel"]) for key, row in values.items() if (condition, key) in scored),
+            "status_counts": {status: sum(row["status"] == status for row in values.values()) for status in sorted({row["status"] for row in values.values()})},
+            "empty_panel_checkpoints": sum(not row["candidate_panel"] for row in values.values()),
+            "unavailable_panel_checkpoints": sum(not row.get("panel_available", True) for row in values.values()),
+            "eligible_read_checkpoints": len(eligible),
+            "coverage_eligible_checkpoints": len(known_panels),
+            "candidate_panel_any_hit_coverage": sum(bool(set(row["candidate_panel"]) & set(row["actual_reads"])) for row in known_panels) / len(known_panels) if known_panels else None,
+            "no_read_checkpoints": len(observed) - len(eligible),
+            **{metric: float(np.mean([value[metric] for value in available])) if available else None for metric in ("binary_log_loss_nats", "brier")},
+            "exact_top1_any_hit_over_declared_eligible": sum(scored.get((condition, row["checkpoint_id"]), {}).get("exact_top1_any_hit", 0) for row in eligible) / len(eligible) if eligible else None,
+            "exact_top3_any_hit_over_declared_eligible": sum(scored.get((condition, row["checkpoint_id"]), {}).get("exact_top3_any_hit", 0) for row in eligible) / len(eligible) if eligible else None,
+        }
+    comparisons = []
+    for baseline, treatment in combinations(sorted(groups), 2):
+        metrics: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        for checkpoint, row in groups[baseline].items():
+            if (baseline, checkpoint) not in scored or (treatment, checkpoint) not in scored:
+                continue
+            for metric in ("binary_log_loss_nats", "brier"):
+                metrics[metric][row["family_id"]].append(scored[treatment, checkpoint][metric] - scored[baseline, checkpoint][metric])
+        comparisons.append({"baseline": baseline, "treatment": treatment, "metrics": {
+            f"{metric}_difference": _paired_interval(metrics[metric], seed=seed, samples=bootstrap_samples)
+            for metric in ("binary_log_loss_nats", "brier")}})
+    return {"schema_version": "goalspec-fixed-panel-report-v2", "probability_semantics": "independent_next_batch_hit",
+            "conditions": summaries, "paired_comparisons": comparisons,
+            "identical_candidate_panels": True, "identical_checkpoint_sets": True,
+            "test_partition_only": all(row["split"] == "test" for row in rows), "heldout_claim": False,
+            "interpretation": "Checkpoint-mean binary log loss for membership anywhere in the next authoritative batch, not full-action cross-entropy or true conditional entropy",
+            "limitations": ["At most three preselected candidates; panel coverage is reported separately", "Partition labels alone do not verify fresh held-out tasks or a preregistered freeze", "Missing predictions remain declared failures without invented probabilities", "Paired loss differences use jointly scored checkpoints only", "Task success, physical execution work and prediction hit rate are separate outcomes"]}
+
+
+def score_fixed_panel_replay(bundle_directory: Path, prediction_directory: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Join a closed prediction replay to private next-batch labels after execution.
+
+    This evaluates recorded raw marginals without fitting on evaluation labels.
+    Public predictor inputs never receive the label file or achieved outcome.
+    """
+    bundle = verify_bundle(bundle_directory)
+    paths = [prediction_directory / name for name in ("manifest.json", "predictions.jsonl", "receipt.json")]
+    hashes = {path: file_hash(path) for path in paths}
+    manifest = json.loads(paths[0].read_text(encoding="utf-8"))
+    if manifest.get("contentHash") != hash_v1({key: value for key, value in manifest.items() if key != "contentHash"}):
+        raise ValueError("Prediction manifest hash mismatch")
+    if (manifest.get("version") != 2 or manifest.get("kind") != "uncalibrated_prediction_replay"
+            or manifest.get("executionAllowed") is not False or manifest.get("probabilitySemantics") != "independent_next_batch_hit"
+            or manifest.get("predictionMode") != "fixed_panel" or manifest.get("sourceDatasetHash") != bundle["bundle_hash"]):
+        raise ValueError("A compatible fixed-panel replay for this dataset is required")
+    public_rows = read_jsonl(bundle_directory / "public.jsonl")
+    label_rows = read_jsonl(bundle_directory / "labels.jsonl")
+    public = {row["checkpoint_id"]: row for row in public_rows}
+    labels = {row["checkpoint_id"]: row for row in label_rows}
+    if len(public) != len(public_rows) or len(labels) != len(label_rows) or set(public) != set(labels):
+        raise ValueError("Unique public checkpoints and matching private labels required")
+    predictions = read_jsonl(paths[1])
+    ids = [row["checkpoint_id"] for row in predictions]
+    if not ids or ids != manifest.get("rowIds") or len(set(ids)) != len(ids):
+        raise ValueError("Every declared prediction must be retained exactly once in order")
+    receipt = json.loads(paths[2].read_text(encoding="utf-8"))
+    completed = sum(row.get("status") == "completed" for row in predictions)
+    if receipt != {"declared": len(ids), "completed": completed, "failed": len(ids) - completed, "liveActorExecuted": False, "toolExecutionPerformed": False}:
+        raise ValueError("Prediction receipt does not close the declared cohort")
+    conditions = ("neutral", "conditional") if manifest.get("inferGoals") is True else ("neutral",)
+    joined = []
+    for row in predictions:
+        key = row["checkpoint_id"]
+        prefix, label = public.get(key), labels.get(key)
+        if prefix is None or label is None or prefix["input_hash"] != hash_v1(prefix["input"]):
+            raise ValueError("Prediction checkpoint is not a verified public input")
+        if label.get("input_hash") != prefix["input_hash"] or any(row.get(field) != prefix[field] for field in ("input_hash", "family_id", "split")):
+            raise ValueError("Prediction and label checkpoint identity mismatch")
+        status = row.get("status")
+        if status not in {"completed", "failed", "not_dispatched"}:
+            raise ValueError("Unknown prediction status")
+        panel_available = "candidatePanel" in row
+        if not panel_available and status == "completed":
+            raise ValueError("Completed replay omitted its fixed panel")
+        panel = row.get("candidatePanel", [])
+        candidates = row.get("candidates", [])
+        candidate_map = {candidate["id"]: candidate for candidate in candidates}
+        if len(candidate_map) != len(candidates) or set(panel) != set(candidate_map) or len(panel) > 3 or len(panel) != len(set(panel)):
+            raise ValueError("Fixed panel differs from the supplied candidate set")
+        if panel_available and row.get("panelHash") != hash_v1(sorted(panel)):
+            raise ValueError("Fixed panel hash mismatch")
+        identities = {candidate_id: hash_v1({"tool": value["invocation"]["tool"], "arguments": value["invocation"]["arguments"]}) for candidate_id, value in candidate_map.items()}
+        if len(set(identities.values())) != len(identities):
+            raise ValueError("Duplicate exact invocation in fixed panel")
+        if not isinstance(label.get("eligible_reads"), list):
+            raise ValueError("Explicit next-batch eligible read labels required")
+        actual = sorted({hash_v1({"tool": invocation["tool"], "arguments": invocation["arguments"]}) for invocation in label["eligible_reads"]})
+        for condition in conditions:
+            probabilities = None
+            scoring_status = "unobserved_actor_action" if label.get("status") == "no_returned_actor_response" else status
+            if status == "completed":
+                output = row.get(condition)
+                if not isinstance(output, dict) or output.get("action") not in {"READ", "NO_READ", "READ_UNCOVERED"}:
+                    raise ValueError("Completed replay omitted its condition output")
+                scores = output.get("scores", [])
+                if len(scores) != len(panel) or {score["candidateId"] for score in scores} != set(panel):
+                    raise ValueError("Every panel candidate needs an explicit independent score")
+                if scoring_status == "completed":
+                    probabilities = {identities[score["candidateId"]]: score["probability"] for score in scores}
+            exact_panel = sorted(identities.values())
+            joined.append({"condition": condition, "checkpoint_id": key, "family_id": row["family_id"], "split": row["split"],
+                           "probability_semantics": "independent_next_batch_hit", "candidate_panel": exact_panel,
+                           "panel_hash": hash_v1(exact_panel), "panel_available": panel_available, "actual_reads": actual,
+                           "status": scoring_status, "probabilities": probabilities})
+    report = score_candidate_panels(joined)
+    report["prediction_manifest_hash"] = manifest["contentHash"]
+    report["source_dataset_hash"] = bundle["bundle_hash"]
+    report["probabilities"] = "recorded_raw_marginals_no_evaluation_label_fitting"
+    if any(file_hash(path) != digest for path, digest in hashes.items()):
+        raise ValueError("Prediction replay changed during evaluation")
+    return report, joined
 
 
 def score_predictions(rows: list[dict[str, Any]]) -> dict[str, Any]:

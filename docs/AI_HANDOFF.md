@@ -1,3 +1,44 @@
+# 2026-11-06: Implemented infrastructure methods v2
+
+Implemented the revised fixed-weight infrastructure design. Live prediction uses
+one ranking request with dispatch-time grounded goals, a shared priority queue,
+fair candidate generation and a common tokenizer-bounded candidate window.
+Probabilities are independent next-batch hits. Calibration v2 and opportunity v2
+bind their actual compiler, retrieval, models, hardware and serving protocol.
+
+Added prefix-only frozen embeddings, scoped PostgreSQL lexical/vector retrieval,
+bounded contrastive failures, deterministic fallback and per-run caches. Native,
+document and replay paths use the original budget owner for embeddings. Causal
+miss import requires a real early prediction and sealed actor response; training
+shadow collection supplies this without speculative reads. Late work is fenced.
+Standard OpenAI-compatible, OpenTelemetry and Prometheus libraries now handle
+transport/export. Managed work drains before budgets and telemetry close.
+
+Read [Infrastructure methods v2](goalspec/INFRA_METHODS_V2.md) for commands,
+configuration, artifact migration, exact verification and remaining requirements.
+The runtime container includes the profile configuration and explicitly generates
+Prisma; a real image build remains unverified because Docker is unavailable here.
+
+The full research Python run passed 604 tests with six optional skips. A separate
+pinned native run passed the previously skipped native parity check and two budget
+tests. Legacy TypeScript passed 281 with one DB and one historical-artifact skip, v5 passed
+49, browser isolation passed two, and real Derya database checks passed ten using
+an independent connection. The disposable PostgreSQL cluster was stopped. See
+the methods runbook for log paths. The final infrastructure suite passed 154 with
+two optional database skips; generated contracts and scoped TypeScript passed.
+Deployment controls passed all 123 tests. Changed Python files pass Ruff; ESLint
+comparison found zero introduced errors and retained 18 pre-existing errors.
+
+Read-only AWS inspection still reports zero approved regional G/VT vCPUs against
+eight required. The observed USD2.24208/hour compute price fits the approved
+USD2.50 cap; quota is still a blocker. No compute, paid model calls, migrations
+against existing data or original-journal reservations occurred in this change.
+Do not call the experiment complete or claim new task-success/latency gains.
+After quota approval, re-render deployment/source identities, complete actual
+watchdog/host/pgvector smoke gates, collect fresh training traces, obtain the human
+annotation review, freeze calibration and run the budgeted paired evaluation.
+Keep the original journal, unresolved reservations and all prior reports.
+
 # 2026-11-06: Explicit authorization for USD2.50 GPU hourly cap
 
 The founder explicitly approved raising the gross GPU hourly ceiling from

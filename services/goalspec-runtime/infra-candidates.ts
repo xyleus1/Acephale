@@ -7,12 +7,30 @@ import { nativeCandidateGraphV5 } from "./native-candidate-graph";
 
 /** Graph candidates retain their IDs and exact bindings when workflows propose duplicates. */
 export function mergeInfraNativeCandidates(graph: Candidate[], workflows: Candidate[], eligible: (invocation: Invocation) => boolean): Candidate[] {
-  const pool = new Map<string, Candidate>();
-  for (const candidate of [...graph, ...workflows]) {
-    const key = hash(candidate.invocation);
-    if (pool.size < 128 && !pool.has(key) && eligible(candidate.invocation)) pool.set(key, candidate);
+  const seen = new Set<string>();
+  // Deduplicate before interleaving so graph bindings win even when their lane is visited later.
+  const lanes = [graph, workflows].map(source => {
+    const tools = new Map<string, Candidate[]>();
+    for (const candidate of source) {
+      const key = hash(candidate.invocation);
+      if (seen.has(key) || !eligible(candidate.invocation)) continue;
+      seen.add(key);
+      const lane = tools.get(candidate.invocation.tool) ?? [];
+      lane.push(candidate); tools.set(candidate.invocation.tool, lane);
+    }
+    return [...tools.values()];
+  });
+  const positions = [0, 0], pool: Candidate[] = [];
+  while (pool.length < 128 && lanes.some(source => source.length)) {
+    for (let source = 0; source < lanes.length && pool.length < 128; source++) {
+      const tools = lanes[source]; if (!tools.length) continue;
+      const index = positions[source] % tools.length;
+      pool.push(tools[index].shift()!);
+      if (!tools[index].length) { tools.splice(index, 1); positions[source] = index; }
+      else positions[source] = index + 1;
+    }
   }
-  return [...pool.values()];
+  return pool;
 }
 
 /** One candidate universe implementation serves frozen replay and live native runs. */

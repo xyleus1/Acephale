@@ -14,6 +14,7 @@ export interface MemoryRun {
   scope: MemoryScope; policyHash: string; sourceFiles: MemoryFile[];
   success: boolean; outcomeVerified: boolean; constraintViolations: number;
   termination: string; publicMessageCount: number; episodeCount: number;
+  verificationTier?: "native_verified" | "independent_replay" | "source_reported";
 }
 export interface ArgumentProvenance {
   actionId: string; argumentPath: (string | number)[];
@@ -57,8 +58,11 @@ const validated = new WeakSet<object>();
 const indexes = new WeakMap<object, { runs: Map<string, MemoryRun>; terms: Map<string, Set<string>> }>();
 const digest = (value: string) => /^[a-f0-9]{64}$/.test(value);
 const sameScope = (a: MemoryScope, b: MemoryScope) => canonical(a) === canonical(b);
+export const LEXICAL_MEMORY_RETRIEVAL_HASH = hash({ version: "goalspec-lexical-memory-v2", ranking: "token-set-cosine",
+  strictPolicy: true, verifiedOnly: true, excludeCurrentRun: true, familyFilterBeforeStatistics: true,
+  maxEpisodes: 4, maxChars: 16000, optionalExamplesAreUntrusted: true });
 
-function memoryStatistics(input: MemoryInput) {
+export function memoryStatistics(input: MemoryInput) {
   const runs = new Map(input.runs.map(run => [run.id, run]));
   const episodes = new Map(input.episodes.map(episode => [episode.id, episode]));
   const transitions = new Map<string, MemoryTransition>();
@@ -151,6 +155,7 @@ export function validateMemoryArtifact(value: unknown): FrozenExperienceMemory {
       || !(artifact.compilerVersion === "goalspec-memory-v5" ? ["v1-training", "v5-training"] : ["v1-training", "v2-development-1", "v2-development-2"]).includes(run.stage)
       || run.split !== (["v1-training", "v5-training"].includes(run.stage) ? "train" : "development")
       || typeof run.success !== "boolean" || typeof run.outcomeVerified !== "boolean"
+      || run.verificationTier !== undefined && !["native_verified", "independent_replay", "source_reported"].includes(run.verificationTier)
       || run.success && (!run.outcomeVerified || run.constraintViolations !== 0)
       || !Number.isInteger(run.constraintViolations) || run.constraintViolations < 0
       || !Number.isInteger(run.publicMessageCount) || run.publicMessageCount < 0
@@ -291,6 +296,26 @@ export interface ContextualMemoryRetrieval {
   transitions: MemoryTransition[]; confusions: MemoryConfusion[];
   omittedEpisodes: number; serializedCharacters: number;
 }
+
+export interface ContextualMemoryOptions {
+  maxEpisodes?: number; maxChars?: number; excludeFamilies?: string[]; allowedFamilies?: string[];
+  /** New infrastructure profiles require these; legacy replay remains reproducible. */
+  strictPolicy?: boolean; verifiedOnly?: boolean;
+  allowedRunIds?: string[];
+  rankedEpisodeIds?: string[];
+}
+
+export function compatibleMemoryRuns(frame: ExecutionFrame, input: FrozenExperienceMemory, options: ContextualMemoryOptions = {}): MemoryRun[] {
+  const artifact = validateMemoryArtifact(input);
+  if (frame.snapshotId !== artifact.repositorySnapshotId) return [];
+  const excluded = new Set(options.excludeFamilies ?? []), allowed = options.allowedFamilies && new Set(options.allowedFamilies);
+  const allowedRuns = options.allowedRunIds && new Set(options.allowedRunIds);
+  return artifact.runs.filter(run => run.id !== frame.runId && sameScope(run.scope, frame.scope)
+    && !excluded.has(run.familyId) && (!allowed || allowed.has(run.familyId))
+    && (!allowedRuns || allowedRuns.has(run.id))
+    && (!options.strictPolicy || run.policyHash === hash(frame.policy))
+    && (!options.verifiedOnly || run.split === "train" && run.outcomeVerified));
+}
 const contextualIndexes = new WeakMap<FrozenExperienceMemory, Map<string, {
   runs: Map<string, MemoryRun>; episodes: MemoryEpisode[]; misses: MemoryMiss[];
   statistics: ReturnType<typeof memoryStatistics>; words: Map<string, Set<string>>;
@@ -299,7 +324,7 @@ const contextualIndexes = new WeakMap<FrozenExperienceMemory, Map<string, {
 /** Complete historical observations and provenance, bounded by dropping whole
  * episodes. Statistics obey the same family/run exclusion as episode retrieval. */
 export function retrieveContextualMemory(frame: ExecutionFrame, query: string, input: FrozenExperienceMemory,
-  options: { maxEpisodes?: number; maxChars?: number; excludeFamilies?: string[]; allowedFamilies?: string[] } = {}): ContextualMemoryRetrieval {
+  options: ContextualMemoryOptions = {}): ContextualMemoryRetrieval {
   const artifact = validateMemoryArtifact(input);
   const result: ContextualMemoryRetrieval = { version: "goalspec-contextual-memory-v5", queryHash: hash(query),
     artifactHash: artifact.contentHash, historicalValuesAreNotCurrentBindings: true, episodes: [], transitions: [], confusions: [], omittedEpisodes: 0, serializedCharacters: 0 };
@@ -308,11 +333,11 @@ export function retrieveContextualMemory(frame: ExecutionFrame, query: string, i
   let cache = contextualIndexes.get(artifact);
   if (!cache) { cache = new Map(); contextualIndexes.set(artifact, cache); }
   const cacheKey = hash([frame.scope, artifact.runs.some(run => run.id === frame.runId) ? frame.runId : null,
-    [...excluded].sort(), allowed ? [...allowed].sort() : null]);
+    [...excluded].sort(), allowed ? [...allowed].sort() : null, options.strictPolicy ? hash(frame.policy) : null, !!options.verifiedOnly,
+    options.allowedRunIds ? [...options.allowedRunIds].sort() : null]);
   let index = cache.get(cacheKey);
   if (!index) {
-    const runs = artifact.runs.filter(run => run.id !== frame.runId && sameScope(run.scope, frame.scope)
-      && !excluded.has(run.familyId) && (!allowed || allowed.has(run.familyId)));
+    const runs = compatibleMemoryRuns(frame, artifact, options);
     const byRun = new Map(runs.map(run => [run.id, run]));
     const episodes = artifact.episodes.filter(episode => byRun.has(episode.runId));
     const ids = new Set(episodes.map(episode => episode.id));
@@ -325,13 +350,15 @@ export function retrieveContextualMemory(frame: ExecutionFrame, query: string, i
   const { runs: byRun, episodes, misses, statistics } = index;
   const previous = previousTool(frame), words = terms(query);
   result.transitions = copy(statistics.transitions.filter(row => row.from === previous));
-  result.confusions = copy(statistics.confusions.filter(row => row.previousTool === previous));
+  result.confusions = copy(statistics.confusions.filter(row => row.previousTool === previous && (!options.verifiedOnly || row.runIds.length >= 3)));
   const count = Math.max(0, Math.min(8, Math.floor(options.maxEpisodes ?? 4)));
   const budget = Math.max(0, Math.min(131072, Math.floor(options.maxChars ?? 49152)));
-  const ranked = episodes.map(episode => {
+  const ranks = options.rankedEpisodeIds && new Map(options.rankedEpisodeIds.map((id, index) => [id, index]));
+  if (ranks && (ranks.size !== options.rankedEpisodeIds!.length || [...ranks.keys()].some(id => !episodes.some(episode => episode.id === id)))) throw new Error("Retrieval returned an incompatible episode");
+  const ranked = episodes.filter(episode => !ranks || ranks.has(episode.id)).map(episode => {
     const episodeWords = index!.words.get(episode.id)!;
     return { episode, run: byRun.get(episode.runId)!, misses: misses.filter(miss => miss.episodeId === episode.id),
-      similarity: [...words].filter(word => episodeWords.has(word)).length / Math.max(1, Math.sqrt(words.size * episodeWords.size)) };
+      similarity: ranks ? 1 / (60 + ranks.get(episode.id)! + 1) : [...words].filter(word => episodeWords.has(word)).length / Math.max(1, Math.sqrt(words.size * episodeWords.size)) };
   }).sort((a, b) => b.similarity - a.similarity || a.episode.id.localeCompare(b.episode.id));
   let used = canonical({ transitions: result.transitions, confusions: result.confusions }).length;
   // A small budget must not accidentally leak arbitrarily large statistics.
@@ -346,7 +373,7 @@ export function retrieveContextualMemory(frame: ExecutionFrame, query: string, i
     if (result.episodes.length >= count || used + size > budget || signatures.has(signature)) continue;
     result.episodes.push(copy(item)); signatures.add(signature); used += size;
   }
-  result.omittedEpisodes = ranked.length - result.episodes.length;
+  result.omittedEpisodes = episodes.length - result.episodes.length;
   result.serializedCharacters = used;
   return result;
 }

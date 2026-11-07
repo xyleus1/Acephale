@@ -4,7 +4,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { canonical, hash } from "../src/lib/goalspec/canonical";
-import { verifyInfraPilotBundle } from "./goalspec-infra-memory";
+import { attachCausalInfraMemory, validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./goalspec-infra-memory";
+import { buildMemoryArtifact } from "../src/lib/goalspec/experience-memory";
 
 function fixture() {
   const directory = resolve("research/goalspec/runs", `infra-memory-test-${randomUUID()}`);
@@ -39,4 +40,31 @@ test("runtime bridge rejects a tampered manifest", () => {
   manifest.bundle_hash = "0".repeat(64);
   writeFileSync(join(directory, "manifest.json"), canonical(manifest));
   assert.throws(() => verifyInfraPilotBundle(directory), /manifest/);
+});
+
+test("fresh profile binding accepts exactly the sealed causal derivation and rejects forged suffixes", () => {
+  const bundleHash = hash("dataset"), eventsHash = hash("sealed events"), publicHash = hash("sealed public responses");
+  const names = ["manifest.json", "runtime-runs.jsonl", "metadata.jsonl", "lineage.json", "cohort-receipt.json"];
+  const sourceFiles = names.map(name => ({ path: `C:\\old-host\\bundle\\${name}`, sha256: hash(name) }));
+  const bundle = { manifest: { bundle_hash: bundleHash, files: Object.fromEntries(names.map(name => [name, { sha256: hash(name) }])) },
+    manifestSha256: hash("manifest.json"), expected: [], lineage: { fresh_qwen_traces: true,
+      cohort_files: { "service/events.jsonl": eventsHash, "service/public-boundaries.jsonl": publicHash } } } satisfies Parameters<typeof validateFreshInfraMemoryBinding>[1];
+  const base = buildMemoryArtifact({ repositorySnapshotId: `infra-fresh:${bundleHash}`, sourceFiles, runs: [], episodes: [], misses: [] }, { profile: "v5" });
+  assert.equal(validateFreshInfraMemoryBinding(base, bundle).kind, "base");
+  const causal = buildMemoryArtifact({ ...base,
+    repositorySnapshotId: `${base.repositorySnapshotId}:causal:${hash([eventsHash, publicHash])}`,
+    sourceFiles: [...sourceFiles, { path: "/moved-artifacts/events.jsonl", sha256: eventsHash }, { path: "/moved-artifacts/public-boundaries.jsonl", sha256: publicHash }],
+  }, { profile: "v5" });
+  assert.equal(validateFreshInfraMemoryBinding(causal, bundle).kind, "causal");
+  const directory = fixture(), causalPath = join(directory, "causal-memory.json");
+  writeFileSync(causalPath, canonical(causal));
+  assert.throws(() => attachCausalInfraMemory(causalPath, "/nonexistent-cohort", "events.jsonl", "public-boundaries.jsonl", join(directory, "unusable.json")), /cannot be attached again/);
+  const forged = buildMemoryArtifact({ ...causal, repositorySnapshotId: `${base.repositorySnapshotId}:causal:${hash("forged")}` }, { profile: "v5" });
+  assert.throws(() => validateFreshInfraMemoryBinding(forged, bundle), /derivation identity/);
+  const unsealedHash = hash("unsealed events");
+  const unsealed = buildMemoryArtifact({ ...causal, repositorySnapshotId: `${base.repositorySnapshotId}:causal:${hash([unsealedHash, publicHash])}`,
+    sourceFiles: causal.sourceFiles.map(file => file.sha256 === eventsHash ? { ...file, sha256: unsealedHash } : file) }, { profile: "v5" });
+  assert.throws(() => validateFreshInfraMemoryBinding(unsealed, bundle), /derivation identity/);
+  const changedDataset = buildMemoryArtifact({ ...base, sourceFiles: sourceFiles.map((file, index) => index === 0 ? { ...file, sha256: hash("changed manifest") } : file) }, { profile: "v5" });
+  assert.throws(() => validateFreshInfraMemoryBinding(changedDataset, bundle), /source files/);
 });

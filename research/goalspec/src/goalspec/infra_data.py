@@ -521,12 +521,15 @@ def audit_gate(pilot: dict[str, Any], audits: list[dict[str, Any]]) -> dict[str,
     return {"audited": len(audits), "acceptable": acceptable, "unsupported_bindings": unsupported, "goal_conditioning_allowed": unsupported == 0 and acceptable / len(audits) >= 0.9, "limitation": "Small pilot audit, not a semantic confidence interval"}
 
 
-def build_memory(trajectories: list[Trajectory], metadata: Mapping[str, EpisodeMeta], split: dict[str, Any]) -> dict[str, Any]:
+def build_memory(trajectories: list[Trajectory], metadata: Mapping[str, EpisodeMeta], split: dict[str, Any], *, eligible_episode_ids: set[str] | None = None) -> dict[str, Any]:
     verify_split(split, trajectories, metadata)
     partitions: dict[str, list[Trajectory]] = defaultdict(list)
     episodes, exclusions, transitions = [], [], defaultdict(lambda: {"observed_success": 0, "observed_failure": 0, "families": set()})
     for trajectory in trajectories:
         meta = metadata[trajectory.trajectory_id]
+        if eligible_episode_ids is not None and trajectory.trajectory_id not in eligible_episode_ids:
+            exclusions.append({"episode_id": trajectory.trajectory_id, "reason": "not_positive_endpoint_eligible"})
+            continue
         if split["families"][meta.family_id] != "train":
             exclusions.append({"episode_id": trajectory.trajectory_id, "reason": "not_training"})
             continue

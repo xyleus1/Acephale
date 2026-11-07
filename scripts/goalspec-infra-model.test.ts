@@ -54,6 +54,24 @@ test("local model uses exact model/template/tool tokenizer and preserves real ca
   assert.equal(result.compiler.tokenizerCalls, 1);
 });
 
+test("candidate window measurement uses the real tokenizer without generating", async () => {
+  const { port, bodies } = mockPort();
+  assert.equal(await port.measureInputTokens(messages, undefined, [tool]), 8);
+  assert.deepEqual(bodies.map(row => row.path), ["/tokenize"]);
+  assert.deepEqual(bodies[0].body.tools, [tool]);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(port.measureInputTokens(messages, controller.signal));
+  assert.equal(bodies.length, 1);
+});
+
+test("SDK retryable HTTP failures make exactly one physical generation attempt", async () => {
+  for (const status of [429, 500, 503]) {
+    const { port, bodies } = mockPort(new Response("provider-private-error", { status }));
+    await assert.rejects(port.complete(request), new RegExp(`HTTP ${status}`));
+    assert.equal(bodies.filter(row => row.path === "/v1/chat/completions").length, 1);
+  }
+});
+
 test("SSE reconstructs fragmented arguments and records first visible token", async () => {
   const events: InfraModelEvent[] = [];
   const raw = event(chunk({ role: "assistant" }))

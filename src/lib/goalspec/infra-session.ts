@@ -29,14 +29,11 @@ export function mixInfraDecisions(neutral: InfraDecision, conditional: InfraDeci
   const weights = new Map<string, number>();
   for (const [decision, weight] of [[neutral, 1 - reliability], [conditional, reliability]] as const) {
     for (const score of decision.scores) weights.set(score.candidateId, (weights.get(score.candidateId) ?? 0) + score.probability * weight);
-    const abstention = Math.max(0, 1 - decision.scores.reduce((sum, item) => sum + item.probability, 0));
-    const key = decision.action === "READ_UNCOVERED" ? "READ_UNCOVERED" : "NO_READ";
-    weights.set(key, (weights.get(key) ?? 0) + abstention * weight);
   }
-  const scores = [...weights].filter(([id]) => id !== "NO_READ" && id !== "READ_UNCOVERED")
+  const scores = [...weights]
     .map(([candidateId, probability]) => ({ candidateId, probability })).sort((a, b) => b.probability - a.probability || a.candidateId.localeCompare(b.candidateId));
-  const best = scores[0]?.probability ?? 0, noRead = weights.get("NO_READ") ?? 0, uncovered = weights.get("READ_UNCOVERED") ?? 0;
-  return { action: best > Math.max(noRead, uncovered) ? "READ" : uncovered > noRead ? "READ_UNCOVERED" : "NO_READ", scores };
+  // Legacy offline diagnostic only. Runtime dispatches one condition, never this two-call mixture.
+  return { action: reliability > 0.5 ? conditional.action : neutral.action, scores };
 }
 export interface InfraSessionPolicy {
   arm: "base" | "neutral_memory_prefetch" | "goalspec";
@@ -44,7 +41,7 @@ export interface InfraSessionPolicy {
   opportunity(frame: ExecutionFrame): InfraOpportunity;
   candidates(frame: ExecutionFrame): Candidate[] | Promise<Candidate[]>;
   validateBinding(candidate: Candidate, frame: ExecutionFrame): boolean;
-  rank(frame: ExecutionFrame, candidates: Candidate[], goals: GoalSet, signal: AbortSignal): Promise<InfraDecision>;
+  rank(frame: ExecutionFrame, candidates: Candidate[], goals: GoalSet, signal: AbortSignal, getLatestGoals?: () => GoalSet): Promise<InfraDecision>;
   inferGoals?(frame: ExecutionFrame, signal: AbortSignal): Promise<GoalSet>;
   goalReliability: number;
   relevantGoalEvidence?(frame: ExecutionFrame): unknown;
@@ -118,7 +115,7 @@ export class InfraSession {
     const opportunity = this.policy.opportunity(frame);
     // Even a perfect predictor must have a positive measured opportunity before retrieval or model calls.
     if (expectedInfraSaving(1, opportunity) <= 0) {
-      this.record({ type: "infra_opportunity_rejected", checkpoint: frame.boundary, estimate: opportunity });
+      this.record({ type: "infra_opportunity_rejected", runId: frame.runId, checkpoint: frame.boundary, estimate: opportunity });
       return;
     }
     if (goalRevision !== this.goalRevision) {
@@ -128,7 +125,7 @@ export class InfraSession {
     const controller = new AbortController();
     this.pendingPrediction = controller; this.controllers.add(controller);
     this.track(this.predict(frame, serial, controller).catch(error => {
-      this.record({ type: "infra_prediction_failed", checkpoint: frame.boundary, errorType: error instanceof Error ? error.name : "Error", cancelled: controller.signal.aborted });
+      this.record({ type: "infra_prediction_failed", runId: frame.runId, checkpoint: frame.boundary, errorType: error instanceof Error ? error.name : "Error", cancelled: controller.signal.aborted });
     }).finally(() => { this.controllers.delete(controller); if (this.pendingPrediction === controller) this.pendingPrediction = undefined; }));
   }
   private startGoals(frame: ExecutionFrame, revision: string) {
@@ -139,7 +136,7 @@ export class InfraSession {
         const dependencies = goalDependencies(goals, frame);
         if (!this.latest || !sameGoalSources(dependencies, this.latest)) {
           this.goals = unknownGoals(); this.goalDependencies = []; this.goalRevision = "";
-          this.record({ type: "infra_goals_stale", revision, reason: "referenced_source_changed" });
+          this.record({ type: "infra_goals_stale", runId: frame.runId, checkpoint: frame.boundary, revision, reason: "referenced_source_changed" });
           // Inference can finish after a newer public checkpoint. Refresh from
           // that checkpoint without installing or exposing the stale result.
           if (this.latest && expectedInfraSaving(1, this.policy.opportunity(this.latest)) > 0) {
@@ -149,9 +146,9 @@ export class InfraSession {
         }
         this.goals = copy(goals);
         this.goalDependencies = dependencies;
-        this.record({ type: "infra_goals_ready", revision, goals: copy(goals), reliability: this.policy.goalReliability });
+        this.record({ type: "infra_goals_ready", runId: frame.runId, checkpoint: frame.boundary, revision, goals: copy(goals), reliability: this.policy.goalReliability });
       }
-    }).catch(error => this.record({ type: "infra_goals_failed", revision, errorType: error instanceof Error ? error.name : "Error" }))
+    }).catch(error => this.record({ type: "infra_goals_failed", runId: frame.runId, checkpoint: frame.boundary, revision, errorType: error instanceof Error ? error.name : "Error" }))
       .finally(() => { this.controllers.delete(controller); if (this.goalTask?.controller === controller) this.goalTask = undefined; }));
     this.goalTask = { revision, controller, task };
   }
@@ -175,26 +172,25 @@ export class InfraSession {
       } catch { /* A malformed proposal never reaches scheduling. */ }
     }
     const candidates = [...unique.values()];
-    const goalView = this.policy.arm === "goalspec" ? copy(this.goals) : unknownGoals();
+    let goalView = unknownGoals();
+    const latestGoals = () => {
+      if (!current()) throw new Error("Stale prediction dispatch");
+      goalView = this.policy.arm === "goalspec" && this.policy.goalReliability > 0 && sameGoalSources(this.goalDependencies, frame)
+        ? copy(this.goals) : unknownGoals();
+      validateGoals(goalView, frame.sources);
+      return copy(goalView);
+    };
     const validateDecision = (decision: InfraDecision) => {
       if (!["READ", "NO_READ", "READ_UNCOVERED"].includes(decision.action) || !Array.isArray(decision.scores)
-      || new Set(decision.scores.map(score => score.candidateId)).size !== decision.scores.length
+      || decision.scores.length > 3 || new Set(decision.scores.map(score => score.candidateId)).size !== decision.scores.length
       || decision.scores.some(score => !candidates.some(candidate => candidate.id === score.candidateId)
-        || !Number.isFinite(score.probability) || score.probability < 0 || score.probability > 1)
-      || decision.scores.reduce((sum, item) => sum + item.probability, 0) > 1 + 1e-9) throw new Error("Invalid candidate ranking");
+        || !Number.isFinite(score.probability) || score.probability < 0 || score.probability > 1)) throw new Error("Invalid candidate ranking");
     };
-    const neutral = await this.policy.rank(copy(frame), copy(candidates), unknownGoals(), controller.signal);
-    validateDecision(neutral);
+    const decision = await this.policy.rank(copy(frame), copy(candidates), latestGoals(), controller.signal, latestGoals);
+    validateDecision(decision);
     if (!current() || generation !== this.scheduler.generation) return;
-    let decision = neutral;
-    if (goalView.hypotheses.length && this.policy.goalReliability > 0) {
-      const conditional = await this.policy.rank(copy(frame), copy(candidates), goalView, controller.signal);
-      validateDecision(conditional);
-      decision = mixInfraDecisions(neutral, conditional, this.policy.goalReliability);
-      this.record({ type: "infra_goal_effect", checkpoint: frame.boundary, neutral, conditional, reliability: this.policy.goalReliability, mixed: decision });
-    }
-    if (!current() || generation !== this.scheduler.generation) return;
-    this.record({ type: "infra_ranking", checkpoint: frame.boundary, poolHash: hash(candidates), candidatePool: candidates,
+    this.record({ type: "infra_ranking", runId: frame.runId, checkpoint: frame.boundary, boundary: frame.boundary, frameHash: hash(frame),
+      poolHash: hash(candidates), candidatePool: candidates, probabilitySemantics: "independent_next_batch_hit",
       decision, goalsHash: hash(goalView), rankingMs: performance.now() - started, arm: this.policy.arm });
     if (decision.action !== "READ") return;
     const measured = this.policy.opportunity(frame);
@@ -204,7 +200,7 @@ export class InfraSession {
       const savingMs = expectedInfraSaving(score.probability, measured);
       const admitted = savingMs > 0 ? this.scheduler.admit([{ ...candidate, probability: score.probability }]) : [];
       for (const key of admitted) this.dependencies.set(key, { candidate, values: candidate.bindings.map(ref => hash(resolveSource(ref, frame.sources))) });
-      this.record({ type: "infra_admission", checkpoint: frame.boundary, candidateId: candidate.id, savingMs, admitted: admitted.length > 0 });
+      this.record({ type: "infra_admission", runId: frame.runId, checkpoint: frame.boundary, frameHash: hash(frame), candidateId: candidate.id, savingMs, admitted: admitted.length > 0 });
     }
   }
   authoritative(invocation: Invocation, execute: () => Promise<Observation>) { return this.scheduler.authoritative(invocation, execute); }

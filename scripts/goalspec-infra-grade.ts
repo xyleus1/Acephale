@@ -60,7 +60,7 @@ export function verifyInfraGoalReplay(bundle: string, predictionDirectory: strin
   if (contentHash !== hash(body) || manifest.kind !== "uncalibrated_prediction_replay" || manifest.executionAllowed !== false
     || manifest.inferGoals !== true || manifest.sourceDatasetHash !== dataset.manifest.bundle_hash
     || hash(manifest.model) !== hash(INFRA_MODEL_PINS.predictor)
-    || ["memoryHash", "predictorContractHash", "candidateCompilerHash"].some(key => !/^[0-9a-f]{64}$/.test(manifest[key]))
+    || ["memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash"].some(key => !/^[0-9a-f]{64}$/.test(manifest[key]))
     || !predictions.length || new Set(predictions.map(row => row.checkpoint_id)).size !== predictions.length
     || hash(manifest.rowIds) !== hash(predictions.map(row => row.checkpoint_id))) throw new Error("Closed frozen goal replay required");
   const completed = predictions.filter(row => row.status === "completed").length;
@@ -193,6 +193,7 @@ export async function runInfraGoalGrading(options: { bundle: string; predictions
   mkdirSync(options.output, { recursive: false });
   write(join(options.output, "plan.json"), { version: INFRA_GRADE_VERSION, parentId: parent,
     sourceDatasetHash: replay.dataset.manifest.bundle_hash, predictionManifestHash: replay.manifest.contentHash,
+    retrievalHash: replay.manifest.retrievalHash,
     predictionRowsSha256: replay.predictionsSha256, annotationsHash: hash(annotations), model: RESEARCH_MODELS.teacher,
     rubric, rubricVersion: INFRA_GRADE_VERSION, maxInputTokens: INPUT_LIMIT, maxOutputTokens: OUTPUT_LIMIT,
     allocation: "preparation", maximumMicrodollars: maximum, retries: 0,

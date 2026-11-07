@@ -20,8 +20,16 @@ from goalspec.infra_native_runner import (
 from goalspec.study_v2 import read, write
 
 
+def empty_shadow_memory(snapshot_id: str) -> dict:
+    """Match the server-owned TypeScript v5 empty memory bootstrap exactly."""
+    body = {"schemaVersion": 1, "compilerVersion": "goalspec-memory-v5",
+            "sourcePolicy": "v5-and-permitted-training-only", "repositorySnapshotId": snapshot_id,
+            "sourceFiles": [], "runs": [], "episodes": [], "misses": [], "transitions": [], "confusions": []}
+    return {**body, "contentHash": hash_v1(body)}
+
+
 def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit: str,
-                     checkpoint_hash: str) -> tuple[dict, dict, dict]:
+                     checkpoint_hash: str, shadow_memory: dict | None = None) -> tuple[dict, dict, dict]:
     """Assemble measured deployment metadata and predeclared local task selections.
 
     Limits are operational policy, not invented performance measurements. The
@@ -31,6 +39,13 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
         raise ValueError("An observed deployment inventory is required")
     if not isinstance(plan.get("experimentId"), str) or not plan["experimentId"]:
         raise ValueError("A collection experimentId is required")
+    if type(plan.get("shadowPrediction", False)) is not bool or plan.get("stage", "collection") != "collection":
+        raise ValueError("Shadow collection requires an explicit boolean and collection stage")
+    shadow = plan.get("shadowPrediction", False)
+    if shadow and not plan.get("predictorBaseUrl"):
+        raise ValueError("Shadow prediction requires the pinned predictor endpoint")
+    if plan.get("memoryPath") and (not shadow or shadow_memory is None):
+        raise ValueError("A shadow memory path needs the actually loaded frozen memory artifact")
     for field in ("actorBaseUrl", "predictorBaseUrl"):
         if field == "predictorBaseUrl" and not plan.get(field):
             continue
@@ -83,6 +98,18 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
                   "timeoutSeconds": plan.get("timeoutSeconds", 600)}}
     if plan.get("predictorBaseUrl"):
         config["predictorBaseUrl"] = plan["predictorBaseUrl"]
+    if shadow:
+        config["shadowPrediction"] = True
+        if shadow_memory is None:
+            shadow_memory = empty_shadow_memory(config["snapshotId"])
+    if shadow_memory is not None:
+        if not shadow or shadow_memory.get("contentHash") != hash_v1({key: value for key, value in shadow_memory.items() if key != "contentHash"}):
+            raise ValueError("Shadow memory must bind a verified frozen artifact")
+        if not isinstance(shadow_memory.get("repositorySnapshotId"), str) or not shadow_memory["repositorySnapshotId"] \
+                or any(run.get("split") != "train" or run.get("familyId") not in families["trainingFamilies"] for run in shadow_memory.get("runs", [])):
+            raise ValueError("Shadow memory must contain only declared training families")
+        config["memoryPath"] = plan.get("memoryPath", "shadow-memory.json")
+        config["snapshotId"] = shadow_memory["repositorySnapshotId"]
     for field in ("otlpBaseUrl", "splitGuardPath"):
         if plan.get(field):
             config[field] = plan[field]
@@ -90,7 +117,7 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
                 "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"), "sourceCommit": source_commit,
                 **{key: deployment[key] for key in ("actor", "predictor", "runtime", "hardware")},
                 "data": {"datasetHash": hash_v1(bundle), "splitHash": hash_v1(family_splits),
-                    "memoryHash": hash_v1({"artifact": "memory", "state": "not-created", "stage": "collection"}),
+                    "memoryHash": shadow_memory["contentHash"] if shadow_memory else hash_v1({"artifact": "memory", "state": "not-created", "stage": "collection"}),
                     "calibrationHash": hash_v1({"artifact": "calibration", "state": "not-created", "stage": "collection"}),
                     "toolSchemaHash": hash_v1([{"domain": domain, "tools": catalog[domain]["tools"]}
                                                for domain in sorted({run["domain"] for run in runs})]),
@@ -102,7 +129,7 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
                 "protocol": {"actorContext": "none", "exposeEvidence": False, "frozenMemory": True,
                     "sameCandidatePool": True, "lookaheadHops": 1, "rankedCandidates": 3, "perRunConcurrency": 2,
                     "globalConcurrency": 4, "startsPerRun": 12, "deadlineMs": 5000,
-                    "cachePolicy": "base-collection-no-speculation", "scheduleHash": hash_v1(runs)}}
+                    "cachePolicy": "base-collection-shadow-prediction-no-speculation" if shadow else "base-collection-no-speculation", "scheduleHash": hash_v1(runs)}}
     validate_task_bundle(config, manifest, bundle)
     return config, manifest, bundle
 
@@ -129,7 +156,14 @@ def prepare_native(plan_path: Path, deployment_path: Path, budget_directory: Pat
     subprocess.run(["node", "--import", "tsx", "scripts/goalspec-infra-native.ts", "checkpoint",
                     str(budget_directory.resolve() / "budget.jsonl"), str(checkpoint)], cwd=ROOT, check=True,
                    capture_output=True, text=True)
-    config, manifest, bundle = build_collection(plan, deployment, catalog, source_commit, hash_v1(read(checkpoint)))
+    runtime_plan, shadow_memory = dict(plan), None
+    if plan.get("memoryPath"):
+        memory_path = (plan_path.resolve().parent / plan["memoryPath"]).resolve()
+        shadow_memory = read(memory_path)
+        runtime_plan["memoryPath"] = str(memory_path)
+    config, manifest, bundle = build_collection(runtime_plan, deployment, catalog, source_commit, hash_v1(read(checkpoint)), shadow_memory)
+    if config.get("shadowPrediction") and not plan.get("memoryPath"):
+        write(output / "shadow-memory.json", empty_shadow_memory(config["snapshotId"]))
     for name, value in (("configuration.json", config), ("manifest.json", manifest), ("tasks.json", bundle),
                         ("preparation-plan.json", plan), ("deployment-inventory.json", deployment)):
         write(output / name, value)

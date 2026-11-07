@@ -1,3 +1,43 @@
+## 2026-11-06: Infrastructure methods v2 and honest prediction provenance
+
+- Keep actor weights, actor input and authoritative tool catalog fixed in the
+  primary three-arm experiment. Goal conditioning changes the speculative ranking
+  request. Use one live ranking call per checkpoint, with current valid goals
+  resolved when it dispatches. Ranking takes priority over queued goal refresh;
+  running predictor work is not preempted. Do not claim in-engine GPU scheduling.
+- Candidate probabilities are independent next-batch invocation hits. They need
+  not sum to one. Rebuild calibration with the v2 probability contract, separate
+  neutral/conditional mappings and the exact compiler/retrieval identity. Fixed
+  panels are a separate prediction mode; their binary loss is not action entropy.
+- Preserve a common goal-neutral candidate window, using the serving tokenizer.
+  Verified success can support executable workflows. Independently verified task
+  failure can support contrastive memory; unknown/censored outcomes cannot.
+  Embed public prefixes only, and filter snapshot, policy, authorization scope,
+  verification and family before lexical/vector retrieval and ranking statistics.
+- Prediction-error memory must join an actual prediction completed before the
+  actor's answer to the same sealed public checkpoint and actual call IDs. A base
+  trace with no prediction supplies no miss. Training-only shadow predictions
+  execute no speculative reads; late predictions are fenced, not relabeled as
+  foresight. Freeze all memory before scoring a new experiment.
+- Use official OpenAI-compatible client transport with retries disabled and
+  preserved strict response validation. Use official OpenTelemetry providers and
+  exporters and the maintained Prometheus client. Each telemetry owner has a
+  distinct process clock identity. Drain model/retrieval/export work before
+  closing its original budget owner; uncertain costs remain reserved.
+- Opportunity v2 binds hardware, serving, model, memory, compiler, retrieval,
+  prompt and measurement protocol. Measure ranking readiness separately from
+  background goal refresh. Rebuild old measurements after this change. The
+  reliability lower bound is currently an enable gate, not a fitted optimal
+  threshold or an accuracy guarantee.
+- Use the original remaining held-out funds when sizing a new cohort. Preserve
+  the USD500 study, USD35 infrastructure and USD65 contingency ceilings, existing
+  commitments and gross GPU limits. No new ledger or silent model substitution.
+
+Implementation and exact operational sequence: [Infrastructure methods v2](goalspec/INFRA_METHODS_V2.md).
+Offline tests are not live benchmark results. GPU quota, host/container smoke,
+real pgvector integration, fresh annotation review and paired evaluation remain
+execution gates. Existing reports and negative results stay immutable.
+
 ## 2026-11-06: Explicitly raise only the GPU hourly ceiling
 
 - The founder explicitly authorized increasing the gross GPU hourly cap from

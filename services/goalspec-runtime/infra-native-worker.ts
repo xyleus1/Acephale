@@ -1,13 +1,15 @@
 import { canonical, copy, hash } from "../../src/lib/goalspec/canonical";
-import type { ExecutionFrame, Scope } from "../../src/lib/goalspec/contracts/generated";
+import type { Candidate, ExecutionFrame, Scope } from "../../src/lib/goalspec/contracts/generated";
 import { validateContract } from "../../src/lib/goalspec/contracts/validate";
+import { resolveSource } from "../../src/lib/goalspec/compiler";
 import { LocalChatModelPort } from "../../src/lib/goalspec/infra-model";
-import type { InfraSession } from "../../src/lib/goalspec/infra-session";
+import type { InfraDecision, InfraSession } from "../../src/lib/goalspec/infra-session";
 import type { BindingEvent } from "../../src/lib/goalspec/patterns";
 import type { PublicBoundary } from "./actor";
 import type { NativeReadExecutor } from "./gateway-client";
 import type { BoundaryWorker } from "./service";
 import { localActorDecision, localActorMessages } from "./local-actor";
+import { infraActorGeneratedEvent, infraNativePublicCheckpointInput } from "./infra-actor-event";
 
 export interface InfraNativeWorkerConfiguration {
   runId: string;
@@ -16,6 +18,8 @@ export interface InfraNativeWorkerConfiguration {
   maxBoundaries: number;
   seed: number;
 }
+export type InfraNativeShadowPrediction = (frame: ExecutionFrame, signal: AbortSignal) =>
+  Promise<{ candidates: Candidate[]; decision: InfraDecision }>;
 
 /** Public inputs only. Historical prefetched metadata is deliberately excluded. */
 export function infraNativeFrame(boundary: PublicBoundary, configuration: InfraNativeWorkerConfiguration, ordinal: number): ExecutionFrame {
@@ -61,13 +65,15 @@ export class InfraNativeBoundaryWorker implements BoundaryWorker {
   private active?: { controller: AbortController; finished: Promise<void> };
   private seen = new Set<string>();
   private closing?: Promise<void>;
+  private shadowTasks = new Set<Promise<void>>();
   constructor(private configuration: InfraNativeWorkerConfiguration, private model: LocalChatModelPort,
     private record: (event: Record<string, unknown>) => void,
-    private runtime?: InfraSession, private reads?: NativeReadExecutor) {
+    private runtime?: InfraSession, private reads?: NativeReadExecutor, private shadowPrediction?: InfraNativeShadowPrediction) {
     if (!!runtime !== !!reads || !configuration.runId || !configuration.snapshotId
       || !Number.isSafeInteger(configuration.maxBoundaries) || configuration.maxBoundaries < 1
       || !Number.isSafeInteger(configuration.seed) || configuration.seed < 0) throw new Error("Invalid infra native worker configuration");
     validateContract("Scope", configuration.scope);
+    if (shadowPrediction && (runtime || reads)) throw new Error("Collection shadow prediction cannot execute speculative reads");
     this.configuration = copy(configuration);
   }
   async decision(publicBoundary: PublicBoundary, boundaryId: string) {
@@ -75,18 +81,51 @@ export class InfraNativeBoundaryWorker implements BoundaryWorker {
     if (!boundaryId || this.seen.has(boundaryId)) throw new Error("Repeated or empty native checkpoint ID");
     const boundary = copy(publicBoundary);
     const frame = infraNativeFrame(boundary, this.configuration, this.boundary);
+    const publicInputHash = hash(infraNativePublicCheckpointInput(frame.runId, boundaryId, boundary));
     const controller = new AbortController();
+    const shadow = new AbortController();
+    const shadowSignal = AbortSignal.any([controller.signal, shadow.signal]);
+    let actorGenerated = false;
     let finish!: () => void;
     this.active = { controller, finished: new Promise<void>(resolve => { finish = resolve; }) };
     this.seen.add(boundaryId); this.boundary++;
     try {
       this.reads?.updateFrame(frame);
-      this.record({ type: "infra_native_checkpoint", runId: frame.runId, boundaryId, frameHash: hash(frame), publicInputHash: hash(boundary) });
+      this.record({ type: "infra_native_checkpoint", runId: frame.runId, checkpoint: frame.boundary, boundary: frame.boundary,
+        boundaryId, frameHash: hash(frame), publicInputHash });
       this.runtime?.observe(frame);
+      if (this.shadowPrediction) {
+        const started = performance.now();
+        const task = Promise.resolve().then(() => { shadowSignal.throwIfAborted(); return this.shadowPrediction!(copy(frame), shadowSignal); }).then(({ candidates, decision }) => {
+          if (shadowSignal.aborted || this.closed || actorGenerated) {
+            this.record({ type: "infra_shadow_prediction_fenced", runId: frame.runId, checkpoint: frame.boundary, boundaryId }); return;
+          }
+          if (!Array.isArray(candidates) || candidates.length > 128 || new Set(candidates.map(candidate => candidate.id)).size !== candidates.length) throw new Error("Invalid shadow candidate pool");
+          for (const candidate of candidates) {
+            validateContract("Candidate", candidate);
+            if (candidate.hop !== 1 || hash(candidate.invocation.scope) !== hash(frame.scope)) throw new Error("Invalid shadow scope");
+            candidate.bindings.forEach(reference => resolveSource(reference, frame.sources));
+          }
+          if (!decision || !["READ", "NO_READ", "READ_UNCOVERED"].includes(decision.action) || !Array.isArray(decision.scores)
+            || decision.scores.length > 3 || new Set(decision.scores.map(score => score.candidateId)).size !== decision.scores.length
+            || decision.scores.some(score => !candidates.some(candidate => candidate.id === score.candidateId)
+              || !Number.isFinite(score.probability) || score.probability < 0 || score.probability > 1)) throw new Error("Invalid shadow ranking");
+          this.record({ type: "infra_ranking", mode: "shadow", executionAllowed: false, runId: frame.runId,
+            checkpoint: frame.boundary, boundary: frame.boundary, boundaryId, frameHash: hash(frame), publicInputHash,
+            poolHash: hash(candidates), candidatePool: copy(candidates), decision: copy(decision), goalsHash: hash(frame.goals),
+            probabilitySemantics: "independent_next_batch_hit", rankingMs: performance.now() - started, arm: "base" });
+        }).catch(error => this.record({ type: "infra_shadow_prediction_failed", runId: frame.runId, checkpoint: frame.boundary,
+          boundaryId, cancelled: shadowSignal.aborted, errorType: error instanceof Error ? error.name : "Error" }));
+        this.shadowTasks.add(task);
+        void task.then(() => this.shadowTasks.delete(task), () => this.shadowTasks.delete(task));
+      }
       const response = await localActorDecision(boundary, this.model, { id: `${frame.runId}:${boundaryId}:actor`,
         maxOutputTokens: 4096, seed: this.configuration.seed, signal: controller.signal });
       controller.signal.throwIfAborted();
       if (this.closed) throw new Error("Native worker closed during inference");
+      actorGenerated = true;
+      this.record(infraActorGeneratedEvent(frame, boundaryId, boundary, response, publicInputHash));
+      shadow.abort();
       const promotions: Record<string, string> = {};
       if (this.runtime && this.reads) {
         const invocations = (response.tool_calls ?? []).map(call => ({ tool: call.name, arguments: JSON.parse(canonical(call.arguments)), scope: frame.scope }));
@@ -110,14 +149,14 @@ export class InfraNativeBoundaryWorker implements BoundaryWorker {
       this.record({ type: "infra_native_response", runId: frame.runId, boundaryId, responseHash: hash(response),
         compiler: response.raw_data.goalspecCompiler, stagedPromotions: Object.keys(promotions).length });
       return { ...response, _goalspecPromotions: promotions };
-    } finally { this.active = undefined; finish(); }
+    } finally { shadow.abort(); this.active = undefined; finish(); }
   }
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.closed = true;
     const active = this.active;
     active?.controller.abort();
-    this.closing = Promise.allSettled([active?.finished, this.runtime?.close()]).then(results => {
+    this.closing = Promise.allSettled([active?.finished, this.runtime?.close(), ...this.shadowTasks]).then(results => {
       const failed = results.find(result => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
     });

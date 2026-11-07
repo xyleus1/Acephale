@@ -69,6 +69,8 @@ def test_fresh_bridge_retains_failures_and_excludes_unknown_and_development(coho
     runtime = read_jsonl(output / "runtime-runs.jsonl")
     assert len(runtime) == 4
     assert [row["id"] for row in runtime if row["memoryEligible"]] == ["run-0"]
+    assert [row["id"] for row in runtime if row["contrastiveEligible"]] == ["run-1"]
+    assert read_jsonl(output / "metadata.jsonl")[1]["verification_tier"] == "native_verified"
     assert runtime[2]["constraintViolations"] is None
     assert len(read_jsonl(output / "verdicts.jsonl")) == 4
     public = read_jsonl(output / "public.jsonl")
@@ -95,10 +97,26 @@ def test_fresh_bridge_runs_in_typescript_memory(cohort, tmp_path):
     result = subprocess.run(["node", "--import", "tsx", "scripts/goalspec-infra-memory.ts", "--fresh", str(bundle), str(destination)], cwd=root, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     receipt = json.loads(result.stdout)
-    assert receipt["declaredRuns"] == 4 and receipt["runs"] == 1 and receipt["episodes"] == 2
+    assert receipt["declaredRuns"] == 4 and receipt["runs"] == 2 and receipt["episodes"] == 4
     artifact = json.loads((destination / "runtime/artifact.json").read_text())
-    assert {run["id"] for run in artifact["runs"]} == {"run-0"}
-    assert len(receipt["exclusions"]) == 3
+    assert {run["id"] for run in artifact["runs"]} == {"run-0", "run-1"}
+    assert receipt["verifiedFailures"] == 1
+    assert len(receipt["exclusions"]) == 2
+
+
+def test_censored_verification_is_retained_but_not_taught_as_a_task_failure(cohort, tmp_path):
+    outcomes = read_jsonl(cohort / "outcomes.jsonl")
+    outcomes[1]["termination"] = "provider_timeout"
+    raw = json.loads((cohort / "run-1.json").read_text())
+    raw["record"] = outcomes[1]
+    write(cohort / "run-1.json", raw)
+    (cohort / "outcomes.jsonl").write_text("".join(json.dumps(row) + "\n" for row in outcomes), encoding="utf-8")
+    seal(cohort)
+    output = tmp_path / "bundle"
+    import_fresh(cohort, output)
+    row = read_jsonl(output / "runtime-runs.jsonl")[1]
+    assert row["outcomeVerified"] is True
+    assert row["contrastiveEligible"] is False and row["outcomeClass"] == "censored_or_unknown"
 
 
 @pytest.mark.parametrize("case", ["missing-failure", "unclosed", "service-failed", "missing-close", "actor", "family", "raw-tamper", "unknown-success"])

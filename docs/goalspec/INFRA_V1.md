@@ -1,5 +1,9 @@
 # GoalSpec infrastructure v1
 
+For current ranking, retrieval, calibration, profiling and execution commands,
+use the [v2 methods runbook](INFRA_METHODS_V2.md). Historical reports keep their
+original configuration and results.
+
 GoalSpec observes public agent checkpoints, retrieves compatible historical
 workflows, binds current arguments, and executes admitted reads concurrently with
 actor inference, before a later matching tool invocation. Exact matching actor
@@ -11,12 +15,14 @@ or the tool catalog. Historical v1-v5 artifacts remain unchanged.
 
 - `InfraSession` dispatches prediction asynchronously, checks a conservative
   overlap opportunity before retrieval, shares a goal-neutral candidate pool,
-  attenuates conditional rankings by independently calibrated goal agreement,
+  uses independently audited goal agreement as a conditional-ranking enable gate,
+  dispatches only one ranking request per checkpoint with a neutral fallback,
   and fences changed requirements, mutations, cancellation and shutdown.
 - `LocalChatModelPort` uses the served model's tokenizer, preserves actual call
   IDs and assistant text, rejects malformed arguments, and records provider
-  lifecycle, usage, input hashes and whole-group context omissions. No hosted
-  OpenAI request type is used to fake a local model request.
+  lifecycle, usage, input hashes and whole-group context omissions. The official
+  OpenAI SDK targets the local OpenAI-compatible endpoint; it does not substitute
+  a hosted model for the pinned local model.
 - The version 2 experiment manifest pins Qwen3.5-9B, Qwen3.5-0.8B, their exact
   revisions, vLLM image digest, actual hardware/software inventories, dataset,
   memory, calibration, schedule and budget hashes. Old manifest validation is
@@ -113,8 +119,11 @@ in the research environment:
 python -m goalspec.infra_cli fit-calibration --bundle DATASET_DIRECTORY --predictions RAW_PREDICTION_DIRECTORY --condition both --output NEW_OUTPUT
 ```
 
-The fitter uses training rows only, reports separate development scores, and binds
-the result to the exact model, prompt/compiler, candidate compiler and memory.
+The v2 fitter uses training rows only, reports separate development scores, and
+binds the result to the exact model, prompt/compiler, candidate compiler, memory
+and retrieval profile. Scores are independent next-batch invocation-hit marginals,
+not a distribution normalized across candidates. Fixed-panel evaluation is a
+separate replay mode described in the v2 runbook.
 Runtime admission requires calibration from the pinned predictor contract.
 Neutral and conditional rankings have separate fitted mappings, retained under
 one artifact hash. Goal-conditioned execution rejects a missing conditional map.
@@ -170,6 +179,8 @@ credentials through an external secret store into the executing process; an API
 authentication check does not establish a credit balance. GPU smoke tests,
 teacher execution, the 20-example human audit, fresh Qwen trajectory collection,
 calibration on those outputs, and live paired native trials remain external
-execution prerequisites. Production activation remains off. Two-hop speculation,
-observation prediction, serving-pressure coordination and vector-retrieval
-experiments remain follow-on work, as specified by the ordered plan.
+execution prerequisites. Production activation remains off. Two-hop speculation
+and observation prediction remain follow-on work. Optional frozen PostgreSQL/
+pgvector episodic retrieval and shared predictor priority coordination are
+implemented; real pgvector integration and live performance have not been
+established locally. See the v2 runbook for current verification and quota status.

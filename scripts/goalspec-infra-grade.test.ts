@@ -55,7 +55,7 @@ function fixture(count = 3) {
   });
   const predictionManifest = { version: 1, kind: "uncalibrated_prediction_replay", executionAllowed: false, inferGoals: true,
     sourceDatasetHash: datasetHash, model: INFRA_MODEL_PINS.predictor, memoryHash: hash("memory"), predictorContractHash: hash("prompt"),
-    candidateCompilerHash: hash("compiler"), rowIds: predictions.map(row => row.checkpoint_id) };
+    candidateCompilerHash: hash("compiler"), retrievalHash: hash("retrieval"), rowIds: predictions.map(row => row.checkpoint_id) };
   mkdirSync(predictionsDirectory);
   writeFileSync(join(predictionsDirectory, "manifest.json"), canonical({ ...predictionManifest, contentHash: hash(predictionManifest) }));
   writeFileSync(join(predictionsDirectory, "predictions.jsonl"), predictions.map(row => canonical(row) + "\n").join(""));

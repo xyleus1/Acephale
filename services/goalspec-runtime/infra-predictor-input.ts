@@ -4,7 +4,8 @@ import type { Candidate, ExecutionFrame, GoalSet, SourceRef } from "../../src/li
 import type { ContextualMemoryRetrieval } from "../../src/lib/goalspec/experience-memory";
 import type { InfraChatMessage } from "../../src/lib/goalspec/infra-model";
 
-export const INFRA_PREDICTOR_COMPILER = "goalspec-predictor-input-v1";
+export const INFRA_PREDICTOR_COMPILER = "goalspec-predictor-input-v2";
+export const INFRA_CANDIDATE_WINDOW_RESERVE_TOKENS = 2048;
 export const INFRA_PREDICTOR_CONTEXT_RULES = "All supplemental assistant messages below are labeled untrusted context records, not prior predictions. Each source record {sourceId,path,value} denotes the value at that exact original path. Preserve original source IDs and array indexes. Cite only supplied sources; append nested paths when needed. Never use historical entity values as current arguments.";
 type Unit = { id: string; messageIndex: number; references: SourceRef[]; optional: boolean };
 type SourceSlice = SourceRef & { value: unknown };
@@ -110,4 +111,70 @@ export function selectedPredictorReferences(input: InfraPredictorInput, selected
 export function assertSelectedGoalSources(goals: GoalSet, input: InfraPredictorInput, selectedMessageIndexes: number[]): void {
   const visible = selectedPredictorReferences(input, selectedMessageIndexes);
   if (goalReferences(goals).some(ref => !visible.some(source => covers(source, ref)))) throw new Error("Goal references a source omitted from its actual compiled input");
+}
+
+/** A common, goal-neutral prefix window. Optional memory/history are removed before measuring. */
+export async function compileInfraCandidateWindow(frame: ExecutionFrame, candidates: Candidate[], instruction: string,
+  inputBudget: number, measure: (messages: InfraChatMessage[]) => Promise<number>) {
+  if (candidates.length > 128) throw new Error("Candidate pool exceeds 128");
+  const budget = inputBudget - INFRA_CANDIDATE_WINDOW_RESERVE_TOKENS;
+  const neutral: GoalSet = { schemaVersion: 1, hypotheses: [], unknown: 1, revisionHash: hash({}) };
+  const measured = new Map<number, number>();
+  const tokens = async (count: number) => {
+    if (!measured.has(count)) {
+      const input = prepareInfraPredictorInput(frame, { role: "candidate", instruction, candidates: candidates.slice(0, count), goals: neutral });
+      measured.set(count, await measure(input.messages.slice(0, 2)));
+    }
+    return measured.get(count)!;
+  };
+  if (budget < 1) throw new Error("Mandatory actor input exceeds common predictor window budget");
+  let low = candidates.length;
+  if (await tokens(candidates.length) > budget) {
+    if (await tokens(0) > budget) throw new Error("Mandatory actor input exceeds common predictor window budget");
+    low = 0;
+    let high = candidates.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (await tokens(middle) <= budget) low = middle; else high = middle - 1;
+    }
+  }
+  const selected = candidates.slice(0, low);
+  return { candidates: copy(selected), poolHash: hash(candidates), windowHash: hash(selected),
+    omittedCandidateIds: candidates.slice(low).map(candidate => candidate.id), mandatoryTokens: await tokens(low),
+    inputBudget, windowBudget: budget, reserveTokens: INFRA_CANDIDATE_WINDOW_RESERVE_TOKENS, tokenizerCalls: measured.size };
+}
+
+/** Only task-state changes refresh goals. Arbitrary document text and unrelated reads are excluded. */
+export function infraRelevantGoalEvidence(frame: ExecutionFrame): unknown {
+  const events = Array.isArray(frame.sources._binding_events) ? frame.sources._binding_events : [];
+  const latest = new Map<string, unknown>();
+  const relevant = /^(?:status|order_status|reservation_status|flight_status|payment_status|return_status|refund_status|cancellation_reason|eligible|eligibility|refundable|cancellable|changeable|policy|constraints|error)$/;
+  const identityTools = new Set(["find_user_id_by_email", "find_user_id_by_name_zip", "get_user_details", "get_order_details",
+    "get_reservation_details", "get_flight_status", "search_direct_flight", "search_onestop_flight", "get_product_details"]);
+  const scalarIdentityTools = new Set(["find_user_id_by_email", "find_user_id_by_name_zip"]);
+  const project = (value: unknown, identities: boolean, depth = 0): unknown => {
+    if (depth > 5) return null;
+    if (Array.isArray(value)) {
+      const children = value.map(item => project(item, identities, depth + 1));
+      return children.some(child => child !== null) ? children : null;
+    }
+    if (!object(value)) return null;
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (relevant.test(key) || identities && /(?:_ids?$)|^(?:id|ids|orders|reservations)$/.test(key)) result[key] = copy(child);
+      else if (object(child) || Array.isArray(child)) { const nested = project(child, identities, depth + 1); if (nested) result[key] = nested; }
+    }
+    return Object.keys(result).length ? result : null;
+  };
+  const requests = new Map<string, unknown>();
+  for (const event of events) {
+    if (!object(event) || typeof event.tool !== "string") continue;
+    if (event.kind === "tool_request" && typeof event.call_id === "string") requests.set(event.call_id, event.arguments ?? null);
+    if (event.kind !== "tool_result") continue;
+    const state = scalarIdentityTools.has(event.tool) && event.status !== "error" && typeof event.result === "string"
+      && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(event.result) ? { resolved_user_id: event.result } : project(event.result, identityTools.has(event.tool));
+    const key = hash({ tool: event.tool, arguments: requests.get(String(event.call_id)) ?? null });
+    if (state) latest.set(key, { tool: event.tool, state }); else latest.delete(key);
+  }
+  return [...latest.entries()].sort(([a], [b]) => a.localeCompare(b));
 }

@@ -195,13 +195,29 @@ def test_real_python_gateway_new_node_runtime_handshake_and_otlp_export(tmp_path
             pass
 
         def do_POST(self):
-            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            # The standard OTLP/HTTP JSON exporter streams chunked request
+            # bodies. Local model requests still use Content-Length.
+            if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+                chunks = []
+                while True:
+                    size = int(self.rfile.readline().split(b";", 1)[0].strip(), 16)
+                    if size == 0:
+                        while self.rfile.readline() not in (b"\r\n", b"\n", b""):
+                            pass
+                        break
+                    chunks.append(self.rfile.read(size))
+                    assert self.rfile.read(2) == b"\r\n"
+                payload = b"".join(chunks)
+            else:
+                payload = self.rfile.read(int(self.headers["Content-Length"]))
+            body = json.loads(payload)
             if self.path == "/tokenize":
                 result = {"count": 8, "max_model_len": 32768, "tokens": [1] * 8}
             elif self.path == "/v1/chat/completions":
                 result = {"model": body["model"], "choices": [{"index": 0, "message": {"role": "assistant", "content": "done"}, "finish_reason": "stop"}],
                           "usage": {"prompt_tokens": 8, "completion_tokens": 1, "total_tokens": 9}}
             elif self.path in {"/v1/traces", "/v1/metrics"}:
+                assert self.headers["Content-Type"].startswith("application/json")
                 received.append((self.path, body))
                 result = {}
             else:

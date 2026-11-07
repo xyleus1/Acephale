@@ -1,3 +1,39 @@
+# 2026-11-06: Research-method infrastructure implementation
+
+- Added a single live ranking path with shared queued-goal priority, current
+  source-grounded goals, independent next-batch hit scores, fair deterministic
+  candidate merging and a common serving-tokenizer candidate window.
+- Added scoped frozen episodic retrieval, prefix-only embeddings, verified
+  contrastive failures, causal early-prediction imports and training shadow
+  collection. Retrieval caches are run-local; historical values never directly
+  bind current tool arguments. Paid embedding preparation/retrieval uses the
+  existing journal and keeps uncertain charges reserved.
+- Added matching fixed-panel replay metrics and versioned calibration/opportunity
+  provenance. Measured prediction readiness now ends at rank completion; goal
+  refresh overlaps the read and is recorded/drained separately. Held-out sizing
+  accepts recovered remaining allocation, with no reset of historical spending.
+- Replaced handwritten transport/export components with pinned official OpenAI
+  and OpenTelemetry SDKs and the maintained Prometheus client. Preserved strict
+  streaming completion, call IDs, no implicit retries and collector acceptance
+  checks. Fixed concurrent shutdown and late hosted response/accounting races.
+- Final review corrected missing container configuration/Prisma generation and
+  included SQL, migration and retrieval lifecycle sources in compiler identity.
+  Document actor responses retain actual compiled-input metadata. Shadow
+  collection rejects development families and hybrid retrieval configuration.
+- Research Python: 604 passed, six skips; separate pinned native parity and budget
+  checks: three passed. Legacy Node: 281 passed, two skips. v5: 49 passed. Browser:
+  two passed. Independent-connection Derya DB: ten passed. The temporary DB was
+  stopped. Full deployment controls passed 123. The final infrastructure suite
+  passed 154 with two optional DB skips; generated contracts and scoped TypeScript
+  passed. Changed-file Ruff passed. ESLint comparison found no introduced errors
+  and retained 18 pre-existing errors. Results and limitations are in
+  [Infrastructure methods v2](goalspec/INFRA_METHODS_V2.md).
+- Initial integration checks exposed a mock collector that assumed Content-Length
+  instead of standard chunked OTLP JSON, and a local-only compiler metadata type
+  that rejected legacy hosted metadata. Both were corrected and checked again.
+  No paid inference or cloud resources were created. AWS GPU quota remains zero;
+  no fresh Qwen benchmark or speedup result is claimed.
+
 # 2026-11-06: Authorized GPU hourly ceiling increase
 
 - Applied the founder's explicit 2026-11-06 approval: changed only

@@ -72,24 +72,29 @@ export function researchProvider(ledger: BudgetLedger, allocation: Allocation, r
   if (!process.env.OPENAI_API_KEY) throw new Error("Configure OPENAI_API_KEY securely before research dispatch");
   const client = researchClient(process.env.OPENAI_API_KEY);
   const model = new ResponsesModelPort(params => client.responses.create({ ...params, service_tier: "default" }), ledger, responseCost, record, assertResearchHostReady);
-  async function embed(text: string) {
+  return { model, embed: createBudgetedEmbedding(client, ledger, allocation, record) };
+}
+export function createBudgetedEmbedding(client: Pick<OpenAI, "embeddings">, ledger: BudgetLedger, allocation: Allocation,
+  record: (event: unknown) => void, hostReady: () => void = assertResearchHostReady) {
+  return async function embed(text: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     // cl100k token IDs are measured by the API; byte count is a conservative bound
     // for text UTF-8 tokenization and prevents a cheaper unbounded reservation.
     const upperTokens = Buffer.byteLength(text, "utf8");
     if (!text || upperTokens > 8192 || countTokens(text) > 8192) throw new Error("Embedding input exceeds budget");
     const id = `embedding:${randomUUID()}`;
-    assertResearchHostReady();
+    hostReady();
     ledger.reserve(id, allocation, Math.ceil(upperTokens * 0.02));
     const start = Date.now();
     let response;
-    try { response = await client.embeddings.create({ model: RESEARCH_MODELS.embedding, input: text, dimensions: 1536, encoding_format: "float" }); }
-    catch (error) { record({ type: "embedding_failed", id, latencyMs: Date.now() - start, reservationRetained: true, ...providerFailure(error) }); throw new Error("Embedding request failed; cost reservation retained"); }
+    try { response = await client.embeddings.create({ model: RESEARCH_MODELS.embedding, input: text, dimensions: 1536, encoding_format: "float" }, { signal }); }
+    catch (error) { record({ type: "embedding_failed", id, latencyMs: Date.now() - start, reservationRetained: true, cancelled: signal?.aborted === true, ...providerFailure(error) }); throw new Error("Embedding request failed; cost reservation retained"); }
     const cost = Math.ceil(response.usage.total_tokens * 0.02);
     ledger.settle(id, cost);
     record({ type: "embedding", id, model: response.model, dimensions: 1536, latencyMs: Date.now() - start, usage: response.usage, costMicrodollars: cost });
+    signal?.throwIfAborted();
     const vector = response.data[0]?.embedding;
     if (response.model !== RESEARCH_MODELS.embedding || response.data.length !== 1 || vector?.length !== 1536 || vector.some(n => !Number.isFinite(n))) throw new Error("Unexpected embedding response");
     return vector;
-  }
-  return { model, embed };
+  };
 }

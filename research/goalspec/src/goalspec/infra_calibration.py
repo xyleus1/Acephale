@@ -17,6 +17,7 @@ from goalspec.infra_data import read_jsonl, verify_bundle
 from goalspec.storage import file_hash
 
 BOUNDS = tuple(index / 10 for index in range(1, 11))
+PROBABILITY_SEMANTICS = "independent_next_batch_hit"
 
 
 def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
@@ -26,13 +27,13 @@ def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path) -
     for field in ("fittingFamilies", "validationFamilies", "sourceDatasetHash"):
         if neutral[field] != conditional[field]:
             raise ValueError("Paired calibration needs the same fitting and validation families")
-    for field in ("model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "predictionManifestHash", "predictionRowsHash"):
+    for field in ("model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash", "predictionManifestHash", "predictionRowsHash"):
         if neutral["provenance"][field] != conditional["provenance"][field]:
             raise ValueError("Replay changed between calibration conditions")
     body = {key: value for key, value in neutral.items() if key != "contentHash"}
     body["conditionalCalibration"] = conditional
     artifact = {**body, "contentHash": hash_v1(body)}
-    report = {"version": "goalspec-infra-paired-calibration-report-v1", "calibrationHash": artifact["contentHash"],
+    report = {"version": "goalspec-infra-paired-calibration-report-v2", "calibrationHash": artifact["contentHash"],
               "neutral": neutral_report, "conditional": conditional_report, "heldoutClaim": False}
     rows = [{**row, "condition": condition} for condition, records in (("neutral", neutral_rows), ("conditional", conditional_rows)) for row in records]
     return artifact, report, rows
@@ -66,10 +67,12 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         raise ValueError("Prediction manifest hash mismatch")
     if manifest.get("kind") != "uncalibrated_prediction_replay" or manifest.get("executionAllowed") is not False or manifest.get("sourceDatasetHash") != bundle["bundle_hash"]:
         raise ValueError("Wrong prediction source dataset or experiment kind")
+    if manifest.get("version") != 2 or manifest.get("probabilitySemantics") != PROBABILITY_SEMANTICS or manifest.get("predictionMode") not in {"selected_candidates", "fixed_panel"}:
+        raise ValueError("Independent next-batch probability semantics and replay mode are required")
     model = manifest.get("model", {})
     if not isinstance(model, dict) or not isinstance(model.get("repository"), str) or not re.fullmatch(r"[0-9a-f]{40}", model.get("revision", "")):
         raise ValueError("Exact predictor model revision required")
-    if any(not _digest(manifest.get(field)) for field in ("memoryHash", "predictorContractHash", "candidateCompilerHash")):
+    if any(not _digest(manifest.get(field)) for field in ("memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash")):
         raise ValueError("Frozen predictor prompt, candidate compiler and memory hashes required")
     if condition == "conditional" and manifest.get("inferGoals") is not True:
         raise ValueError("Conditional calibration requires actually executed goal predictions")
@@ -138,8 +141,14 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         scores = raw["scores"]
         if len({score["candidateId"] for score in scores}) != len(scores):
             raise ValueError("Duplicate predicted candidate")
-        if any(type(score.get("probability")) not in {int, float} or not math.isfinite(score["probability"]) or not 0 <= score["probability"] <= 1 or score["candidateId"] not in candidates for score in scores) or sum(score["probability"] for score in scores) > 1 + 1e-9:
+        if any(type(score.get("probability")) not in {int, float} or not math.isfinite(score["probability"]) or not 0 <= score["probability"] <= 1 or score["candidateId"] not in candidates for score in scores):
             raise ValueError("Invalid raw candidate probabilities")
+        if manifest["predictionMode"] == "fixed_panel":
+            panel = row.get("candidatePanel")
+            if not isinstance(panel, list) or len(panel) > 3 or len(panel) != len(set(panel)) or set(panel) != set(candidates):
+                raise ValueError("Fixed panel must contain every supplied candidate exactly once")
+            if row.get("panelHash") != hash_v1(sorted(panel)) or {score["candidateId"] for score in scores} != set(panel):
+                raise ValueError("Fixed panel scores must cover the complete declared panel")
         if not scores:
             empty.append(key)
         actual = {hash_v1({"tool": invocation["tool"], "arguments": invocation["arguments"]}) for invocation in label["eligible_reads"]}
@@ -164,27 +173,26 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
     bins[-1]["upper"] = 1
     for row in joined:
         row["calibrated_probability"] = next(value["probability"] for value in bins if row["raw_probability"] <= value["upper"])
-    checkpoint_scores: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in joined:
-        checkpoint_scores[row["checkpoint_id"]].append(row)
-    for scores in checkpoint_scores.values():
-        denominator = max(1, sum(row["calibrated_probability"] for row in scores))
-        for row in scores:
-            row["runtime_probability"] = row["calibrated_probability"] / denominator
+        # Several candidates may occur in one batch, so marginal hit
+        # probabilities must not be normalized as mutually exclusive classes.
+        row["runtime_probability"] = row["calibrated_probability"]
     body = {
-        "version": 1, "fittingFamilies": sorted({row["family_id"] for row in fitting}),
+        "version": 2, "probabilitySemantics": PROBABILITY_SEMANTICS,
+        "predictionMode": manifest["predictionMode"],
+        "fittingFamilies": sorted({row["family_id"] for row in fitting}),
         "validationFamilies": sorted({row["family_id"] for row in validation}),
         "sourceDatasetHash": bundle["bundle_hash"], "bins": bins,
         "provenance": {
             "model": model, "memoryHash": manifest["memoryHash"], "condition": condition,
-            "predictorContractHash": manifest["predictorContractHash"], "candidateCompilerHash": manifest["candidateCompilerHash"],
+            "predictorContractHash": manifest["predictorContractHash"], "candidateCompilerHash": manifest["candidateCompilerHash"], "retrievalHash": manifest["retrievalHash"],
             "predictionManifestHash": manifest_hash, "predictionRowsHash": predictions_hash,
             "method": "fixed_deciles_empty_forward_merge_laplace_1_1",
         },
     }
     calibration = {**body, "contentHash": hash_v1(body)}
     report = {
-        "version": "goalspec-infra-calibration-report-v1", "condition": condition,
+        "version": "goalspec-infra-calibration-report-v2", "condition": condition,
+        "probabilitySemantics": PROBABILITY_SEMANTICS, "predictionMode": manifest["predictionMode"],
         "calibrationHash": calibration["contentHash"], "declaredCheckpoints": len(predictions),
         "failedCheckpoints": failures, "notDispatchedCheckpoints": not_dispatched, "completedWithoutCandidateScores": empty,
         "unknownOnlyGoalsExcluded": unknown_goals,
@@ -192,7 +200,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         "fit": {field: _metrics(fitting, field) for field in ("raw_probability", "calibrated_probability", "runtime_probability")},
         "development": {field: _metrics(validation, field) for field in ("raw_probability", "calibrated_probability", "runtime_probability")},
         "calibrationBins": bins, "validationUsedForFit": False, "heldoutClaim": False,
-        "limitations": ["Calibration covers emitted candidate scores, not absent candidates or task success", "Development probabilities include the runtime top-three normalization", "No fallback values are fabricated for failed predictions", "Fitted values are specific to the recorded model, prompts, memory and condition"],
+        "limitations": ["Calibration covers the declared scored candidates, not absent candidates or task success", "Each label means membership anywhere in the immediate next authoritative batch", "Binary log loss is not full-action cross-entropy or true conditional entropy", "No fallback values are fabricated for failed predictions", "Fitted values are specific to the recorded model, prompts, memory, selection mode and condition"],
     }
     if file_hash(prediction_path) != predictions_hash or json.loads(manifest_path.read_text(encoding="utf-8")) != manifest:
         raise ValueError("Prediction artifacts changed during calibration")

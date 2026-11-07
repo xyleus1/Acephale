@@ -49,25 +49,39 @@ export function attachInfraHostedWorkers(
       event => record({ runId, event }));
     let remaining = 3;
     const finish = () => { if (--remaining === 0) ledger.finishParent(parent); };
-    let actorClosed = false;
-    const actorWorker: BoundaryWorker = { decision: (boundary, id) => actor.decision(boundary, id), async close() {
-      if (!actorClosed) { await actor.close(); actorClosed = true; finish(); }
+    let actorClosing: Promise<void> | undefined;
+    const actorWorker: BoundaryWorker = { decision: (boundary, id) => actorClosing
+      ? Promise.reject(new Error("Native actor worker closing")) : actor.decision(boundary, id), close() {
+      if (!actorClosing) actorClosing = Promise.resolve().then(async () => { await actor.close(); finish(); });
+      return actorClosing;
     } };
     const hosted = (role: "user" | "evaluator"): BoundaryWorker => {
       const modelName = role === "user" ? RESEARCH_MODELS.user : RESEARCH_MODELS.teacher;
       const inputCap = role === "user" ? 8192 : 32768, outputCap = role === "user" ? 1024 : 4096;
-      let closed = false, calls = 0;
-      return { async decision(boundary, boundaryId) {
-        if (closed || calls++ >= configuration.maxSteps) throw new Error("Native hosted step budget exhausted");
-        if (boundary.tools.length || boundary.messages.some(message => !["user", "assistant"].includes(message.role))
-          || countTokens(canonical(boundary)) > inputCap - 128) throw new Error("Native hosted context or tool contract violated");
-        const result = await provider.model.complete({ id: `${boundaryId}:${role}`, model: modelName,
-          input: boundary.messages.map(message => ({ role: message.role as "user" | "assistant", content: message.content ?? "" })),
-          instructions: boundary.policy, maxOutputTokens: outputCap, allocation: configuration.allocation,
-          maximumAttemptMicrodollars: maximumCost(modelName, inputCap, outputCap), retries: 0 });
-        if (result.calls.length || result.refusals.length) throw new Error("Invalid native hosted model response");
-        return { role: role === "user" ? "user" : "assistant", content: result.text, usage: result.usage };
-      }, async close() { if (!closed) { closed = true; finish(); } } };
+      let closed = false, calls = 0, closing: Promise<void> | undefined;
+      const pending = new Set<Promise<unknown>>();
+      return { decision(boundary, boundaryId) {
+        const task = (async () => {
+          if (closed || calls++ >= configuration.maxSteps) throw new Error("Native hosted step budget exhausted");
+          if (boundary.tools.length || boundary.messages.some(message => !["user", "assistant"].includes(message.role))
+            || countTokens(canonical(boundary)) > inputCap - 128) throw new Error("Native hosted context or tool contract violated");
+          const result = await provider.model.complete({ id: `${boundaryId}:${role}`, model: modelName,
+            input: boundary.messages.map(message => ({ role: message.role as "user" | "assistant", content: message.content ?? "" })),
+            instructions: boundary.policy, maxOutputTokens: outputCap, allocation: configuration.allocation,
+            maximumAttemptMicrodollars: maximumCost(modelName, inputCap, outputCap), retries: 0 });
+          // The provider has now settled or retained its reservation. A close fences its response.
+          if (closed) throw new Error("Native hosted worker closed during inference");
+          if (result.calls.length || result.refusals.length) throw new Error("Invalid native hosted model response");
+          return { role: role === "user" ? "user" : "assistant", content: result.text, usage: result.usage };
+        })();
+        pending.add(task); void task.then(() => pending.delete(task), () => pending.delete(task)); return task;
+      }, close() {
+        if (!closing) {
+          closed = true;
+          closing = Promise.resolve().then(async () => { while (pending.size) await Promise.allSettled([...pending]); finish(); });
+        }
+        return closing;
+      } };
     };
     return [{ runId, worker: actorWorker }, { runId: `${runId}:user`, worker: hosted("user") },
       { runId: `${runId}:evaluator`, worker: hosted("evaluator") }];

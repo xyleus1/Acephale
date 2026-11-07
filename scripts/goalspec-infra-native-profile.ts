@@ -1,5 +1,6 @@
 /** Native component measurements use a live Python snapshot gateway, never trace durations. */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,6 +13,9 @@ import { NativeGateway, NativeReadExecutor } from "../services/goalspec-runtime/
 import { NativeReadPolicy } from "../services/goalspec-runtime/native-read-policy";
 import { createInfraNativeCandidates } from "../services/goalspec-runtime/infra-candidates";
 import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-compiler-identity";
+import { infraOpportunityProfile, NATIVE_PROFILE_PROTOCOL } from "../services/goalspec-runtime/infra-opportunity-profile";
+import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/goalspec-runtime/infra-memory-services";
+import { episodicRetrievalProfileHash } from "../src/lib/goalspec/episodic-retrieval";
 import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/goalspec-runtime/infra-predictors";
 import { localActorDecision, localActorMessages } from "../services/goalspec-runtime/local-actor";
 import type { PublicBoundary } from "../services/goalspec-runtime/actor";
@@ -19,30 +23,42 @@ import { DurableBudget } from "../services/goalspec-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/goalspec-runtime/infra-hosted-workers";
 import { nativeSplitGuard } from "../services/goalspec-runtime/infra-split-guard";
 import { publicInfraFrame, selectInfraReplayRows } from "./goalspec-infra-predict";
-import { verifyInfraPilotBundle } from "./goalspec-infra-memory";
+import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./goalspec-infra-memory";
 
 export interface NativeProfileConfig {
   version: 1; datasetPath: string; cohortPath: string; memoryPath: string; manifestPath: string; ledgerCheckpointPath: string;
   budgetDirectory: string; actorBaseUrl: string; predictorBaseUrl: string; limit: number; seed: number; maximumLifetimeSeconds: number;
-  otlpBaseUrl?: string; splitGuardPath?: string;
+  otlpBaseUrl?: string; splitGuardPath?: string; episodicEmbeddingsPath?: string; stream?: boolean;
 }
 type Span = { clockId: string; startMs: number; endMs: number };
 type Spans = Partial<Record<"actorLeadMs" | "predictionMs" | "toolMs" | "validationMs" | "schedulingMs", Span>>
   & { contentionMs?: { method: "paired_difference"; baseline: Span; concurrent: Span } };
 const json = async <T = any>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8"));
 const write = (file: string, value: unknown) => writeFile(file, canonical(value) + "\n", { flag: "wx", mode: 0o600 });
-export const NATIVE_PROFILE_PROTOCOL = "native-paired-component-profile-v1: pinned ephemeral native state reconstructed from verified public prefix only; same seeded actor input alone versus overlapping grounded goal, neutral and conditional prediction plus one authorized scheduler-managed native snapshot read and freshness refresh; alternate pair order; actual monotonic gateway-inclusive spans; negative paired actor excess remains failed; no proposed actor calls executed; all operations drained and failures retained; not a benchmark or causal speedup estimate";
+export { NATIVE_PROFILE_PROTOCOL };
+
+/** Bind the original journal prefix while allowing later billed profiling entries. */
+export async function nativeProfileJournalPrefix(ledgerPath: string, bytes?: number) {
+  const metadata = await stat(ledgerPath), count = bytes ?? metadata.size;
+  if (!metadata.isFile() || !Number.isSafeInteger(count) || count < 1 || count > metadata.size) throw new Error("Original budget journal prefix missing or truncated");
+  const digest = createHash("sha256"); let read = 0;
+  for await (const chunk of createReadStream(ledgerPath, { start: 0, end: count - 1 })) { digest.update(chunk); read += chunk.length; }
+  if (read !== count) throw new Error("Original budget journal prefix changed during read");
+  return { pathHash: hash(resolve(ledgerPath)), bytes: count, sha256: digest.digest("hex") };
+}
 
 async function inputs(configurationPath: string) {
   const config = await json<NativeProfileConfig>(configurationPath), base = dirname(resolve(configurationPath));
   const path = (file: string) => resolve(base, file);
   if (config.version !== 1 || !Number.isSafeInteger(config.limit) || config.limit < 1 || config.limit > 100
     || !Number.isSafeInteger(config.seed) || config.seed < 0 || !Number.isSafeInteger(config.maximumLifetimeSeconds)
-    || config.maximumLifetimeSeconds < 1 || config.maximumLifetimeSeconds > 28800) throw new Error("Invalid bounded native profile configuration");
+    || config.maximumLifetimeSeconds < 1 || config.maximumLifetimeSeconds > 28800
+    || config.stream !== undefined && typeof config.stream !== "boolean") throw new Error("Invalid bounded native profile configuration");
   const dataset = verifyInfraPilotBundle(path(config.datasetPath)), memory = validateMemoryArtifact(await json(path(config.memoryPath)));
   const manifest = await json(path(config.manifestPath)); validateInfraManifest(manifest);
   const checkpoint = await json(path(config.ledgerCheckpointPath));
-  if (dataset.lineage.fresh_qwen_traces !== true || memory.repositorySnapshotId !== `infra-fresh:${dataset.manifest.bundle_hash}`
+  validateFreshInfraMemoryBinding(memory, dataset);
+  if (dataset.lineage.fresh_qwen_traces !== true
     || manifest.data.datasetHash !== dataset.manifest.bundle_hash || manifest.data.memoryHash !== memory.contentHash
     || manifest.data.environmentRevision !== "2174a603f6d014ef94473ffa95957f6ce27100db"
     || hash(checkpoint) !== manifest.budgets.ledgerCheckpointHash || !manifest.seeds.includes(config.seed)) throw new Error("Native profile source or ledger identity mismatch");
@@ -52,7 +68,7 @@ async function inputs(configurationPath: string) {
     if (canonical([...manifest.data[key]].sort()) !== canonical(expected)) throw new Error("Native profile changed the frozen family partitions");
   }
   // Constructors reject credential-bearing endpoints before any plan is persisted.
-  for (const role of ["actor", "predictor"] as const) new LocalChatModelPort({ baseUrl: config[`${role}BaseUrl`], model: manifest[role].servedModel });
+  for (const role of ["actor", "predictor"] as const) new LocalChatModelPort({ baseUrl: config[`${role}BaseUrl`], model: manifest[role].servedModel, stream: config.stream ?? true });
   nativeSplitGuard(config, manifest, resolve(configurationPath));
   const publicRows = (await readFile(join(path(config.datasetPath), "public.jsonl"), "utf8")).split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   return { config, path, dataset, memory, manifest, checkpoint, publicRows };
@@ -71,11 +87,15 @@ export async function prepareNativeProfile(configurationPath: string, output: st
   const ledgerPath = resolve(path(config.budgetDirectory), "budget.jsonl"), metadata = await stat(ledgerPath);
   if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
   const budget = new DurableBudget(ledgerPath);
-  try { validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath); } finally { budget.close(); }
+  let budgetJournalPrefix: Awaited<ReturnType<typeof nativeProfileJournalPrefix>>;
+  try { validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath); budgetJournalPrefix = await nativeProfileJournalPrefix(ledgerPath); } finally { budget.close(); }
+  const embeddings = config.episodicEmbeddingsPath ? await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory) : undefined;
+  if (embeddings && !process.env.GOALSPEC_RESEARCH_DATABASE_URL) throw new Error("Episodic profiling requires the dedicated research database");
   // Never consult next-action labels to select prefixes or candidate IDs.
   const selected = selectInfraReplayRows(publicRows.filter(row => row.split !== "test" && poolFor(row, memory, dataset.expected).candidates.length > 0), config.limit);
   if (!selected.length || selected.some(row => !(row.split === "train" ? manifest.data.trainingFamilies : manifest.data.developmentFamilies).includes(row.family_id))) throw new Error("No eligible declared train/development native prefixes");
-  const body = { version: 1, kind: "native_component_profile", configuration: config, configurationHash: hash(config),
+  const body = { version: 2, kind: "native_component_profile", configuration: config, configurationHash: hash(config),
+    profile: infraOpportunityProfile(manifest, "native", { stream: config.stream ?? true, retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : undefined }), budgetJournalPrefix,
     manifestHash: hash(manifest), sourceDatasetHash: dataset.manifest.bundle_hash, memoryHash: memory.contentHash,
     candidateCompilerHash: infraCandidateCompilerHash("native"), predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
     protocol: NATIVE_PROFILE_PROTOCOL, rowIds: selected.map(row => row.checkpoint_id), benchmarkClaim: false,
@@ -92,6 +112,7 @@ export async function measureNativePair(options: {
   candidate: ReturnType<typeof poolFor>["candidates"][number]; executor: ReadExecutor;
   nonMutating?: (invocation: ReturnType<typeof poolFor>["candidates"][number]["invocation"]) => boolean;
   actor: (suffix: string) => ReturnType<typeof localActorDecision>; prediction: () => Promise<unknown>;
+  refreshGoals?: () => Promise<unknown>;
 }): Promise<Record<string, any> & { status: string; errorType?: string }> {
   const { candidate, executor, signal } = options;
   localActorMessages(options.boundary);
@@ -120,8 +141,15 @@ export async function measureNativePair(options: {
       };
       const scheduler = new SpeculationScheduler(`profile:${options.checkpointId}`, wrapped, event => trace.push(event));
       const actorPromise = actorCall("concurrent");
+      let goalRefresh: Promise<void> | undefined;
       const background = (async () => {
         const prediction = await timed(options.prediction); spans.predictionMs = prediction.span; raw.prediction = prediction.result;
+        if (options.refreshGoals) goalRefresh = (async () => {
+          const startMs = performance.now();
+          try { raw.goalRefresh = { status: "completed", result: await options.refreshGoals!() }; }
+          catch (error) { raw.goalRefresh = { status: "failed", errorType: error instanceof Error ? error.name : "GoalRefreshError" }; }
+          finally { raw.goalRefreshSpan = { clockId, startMs, endMs: performance.now() }; }
+        })();
         signal.throwIfAborted();
         const startMs = performance.now(), admitted = scheduler.admit([{ ...candidate, probability: 1 }]);
         spans.schedulingMs = { clockId, startMs, endMs: performance.now() };
@@ -131,7 +159,7 @@ export async function measureNativePair(options: {
         raw.observationHash = hash(promoted.observation);
       })();
       const settled = await Promise.allSettled([actorPromise, background]);
-      try { await scheduler.close(); } finally { raw.schedulerEvents = trace; }
+      try { await scheduler.close(); } finally { await goalRefresh; raw.schedulerEvents = trace; }
       if (settled[0].status === "rejected") throw settled[0].reason;
       if (settled[1].status === "rejected") throw settled[1].reason;
       return settled[0].value;
@@ -151,7 +179,7 @@ export async function measureNativePair(options: {
 }
 
 export async function measurePreparedNativePrefix(configurationPath: string, output: string, ordinal: number) {
-  const { config, dataset, memory, manifest, publicRows } = await inputs(configurationPath);
+  const { config, path, dataset, memory, manifest, publicRows } = await inputs(configurationPath);
   const plan = await json(join(output, "profile-plan.json")), { contentHash, ...planBody } = plan;
   const declared = plan.rows[ordinal], row = publicRows.find(row => row.checkpoint_id === declared?.checkpoint_id);
   if (contentHash !== hash(planBody) || plan.configurationHash !== hash(config) || plan.manifestHash !== hash(manifest)
@@ -166,10 +194,27 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
   const executor = new NativeReadExecutor(gateway, row.checkpoint_id, frame.scope, new Set(row.input.tools.filter((tool: any) => tool.side_effects === "read_only").map((tool: any) => tool.name)), policy);
   executor.updateFrame(frame);
   const actorEvents: unknown[] = [], predictorEvents: unknown[] = [];
-  const actor = new LocalChatModelPort({ baseUrl: config.actorBaseUrl, model: manifest.actor.servedModel, record: event => actorEvents.push(event) });
+  const actor = new LocalChatModelPort({ baseUrl: config.actorBaseUrl, model: manifest.actor.servedModel, stream: config.stream ?? true, record: event => actorEvents.push(event) });
   const model = new LocalChatModelPort({ baseUrl: config.predictorBaseUrl, model: manifest.predictor.servedModel,
-    contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record: event => predictorEvents.push(event) });
-  const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id] });
+    contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, stream: config.stream ?? true, record: event => predictorEvents.push(event) });
+  let budget: DurableBudget | undefined, memoryServices: ReturnType<typeof createInfraMemoryServices> | undefined;
+  try {
+  if (config.episodicEmbeddingsPath) {
+    if (!process.env.GOALSPEC_RESEARCH_DATABASE_URL) throw new Error("Episodic profiling requires the dedicated research database");
+    const ledgerPath = resolve(path(config.budgetDirectory), "budget.jsonl");
+    const metadata = await stat(ledgerPath);
+    if (!metadata.isFile() || metadata.size === 0 || !plan.budgetJournalPrefix) throw new Error("Original nonempty budget journal and frozen prefix required");
+    budget = new DurableBudget(ledgerPath);
+    if (hash(await nativeProfileJournalPrefix(ledgerPath, plan.budgetJournalPrefix.bytes)) !== hash(plan.budgetJournalPrefix)) throw new Error("Original budget journal prefix changed since profiling was declared");
+    const embeddings = await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory);
+    memoryServices = createInfraMemoryServices({ memory, embeddings, databaseUrl: process.env.GOALSPEC_RESEARCH_DATABASE_URL,
+      applicationDatabaseUrl: process.env.DATABASE_URL, budget: budget.ledger, allocation: "development",
+      allowedFamilies: dataset.expected, record: event => predictorEvents.push(event) });
+  }
+  const retrieval = memoryServices?.perRun(`profile:${row.checkpoint_id}`, "neutral_memory_prefetch", row.family_id);
+  if (hash(plan.profile) !== hash(infraOpportunityProfile(manifest, "native", { stream: config.stream ?? true, retrievalHash: retrieval?.profileHash }))) throw new Error("Measured deployment or actual retrieval profile changed");
+  const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
+    ...(retrieval ? { retrieveMemory: retrieval.retrieve, retrievalProfileHash: retrieval.profileHash } : {}) });
   const guard = nativeSplitGuard(config, manifest, resolve(configurationPath)), interruption = new AbortController();
   const guardIdentity = guard?.();
   const signal = AbortSignal.any([interruption.signal, AbortSignal.timeout(Math.min(180000, Number(process.env.GOALSPEC_PROFILE_REMAINING_MS ?? 0)))]);
@@ -178,12 +223,15 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
   try { raw = await measureNativePair({ boundary: prefix.boundary, checkpointId: row.checkpoint_id, ordinal, seed: config.seed, candidate: candidates[0], executor, signal,
     nonMutating: invocation => executor.nonMutating(invocation),
     actor: suffix => localActorDecision(prefix.boundary, actor, { id: `profile:${row.checkpoint_id}:${suffix}`, seed: config.seed, maxOutputTokens: 4096, signal }),
-    prediction: async () => {
-      const goals = await predictor.inferGoals(frame, signal), neutral = await predictor.rawRank(frame, candidates, frame.goals, signal);
-      const conditional = await predictor.rawRank(frame, candidates, goals, signal); return { goals, neutral, conditional };
-    } }); } finally { if (monitor) clearInterval(monitor); }
-  await write(join(output, `node-measurement-${ordinal}.json`), { ...raw, actorEvents, predictorEvents, prefixHash: hash(prefix), splitGuard: guardIdentity ?? null });
+    prediction: async () => ({ neutral: await predictor.rawRank(frame, candidates, frame.goals, signal) }),
+    refreshGoals: () => predictor.inferGoals(frame, signal),
+  }); } finally { if (monitor) clearInterval(monitor); }
+  await memoryServices?.drain();
+  await write(join(output, `node-measurement-${ordinal}.json`), { ...raw, profileHash: hash(plan.profile), actorEvents, predictorEvents, prefixHash: hash(prefix), splitGuard: guardIdentity ?? null });
   return { checkpoint_id: row.checkpoint_id, status: raw.status };
+  } finally {
+    try { await memoryServices?.close(); } finally { budget?.close(); }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

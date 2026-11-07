@@ -17,11 +17,13 @@ class Trial:
     reserved_usd: float
 
 
-def freeze_heldout(families: list[str], development_costs: list[float], censored: bool, seed: int):
+def freeze_heldout(families: list[str], development_costs: list[float], censored: bool, seed: int, *, remaining_usd: float = 240):
     if not development_costs or any(not math.isfinite(c) or c < 0 for c in development_costs):
         raise ValueError("Completed development costs required")
     allowance = math.ceil(4 * max(1.25, 2.5 if censored else 0, 1.25 * max(development_costs))) / 4
-    count = min(16, 2 * math.floor(240 / (24 * allowance)))
+    if not math.isfinite(remaining_usd) or remaining_usd < 0 or remaining_usd > 240:
+        raise ValueError("Invalid remaining heldout allocation")
+    count = min(16, 2 * math.floor(remaining_usd / (24 * allowance)))
     retail = sorted(f for f in families if f.startswith("retail:"))
     airline = sorted(f for f in families if f.startswith("airline:"))
     if len(set(families)) != len(families) or len(retail) < count // 2 or len(airline) < count // 2:

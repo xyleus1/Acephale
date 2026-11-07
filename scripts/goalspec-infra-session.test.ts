@@ -124,3 +124,17 @@ test("changed goal sources are invalidated even while speculative opportunity is
   available = true; session.observe(goalFrame(2, "new-id")); await session.settled(); assert.equal(calls, 2);
   await session.close();
 });
+
+test("one ranking per checkpoint reads current goals at dispatch and admits multiple high-probability reads", async () => {
+  const queued = deferred<void>(), goalsReady = deferred<GoalSet>(); let ranks = 0, reads = 0;
+  const input = goalFrame(0), second = candidate(); second.id = "candidate-2"; second.invocation.arguments.id = "second";
+  const scheduler = new SpeculationScheduler("run", { eligible: () => true, read: async () => { reads++; return "ready"; }, validate: async (_, prior) => prior }, () => {});
+  const session = new InfraSession(scheduler, policy({ candidates: () => [candidate(), second], inferGoals: () => goalsReady.promise,
+    rank: async (_, __, ___, ____, latest) => {
+      ranks++; await queued.promise; assert.equal(latest?.().hypotheses[0]?.objective, "Read current-id");
+      return { action: "READ", scores: [{ candidateId: "candidate", probability: 0.9 }, { candidateId: "candidate-2", probability: 0.8 }] };
+    } }));
+  session.observe(input); await new Promise(resolve => setImmediate(resolve));
+  goalsReady.resolve(groundedGoals(input)); await new Promise(resolve => setImmediate(resolve)); queued.resolve();
+  await session.settled(); assert.equal(ranks, 1); assert.equal(reads, 2); await session.close();
+});

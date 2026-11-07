@@ -20,7 +20,14 @@ from goalspec.infra_data import (
     validate_annotation,
     verify_bundle,
 )
-from goalspec.infra_evaluation import TrialDesign, TrialResult, report_trials, score_predictions
+from goalspec.infra_evaluation import (
+    TrialDesign,
+    TrialResult,
+    report_trials,
+    score_candidate_panels,
+    score_fixed_panel_replay,
+    score_predictions,
+)
 from goalspec.storage import file_hash, load_trajectories
 
 
@@ -66,6 +73,12 @@ def main(argv: list[str] | None = None) -> None:
     predictions = commands.add_parser("score-predictions")
     predictions.add_argument("--rows", type=Path, required=True)
     predictions.add_argument("--output", type=Path, required=True)
+    panel_scores = commands.add_parser("score-fixed-panels")
+    panel_scores.add_argument("--rows", type=Path, required=True)
+    panel_scores.add_argument("--output", type=Path, required=True)
+    panel_replay = commands.add_parser("score-panel-replay")
+    for field in ("bundle", "predictions", "output"):
+        panel_replay.add_argument(f"--{field}", type=Path, required=True)
     verify = commands.add_parser("verify")
     verify.add_argument("directory", type=Path)
     historical = commands.add_parser("import-v5")
@@ -155,6 +168,11 @@ def main(argv: list[str] | None = None) -> None:
         result = publish_bundle(args.output, {"annotations.jsonl": [row.model_dump(mode="json") for row in annotations], "validation.jsonl": validations, "lineage.json": {"annotation_sha256": file_hash(args.annotations), "dataset_manifest_sha256": file_hash(args.dataset / "manifest.json")}})
     elif args.command == "audit":
         result = publish_bundle(args.output, {"audit.json": audit_gate(_json(args.pilot), read_jsonl(args.reviews)), "lineage.json": {"pilot_sha256": file_hash(args.pilot), "reviews_sha256": file_hash(args.reviews)}})
+    elif args.command == "score-fixed-panels":
+        result = publish_bundle(args.output, {"prediction-report.json": score_candidate_panels(read_jsonl(args.rows)), "lineage.json": {"rows_sha256": file_hash(args.rows)}})
+    elif args.command == "score-panel-replay":
+        report, joined = score_fixed_panel_replay(args.bundle, args.predictions)
+        result = publish_bundle(args.output, {"prediction-report.json": report, "joined-panels.jsonl": joined}, parquet=True)
     elif args.command == "report":
         design = TrialDesign.model_validate(_json(args.design))
         rows = [TrialResult.model_validate(row) for row in read_jsonl(args.results)]

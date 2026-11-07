@@ -5,13 +5,20 @@ import type { EvidenceEnvelope, ExecutionFrame } from "../../src/lib/goalspec/co
 import { canonical, copy, hash } from "../../src/lib/goalspec/canonical";
 import { countTokens } from "../../src/lib/goalspec/predictors";
 import { compileUnits } from "../../src/lib/goalspec/compiler";
+import type { InfraModelResult } from "../../src/lib/goalspec/infra-model";
+
+export interface HostedActorCompilerMetadata {
+  compilerVersion: string; inputHash: string; tokens: number; selected: string[]; omitted: string[];
+  actorContextMode?: "current-only"; omittedHistoricalDerivedContexts?: number;
+}
 
 export interface NativeMessage {
   role: "system" | "user" | "assistant" | "tool"; content?: string | null; id?: string;
   tool_calls?: { id: string; name: string; arguments: Record<string, unknown> }[] | null;
   raw_data?: { goalspecContinuation?: ResponseInputItem[]; goalspecVerifiedEvidence?: EvidenceEnvelope[]; goalspecActorContext?: {
     version: 1; boundary: number; scopeHash: string; snapshotId: string; text: string;
-  } } | null;
+  }; goalspecCompiler?: HostedActorCompilerMetadata | (InfraModelResult["compiler"] & { inputHash: string; tokens: number; actorContextMode: "none" });
+    goalspecLocalContinuation?: InfraModelResult["continuation"]; goalspecLocalTiming?: InfraModelResult["timing"] } | null;
 }
 export interface PublicBoundary { messages: NativeMessage[]; policy: string; tools: { type: "function"; function: { name: string; description?: string; parameters: Record<string, unknown> } }[] }
 

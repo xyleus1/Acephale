@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { canonical, hash } from "../src/lib/goalspec/canonical";
-import { BudgetLedger, heldoutSize } from "../src/lib/goalspec/budget";
+import { BudgetLedger, heldoutSize, heldoutSizeFromLedger } from "../src/lib/goalspec/budget";
 import { compileInput, validateGoals } from "../src/lib/goalspec/compiler";
 import { SpeculationScheduler, SpeculativeCapacity, type ReadExecutor, type RuntimeEvent } from "../src/lib/goalspec/scheduler";
 import type { Candidate, Invocation, GoalSet, ExecutionFrame } from "../src/lib/goalspec/contracts/generated";
@@ -129,6 +129,18 @@ test("budgets reserve concurrent attempts and protect infrastructure", () => {
   assert.deepEqual(heldoutSize([1], false), { allowance: 1.25, families: 16 });
   assert.deepEqual(heldoutSize([1], true), { allowance: 2.5, families: 8 });
 });
+test("heldout sizing retains old and unknown commitments without counting children twice", () => {
+  const ledger = new BudgetLedger();
+  ledger.reserve("old", "heldout", 100_000_000);
+  ledger.reserveChild("old", "old/request", 10_000_000);
+  assert.equal(ledger.remaining("heldout"), 140_000_000);
+  assert.deepEqual(heldoutSizeFromLedger(ledger, [1], false), { allowance: 1.25, families: 8 });
+  ledger.settle("old/request", 5_000_000); ledger.finishParent("old");
+  assert.equal(ledger.remaining("heldout"), 235_000_000);
+  assert.deepEqual(heldoutSize([1], false, 0), { allowance: 1.25, families: 0 });
+  assert.throws(() => heldoutSize([1], false, 241), /remaining/);
+});
+
 test("canonical JSON rejects lossy coercion", () => {
   assert.equal(canonical({ b: 2, a: 1 }), '{"a":1,"b":2}');
   for (const value of [NaN, undefined, new Date(), [undefined]]) assert.throws(() => canonical(value));

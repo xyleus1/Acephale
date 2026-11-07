@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -13,9 +13,15 @@ import { DocumentReadExecutor, DOCUMENT_TOOLS, documentCandidates, validateDocum
 import { documentFrame, runDocumentTrial, type DocumentTask, type DocumentTrialResult } from "../services/goalspec-runtime/infra-document-runner";
 import { localActorDecision } from "../services/goalspec-runtime/local-actor";
 import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH, validateInfraCalibration } from "../services/goalspec-runtime/infra-predictors";
-import { validateMemoryArtifact } from "../src/lib/goalspec/experience-memory";
-import { SpeculationScheduler } from "../src/lib/goalspec/scheduler";
+import { validateMemoryArtifact, LEXICAL_MEMORY_RETRIEVAL_HASH } from "../src/lib/goalspec/experience-memory";
 import { validateInfraGoalReliabilityArtifact, validateInfraOpportunityArtifact } from "../services/goalspec-runtime/infra-artifacts";
+import { infraOpportunityProfile } from "../services/goalspec-runtime/infra-opportunity-profile";
+import { infraRelevantGoalEvidence } from "../services/goalspec-runtime/infra-predictor-input";
+import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/goalspec-runtime/infra-memory-services";
+import { episodicRetrievalProfileHash } from "../src/lib/goalspec/episodic-retrieval";
+import { DurableBudget } from "../services/goalspec-runtime/durable-budget";
+import { TrialLedger } from "../services/goalspec-runtime/provider";
+import { validateInfraLedgerCheckpoint } from "../services/goalspec-runtime/infra-hosted-workers";
 import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-compiler-identity";
 import { closeDocumentCollection, verifyDocumentBundle } from "./goalspec-infra-document-data";
 
@@ -25,6 +31,7 @@ interface RunConfiguration {
   version: 1; stage: "collection" | "development" | "heldout"; manifestPath: string; ledgerCheckpointPath: string; corpusPath: string; tasksPath: string;
   actorBaseUrl: string; predictorBaseUrl?: string; calibrationPath?: string; memoryPath?: string; opportunityPath?: string; goalReliabilityPath?: string;
   calibrationDatasetPath?: string;
+  episodicEmbeddingsPath?: string; budgetDirectory?: string; maxEmbeddingMicrodollarsPerRun?: number;
   schedule: { taskId: string; arm: InfraSessionPolicy["arm"]; seed: number }[];
   maximumLifetimeSeconds: number; maxSteps: number;
 }
@@ -60,6 +67,9 @@ export async function runLive(configurationPath: string, output: string) {
   let reliability = 0;
   let snapshotId = manifest.data.memoryHash;
   let predictors: InfraLocalPredictors | undefined;
+  let memoryServices: ReturnType<typeof createInfraMemoryServices> | undefined;
+  let embeddingBudget: DurableBudget | undefined;
+  let predictorsForRun: ((runId: string, arm: InfraSessionPolicy["arm"], familyId: string) => InfraLocalPredictors | undefined) = () => predictors;
   // Validate endpoints before persisting configuration, which must never contain URL credentials.
   new LocalChatModelPort({ baseUrl: config.actorBaseUrl, model: manifest.actor.servedModel });
   if (config.predictorBaseUrl) new LocalChatModelPort({ baseUrl: config.predictorBaseUrl, model: manifest.predictor.servedModel,
@@ -84,19 +94,51 @@ export async function runLive(configurationPath: string, output: string) {
         || calibration.validationFamilies.some(family => !manifest.data.developmentFamilies.includes(family))
         || memory.runs.some(run => run.split !== "train" || !manifest.data.trainingFamilies.includes(run.familyId))) throw new Error("Memory or calibration provenance mismatch");
       snapshotId = memory.repositorySnapshotId;
+      const embeddings = config.episodicEmbeddingsPath
+        ? await loadFrozenEpisodeEmbeddings(resolve(dirname(resolve(configurationPath)), config.episodicEmbeddingsPath), memory) : undefined;
+      if (embeddings) {
+        if (!config.budgetDirectory || !Number.isSafeInteger(config.maxEmbeddingMicrodollarsPerRun) || config.maxEmbeddingMicrodollarsPerRun! < 1) {
+          throw new Error("Hybrid retrieval requires original budget directory and a reserved per-trial embedding allowance");
+        }
+        const ledgerPath = resolve(dirname(resolve(configurationPath)), config.budgetDirectory, "budget.jsonl");
+        const metadata = await stat(ledgerPath);
+        if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
+        embeddingBudget = new DurableBudget(ledgerPath);
+        validateInfraLedgerCheckpoint(await artifact(config.ledgerCheckpointPath), embeddingBudget.ledger, ledgerPath);
+        const allocation = config.stage === "collection" ? "training" : config.stage;
+        memoryServices = createInfraMemoryServices({ memory, embeddings, budget: embeddingBudget.ledger, allocation,
+          databaseUrl: process.env.GOALSPEC_RESEARCH_DATABASE_URL, applicationDatabaseUrl: process.env.DATABASE_URL,
+          budgetForRun: runId => ({ ledger: new TrialLedger(embeddingBudget!.ledger, `infra-document:${runId}`, allocation), allocation }),
+          allowedFamilies: manifest.data.trainingFamilies, excludeFamilies: manifest.data.heldoutFamilies, record: telemetry.record });
+      }
       const provenance = { datasetHash: dataset.manifest.bundle_hash, allowedFamilies: [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies], excludedFamilies: manifest.data.heldoutFamilies };
-      const opportunity = validateInfraOpportunityArtifact(await artifact(config.opportunityPath), provenance);
+      const opportunity = validateInfraOpportunityArtifact(await artifact(config.opportunityPath), {
+        ...provenance, opportunityProfile: infraOpportunityProfile(manifest, "documents", {
+          retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : undefined }),
+      });
       if (opportunity.sampleCount < 10) throw new Error("Insufficient measured opportunity samples");
       estimate = opportunity.estimate; expectedInfraSaving(1, estimate);
       const audit = validateInfraGoalReliabilityArtifact(await artifact(config.goalReliabilityPath), { ...provenance, allowedFamilies: manifest.data.trainingFamilies,
         predictor: { model: { repository: manifest.predictor.repository, revision: manifest.predictor.revision }, memoryHash: memory.contentHash,
+          retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : LEXICAL_MEMORY_RETRIEVAL_HASH,
           predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash: infraCandidateCompilerHash("documents") } });
       reliability = audit.reliability;
-      predictors = new InfraLocalPredictors(new LocalChatModelPort({ baseUrl: config.predictorBaseUrl, model: manifest.predictor.servedModel,
-        contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record: event => telemetry.record(event) }), {
+      const predictorModel = new LocalChatModelPort({ baseUrl: config.predictorBaseUrl, model: manifest.predictor.servedModel,
+        contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record: event => telemetry.record(event) });
+      const predictorOptions = {
         calibration, memory, expectedCandidateCompilerHash: infraCandidateCompilerHash("documents"),
         allowedFamilies: manifest.data.trainingFamilies, excludeFamilies: [...manifest.data.developmentFamilies, ...manifest.data.heldoutFamilies], record: telemetry.record,
-      });
+      };
+      if (!memoryServices) predictors = new InfraLocalPredictors(predictorModel, predictorOptions);
+      else predictorsForRun = (runId, arm, familyId) => {
+        const retriever = memoryServices!.perRun(runId, arm, familyId);
+        return retriever ? new InfraLocalPredictors(predictorModel, { ...predictorOptions,
+          retrieveMemory: retriever.retrieve, retrievalProfileHash: retriever.profileHash }) : undefined;
+      };
+      if (embeddingBudget) embeddingBudget.ledger.reserveMany(config.schedule.map((_, index) => ({
+        id: `infra-document:${manifest.experimentId}:${index}`, allocation: config.stage === "collection" ? "training" : config.stage,
+        maximum: config.maxEmbeddingMicrodollarsPerRun!,
+      })));
     }
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), config.maximumLifetimeSeconds * 1000);
     const results: DocumentTrialResult[] = [];
@@ -109,17 +151,21 @@ export async function runLive(configurationPath: string, output: string) {
     try {
       for (let index = 0; index < config.schedule.length; index++) {
         const row = config.schedule[index], task = tasks.find(task => task.id === row.taskId)!;
+        const runPredictors = predictorsForRun(`${manifest.experimentId}:${index}`, row.arm, task.familyId);
         const policy: InfraSessionPolicy = { arm: row.arm, memoryHash: manifest.data.memoryHash, goalReliability: reliability,
           opportunity: () => ({ ...estimate }), candidates: documentCandidates, validateBinding: validateDocumentBinding,
-          rank: predictors ? predictors.rank.bind(predictors) : async () => ({ action: "NO_READ", scores: [] }),
-          ...(predictors ? { inferGoals: predictors.inferGoals.bind(predictors) } : {}) };
+          relevantGoalEvidence: infraRelevantGoalEvidence,
+          rank: runPredictors ? runPredictors.rank.bind(runPredictors) : async () => ({ action: "NO_READ", scores: [] }),
+          ...(runPredictors ? { inferGoals: runPredictors.inferGoals.bind(runPredictors) } : {}) };
         const result = await runDocumentTrial({ runId: `${manifest.experimentId}:${index}`, task, corpus,
           scope: { tenantId: "research-documents", principalId: "research-operator", authorizationVersion: "read-only-v1", environmentVersion: manifest.data.environmentRevision, toolSchemaHash: hash(DOCUMENT_TOOLS) },
           snapshotId, seed: row.seed, actor: async (boundary, identity) => {
             const response = await localActorDecision(boundary, actor, { ...identity, maxOutputTokens: 4096 });
-            return { role: response.role, content: response.content, tool_calls: response.tool_calls };
+            return response;
           },
           policy, telemetry, experimentKind: "live_local_actor", signal: controller.signal, maxSteps: config.maxSteps });
+        await memoryServices?.drain();
+        embeddingBudget?.ledger.finishParent(`infra-document:${manifest.experimentId}:${index}`);
         results.push(result); await exclusiveJson(join(directory, `trial-${String(index).padStart(4, "0")}.json`), result);
       }
     } finally { clearTimeout(timer); }
@@ -135,7 +181,7 @@ export async function runLive(configurationPath: string, output: string) {
     completedCohort = true;
     return { output: directory, trials: results.length, succeeded: results.filter(result => result.success).length };
   } finally {
-    await telemetry.close();
+    try { await memoryServices?.close(); } finally { embeddingBudget?.close(); await telemetry.close(); }
     if (completedCohort && config.stage === "collection") closeDocumentCollection(directory, config.schedule.length);
   }
 }

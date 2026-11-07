@@ -317,11 +317,12 @@ def run_profile(configuration: Path, output: Path, upstream: Path):
                 raw["nativeOperationsDrained"] = not cleanup and observed.active == 0
             raw["hostHealth"] = samples
         name = f"measurement-{ordinal:04d}.json"
+        raw["profileHash"] = hash_v1(plan["profile"])
         write(output / name, raw)
-        rows.append({**identity, "status": raw["status"], **({"spans": raw["spans"]} if raw["status"] == "completed" else {"errorType": raw["errorType"]}),
+        rows.append({**identity, "profileHash": raw["profileHash"], "status": raw["status"], **({"spans": raw["spans"]} if raw["status"] == "completed" else {"errorType": raw["errorType"]}),
                      "evidence": {"path": name, "sha256": file_hash(output / name)}})
     closed = not unresolved_cleanup
-    body = {"version": 1, "kind": "measured_infra_opportunity" if closed else "incomplete_native_profile", "sourceDatasetHash": plan["sourceDatasetHash"],
+    body = {"version": 2, "kind": "measured_infra_opportunity" if closed else "incomplete_native_profile", "sourceDatasetHash": plan["sourceDatasetHash"], "profile": plan["profile"],
             "protocol": plan["protocol"], "profilePlanHash": plan["contentHash"], "rowIds": plan["rowIds"], "rows": rows}
     write(output / ("measurements.json" if closed else "incomplete-measurements.json"), {**body, "contentHash": hash_v1(body)})
     complete = sum(row["status"] == "completed" for row in rows)

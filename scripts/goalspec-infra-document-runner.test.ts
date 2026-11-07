@@ -36,6 +36,17 @@ test("three infrastructure arms preserve actor inputs, physical observations and
       await telemetry.close(); results.push(result);
       assert.equal(result.success, true); assert.equal(result.logicalCalls, 2); assert.equal(result.physicalCalls, 2);
       assert.match(await readFile(join(directory, arm, "metrics.prom"), "utf8"), /goalspec_tasks_total/);
+      const events = (await readFile(join(directory, arm, "events.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+      const generations = events.filter(event => event.type === "actor_generated");
+      assert.equal(generations.length, 3);
+      for (const event of generations) {
+        assert.equal(event.runId, arm); assert.equal(event.boundaryId, `${arm}:${event.checkpoint}`);
+        assert.equal(event.actorInputHashKind, "public_boundary_fixture");
+        assert.match(event.actorResponseHash, /^[a-f0-9]{64}$/);
+      }
+      const fetchGenerated = events.findIndex(event => event.type === "actor_generated" && event.checkpoint === 1);
+      const promotion = events.findIndex(event => event.type === "promotion_requested");
+      if (arm !== "base") assert.ok(promotion > fetchGenerated);
     }
     assert.deepEqual(results[0].actorInputHashes, results[1].actorInputHashes);
     assert.deepEqual(results[1].actorInputHashes, results[2].actorInputHashes);

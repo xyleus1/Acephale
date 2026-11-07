@@ -8,6 +8,7 @@ from goalspec.infra_evaluation import (
     TrialDesign,
     TrialResult,
     report_trials,
+    score_candidate_panels,
     score_predictions,
 )
 
@@ -45,6 +46,8 @@ def test_paired_differences_and_denominators():
     assert latency["paired_trials"] == 4
     assert latency["ci95"] == [-10, -10]
     assert report["paired_comparisons"][2]["metrics"]["latency_ms_difference"]["estimate"] == 0
+    assert report["paired_comparisons"][0]["metrics"]["logical_calls_difference"]["estimate"] == 0
+    assert report["paired_comparisons"][0]["metrics"]["physical_calls_difference"]["estimate"] == 1
 
 
 def test_failed_unstarted_and_unknown_telemetry_stay_in_denominator():
@@ -111,3 +114,71 @@ def test_probability_or_pool_corruption_fails_closed():
     row["pool_hash"] = "0" * 64
     with pytest.raises(ValueError, match="pool hash"):
         score_predictions([row])
+
+
+def panel_rows():
+    rows = []
+    for index in range(2):
+        for condition in ("neutral", "goal"):
+            rows.append({"condition": condition, "checkpoint_id": f"cp-{index}", "family_id": f"family-{index}", "split": "test",
+                         "probability_semantics": "independent_next_batch_hit", "candidate_panel": ["a", "b", "c"],
+                         "panel_hash": hash_v1(["a", "b", "c"]), "actual_reads": ["a", "b", "outside-pool"],
+                         "status": "completed", "probabilities": {"a": .9, "b": .8, "c": .1} if condition == "goal" else {"a": .2, "b": .1, "c": .8}})
+    return rows
+
+
+def test_fixed_panel_scores_all_next_batch_hits_as_independent_marginals():
+    report = score_candidate_panels(panel_rows(), bootstrap_samples=100)
+    goal, neutral = report["conditions"]["goal"], report["conditions"]["neutral"]
+    assert goal["binary_log_loss_nats"] < neutral["binary_log_loss_nats"]
+    assert goal["brier"] < neutral["brier"]
+    assert goal["candidate_panel_any_hit_coverage"] == 1
+    assert goal["exact_top1_any_hit_over_declared_eligible"] == 1
+    assert neutral["exact_top1_any_hit_over_declared_eligible"] == 0
+    assert report["test_partition_only"] is True
+    assert report["heldout_claim"] is False
+    assert report["paired_comparisons"][0]["metrics"]["binary_log_loss_nats_difference"]["families"] == 2
+    assert "not full-action" in report["interpretation"]
+
+
+@pytest.mark.parametrize("defect", ["missing_score", "different_panel", "different_labels", "missing_checkpoint", "nan", "first_call", "family_split"])
+def test_fixed_panel_comparisons_fail_closed_on_noncomparable_outputs(defect):
+    rows = panel_rows()
+    if defect == "missing_score":
+        del rows[0]["probabilities"]["c"]
+    elif defect == "different_panel":
+        rows[0]["candidate_panel"] = ["a", "b"]
+        rows[0]["panel_hash"] = hash_v1(["a", "b"])
+        del rows[0]["probabilities"]["c"]
+    elif defect == "different_labels":
+        rows[0]["actual_reads"] = ["a"]
+    elif defect == "missing_checkpoint":
+        rows.pop()
+    elif defect == "nan":
+        rows[0]["probabilities"]["a"] = float("nan")
+    elif defect == "first_call":
+        rows[0]["probability_semantics"] = "first_call"
+    else:
+        rows[1]["split"] = "train"
+    with pytest.raises(ValueError):
+        score_candidate_panels(rows)
+
+
+def test_fixed_panel_failure_retained_without_log_loss_imputation():
+    rows = panel_rows()
+    rows[0].update(status="failed", probabilities=None)
+    report = score_candidate_panels(rows, bootstrap_samples=100)
+    neutral = report["conditions"]["neutral"]
+    assert neutral["declared_checkpoints"] == 2 and neutral["scored_checkpoints"] == 1
+    assert neutral["status_counts"]["failed"] == 1
+    assert report["paired_comparisons"][0]["metrics"]["brier_difference"]["paired_trials"] == 1
+
+
+def test_empty_panels_and_no_read_batches_have_explicit_denominators():
+    rows = panel_rows()
+    for row in rows:
+        row.update(candidate_panel=[], panel_hash=hash_v1([]), probabilities={}, actual_reads=[])
+    report = score_candidate_panels(rows)
+    assert report["conditions"]["goal"]["binary_log_loss_nats"] is None
+    assert report["conditions"]["goal"]["candidate_panel_any_hit_coverage"] is None
+    assert report["conditions"]["goal"]["no_read_checkpoints"] == 2

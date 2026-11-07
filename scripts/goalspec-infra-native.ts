@@ -10,11 +10,16 @@ import { validateMemoryArtifact, type FrozenExperienceMemory } from "../src/lib/
 import { SpeculationScheduler, SpeculativeCapacity } from "../src/lib/goalspec/scheduler";
 import { createInfraNativeCandidates } from "../services/goalspec-runtime/infra-candidates";
 import { infraCandidateCompilerHash } from "../services/goalspec-runtime/infra-compiler-identity";
+import { infraOpportunityProfile } from "../services/goalspec-runtime/infra-opportunity-profile";
+import { infraRelevantGoalEvidence } from "../services/goalspec-runtime/infra-predictor-input";
+import { infraNativePublicCheckpointInput } from "../services/goalspec-runtime/infra-actor-event";
+import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/goalspec-runtime/infra-memory-services";
+import { episodicRetrievalProfileHash, validateEpisodeEmbeddings, type FrozenEpisodeEmbeddings } from "../src/lib/goalspec/episodic-retrieval";
+import { TrialLedger } from "../services/goalspec-runtime/provider";
 import { NativeGateway, NativeReadExecutor } from "../services/goalspec-runtime/gateway-client";
 import { NativeReadPolicy } from "../services/goalspec-runtime/native-read-policy";
 import { INFRA_PREDICTOR_CONTRACT_HASH, InfraLocalPredictors, validateInfraCalibration, type InfraProbabilityCalibration } from "../services/goalspec-runtime/infra-predictors";
 import { InfraNativeBoundaryWorker } from "../services/goalspec-runtime/infra-native-worker";
-import { localActorMessages } from "../services/goalspec-runtime/local-actor";
 import { InfraTelemetry } from "../services/goalspec-runtime/infra-telemetry";
 import { nativeSplitGuard } from "../services/goalspec-runtime/infra-split-guard";
 import { ResearchService, type BoundaryWorker } from "../services/goalspec-runtime/service";
@@ -44,6 +49,8 @@ export interface InfraNativeConfiguration {
   snapshotId: string; runs: InfraNativeRun[]; maximumLifetimeSeconds: number; stream: boolean;
   taskBundleHash?: string; hosted?: InfraHostedConfiguration;
   otlpBaseUrl?: string; splitGuardPath?: string;
+  episodicEmbeddingsPath?: string;
+  shadowPrediction?: boolean;
 }
 export interface InfraNativeArtifacts {
   manifest: InfraExperimentManifestV2;
@@ -51,6 +58,7 @@ export interface InfraNativeArtifacts {
   calibration?: InfraProbabilityCalibration;
   opportunity?: InfraOpportunityArtifact;
   goalReliability?: InfraGoalReliabilityArtifact;
+  embeddings?: FrozenEpisodeEmbeddings;
 }
 export function infraNativeToolsHash(runs: InfraNativeRun[]) {
   const domains = new Map<string, PublicBoundary["tools"]>();
@@ -106,15 +114,33 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
       || new Set(block.map(run => run.maxBoundaries)).size !== 1)) throw new Error("Comparison native schedule requires complete matched three-arm blocks");
   }
   const speculative = configuration.runs.some(run => run.arm !== "base");
+  if (configuration.shadowPrediction !== undefined && typeof configuration.shadowPrediction !== "boolean") throw new Error("Invalid shadow prediction flag");
+  if (configuration.shadowPrediction) {
+    if (configuration.stage !== "collection" || speculative || !configuration.predictorBaseUrl || !artifacts.memory
+      || artifacts.embeddings || configuration.episodicEmbeddingsPath
+      || configuration.runs.some(run => !manifest.data.trainingFamilies.includes(run.familyId))) {
+      throw new Error("Shadow prediction requires base-only training collection, a predictor and frozen lexical memory");
+    }
+    const memory = validateMemoryArtifact(artifacts.memory);
+    if (memory.contentHash !== manifest.data.memoryHash || memory.repositorySnapshotId !== configuration.snapshotId
+      || memory.runs.some(run => run.split !== "train" || !manifest.data.trainingFamilies.includes(run.familyId))) {
+      throw new Error("Shadow training memory provenance mismatch");
+    }
+  }
+  if (configuration.episodicEmbeddingsPath && (!artifacts.memory || !artifacts.embeddings || !configuration.hosted)) {
+    throw new Error("Episodic retrieval requires frozen memory/embeddings and reserved native trial budgets");
+  }
   if (!speculative) return;
   if (!configuration.predictorBaseUrl || !artifacts.memory || !artifacts.calibration || !artifacts.opportunity) throw new Error("Speculation requires measured opportunity, calibrated predictions and frozen memory");
   const learningFamilies = [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies];
-  const artifactScope = { datasetHash: manifest.data.datasetHash, allowedFamilies: learningFamilies, excludedFamilies: manifest.data.heldoutFamilies };
+  const artifactScope = { datasetHash: manifest.data.datasetHash, allowedFamilies: learningFamilies, excludedFamilies: manifest.data.heldoutFamilies,
+    opportunityProfile: infraOpportunityProfile(manifest, "native", { stream: configuration.stream,
+      retrievalHash: artifacts.embeddings ? episodicRetrievalProfileHash(validateEpisodeEmbeddings(artifacts.embeddings, artifacts.memory)) : undefined }) };
   const memory = validateMemoryArtifact(artifacts.memory), calibration = validateInfraCalibration(artifacts.calibration);
   const opportunity = validateInfraOpportunityArtifact(artifacts.opportunity, artifactScope);
   if (memory.contentHash !== manifest.data.memoryHash || memory.repositorySnapshotId !== configuration.snapshotId
     || calibration.contentHash !== manifest.data.calibrationHash || calibration.sourceDatasetHash !== manifest.data.datasetHash
-    || opportunity.version !== 1 || opportunity.sourceDatasetHash !== manifest.data.datasetHash
+    || opportunity.version !== 2 || opportunity.sourceDatasetHash !== manifest.data.datasetHash
     || !Number.isSafeInteger(opportunity.sampleCount) || opportunity.sampleCount < 1 || !opportunity.families.length) throw new Error("Native artifact provenance mismatch");
   const heldout = new Set(manifest.data.heldoutFamilies);
   const learning = new Set(learningFamilies);
@@ -130,6 +156,7 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
       model: { repository: manifest.predictor.repository, revision: manifest.predictor.revision },
       memoryHash: memory.contentHash, predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
       candidateCompilerHash: infraCandidateCompilerHash("native"),
+      retrievalHash: artifactScope.opportunityProfile.retrievalHash,
     } });
   }
 }
@@ -145,6 +172,10 @@ export async function loadInfraNativeConfiguration(path: string) {
     ...(configuration.opportunityPath ? { opportunity: await json(configuration.opportunityPath) } : {}),
     ...(configuration.goalReliabilityPath ? { goalReliability: await json(configuration.goalReliabilityPath) } : {}),
   };
+  if (configuration.episodicEmbeddingsPath) {
+    if (!artifacts.memory) throw new Error("Episodic retrieval requires frozen memory");
+    artifacts.embeddings = await loadFrozenEpisodeEmbeddings(resolve(directory, configuration.episodicEmbeddingsPath), artifacts.memory);
+  }
   validateInfraNativeConfiguration(configuration, artifacts);
   const checkpoint = await json(configuration.ledgerCheckpointPath);
   if (hash(checkpoint) !== artifacts.manifest.budgets.ledgerCheckpointHash) throw new Error("Budget checkpoint does not match the frozen manifest");
@@ -159,18 +190,33 @@ export function buildInfraNativeWorkers(configuration: InfraNativeConfiguration,
     return new LocalChatModelPort({ baseUrl: role === "actor" ? configuration.actorBaseUrl : configuration.predictorBaseUrl!,
       model: identity.servedModel, contextWindow: identity.contextWindow, inputBudget: identity.inputBudget, maxOutputTokens: identity.outputCap,
       stream: configuration.stream, record });
-  }): { runId: string; worker: BoundaryWorker }[] {
+  }, memoryServices?: ReturnType<typeof createInfraMemoryServices>): { runId: string; worker: BoundaryWorker }[] {
   validateInfraNativeConfiguration(configuration, artifacts);
   const capacity = new SpeculativeCapacity(4), actor = makeModel("actor");
-  const predictor = configuration.runs.some(run => run.arm !== "base") ? makeModel("predictor") : undefined;
+  const predictor = configuration.shadowPrediction || configuration.runs.some(run => run.arm !== "base") ? makeModel("predictor") : undefined;
   return configuration.runs.map(run => {
     const scope = { tenantId: `custom-tau-${run.domain}`, principalId: "native-actor", authorizationVersion: "native-v1",
       environmentVersion: ENVIRONMENT, toolSchemaHash: hash(run.tools) };
     const workerConfiguration = { runId: run.runId, scope, snapshotId: configuration.snapshotId, maxBoundaries: run.maxBoundaries, seed: run.seed };
-    if (run.arm === "base") return { runId: run.runId, worker: new InfraNativeBoundaryWorker(workerConfiguration, actor, record) };
+    if (run.arm === "base") {
+      if (!configuration.shadowPrediction) return { runId: run.runId, worker: new InfraNativeBoundaryWorker(workerConfiguration, actor, record) };
+      const policy = new NativeReadPolicy(run.domain, scope);
+      const toolsByName = Object.fromEntries(run.tools.map(tool => [tool.function.name, tool.function.parameters]));
+      const compiler = createInfraNativeCandidates(artifacts.memory!, toolsByName, invocation => policy.eligible(invocation), {
+        allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: [...artifacts.manifest.data.heldoutFamilies, run.familyId],
+      });
+      const shadow = new InfraLocalPredictors(predictor!, { memory: artifacts.memory!, record,
+        allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: [...artifacts.manifest.data.heldoutFamilies, run.familyId] });
+      return { runId: run.runId, worker: new InfraNativeBoundaryWorker(workerConfiguration, actor, record, undefined, undefined,
+        async (frame, signal) => { policy.updateFrame(frame); const candidates = compiler.candidates(frame);
+          return { candidates, decision: await shadow.rawRank(frame, candidates, frame.goals, signal) }; }) };
+    }
     const reads = new NativeReadExecutor(gateway, run.runId, scope, new Set(READS[run.domain]), new NativeReadPolicy(run.domain, scope));
     const scheduler = new SpeculationScheduler(run.runId, reads, event => record({ ...event, arm: run.arm }), capacity);
+    const retriever = memoryServices?.perRun(run.runId, run.arm, run.familyId);
+    if (artifacts.embeddings && !retriever) throw new Error("Episodic retrieval configuration is not connected to its execution port");
     const predictors = new InfraLocalPredictors(predictor!, { calibration: artifacts.calibration!, memory: artifacts.memory,
+      ...(retriever ? { retrieveMemory: retriever.retrieve, retrievalProfileHash: retriever.profileHash } : {}),
       expectedCandidateCompilerHash: infraCandidateCompilerHash("native"),
       allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: [...artifacts.manifest.data.heldoutFamilies, run.familyId], record });
     const toolsByName = Object.fromEntries(run.tools.map(tool => [tool.function.name, tool.function.parameters]));
@@ -184,11 +230,14 @@ export function buildInfraNativeWorkers(configuration: InfraNativeConfiguration,
       opportunity: () => copy(artifacts.opportunity!.estimate), candidates: candidatePool,
       validateBinding: (candidate, frame) => candidatePool(frame).some(current => hash(current.invocation) === hash(candidate.invocation)
         && hash(current.bindings) === hash(candidate.bindings)),
-      rank: (frame, candidates, goals, signal) => predictors.rank(frame, candidates, goals, signal),
+      rank: (frame, candidates, goals, signal, getLatestGoals) => predictors.rank(frame, candidates, goals, signal, getLatestGoals),
       inferGoals: (frame, signal) => predictors.inferGoals(frame, signal),
+      relevantGoalEvidence: infraRelevantGoalEvidence,
       goalReliability: run.arm === "goalspec" ? artifacts.goalReliability!.reliability : 0,
     }, record);
-    return { runId: run.runId, worker: new InfraNativeBoundaryWorker(workerConfiguration, actor, record, runtime, reads) };
+    const worker = new InfraNativeBoundaryWorker(workerConfiguration, actor, record, runtime, reads);
+    return { runId: run.runId, worker: { decision: (boundary, id) => worker.decision(boundary, id),
+      async close() { await worker.close(); await memoryServices?.drain(); } } };
   });
 }
 
@@ -206,24 +255,30 @@ export async function runInfraNativeService(configurationPath: string, artifactD
   await writeFile(publicTrace, "", { flag: "wx", mode: 0o600 });
   const telemetry = await InfraTelemetry.create(directory, configuration.otlpBaseUrl);
   const gateway = new NativeGateway(options.gatewayUrl, options.gatewayToken), service = new ResearchService(gateway);
-  const controller = new AbortController(), stop = () => controller.abort();
+  const controller = new AbortController();
+  let serviceClosing: Promise<void> | undefined;
+  const closeService = () => {
+    if (!serviceClosing) { serviceClosing = service.close(); void serviceClosing.catch(() => {}); }
+    return serviceClosing;
+  };
+  // Gateway cancellation alone cannot interrupt a worker already inside model inference.
+  // Every stop path closes the worker owner immediately and awaits the same drain below.
+  const stop = () => { controller.abort(); void closeService(); };
   options.signal?.addEventListener("abort", stop, { once: true });
-  if (options.signal?.aborted) controller.abort();
+  if (options.signal?.aborted) stop();
   const timer = setTimeout(stop, configuration.maximumLifetimeSeconds * 1000);
-  let guardClosing: Promise<void> | undefined;
   const guardTimer = guard ? setInterval(() => {
     try { guard(); } catch {
-      if (!guardClosing) {
-        telemetry.record({ type: "infra_split_guard_interruption" }); controller.abort();
-        guardClosing = service.close(); void guardClosing.catch(() => {});
+      if (!serviceClosing) {
+        telemetry.record({ type: "infra_split_guard_interruption" }); stop();
       }
     }
   }, 500) : undefined;
   let decisions = 0;
   let budget: DurableBudget | undefined, costs: ImmutableEventLog | undefined;
+  let memoryServices: ReturnType<typeof createInfraMemoryServices> | undefined;
   try {
-    const runs = buildInfraNativeWorkers(configuration, artifacts, gateway, telemetry.record);
-    let workers = runs;
+    controller.signal.throwIfAborted();
     if (configuration.hosted) {
       if (!options.budgetDirectory) throw new Error("Original budget directory required for hosted native workers");
       const ledgerPath = resolve(options.budgetDirectory, "budget.jsonl");
@@ -235,13 +290,23 @@ export async function runInfraNativeService(configurationPath: string, artifactD
       costs = new ImmutableEventLog(join(resolve(options.budgetDirectory), `events-${randomUUID()}.jsonl`));
       costs.append({ type: "research_manifest", manifestHash: hash(configuration), experimentManifestHash: hash(artifacts.manifest),
         actor: artifacts.manifest.actor, predictor: artifacts.manifest.predictor, accountingScope: "hosted_native_user_and_judge" });
-      workers = attachInfraHostedWorkers(runs, configuration.hosted, budget.ledger, event => costs!.append(event));
     }
+    if (artifacts.embeddings) {
+      const allocation = configuration.hosted!.allocation;
+      memoryServices = createInfraMemoryServices({ memory: artifacts.memory!, embeddings: artifacts.embeddings,
+        databaseUrl: process.env.GOALSPEC_RESEARCH_DATABASE_URL, applicationDatabaseUrl: process.env.DATABASE_URL,
+        budget: budget!.ledger, allocation, budgetForRun: runId => ({ ledger: new TrialLedger(budget!.ledger, `infra:${runId}`, allocation), allocation }),
+        allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: artifacts.manifest.data.heldoutFamilies,
+        record: event => { telemetry.record(event); costs!.append(event); } });
+    }
+    controller.signal.throwIfAborted();
+    const runs = buildInfraNativeWorkers(configuration, artifacts, gateway, telemetry.record, undefined, memoryServices);
+    const workers = configuration.hosted ? attachInfraHostedWorkers(runs, configuration.hosted, budget!.ledger, event => costs!.append(event)) : runs;
     const actorIds = new Set(runs.map(run => run.runId));
     for (const { runId, worker } of workers) service.register(runId, !actorIds.has(runId) ? worker : {
       close: () => worker.close(),
       decision: async (boundary, boundaryId) => {
-        const publicInput = { runId, boundaryId, policy: boundary.policy, messages: localActorMessages(boundary), tools: boundary.tools };
+        const publicInput = infraNativePublicCheckpointInput(runId, boundaryId, boundary);
         await appendFile(publicTrace, canonical({ type: "public_checkpoint", ...publicInput, inputHash: hash(publicInput) }) + "\n", { mode: 0o600 });
         const response = await telemetry.span("native.actor_decision", runId, { stage: configuration.stage }, () => worker.decision(boundary, boundaryId));
         await appendFile(publicTrace, canonical({ type: "public_response", runId, boundaryId, response }) + "\n", { mode: 0o600 });
@@ -264,9 +329,9 @@ export async function runInfraNativeService(configurationPath: string, artifactD
   } catch (error) { if (!controller.signal.aborted) throw error; return { decisions, aborted: true }; }
   finally {
     clearTimeout(timer); if (guardTimer) clearInterval(guardTimer); options.signal?.removeEventListener("abort", stop);
-    try { await Promise.all([service.close(), guardClosing]); }
+    try { await closeService(); }
     finally {
-      try { costs?.append({ type: "service_closed", decisions, aborted: controller.signal.aborted }); costs?.close(); }
+      try { await memoryServices?.close(); costs?.append({ type: "service_closed", decisions, aborted: controller.signal.aborted }); costs?.close(); }
       finally {
         budget?.close();
         telemetry.record({ type: "infra_native_service_closed", decisions, aborted: controller.signal.aborted }); await telemetry.close();

@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
+import re
+import shlex
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("infra_control", Path(__file__).with_name("control.py"))
@@ -65,6 +67,45 @@ class ControlTests(unittest.TestCase):
         result = control.validate_config()
         self.assertTrue(result["valid"])
         self.assertFalse(result["containerExecutionValidated"])
+
+    def test_runtime_image_contains_serving_and_compiler_identity_inputs(self):
+        root = Path(__file__).resolve().parents[2]
+        dockerfile = Path(__file__).with_name("runtime.Dockerfile").read_text()
+        copies = []
+        for line in dockerfile.splitlines():
+            fields = shlex.split(line)
+            if fields and fields[0] == "COPY":
+                copies.extend((Path(source), Path(fields[-1])) for source in fields[1:-1])
+        identity = root / "services/goalspec-runtime/infra-compiler-identity.ts"
+        referenced = [identity.parent / source for source in re.findall(r'"(\.{1,2}/[^"\n]+\.(?:ts|sql))"', identity.read_text())]
+        required = [root / "infra/goalspec-infra-v1/compose.json", *referenced]
+        for path in required:
+            target = path.resolve().relative_to(root)
+            self.assertTrue(path.is_file(), str(target))
+            self.assertTrue(any((source == target and destination == target)
+                                or (root / source).is_dir() and target.is_relative_to(source)
+                                and destination / target.relative_to(source) == target
+                                for source, destination in copies), f"Runtime image omits {target}")
+        # SQL and the lifecycle port affect ranked examples and latency calibration.
+        bound = {path.resolve().relative_to(root).as_posix() for path in referenced}
+        self.assertTrue({"src/lib/goalspec/episodic-postgres.ts", "services/goalspec-runtime/infra-memory-services.ts",
+                         "services/goalspec-runtime/migrations/002-episodic-memory.sql"} <= bound)
+
+    def test_runtime_generates_prisma_without_application_credentials(self):
+        dockerfile = Path(__file__).with_name("runtime.Dockerfile").read_text()
+        lines = dockerfile.splitlines()
+        schema_copy = next(index for index, line in enumerate(lines) if line.startswith("COPY prisma/schema.prisma "))
+        generation = [(index, line) for index, line in enumerate(lines) if line.startswith("RUN ") and "prisma generate" in line]
+        self.assertEqual(len(generation), 1)
+        index, command = generation[0]
+        self.assertLess(schema_copy, index)
+        self.assertLess(index, next(i for i, line in enumerate(lines) if line.startswith("USER ")))
+        self.assertIn("--schema prisma/schema.prisma", command)
+        self.assertIn("--no-install", command)
+        for variable in ("DATABASE_URL", "DATABASE_URL_UNPOOLED"):
+            self.assertIn(f"{variable}=postgresql://build:build@127.0.0.1:5432/goalspec_build", command)
+        self.assertFalse(any(line.startswith("ENV ") and "DATABASE_URL" in line for line in lines))
+        self.assertNotIn(".env", "\n".join(line for line in lines if line.startswith("COPY ")))
 
     def test_quote_uses_live_price_and_pins_image(self):
         value = control.quote(self.client, "test-region", self.now)
@@ -139,10 +180,8 @@ class ControlTests(unittest.TestCase):
             control.init_ledger(self.root / "too-high.json", 401, 0, 0)
 
     def test_lock_excludes_parallel_mutations(self):
-        with control.ledger_lock(self.ledger):
-            with self.assertRaises(FileExistsError):
-                with control.ledger_lock(self.ledger):
-                    self.fail("lock was not exclusive")
+        with control.ledger_lock(self.ledger), self.assertRaises(FileExistsError), control.ledger_lock(self.ledger):
+            self.fail("lock was not exclusive")
 
     def export(self, lease):
         payload = self.root / "results.jsonl"
@@ -181,7 +220,7 @@ class ControlTests(unittest.TestCase):
             outside.unlink()
 
     def test_watchdog_setup_deadline_and_emergency_cleanup(self):
-        lease = self.launch()
+        self.launch()
         self.assertEqual(control.watchdog_tick(self.client, self.ledger, self.now + 1799), [])
         result = control.watchdog_tick(self.client, self.ledger, self.now + 1800)
         self.assertEqual(result[0]["status"], "terminated")

@@ -9,6 +9,8 @@ import { RESEARCH_MODELS, type ModelRequest } from "../src/lib/goalspec/model";
 import { DurableBudget } from "../services/goalspec-runtime/durable-budget";
 import { attachInfraHostedWorkers, validateInfraHosted, validateInfraLedgerCheckpoint } from "../services/goalspec-runtime/infra-hosted-workers";
 import { writeInfraLedgerCheckpoint } from "./goalspec-infra-native";
+import { ResearchService } from "../services/goalspec-runtime/service";
+import { NativeGateway } from "../services/goalspec-runtime/gateway-client";
 
 const configuration = { allocation: "training" as const, maxCostMicrodollarsPerRun: 1_250_000,
   maxSteps: 10, maxErrors: 2, timeoutSeconds: 300 };
@@ -51,6 +53,45 @@ test("failed hosted requests retain uncertain cost after all workers close", asy
   for (const worker of workers) await worker.worker.close();
   assert.equal(ledger.snapshot().find(row => row.id === "infra:failed")?.actual, undefined);
   assert.equal(ledger.snapshot().find(row => row.parentId === "infra:failed")?.maximum, 100);
+});
+
+test("concurrent closes drain late provider receipts before finishing the shared trial reservation", async () => {
+  const ledger = new BudgetLedger(); let actorCloses = 0, releaseActor!: () => void, releaseProvider!: () => void;
+  const workers = attachInfraHostedWorkers([{ runId: "drain", worker: { async decision() {}, async close() {
+    actorCloses++; await new Promise<void>(resolve => { releaseActor = resolve; });
+  } } }], configuration, ledger, () => {}, (trial, allocation) => ({ model: { async complete(request) {
+    trial.reserve(request.id, allocation, 100);
+    await new Promise<void>(resolve => { releaseProvider = resolve; });
+    assert.equal(ledger.snapshot().find(row => row.id === "infra:drain")?.actual, undefined);
+    trial.settle(request.id, 25);
+    return { model: request.model, continuation: [], calls: [], text: "late native text", status: "completed", refusals: [], usage: undefined };
+  } }, embed: async () => [] }));
+  const decision = assert.rejects(workers[1].worker.decision(boundary, "pending"), /closed during inference/);
+  const first = workers[0].worker.close(), second = workers[0].worker.close(); assert.equal(first, second);
+  await workers[2].worker.close(); let userClosed = false;
+  const closingUser = workers[1].worker.close().then(() => { userClosed = true; });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(actorCloses, 1); assert.equal(userClosed, false);
+  releaseActor(); await first; assert.equal(ledger.snapshot().find(row => row.id === "infra:drain")?.actual, undefined);
+  releaseProvider(); await Promise.all([decision, closingUser]);
+  assert.equal(ledger.snapshot().find(row => row.id === "infra:drain")?.actual, 25);
+});
+
+test("service shutdown is single-flight and fences an in-flight decision response", async () => {
+  const gateway = new NativeGateway("http://127.0.0.1:1", "x".repeat(32));
+  let responds = 0, closes = 0, releaseDecision!: () => void, releaseClose!: () => void;
+  gateway.request = async <T>(path: string) => {
+    if (path === "/respond") responds++;
+    return { runId: "run", boundaryId: "pending", public: boundary } as T;
+  };
+  const service = new ResearchService(gateway);
+  service.register("run", { async decision() { await new Promise<void>(resolve => { releaseDecision = resolve; }); return { content: "late" }; },
+    async close() { closes++; await new Promise<void>(resolve => { releaseClose = resolve; }); } });
+  const pending = service.step(); await new Promise(resolve => setImmediate(resolve));
+  const first = service.close(), second = service.close(); assert.equal(first, second);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(closes, 1);
+  releaseDecision(); assert.equal(await pending, false); assert.equal(responds, 0);
+  releaseClose(); await first; assert.equal(await service.step(), false);
+  assert.throws(() => service.register("other", { async decision() {}, async close() {} }), /closing/);
 });
 
 test("native hosted limits cannot spend contingency or cross phase allocations", () => {

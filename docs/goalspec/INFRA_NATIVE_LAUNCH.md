@@ -1,5 +1,9 @@
 # Prepare and launch the fixed-Qwen native collection
 
+For current shadow collection, causal memory, hybrid retrieval and v2 artifact
+requirements, use the [methods runbook](INFRA_METHODS_V2.md) alongside these
+deployment and native-launch instructions.
+
 The new native launcher calls `scripts/goalspec-infra-native.ts`. It does not
 start the legacy hosted actor. Qwen owns actor inference; the fixed hosted user
 simulator and independent judge use the original durable budget journal.
@@ -89,9 +93,12 @@ captures the original ledger checkpoint, and generates `configuration.json`,
 validates the generated configuration. It makes zero model calls, downloads
 nothing and provisions no host. It deliberately cannot invent deployment data.
 
-Memory and calibration are absent during collection. Their manifest hashes
-identify that absence explicitly; no calibration artifact is fabricated to
-enable a run. Any later ledger change invalidates the checkpoint. Prepare a new
+Ordinary collection does not require memory or calibration. With
+`shadowPrediction: true`, preparation requires the predictor URL and binds either
+the supplied training `memoryPath` or a generated empty `shadow-memory.json`.
+Base actor behavior remains fixed and speculation is disabled; only causal
+prediction events are collected. No calibration artifact is fabricated to enable
+collection. Any later ledger change invalidates the checkpoint. Prepare a new
 directory after reconciliation instead of editing a frozen manifest.
 
 ## Collection
@@ -125,9 +132,11 @@ node --import tsx scripts/goalspec-infra-memory.ts --fresh NEW_BUNDLE_DIRECTORY 
 ```
 
 The importer requires a completed closed cohort. It retains failed and unknown
-outcomes; only successful independently verified training runs with zero known
-constraint violations enter workflow memory. Development data stays excluded
-from memory. If there are fewer than 100 eligible annotation checkpoints, the
+outcomes. Successful independently verified training runs with zero known
+constraint violations support workflows. Verified failed training endpoints can
+remain contrastive episodes; unknown/censored/provider-failed outcomes do not
+become known-outcome memory. Development data stays excluded from memory.
+If there are fewer than 100 eligible annotation checkpoints, the
 explicit pilot size fails rather than silently shrinking the audit design.
 
 Next generate teacher annotations, review the declared 20 examples, measure

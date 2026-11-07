@@ -18,3 +18,14 @@ def test_balanced_paired_grid_freezes_from_development_costs_only():
     assert censored["reserved_usd"] == 240
     with pytest.raises(ValueError):
         validate_completed_grid(design, [])
+
+
+def test_remaining_allocation_limits_complete_paired_blocks():
+    families = [f"{domain}:{i}" for domain in ("retail", "airline") for i in range(8)]
+    design = freeze_heldout(families, [1], False, seed=19, remaining_usd=60)
+    assert len(design["families"]) == 4
+    assert len(design["trials"]) == 48
+    assert design["reserved_usd"] == 60
+    assert freeze_heldout(families, [1], False, seed=19, remaining_usd=0)["trials"] == []
+    with pytest.raises(ValueError, match="remaining"):
+        freeze_heldout(families, [1], False, seed=19, remaining_usd=241)
