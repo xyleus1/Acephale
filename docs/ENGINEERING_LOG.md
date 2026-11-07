@@ -21,10 +21,19 @@ database skips among 208; two new budget-report cases then passed separately.
 Initial full research pytest: 276 passed and one failed native-fixture ESM import.
 Corrected the import and reran all six native-profile tests successfully, including
 the real pinned environment/gateway with mocked models. This is a focused repair
-verification, not a subsequent all-passing full research run. Full deployment
+verification, not a subsequent all-passing full local research run. Full deployment
 unittest: 124 passed. ESLint: zero errors and 27 explicit-any warnings. Research
 Ruff, CLI help and documentation entrypoint/link checks passed.
 
+The [main-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
+subsequently passed at `d510c1bbc139e09fe9e40ed1145daead87fbfb18`: all 210 Node tests
+passed without skips, Python passed 275 with two skips, and deployment passed 124.
+Typecheck, ESLint, Ruff and CLI help succeeded. The Node tests verified actual
+disposable pgvector publication, scoped retrieval, immutable guards and
+PostgreSQL read-only transactions/bound values. The Python CI skips were the
+external pinned native environment and the Windows-only sharing case; both had
+been covered by the local runs described above.
+
 No paid model request, cloud provisioning, live benchmark result or performance
-gain is reported by this entry. Remote CI and its real PostgreSQL integration
-remain pending. See [STATE](STATE.md) for the exact evidence boundaries and logs.
+gain is reported by this entry. Production database publication and live serving
+remain outstanding. See [STATE](STATE.md) for exact evidence boundaries and logs.

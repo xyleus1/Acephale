@@ -37,8 +37,11 @@ pgvector service to its verified image digest. GitHub's
 [runner inventory](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
 announces an Ubuntu-latest transition this month, so the moving alias would weaken
 reproducibility. CI installs locked dependencies, applies direct research SQL and
-runs real disposable-database integration. A configured workflow is not a passed
-workflow; record remote results only after execution.
+runs real disposable-database integration. Record remote results only after
+execution. The [completed main-branch run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
+at `d510c1bbc139e09fe9e40ed1145daead87fbfb18` now establishes CI integration for
+the research PostgreSQL/pgvector code. It does not establish production publication
+or native task accuracy.
 
 Keep initial failures, targeted repairs and full-suite runs distinguishable in
 verification records. Never transform a fixed single test into an invented fresh

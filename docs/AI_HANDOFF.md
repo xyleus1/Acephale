@@ -15,13 +15,19 @@ Serving and research database definitions are `infra/acephale-infra-v1`.
 Entrypoints are `npm run check`, `npm test`, `acephale:infra`,
 `acephale:infra-native`, `acephale:infra-predict` and `acephale:infra-annotate`.
 
-Standalone contract/type checks passed. The full Node run passed 206 tests with
-two real-database skips; two newly added budget-report tests passed separately.
-The initial research run passed 276 and failed one ESM fixture import; after its
-fix, all six native-profile tests passed, including that case. The full deployment
-suite passed 124. ESLint has no errors and 27 explicit-any warnings; Ruff and CLI
-help passed. See STATE for exact coverage and retained logs. Remote CI and its
-real PostgreSQL tests are still pending.
+The [main-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
+passed for `d510c1bbc139e09fe9e40ed1145daead87fbfb18`: Node 210 passed with no skips,
+Python 275 passed with two platform/environment skips, and deployment 124 passed.
+Typecheck, ESLint, Ruff and CLI help succeeded. Real disposable PostgreSQL/pgvector
+publication, scoped retrieval, immutable guards and read-only/bound-value tests
+passed. Production database readiness and publication are still outstanding.
+
+Preserve the local repair history: initial Python 276 passed and one ESM fixture
+import failed, followed by all six native-profile tests passing after the fix.
+Both Python CI skips were covered locally: the native fixture in that rerun and
+the Windows sharing test in the initial passing set. Local ESLint recorded zero
+errors and 27 explicit-any warnings. See STATE for exact separate run counts and
+retained logs; do not collapse these into an invented zero-skip Python run.
 
 Preserve the external original budget journal and credentials in secure operator
 configuration. No paid execution or provisioning follows automatically from local

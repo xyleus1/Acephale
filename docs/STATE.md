@@ -17,16 +17,16 @@ benchmark results.
 
 ## Standalone verification
 
-The following checks ran against this standalone source on 2026-11-07. These are
-software checks, not live model evaluation:
+The following local checks ran against this standalone source on 2026-11-07.
+These are software checks, not live model evaluation:
 
 | Check | Observed result |
 | --- | --- |
 | `npm run check` | Passed generated-contract checks and TypeScript compilation |
-| Full `npm test` | 208 tests: 206 passed, 2 skipped; both skips require a real local PostgreSQL database |
-| Subsequently added budget-report tests | 2 passed in a focused run; 210 distinct Node tests are covered across these runs, not one full 210-test run |
-| Full research pytest, fresh Python 3.12.14 environment | Initially 276 passed, 1 failed because a native fixture imported an ESM default export that does not exist |
-| Native-profile file rerun after correcting the import | 6 passed, including the previously failing pinned native snapshot/gateway test; the entire research suite was not rerun after that fix |
+| Full local `npm test` | 208 tests: 206 passed, 2 skipped; both skips require a real local PostgreSQL database |
+| Subsequently added budget-report tests | 2 passed in a focused run; 210 distinct Node tests are covered across these local runs, not one full local 210-test run |
+| Initial full local research pytest, fresh Python 3.12.14 environment | 276 passed, 1 failed because a native fixture imported an ESM default export that does not exist |
+| Native-profile file rerun after correcting the import | 6 passed, including the previously failing pinned native snapshot/gateway test; the entire research suite was not rerun locally after that fix |
 | Full deployment unittest suite | 124 passed |
 | ESLint | 0 errors, 27 `no-explicit-any` warnings |
 | Research Ruff and `acephale --help` | Passed |
@@ -41,7 +41,7 @@ budget-report tests are additional, distinct cases.
 Retained operator-side logs include `acephale-check-final-20261107.txt`,
 `acephale-node-tests-20261107.txt`, `acephale-python-tests-20261107.txt`,
 `acephale-python-native-final-20261107.txt`, `acephale-deploy-tests-20261107.txt`
-and `acephale-source-lint.txt`. Their private directory is not a repository path.
+and `acephale-lint-final-20261107.txt`. Their private directory is not a repository path.
 No paid request, cloud provisioning or live benchmark was performed for these checks.
 
 Local/CI Python unit validation uses 3.12.14, which is installed; 3.12.16 was not
@@ -50,11 +50,27 @@ target remains pinned to Python 3.12.16 and must pass its own observed inventory
 checks. Unit-test interpreter selection is not authorization to substitute a
 different production runtime.
 
-CI uses Ubuntu 24.04, commit-pinned setup actions, frozen dependency locks and the
-verified `pgvector/pgvector:0.8.7-pg17` image digest. It applies the research schema
-and runs the database tests against a disposable service. That remote CI run and
-its real-database result remain pending; local skipped tests are not converted
-into passes because the workflow exists.
+The [main-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
+passed for source commit `d510c1bbc139e09fe9e40ed1145daead87fbfb18`:
+
+| CI check | Observed result |
+| --- | --- |
+| Full Node suite | 210 passed, 0 skipped |
+| Full research pytest | 275 passed, 2 skipped |
+| Full deployment unittest | 124 passed |
+| Typecheck, ESLint, research Ruff and CLI help | Passed |
+
+The Node suite exercised real pgvector publication, scoped retrieval, immutable
+SQL guards, read-only PostgreSQL transactions and bound query values. CI used
+Ubuntu 24.04, commit-pinned setup actions, frozen dependency locks and the verified
+`pgvector/pgvector:0.8.7-pg17` image digest with a disposable database.
+
+The two Python CI skips were the pinned native environment test, whose external
+checkout was not installed on CI, and the Windows-specific sharing test on Linux.
+Both were exercised locally: the former passed in the six-test native-profile
+rerun; the latter was among the initial 276 passing tests. These complementary
+runs are not represented as one homogeneous zero-skip Python execution. CI verifies
+the database integration code, not production database publication or live serving.
 
 ## External execution gates
 
@@ -64,8 +80,9 @@ into passes because the workflow exists.
 2. Validate actual serving fit, exact model/tokenizer identities and tool parsing
    on the guarded host. Regenerate observed deployment inventory after source or
    environment changes; an example manifest is not evidence.
-3. Complete real research PostgreSQL/pgvector publication and retrieval tests.
-   Local SQL/mocked fixtures do not establish that integration.
+3. Prepare and verify the actual research database and publish its reviewed frozen
+   artifacts. Publication/retrieval code passed against disposable PostgreSQL/
+   pgvector in CI; production database readiness and publication remain outstanding.
 4. Resolve the original budget journal through private operator configuration and
    reconcile outstanding reservations. Preserve the $500 total and its protected
    allocations; do not reset the experiment's allowance during separation.
