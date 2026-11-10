@@ -95,6 +95,43 @@ def _model_identity(model: dict[str, Any], token_ids: dict[str, int], selection:
     return artifact["servedModel"]
 
 
+def _failed_undispatched_prefix(row: dict[str, Any], window: dict[str, Any], events: list[dict[str, Any]], served_model: str) -> bool:
+    """Recognize the compiler's failed fixed-panel path without treating it as a prediction."""
+    pool, ids = row.get("candidates", []), window.get("candidateIds")
+    if row.get("status") != "failed" or not isinstance(ids, list) or len(ids) >= len(pool):
+        return False
+    # rawRankPanel rejects the shortened window before preparing or requesting
+    # generation. An absent model_dispatch alone cannot establish that path.
+    allowed = {"model_tokenizer_started", "model_tokenizer_completed", "infra_candidate_window"}
+    if any(event.get("type") not in allowed or event.get("type") != "infra_candidate_window"
+           and event.get("purpose") != "candidate_window" for event in events):
+        return False
+    if not events or events[-1] is not window or len(events[:-1]) % 2:
+        return False
+    for started, completed in zip(events[:-1:2], events[1:-1:2], strict=True):
+        if (started.get("type") != "model_tokenizer_started" or completed.get("type") != "model_tokenizer_completed"
+                or not isinstance(started.get("requestId"), str) or not started["requestId"]
+                or completed.get("requestId") != started["requestId"]
+                or started.get("model") != served_model or completed.get("model") != served_model):
+            return False
+    prefix, omitted = pool[:len(ids)], pool[len(ids):]
+    if (ids != [candidate["id"] for candidate in prefix] or window.get("windowHash") != hash_v1(prefix)
+            or window.get("omittedCandidateIds") != [candidate["id"] for candidate in omitted]):
+        return False
+    fields = ("inputBudget", "windowBudget", "reserveTokens", "mandatoryTokens", "tokenizerCalls")
+    if any(type(window.get(key)) is not int or window[key] < 0 for key in fields):
+        return False
+    measurements = [event for event in events if event.get("type") == "model_tokenizer_completed"]
+    if (len(measurements) < 2 or any(type(event.get("inputTokens")) is not int or event["inputTokens"] <= 0 for event in measurements)
+            or len({event["requestId"] for event in measurements}) != len(measurements)):
+        return False
+    return ((window["inputBudget"], window["reserveTokens"], window["windowBudget"]) == (7168, 2048, 5120)
+            and window["mandatoryTokens"] <= window["windowBudget"]
+            and window["tokenizerCalls"] == len(measurements)
+            and measurements[0]["inputTokens"] > window["windowBudget"] >= measurements[1]["inputTokens"]
+            and any(event.get("inputTokens") == window["mandatoryTokens"] for event in measurements))
+
+
 def _row_evidence(row: dict[str, Any], served_model: str) -> dict[str, Any]:
     audit = _hashed(row.get("audit"))
     if audit.get("version") != 1 or not isinstance(audit.get("events"), list) or type(audit.get("rowWallMs")) not in (int, float) or not math.isfinite(audit["rowWallMs"]) or audit["rowWallMs"] < 0:
@@ -119,9 +156,12 @@ def _row_evidence(row: dict[str, Any], served_model: str) -> dict[str, Any]:
     dispatch = next(iter(by_type["model_dispatch"]), None)
     compiled = next(iter(by_type["infra_predictor_compiled"]), None)
     completion = next(iter(by_type["model_completed"]), None)
-    if window and (window.get("poolHash") != hash_v1(pool) or window.get("windowHash") != hash_v1(pool)
-                   or window.get("candidateIds") != row.get("candidatePanel")):
-        raise ValueError("Actual fixed candidate window differs from the ordered panel")
+    if window:
+        if window.get("poolHash") != hash_v1(pool):
+            raise ValueError("Actual fixed candidate window differs from the ordered panel")
+        if (window.get("windowHash") != hash_v1(pool) or window.get("candidateIds") != row.get("candidatePanel")):
+            if not _failed_undispatched_prefix(row, window, events, served_model):
+                raise ValueError("Actual fixed candidate window differs from the ordered panel")
     if prepared and (not window or prepared.get("candidatePoolHash") != window["poolHash"] or prepared.get("candidateWindowHash") != window["windowHash"]):
         raise ValueError("Prepared prompt has no matching candidate window")
     if dispatch:

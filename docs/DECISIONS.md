@@ -176,3 +176,13 @@ deadline or the 3-second consumer freshness limit. Publish fixed diagnostic stag
 names and numeric timings only. Exceptions still poison the current session and
 replacement requires confirmed drain. A failed soak remains failed; this change
 requires a fresh compatible inventory and read-only soak before native dispatch.
+
+# Failed panel compilation remains a declared comparison outcome
+
+A fixed-panel predictor must refuse to silently shorten its panel to fit context.
+Reporting may recognize the resulting failed ordered-prefix compilation only
+with complete pre-request evidence. Keep the original full panel identity and
+failed row, and do not invent a dispatched prompt or score. Completed or
+dispatched predictions still require exact full-panel agreement. Pin this
+reporting-only correction separately from previously frozen execution source;
+never modify or reseal its immutable inputs.
