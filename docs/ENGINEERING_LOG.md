@@ -213,3 +213,27 @@ exhaustion, bounded failure metadata, poisoned-session rejection and managed dra
 The first run had 35 fixture setup errors from an inaccessible global pytest
 temporary directory and two passes; the subsequent explicit new output directory
 resolved that environment failure. These checks made no model/provider calls.
+
+# 2026-11-10: Preserve failed fixed-panel compiler outcomes in reports
+
+The real base replay retained 150 rows: 145 completed and five failed. Three
+failures recorded a shortened common candidate window and correctly refused
+dispatch because the frozen three-candidate panel could not fit. The comparison
+validator incorrectly demanded a full window even for these pre-request failures.
+The reporting-only correction recognizes exactly that path: failed status,
+paired candidate-window tokenizer events, one terminal window, exact original
+pool/prefix/suffix hashes and consistent token-budget metadata. Any later model
+request, preparation, dispatch or completion event retains the strict full-panel
+requirement. The original panel and failure denominator remain unchanged.
+
+Focused fairness tests: 46 passed, including the three immutable real rows,
+prefix lengths 2/0/2, and negative cases for reordered bindings, modified
+arguments, hashes, omitted suffixes, request events, tokenizer model/pairing and
+the exact 7,168/2,048/5,120 context policy. Review also required proof that the
+full pool exceeded budget while the empty pool fit; arbitrary missing-dispatch
+rows do not establish a failed compiler prefix. Ruff
+passed. The real replay fixture is operator-held; its test verifies exact SHA256
+e374489048f0637938895ef2ac073b03009ab05a8b98be219f8b81ebafbd10ce and skips
+when ACEPHALE_FIXED_PANEL_REPLAY_FIXTURE is absent. No native trace, model request,
+weight, training input or original replay artifact changed. This separate report
+revision does not retroactively change the source identity of execution.

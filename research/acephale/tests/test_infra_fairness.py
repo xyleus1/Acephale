@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -9,7 +11,7 @@ from acephale.contracts_v1 import hash_v1
 from acephale.infra_calibration import fit_calibration
 from acephale.infra_cli import main
 from acephale.infra_data import publish_bundle, read_jsonl
-from acephale.infra_fairness import compare_predictor_replays
+from acephale.infra_fairness import _row_evidence, compare_predictor_replays
 from acephale.storage import file_hash
 from acephale.training_data import BASE
 
@@ -256,3 +258,125 @@ def test_comparison_cli_publishes_closed_development_result(tmp_path, capsys):
     with pytest.raises(FileExistsError):
         main(arguments)
     assert "bundle_hash" in capsys.readouterr().out
+
+
+def failed_prefix(row, retained=1):
+    row = deepcopy(row)
+    served = row["audit"]["events"][2]["model"]
+    row["status"] = "failed"
+    row.pop("neutral")
+    window = deepcopy(row["audit"]["events"][0])
+    prefix = row["candidates"][:retained]
+    window.update(windowHash=hash_v1(prefix), candidateIds=[item["id"] for item in prefix],
+                  omittedCandidateIds=[item["id"] for item in row["candidates"][retained:]],
+                  inputBudget=7168, windowBudget=5120, reserveTokens=2048, mandatoryTokens=5010 if retained else 5000, tokenizerCalls=3)
+    pairs = []
+    for index, tokens in enumerate((5200, 5000, 5010 if retained else 5201)):
+        common = {"requestId": f"measure:fixture:{index}", "model": served, "purpose": "candidate_window"}
+        pairs.extend([{"type": "model_tokenizer_started", **common}, {"type": "model_tokenizer_completed", **common, "inputTokens": tokens}])
+    row["audit"] = seal({"version": 1, "events": [*pairs, window], "rowWallMs": 3})
+    return row
+
+
+@pytest.mark.parametrize("retained", [0, 1])
+def test_failed_ordered_prefix_retains_full_pool_and_failure_denominator(tmp_path, retained):
+    bundle, runs, partition, memory = fixture(tmp_path)
+    path = runs["lora_17"]
+    rows = read_jsonl(path / "predictions.jsonl")
+    rows[-1] = failed_prefix(rows[-1], retained)
+    served = rows[-1]["audit"]["events"][0]["model"]
+    evidence = _row_evidence(rows[-1], served)
+    assert evidence["pool"] == hash_v1(rows[-1]["candidates"])
+    assert evidence["prepared"] is None and evidence["dispatch"] is None
+    write_rows(path / "predictions.jsonl", rows)
+    write(path / "receipt.json", {"declared": 6, "completed": 5, "failed": 1, "liveActorExecuted": False, "toolExecutionPerformed": False})
+    report, joined = compare_predictor_replays(bundle, runs, partition, memory)
+    assert len(joined) == 6
+    assert report["conditions"]["lora_17"]["status_counts"] == {"completed": 1, "failed": 1}
+    assert report["conditions"]["lora_17"]["declared_checkpoints"] == 2
+    assert report["unverifiableFailedPromptCheckpoints"] == ["dev1"]
+    assert not report["allDevelopmentInputsVerified"]
+
+
+@pytest.mark.parametrize("defect", ["completed", "not_dispatched", "dispatch", "request", "model_failed", "prepared",
+                                   "reordered_prefix", "changed_argument", "suffix", "window_hash", "pool_hash",
+                                   "duplicate_window", "after_window", "tokenizer_pair", "tokenizer_count", "budget",
+                                   "tokenizer_model", "full_pool_fits", "empty_pool_too_large", "non_integer_tokens", "duplicate_measurement", "context_policy"])
+def test_failed_prefix_exception_rejects_tampering_and_later_model_work(tmp_path, defect):
+    _, runs, _, _ = fixture(tmp_path)
+    original = read_jsonl(runs["base_binary"] / "predictions.jsonl")[-1]
+    row = failed_prefix(original)
+    events = row["audit"]["events"]
+    window = events[-1]
+    if defect in {"completed", "not_dispatched"}:
+        row["status"] = defect
+    elif defect in {"dispatch", "request", "model_failed", "prepared"}:
+        event = {"dispatch": deepcopy(original["audit"]["events"][2]),
+                 "request": {"type": "model_request_received"}, "model_failed": {"type": "model_failed", "dispatched": True},
+                 "prepared": deepcopy(original["audit"]["events"][1])}[defect]
+        events.append(event)
+    elif defect == "reordered_prefix":
+        window["candidateIds"] = [row["candidatePanel"][1]]
+        window["windowHash"] = hash_v1(row["candidates"][1:])
+    elif defect == "changed_argument":
+        row["candidates"][0]["invocation"]["arguments"] = {"changed": True}
+        row["orderedCandidatePoolHash"] = window["poolHash"] = hash_v1(row["candidates"])
+    elif defect == "suffix":
+        window["omittedCandidateIds"] = []
+    elif defect == "window_hash":
+        window["windowHash"] = "f" * 64
+    elif defect == "pool_hash":
+        window["poolHash"] = "f" * 64
+    elif defect == "duplicate_window":
+        events.append(deepcopy(window))
+    elif defect == "after_window":
+        events.append(deepcopy(events[0]))
+    elif defect == "tokenizer_pair":
+        events[1]["requestId"] = "other"
+    elif defect == "tokenizer_count":
+        window["tokenizerCalls"] = 2
+    elif defect == "budget":
+        window["mandatoryTokens"] = 5121
+    elif defect == "tokenizer_model":
+        events[0]["model"] = events[1]["model"] = "other-model"
+    elif defect == "full_pool_fits":
+        events[1]["inputTokens"] = 5000
+    elif defect == "empty_pool_too_large":
+        events[3]["inputTokens"] = 5200
+    elif defect == "non_integer_tokens":
+        events[1]["inputTokens"] = True
+    elif defect == "duplicate_measurement":
+        events[2]["requestId"] = events[3]["requestId"] = events[0]["requestId"]
+    elif defect == "context_policy":
+        window["inputBudget"] = 8192
+        window["reserveTokens"] = 3072
+    row["audit"] = seal(row["audit"])
+    with pytest.raises(ValueError):
+        _row_evidence(row, BASE["repository"])
+
+
+def test_actual_immutable_failed_window_rows_when_operator_fixture_is_available():
+    configured = os.environ.get("ACEPHALE_FIXED_PANEL_REPLAY_FIXTURE")
+    if not configured:
+        pytest.skip("Operator-held immutable real replay is not distributed with private candidate bindings")
+    path = Path(configured)
+    expected_sha = "e374489048f0637938895ef2ac073b03009ab05a8b98be219f8b81ebafbd10ce"
+    assert file_hash(path) == expected_sha
+    expected = {"cf58c940fccee7b47310dae11f11ed4915dff41dad027de83529d1c8a981fc81": 2,
+                "86613d6a596ee659929932f0f16f8b037e3722d1ec3f9dce54c55788dd753ce1": 0,
+                "54bd3550f98a8d588ea93a1204bb1f238d2e487a5eb8bf2618900d4af404824d": 2}
+    rows = [row for row in read_jsonl(path) if row["checkpoint_id"] in expected]
+    assert len(rows) == 3
+    for row in rows:
+        assert row["status"] == "failed" and len(row["candidates"]) == 3
+        window = row["audit"]["events"][-1]
+        assert len(window["candidateIds"]) == expected[row["checkpoint_id"]]
+        evidence = _row_evidence(row, BASE["repository"])
+        assert evidence["pool"] == row["orderedCandidatePoolHash"]
+        assert evidence["prepared"] is None and evidence["dispatch"] is None
+        changed = deepcopy(row)
+        changed["audit"]["events"].append({"type": "model_dispatch"})
+        changed["audit"] = seal(changed["audit"])
+        with pytest.raises(ValueError):
+            _row_evidence(changed, BASE["repository"])
+    assert file_hash(path) == expected_sha

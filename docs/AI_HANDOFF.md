@@ -145,3 +145,10 @@ The 3-second consumer freshness bound, nonce checks and confirmed drain before
 reconnect are unchanged. Failed observations publish only a fixed stage name and
 elapsed/remaining/budget milliseconds, never exception messages. A new deployment
 inventory and read-only guard soak must qualify this source before paid trials.
+
+The reporting-only failed-panel repair accepts a shortened ordered prefix only
+when the row failed before any model request and the complete tokenizer/window
+audit proves that path. It retains the original full panel and failed denominator;
+it does not supply probabilities or claim a verified dispatched prompt. Keep this
+reporting revision separate from the frozen runtime/training source until all
+execution finishes. Original prediction artifacts must not be rewritten/resealed.
