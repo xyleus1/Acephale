@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { hash } from "../src/lib/acephale/canonical";
-import { nativeSplitGuard } from "../services/acephale-runtime/infra-split-guard";
+import { nativeSplitGuard, nativeSplitGuardDiagnostic, NativeSplitGuardError } from "../services/acephale-runtime/infra-split-guard";
 
 test("split heartbeat binds exact manifest, endpoints and remote identity, and rejects newest stale status", async () => {
   const directory = await mkdtemp(join(tmpdir(), "native-split-guard-")), previous = process.env.ACEPHALE_HOST_STATUS_FILE;
@@ -33,10 +33,20 @@ test("split heartbeat binds exact manifest, endpoints and remote identity, and r
         manifestHash: hash(manifest), remoteInstanceId: guard.expectedInstanceId, ...changes }));
     };
     await publish(); assert.equal(check().remoteInstanceId, guard.expectedInstanceId);
-    await publish({ remoteInstanceId: "i-fedcba98765432100" }); assert.throws(check, /another host/);
+    await publish({ remoteInstanceId: "i-fedcba98765432100" }); assert.throws(check, { reasonCode: "identity" });
     await publish({ endpointProvenanceHash: "0".repeat(64) }); assert.throws(check, /endpoint set/);
-    await publish({ observedAtUnixMs: Date.now() - 3100 }); assert.throws(check, /stale/);
-    await publish({ healthy: false, state: "degraded" }); assert.throws(check, /degraded/);
+    await publish({ observedAtUnixMs: Date.now() - 3857 }); assert.throws(check, (error: unknown) => {
+      const diagnostic = nativeSplitGuardDiagnostic(error);
+      assert.equal(diagnostic.reasonCode, "stale"); assert.ok(diagnostic.heartbeatAgeMs! >= 3857);
+      assert.equal(diagnostic.maxStatusAgeMs, 3000);
+      assert.deepEqual(Object.keys(diagnostic).sort(), ["heartbeatAgeMs", "maxStatusAgeMs", "reasonCode"]); return true;
+    });
+    await publish({ healthy: false, state: "degraded" }); assert.throws(check, { reasonCode: "degraded" });
+    await publish({ maxStatusAgeMs: 100, observedAtUnixMs: Date.now() - 200 }); assert.throws(check, { reasonCode: "stale", maxStatusAgeMs: 100 });
+    await publish({ observedAtUnixMs: Date.now() + 2000 }); assert.throws(check, { reasonCode: "stale" });
+    await publish({ observedAtUnixMs: "private-invalid-status" }); assert.throws(check, { reasonCode: "degraded" });
+    assert.deepEqual(nativeSplitGuardDiagnostic(new Error("private/path/secret")), { reasonCode: "degraded" });
+    assert.deepEqual(nativeSplitGuardDiagnostic(new NativeSplitGuardError("degraded", "private payload", NaN, Infinity)), { reasonCode: "degraded" });
     assert.throws(() => nativeSplitGuard({ ...configuration, actorBaseUrl: "http://127.0.0.1:19999" }, manifest, join(directory, "configuration.json")), /tunnels/);
   } finally {
     if (previous === undefined) delete process.env.ACEPHALE_HOST_STATUS_FILE; else process.env.ACEPHALE_HOST_STATUS_FILE = previous;
@@ -79,7 +89,7 @@ test("Lambda guard binds provider receipt, pinned host key and machine identity 
     const check = () => nativeSplitGuard(configuration, manifest, join(directory, "configuration.json"))!;
     const running = check(); assert.equal(running().remoteInstanceId, instance.id);
     await writeFile(join(directory, "known_hosts"), knownHosts + "# changed after startup\n");
-    assert.throws(running, /changed after guard startup/);
+    assert.throws(running, { reasonCode: "identity", message: "Pinned SSH identity file changed after guard startup" });
     await writeFile(join(directory, "known_hosts"), knownHosts.replace(instance.ip, "203.0.113.2")); assert.throws(check, /known_hosts/);
     await writeFile(join(directory, "known_hosts"), knownHosts);
     guard.expectedMachineIdSha256 = "f".repeat(64); await persist(); assert.throws(check, /identity differ/);

@@ -163,3 +163,16 @@ final degraded publication and cancellation before any SSH launch. Thirty-three
 focused guard tests passed; Ruff passed. An initial worktree-only run lacked
 `tsx` and failed two cross-language tests; installing the local dependency
 junction allowed both to pass. No benchmark or model call was made by these tests.
+
+# 2026-11-10: Native failure and OTLP diagnostics
+
+Added sanitized guard reason/age diagnostics and allowlisted OTLP transport error
+codes. Removed the final historical export-failure throw that could mask a guard
+abort; SDK shutdown failures now remain explicit while local queues drain.
+The export receipt distinguishes incomplete, no failures observed and no configured
+exporter. Local publication still rejects closure on failure. Tests use actual
+loopback HTTP rejection and connection reset, preserve native gateway exceptions
+and cancellation, and verify an aborted CLI exits 1. No frozen cohort is changed
+and these fixtures establish no native reward or model performance.
+Typecheck and schema generation checks passed. All 31 focused Node tests passed
+without skips; ESLint completed with zero errors and 35 existing warnings.

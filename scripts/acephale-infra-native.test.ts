@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import fixture from "../research/acephale/examples/infra-manifest-v2.fixture.json";
 import { hash, copy } from "../src/lib/acephale/canonical";
 import { LocalChatModelPort } from "../src/lib/acephale/infra-model";
@@ -202,7 +204,7 @@ test("credential-bearing model URLs fail before creating any service artifact", 
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-test("native service runs a real loopback gateway decision and clean close without provider calls", async () => {
+for (const runtimeFailure of [false, true]) test(`native gateway ${runtimeFailure ? "failure" : "completion"} is preserved with real rejected OTLP and local traces`, async () => {
   const directory = await mkdtemp(join(tmpdir(), "acephale-infra-native-service-"));
   const { configuration, artifacts } = configured();
   let next = 0, ready = false;
@@ -216,6 +218,8 @@ test("native service runs a real loopback gateway decision and clean close witho
       else if (req.url === "/tokenize") { assert.equal(ready, true); res.end(JSON.stringify({ count: 8, max_model_len: 32768, tokens: Array(8).fill(1) })); }
       else if (req.url === "/v1/chat/completions") res.end(JSON.stringify({ model: "actor", choices: [{ index: 0,
         message: { role: "assistant", content: "done" }, finish_reason: "stop" }], usage: { prompt_tokens: 8, completion_tokens: 1, total_tokens: 9 } }));
+      else if (req.url === "/next" && runtimeFailure && next > 0) { res.statusCode = 409; res.end("{}"); }
+      else if (req.url === "/v1/traces" || req.url === "/v1/metrics") { res.statusCode = 400; res.end("{}"); }
       else if (req.url === "/next") res.end(JSON.stringify(next++ === 0 ? { runId: "run", boundaryId: "first", public: {
         policy: "native policy", tools, messages: [{ role: "user", content: "List airports" }],
       } } : next === 2 ? { runId: "run", boundaryId: "close", operation: "close" } : null));
@@ -226,30 +230,37 @@ test("native service runs a real loopback gateway decision and clean close witho
   }).listen(0, "127.0.0.1");
   await once(server, "listening"); const address = server.address(); assert.ok(address && typeof address !== "string");
   const url = `http://127.0.0.1:${address.port}`;
-  configuration.actorBaseUrl = url;
+  configuration.actorBaseUrl = url; configuration.otlpBaseUrl = url;
   try {
     await writeFile(join(directory, "config.json"), JSON.stringify(configuration));
     await writeFile(join(directory, "manifest.json"), JSON.stringify(artifacts.manifest));
     await writeFile(join(directory, "checkpoint.json"), JSON.stringify({ fixture: true }));
     const output = join(directory, "output");
-    const result = await runInfraNativeService(join(directory, "config.json"), output, { gatewayUrl: url, gatewayToken: "x".repeat(32) });
-    assert.deepEqual(result, { decisions: 2, aborted: false });
+    const running = runInfraNativeService(join(directory, "config.json"), output, { gatewayUrl: url, gatewayToken: "x".repeat(32) });
+    if (runtimeFailure) await assert.rejects(running, { message: "Native gateway rejected request (409)" });
+    else assert.deepEqual(await running, { decisions: 2, aborted: false });
     assert.equal(ready, true);
-    assert.equal(responses.length, 2);
+    assert.equal(responses.length, runtimeFailure ? 1 : 2);
     assert.equal((responses[0].response as Record<string, unknown>).content, "done");
     const trace = (await readFile(join(output, "public-boundaries.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     assert.deepEqual(trace.map(row => row.type), ["public_checkpoint", "public_response"]);
     assert.ok(!(await readFile(join(output, "events.jsonl"), "utf8")).includes("List airports"));
+    const events = (await readFile(join(output, "events.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    assert.ok(events.some(event => event.type === "telemetry_export_receipt" && event.collectorAccepted === false && event.status === 400));
+    assert.ok(events.some(event => event.type === "span_completed"));
+    const receipt = JSON.parse(await readFile(join(output, "telemetry-export-receipt.json"), "utf8"));
+    assert.equal(receipt.observabilityStatus, "incomplete"); assert.ok(receipt.failed > 0);
+    assert.equal(receipt.tracesAccepted, 0); assert.equal(receipt.metricsAccepted, 0);
   } finally {
     server.closeAllConnections(); await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-for (const stopMode of ["signal", "deadline"] as const) test(`native ${stopMode} stop cancels active inference before closing telemetry`, { timeout: 10000 }, async () => {
+for (const stopMode of ["signal", "deadline", "deadline-cli"] as const) test(`native ${stopMode} stop cancels active inference despite rejected OTLP`, { timeout: 15000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "infra-native-stop-"));
   const { configuration, artifacts } = configured();
-  configuration.maximumLifetimeSeconds = stopMode === "deadline" ? 1 : 10;
+  configuration.maximumLifetimeSeconds = stopMode === "signal" ? 10 : 1;
   const controller = new AbortController();
   let started!: () => void, cancelled!: () => void, responds = 0, lateResponse = false;
   const actorStarted = new Promise<void>(resolve => { started = resolve; });
@@ -270,22 +281,31 @@ for (const stopMode of ["signal", "deadline"] as const) test(`native ${stopMode}
           lateResponse = true;
           res.end(JSON.stringify({ model: "actor", choices: [{ index: 0, message: { role: "assistant", content: "late" }, finish_reason: "stop" }],
             usage: { prompt_tokens: 8, completion_tokens: 1, total_tokens: 9 } }));
-        }, stopMode === "deadline" ? 2200 : 500);
+        }, stopMode === "signal" ? 500 : 2200);
         timers.add(timer);
         res.once("close", () => { clearTimeout(timer); timers.delete(timer); if (!res.writableEnded) cancelled(); });
       } else if (req.url === "/respond") { responds++; res.end("{}"); }
+      else if (req.url === "/v1/traces" || req.url === "/v1/metrics") { res.statusCode = 400; res.end("{}"); }
       else if (req.url === "/status") res.end('{"closed":true}');
       else { res.statusCode = 404; res.end("{}"); }
     });
   }).listen(0, "127.0.0.1");
   await once(server, "listening"); const address = server.address(); assert.ok(address && typeof address !== "string");
-  const url = `http://127.0.0.1:${address.port}`; configuration.actorBaseUrl = url;
+  const url = `http://127.0.0.1:${address.port}`; configuration.actorBaseUrl = url; configuration.otlpBaseUrl = url;
   try {
     await writeFile(join(directory, "config.json"), JSON.stringify(configuration));
     await writeFile(join(directory, "manifest.json"), JSON.stringify(artifacts.manifest));
     await writeFile(join(directory, "checkpoint.json"), JSON.stringify({ fixture: true }));
     const output = join(directory, "output");
-    const running = runInfraNativeService(join(directory, "config.json"), output,
+    const running = stopMode === "deadline-cli" ? new Promise<unknown>((resolve, reject) => {
+      const child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("./acephale-infra-native.ts", import.meta.url)), join(directory, "config.json"), output],
+        { windowsHide: true, env: { ...process.env, ACEPHALE_GATEWAY_URL: url, ACEPHALE_GATEWAY_TOKEN: "x".repeat(32) } });
+      let stdout = "", stderr = "";
+      child.stdout.on("data", chunk => { stdout += chunk; }); child.stderr.on("data", chunk => { stderr += chunk; });
+      child.once("error", reject); child.once("close", code => {
+        try { assert.equal(code, 1, stderr); resolve(JSON.parse(stdout)); } catch (error) { reject(error); }
+      });
+    }) : runInfraNativeService(join(directory, "config.json"), output,
       { gatewayUrl: url, gatewayToken: "x".repeat(32), signal: controller.signal });
     await actorStarted; if (stopMode === "signal") controller.abort();
     assert.deepEqual(await running, { decisions: 0, aborted: true });
@@ -298,6 +318,8 @@ for (const stopMode of ["signal", "deadline"] as const) test(`native ${stopMode}
     const trace = (await readFile(join(output, "public-boundaries.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     assert.deepEqual(trace.map(row => row.type), ["public_checkpoint"]);
     assert.equal((await stat(join(output, "telemetry-export-receipt.json"))).isFile(), true);
+    const receipt = JSON.parse(await readFile(join(output, "telemetry-export-receipt.json"), "utf8"));
+    assert.equal(receipt.observabilityStatus, "incomplete"); assert.ok(receipt.failed > 0);
   } finally {
     controller.abort(); timers.forEach(clearTimeout); server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

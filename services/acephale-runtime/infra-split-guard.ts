@@ -6,6 +6,20 @@ import { hash } from "../../src/lib/acephale/canonical";
 const sha256 = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const hexHash = (value: unknown) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 
+export class NativeSplitGuardError extends Error {
+  constructor(readonly reasonCode: "stale" | "degraded" | "identity", message: string,
+    readonly heartbeatAgeMs?: number, readonly maxStatusAgeMs?: number) { super(message); }
+}
+
+/** Never put filesystem errors, status contents or host identities in stop diagnostics. */
+export function nativeSplitGuardDiagnostic(error: unknown) {
+  return error instanceof NativeSplitGuardError ? {
+    reasonCode: error.reasonCode,
+    ...(Number.isFinite(error.heartbeatAgeMs) ? { heartbeatAgeMs: error.heartbeatAgeMs } : {}),
+    ...(Number.isFinite(error.maxStatusAgeMs) ? { maxStatusAgeMs: error.maxStatusAgeMs } : {}),
+  } : { reasonCode: "degraded" as const };
+}
+
 function verifiedKnownHosts(path: string, host: string, port: number, fingerprint: string) {
   const bytes = readFileSync(path), lines = bytes.toString("utf8").split(/\r?\n/)
     .map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
@@ -67,19 +81,29 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
     servedModels: { actor: manifest.actor.servedModel, predictor: manifest.predictor.servedModel }, ...providerBinding };
   const expected = hash(provenance);
   return () => {
-    if (providerBinding && verifiedKnownHosts(providerBinding.knownHostsPath, providerBinding.sshHost, guard.sshPort, providerBinding.hostKeySha256) !== providerBinding.knownHostsHash) throw new Error("Pinned SSH identity file changed after guard startup");
+    if (providerBinding) {
+      try {
+        if (verifiedKnownHosts(providerBinding.knownHostsPath, providerBinding.sshHost, guard.sshPort, providerBinding.hostKeySha256) !== providerBinding.knownHostsHash) throw new Error();
+      } catch { throw new NativeSplitGuardError("identity", "Pinned SSH identity file changed after guard startup"); }
+    }
     const directory = process.env.ACEPHALE_HOST_STATUS_FILE;
-    if (!directory) throw new Error("Split execution requires its local heartbeat directory");
-    const name = readdirSync(directory).filter(name => /^\d{16}\.json$/.test(name)).sort().at(-1);
-    if (!name) throw new Error("Split guard heartbeat missing");
-    const status = JSON.parse(readFileSync(join(directory, name), "utf8"));
+    if (!directory) throw new NativeSplitGuardError("degraded", "Split execution requires its local heartbeat directory");
+    let name: string | undefined, status;
+    try {
+      name = readdirSync(directory).filter(name => /^\d{16}\.json$/.test(name)).sort().at(-1);
+      if (!name) throw new Error();
+      status = JSON.parse(readFileSync(join(directory, name), "utf8"));
+      if (!status || typeof status !== "object" || Array.isArray(status)) throw new Error();
+    } catch { throw new NativeSplitGuardError("degraded", "Split guard heartbeat missing or unreadable"); }
     const age = Date.now() - status.observedAtUnixMs;
+    const maximumAge = Math.min(3000, status.maxStatusAgeMs);
     if (status.healthy !== true || status.state !== "healthy" || status.networkConnected !== true
       || typeof status.observedAtUnixMs !== "number" || !Number.isFinite(status.observedAtUnixMs)
       || typeof status.maxStatusAgeMs !== "number" || !Number.isFinite(status.maxStatusAgeMs) || status.maxStatusAgeMs <= 0
-      || age < -1000 || age > Math.min(3000, status.maxStatusAgeMs) || status.heartbeatSequence !== Number(name.slice(0, 16))) throw new Error("Split host heartbeat is degraded or stale");
+      || status.heartbeatSequence !== Number(name.slice(0, 16))) throw new NativeSplitGuardError("degraded", "Split host heartbeat is degraded", age, maximumAge);
+    if (age < -1000 || age > maximumAge) throw new NativeSplitGuardError("stale", "Split host heartbeat is stale", age, maximumAge);
     if (status.endpointProvenanceHash !== expected || status.manifestHash !== hash(manifest)
-      || status.remoteInstanceId !== guard.expectedInstanceId) throw new Error("Split heartbeat belongs to another host, manifest or endpoint set");
+      || status.remoteInstanceId !== guard.expectedInstanceId) throw new NativeSplitGuardError("identity", "Split heartbeat belongs to another host, manifest or endpoint set", age, maximumAge);
     return { endpointProvenanceHash: expected, manifestHash: hash(manifest), remoteInstanceId: guard.expectedInstanceId };
   };
 }

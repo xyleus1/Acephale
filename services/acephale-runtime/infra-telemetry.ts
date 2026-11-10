@@ -89,6 +89,7 @@ export class InfraTelemetry {
   private readonly processClockId = `node:${process.pid}:${randomUUID()}`;
   private otel?: ReturnType<typeof createInfraOtel>;
   private exportCounts = { tracesAccepted: 0, metricsAccepted: 0, failed: 0 };
+  private exportShutdownFailed = false;
   private constructor(readonly directory: string, private otlpUrl?: string) {}
   static async create(directory: string, otlpUrl?: string) {
     if (otlpUrl) {
@@ -119,7 +120,7 @@ export class InfraTelemetry {
     const raw = JSON.stringify({ ...event, ...metadata }) + "\n";
     if (this.pendingBytes + Buffer.byteLength(raw) > 8388608) throw new Error("Telemetry byte queue exhausted");
     this.pendingBytes += Buffer.byteLength(raw); this.events.push(raw);
-    const safe = Object.fromEntries(["type", "name", "traceId", "spanId", "durationMs", "latencyMs", "success", "arm", "errorType"].filter(key => event[key] !== undefined).map(key => [key, event[key]]));
+    const safe = Object.fromEntries(["type", "name", "traceId", "spanId", "durationMs", "latencyMs", "success", "arm", "errorType", "reasonCode", "heartbeatAgeMs", "maxStatusAgeMs"].filter(key => event[key] !== undefined).map(key => [key, event[key]]));
     this.lifecycle.push(JSON.stringify({ ...safe, ...metadata }) + "\n");
   }
   async flush() {
@@ -155,7 +156,9 @@ export class InfraTelemetry {
       if (span) this.otel!.finish(span, success, durationMs / 1000);
     }
   }
-  exportSummary() { return { endpoint: this.otlpUrl ?? null, spans: this.spanCount, ...this.exportCounts }; }
+  exportSummary() { return { endpoint: this.otlpUrl ?? null, spans: this.spanCount, ...this.exportCounts,
+    shutdownFailed: this.exportShutdownFailed,
+    observabilityStatus: !this.otlpUrl ? "not_configured" : this.exportCounts.failed || this.exportShutdownFailed ? "incomplete" : "no_failures_observed" }; }
   close(): Promise<void> {
     if (this.closing) return this.closing;
     clearInterval(this.timer);
@@ -163,7 +166,13 @@ export class InfraTelemetry {
       const errors = new Set<unknown>();
       try { await this.flush(); } catch (error) { errors.add(error); }
       // Even a local publication failure must drain the SDK's managed exporters.
-      try { await this.otel?.close(); } catch (error) { this.fail(error); errors.add(error); }
+      try { await this.otel?.close(); } catch {
+        this.exportShutdownFailed = true;
+        // Remote delivery is separate from local record integrity. Persist its
+        // failure without poisoning the final local drain or exposing SDK text.
+        try { this.enqueue({ type: "telemetry_export_shutdown_failed" }, true); }
+        catch (error) { this.fail(error); errors.add(error); }
+      }
       try { await this.flush(); } catch (error) { errors.add(error); }
       // A previously latched failure can make flush reject before joining an
       // already queued writer. Closure still waits for that writer to settle.

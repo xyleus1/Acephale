@@ -22,7 +22,7 @@ import { NativeReadPolicy } from "../services/acephale-runtime/native-read-polic
 import { predictorContractHash, InfraLocalPredictors, validateInfraCalibration, type InfraProbabilityCalibration } from "../services/acephale-runtime/infra-predictors";
 import { InfraNativeBoundaryWorker } from "../services/acephale-runtime/infra-native-worker";
 import { InfraTelemetry } from "../services/acephale-runtime/infra-telemetry";
-import { nativeSplitGuard } from "../services/acephale-runtime/infra-split-guard";
+import { nativeSplitGuard, nativeSplitGuardDiagnostic } from "../services/acephale-runtime/infra-split-guard";
 import { ResearchService, type BoundaryWorker } from "../services/acephale-runtime/service";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { ImmutableEventLog } from "../services/acephale-runtime/artifacts";
@@ -269,9 +269,9 @@ export async function runInfraNativeService(configurationPath: string, artifactD
   if (options.signal?.aborted) stop();
   const timer = setTimeout(stop, configuration.maximumLifetimeSeconds * 1000);
   const guardTimer = guard ? setInterval(() => {
-    try { guard(); } catch {
+    try { guard(); } catch (error) {
       if (!serviceClosing) {
-        telemetry.record({ type: "infra_split_guard_interruption" }); stop();
+        telemetry.record({ type: "infra_split_guard_interruption", ...nativeSplitGuardDiagnostic(error) }); stop();
       }
     }
   }, 500) : undefined;
@@ -337,7 +337,8 @@ export async function runInfraNativeService(configurationPath: string, artifactD
         budget?.close();
         telemetry.record({ type: "infra_native_service_closed", decisions, aborted: controller.signal.aborted }); await telemetry.close();
         await writeFile(join(directory, "telemetry-export-receipt.json"), canonical(telemetry.exportSummary()) + "\n", { flag: "wx", mode: 0o600 });
-        if (configuration.otlpBaseUrl && telemetry.exportSummary().failed) throw new Error("Native telemetry export was not accepted by the configured collector");
+        // Export failures remain explicit in the receipt. They must not replace
+        // the original runtime exception or turn a guard abort into another error.
       }
     }
   }

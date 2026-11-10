@@ -4,6 +4,13 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+Native stop diagnostics now retain only a classified split-guard reason and
+finite heartbeat age/limit. The three-second freshness ceiling is unchanged.
+Remote OTLP rejection or SDK shutdown failure marks the export receipt incomplete
+without replacing the original runtime failure or aborted result. Local recording
+and publication failures remain fatal. Accepted counters describe observed
+collector responses, not durable backend storage; historical cohorts are unchanged.
+
 The actual trainer CPU probe also reproduced a missing C compiler in Triton's
 driver build. The trainer now pins GCC, development headers and their complete
 32-package added dependency closure, with that file bound into image receipts.

@@ -155,3 +155,15 @@ The guard's optional thread stop event permits a daemon-independent Windows
 supervisor to stop it normally after its native child ends. It retains the same
 freshness checks, bounded probe, SSH ownership and final degraded publication.
 The event does not authorize restarting trials or releasing unknown charges.
+
+# 2026-11-10: Preserve native failures separately from remote observability
+
+Classify runtime split-guard failures as stale, degraded or identity, with only
+finite age and effective freshness limit in diagnostics. Do not expose status
+payloads or filesystem errors. Preserve every guard predicate and its deadline.
+Failed OTLP requests and SDK shutdown failures make observability incomplete;
+they cannot overwrite the original execution error or abort. Local recording,
+queue and publication failures remain fatal. Request counters do not prove
+backend durability, and a post-run export cannot relabel an earlier rejection.
+This follows the OpenTelemetry
+[runtime error contract](https://opentelemetry.io/docs/specs/otel/error-handling/).
