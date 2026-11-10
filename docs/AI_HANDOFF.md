@@ -11,6 +11,12 @@ A disposable exact-base-image probe compiled and imported a Python C extension;
 this does not establish GPU training. Build a new observed trainer image before
 using this change. Model and Python dependency pins remain unchanged.
 
+The split-host guard accepts an optional owner stop event. A detached local
+supervisor may own the guard thread and native child together, then stop and
+join the guard through its existing SSH drain and degraded final publication.
+This changes no health deadline or admission check. A daemon-killed cohort must
+remain interrupted; absent closure cannot be replaced by a successful receipt.
+
 Trainer launches now create writable per-run home and cache directories beneath
 the retained output mount. `launch.json` binds their explicit environment and
 the host launcher's source hash. This repairs the observed host-UID `HOME=/`

@@ -7,6 +7,7 @@ import io
 import json
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -19,6 +20,43 @@ from acephale.infra_split_guard import (
     persistent_probe_script,
     run_guard,
 )
+
+
+def test_owner_stop_event_joins_real_probe_and_publishes_degraded(tmp_path, monkeypatch):
+    config, provenance = fixture(tmp_path)
+    session, opener, _ = responder(config, provenance)
+    ready(session)
+    stop = threading.Event()
+    monkeypatch.setattr("acephale.infra_split_guard.PersistentProbeSession", lambda *_args, **_kwargs: session)
+    original = observe_persistent
+    def observe(current, active):
+        value = original(current, active, opener=opener)
+        stop.set()
+        return value
+    monkeypatch.setattr("acephale.infra_split_guard.observe_persistent", observe)
+    output = tmp_path / "owner-stop"
+    worker = threading.Thread(target=run_guard, args=(tmp_path / "guard.json", output), kwargs={"stop_event": stop})
+    worker.start()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert session.process.poll() is not None
+    assert all(not thread.is_alive() for thread in session.workers)
+    publications = [json.loads(path.read_text()) for path in sorted(output.glob("[0-9]*.json"))]
+    assert publications[0]["healthy"] is True
+    assert publications[-1]["healthy"] is False
+    assert publications[-1]["reason"] == "guard_stopped"
+    assert publications[-1]["tunnelClosed"] and publications[-1]["probeClosed"]
+
+
+def test_owner_pre_cancel_does_not_launch_probe(tmp_path, monkeypatch):
+    fixture(tmp_path)
+    stop = threading.Event()
+    stop.set()
+    monkeypatch.setattr("acephale.infra_split_guard.PersistentProbeSession", lambda *_args, **_kwargs: pytest.fail("Cancelled owner launched SSH"))
+    output = tmp_path / "owner-cancelled"
+    run_guard(tmp_path / "guard.json", output, stop_event=stop)
+    value = json.loads((output / "0000000000000001.json").read_text())
+    assert value["reason"] == "guard_stopped" and not value["healthy"]
 
 
 def responder(config, provenance, *, behavior="normal", startup=0, delay=0, startup_seconds=2):

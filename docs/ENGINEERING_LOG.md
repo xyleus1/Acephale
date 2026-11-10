@@ -144,6 +144,7 @@ been covered by the local runs described above.
 No paid model request, cloud provisioning, live benchmark result or performance
 gain is reported by this entry. Production database publication and live serving
 remain outstanding. See [STATE](STATE.md) for exact evidence boundaries and logs.
+
 # 2026-11-10: Actual C compiler prerequisite
 
 The original trainer's installed TRL/Triton path reproduced `Failed to find C
@@ -153,3 +154,13 @@ any existing package, then compiled and imported a Python C extension. The full
 closure is now pinned and hashed as a trainer build input. The complete image
 package inventory is retained for inspection. This change adds no CUDA optimizer
 evidence and does not modify model or Python package versions.
+
+# 2026-11-10: owned guard cancellation
+
+Added an optional stop event to `run_guard`, preserving the command-line default.
+Real child-process tests cover stopping and joining the probe and its workers,
+final degraded publication and cancellation before any SSH launch. Thirty-three
+focused guard tests passed; Ruff passed. An initial worktree-only run lacked
+`tsx` and failed two cross-language tests; installing the local dependency
+junction allowed both to pass. No benchmark or model call was made by these tests.
+

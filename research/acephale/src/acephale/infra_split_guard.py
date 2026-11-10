@@ -417,7 +417,7 @@ def publish(directory: Path, sequence: int, provenance: dict, healthy: bool, det
     return value
 
 
-def run_guard(configuration: Path, output: Path):
+def run_guard(configuration: Path, output: Path, *, stop_event: threading.Event | None = None):
     config, provenance = load_guard(configuration)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -426,7 +426,7 @@ def run_guard(configuration: Path, output: Path):
     drained = True
     try:
         with (output / "ssh-tunnel.log").open("x", encoding="utf-8") as log:
-            while time.monotonic() < deadline:
+            while time.monotonic() < deadline and not (stop_event and stop_event.is_set()):
                 sequence += 1
                 try:
                     if session is None:
@@ -441,7 +441,10 @@ def run_guard(configuration: Path, output: Path):
                     if session:
                         session.close()
                         session = None
-                time.sleep(0.5)
+                if stop_event is None:
+                    time.sleep(0.5)
+                else:
+                    stop_event.wait(0.5)
     except KeyboardInterrupt:
         pass
     finally:

@@ -137,6 +137,7 @@ or native task accuracy.
 Keep initial failures, targeted repairs and full-suite runs distinguishable in
 verification records. Never transform a fixed single test into an invented fresh
 all-passing full-suite result, and never count overlapping reruns twice.
+
 # 2026-11-10: Pin the trainer's required C toolchain
 
 Actual installed TRL 1.16 source invokes its fused LM head independently of the
@@ -147,3 +148,11 @@ image-input hash and retained installed-package inventory. A CPU-only probe on
 the pinned Python base compiled and imported a C extension. Keep model, Python,
 training recipe and network-isolated runtime behavior unchanged; require a fresh
 image receipt and actual CUDA smoke before claiming readiness.
+
+# Guard lifetime belongs to the native supervisor
+
+The guard's optional thread stop event permits a daemon-independent Windows
+supervisor to stop it normally after its native child ends. It retains the same
+freshness checks, bounded probe, SSH ownership and final degraded publication.
+The event does not authorize restarting trials or releasing unknown charges.
+
