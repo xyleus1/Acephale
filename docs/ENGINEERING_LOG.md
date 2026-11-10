@@ -2,6 +2,11 @@
 
 ## 2026-11-10: qualify the actual Lambda transport
 
+Live qualification confirmed tool-call continuation, concurrent inference and
+stored traces, then exposed missing lifecycle-log discovery. Enable the pinned
+Alloy file source's built-in glob matching. The actual serving image provides
+`python3`; the inventory probe now invokes that executable explicitly.
+
 The actual Tempo 3.1.1 binary rejected the earlier v2 configuration's top-level
 `ingester` and `compactor` fields. The configuration now uses the pinned v3
 source's `live_store` and `backend_worker.compaction` fields with unchanged

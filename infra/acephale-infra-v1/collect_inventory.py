@@ -353,7 +353,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
         if not resident:
             raise ValueError("Both model containers must have resident NVIDIA allocations")
         packages = json.loads(runner(DOCKER + ["exec", "--env", "PYTHONDONTWRITEBYTECODE=1",
-                                             ids[0], "python", "-B", "-c", SERVING_PROBE], source))
+                                             ids[0], "python3", "-B", "-c", SERVING_PROBE], source))
         if (packages.get("vllm") != "0.32.0" or packages.get("torch", "").split("+")[0] != versions["servingTorch"]
                 or packages.get("cuda") != versions["servingCuda"] or not packages.get("transformers")
                 or not packages.get("packages")):
