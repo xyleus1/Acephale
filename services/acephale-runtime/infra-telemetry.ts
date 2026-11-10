@@ -1,13 +1,44 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Counter, Gauge, Histogram, Registry } from "@prometheus-io/client";
 import { createInfraOtel } from "./infra-otel";
-import { appendFile, mkdir, open, writeFile, rename } from "node:fs/promises";
+import { appendFile, mkdir, open, writeFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { hash } from "../../src/lib/acephale/canonical";
 
 type Labels = Record<string, string>;
 const allowedLabels = new Set(["arm", "outcome", "tool", "kind", "category", "stage"]);
 const buckets = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300];
+const replacementRetryMs = 1000;
+type PublicationIO = { platform?: NodeJS.Platform; renameFile?: typeof rename; now?: () => number; sleep?: (ms: number) => Promise<void> };
+
+/** Keep the previous complete snapshot visible until an atomic replacement succeeds.
+ * Windows readers may temporarily omit FILE_SHARE_DELETE. Never unlink the live file. */
+export async function publishInfraMetricsSnapshot(directory: string, snapshot: string, io: PublicationIO = {}) {
+  const temporary = join(directory, `.metrics.prom.${randomUUID()}.tmp`), destination = join(directory, "metrics.prom");
+  const replace = io.renameFile ?? rename, now = io.now ?? (() => performance.now());
+  const sleep = io.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
+  try {
+    await writeFile(temporary, snapshot, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    const deadline = now() + replacementRetryMs;
+    let previousError: unknown;
+    for (let attempt = 0; ; attempt++) {
+      if (attempt > 0 && now() >= deadline) throw previousError;
+      try { await replace(temporary, destination); break; }
+      catch (error) {
+        previousError = error;
+        const code = error instanceof Error && "code" in error ? error.code : undefined;
+        const remaining = deadline - now();
+        if ((io.platform ?? process.platform) !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(String(code))
+          || remaining <= 0 || attempt >= 15) throw error;
+        await sleep(Math.min(10 * 2 ** attempt, 100, remaining));
+      }
+    }
+  } catch (error) {
+    try { await rm(temporary, { force: true }); }
+    catch (cleanup) { throw new AggregateError([error, cleanup], "Metrics publication and owned temporary-file cleanup failed"); }
+    throw error;
+  }
+}
 function labelText(labels: Labels) {
   return Object.entries(labels).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => {
     if (!allowedLabels.has(key) && key !== "le") throw new Error("High cardinality metric label rejected");
@@ -52,6 +83,8 @@ export class InfraTelemetry {
   private pendingBytes = 0;
   private lifecycle: string[] = [];
   private closed = false;
+  private closing?: Promise<void>;
+  private lastPublishedMetrics?: string;
   private spanCount = 0;
   private readonly processClockId = `node:${process.pid}:${randomUUID()}`;
   private otel?: ReturnType<typeof createInfraOtel>;
@@ -71,14 +104,16 @@ export class InfraTelemetry {
       try {
         if (receipt.collectorAccepted) telemetry.exportCounts[receipt.kind === "traces" ? "tracesAccepted" : "metricsAccepted"]++;
         else { telemetry.exportCounts.failed++; telemetry.metrics.increment("acephale_telemetry_exports_total", { outcome: "failed" }); }
-        telemetry.record({ type: "telemetry_export_receipt", endpoint: otlpUrl, ...receipt });
-      } catch (error) { telemetry.failure = error instanceof Error ? error : new Error("Telemetry receipt failed"); }
+        telemetry.enqueue({ type: "telemetry_export_receipt", endpoint: otlpUrl, ...receipt }, true);
+      } catch (error) { telemetry.fail(error); }
     });
-    telemetry.timer = setInterval(() => { void telemetry.flush().catch(error => { telemetry.failure = error as Error; }); }, 100);
+    telemetry.timer = setInterval(() => { void telemetry.flush().catch(error => { telemetry.fail(error); }); }, 100);
     telemetry.timer.unref(); return telemetry;
   }
-  record = (event: Record<string, unknown>) => {
-    if (this.closed || this.failure) throw this.failure ?? new Error("Telemetry closed");
+  private fail(error: unknown) { this.failure ??= error instanceof Error ? error : new Error("Telemetry failed"); }
+  record = (event: Record<string, unknown>) => { this.enqueue(event); };
+  private enqueue(event: Record<string, unknown>, duringClose = false) {
+    if (this.closed || this.failure || this.closing && !duringClose) throw this.failure ?? new Error("Telemetry closed");
     if (this.events.length >= 4096) throw new Error("Telemetry queue exhausted");
     const metadata = { sequence: this.sequence++, timestamp: new Date().toISOString(), monotonicNs: process.hrtime.bigint().toString(), processClockId: this.processClockId };
     const raw = JSON.stringify({ ...event, ...metadata }) + "\n";
@@ -86,22 +121,26 @@ export class InfraTelemetry {
     this.pendingBytes += Buffer.byteLength(raw); this.events.push(raw);
     const safe = Object.fromEntries(["type", "name", "traceId", "spanId", "durationMs", "latencyMs", "success", "arm", "errorType"].filter(key => event[key] !== undefined).map(key => [key, event[key]]));
     this.lifecycle.push(JSON.stringify({ ...safe, ...metadata }) + "\n");
-  };
+  }
   async flush() {
-    if (this.failure) throw this.failure;
+    if (this.failure || this.closed) throw this.failure ?? new Error("Telemetry closed");
     const batch = this.events.splice(0).join("");
     const lifecycle = this.lifecycle.splice(0).join("");
     this.writing = this.writing.then(async () => {
       if (batch) await appendFile(join(this.directory, "events.jsonl"), batch, { encoding: "utf8", mode: 0o600 });
       if (lifecycle) await appendFile(join(this.directory, "logs", "lifecycle.jsonl"), lifecycle, { encoding: "utf8", mode: 0o600 });
-      const temporary = join(this.directory, "metrics.prom.tmp");
-      await writeFile(temporary, await this.metrics.render(), { encoding: "utf8", mode: 0o600 }); await rename(temporary, join(this.directory, "metrics.prom"));
+      const snapshot = await this.metrics.render();
+      if (snapshot !== this.lastPublishedMetrics) {
+        await publishInfraMetricsSnapshot(this.directory, snapshot);
+        this.lastPublishedMetrics = snapshot;
+      }
       this.pendingBytes -= Buffer.byteLength(batch);
     });
-    this.writing.catch(error => { this.failure = error as Error; });
+    this.writing.catch(error => { this.fail(error); });
     await this.writing;
   }
   async span<T>(name: string, runId: string, attributes: Record<string, string | number | boolean>, operation: () => Promise<T>): Promise<T> {
+    if (this.closed || this.closing || this.failure) throw this.failure ?? new Error("Telemetry closed");
     const span = this.otel?.start(name, runId, attributes);
     const traceId = span?.spanContext().traceId ?? hash(runId).slice(0, 32), spanId = span?.spanContext().spanId ?? randomBytes(8).toString("hex");
     const started = performance.now();
@@ -117,9 +156,22 @@ export class InfraTelemetry {
     }
   }
   exportSummary() { return { endpoint: this.otlpUrl ?? null, spans: this.spanCount, ...this.exportCounts }; }
-  async close() {
-    if (this.closed) return; clearInterval(this.timer);
-    await this.flush(); await this.otel?.close();
-    await this.flush(); this.closed = true;
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
+    clearInterval(this.timer);
+    this.closing = Promise.resolve().then(async () => {
+      const errors = new Set<unknown>();
+      try { await this.flush(); } catch (error) { errors.add(error); }
+      // Even a local publication failure must drain the SDK's managed exporters.
+      try { await this.otel?.close(); } catch (error) { this.fail(error); errors.add(error); }
+      try { await this.flush(); } catch (error) { errors.add(error); }
+      // A previously latched failure can make flush reject before joining an
+      // already queued writer. Closure still waits for that writer to settle.
+      try { await this.writing; } catch (error) { errors.add(error); }
+      this.closed = true;
+      if (errors.size === 1) throw [...errors][0];
+      if (errors.size) throw new AggregateError([...errors], "Telemetry drain failed");
+    });
+    return this.closing;
   }
 }

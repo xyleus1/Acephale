@@ -159,3 +159,13 @@ and retain that receipt separately. Offline tests exercise the real Python
 gateway/new Node runtime handshake and actual loopback trace/metric requests with
 mock model responses. They do not attest an AWS host, a working SSH session,
 remote telemetry storage or model quality.
+
+Local Prometheus snapshots publish through uniquely owned temporary files and
+atomic replacement. Windows sharing denials receive bounded retries within a
+one-second retry window; the live snapshot is never deleted or truncated to force replacement.
+Unchanged rendered bytes skip replacement. The cache advances only after a
+successful publication. Fatal publication errors remain visible and cause drain
+to fail, while close still waits for queued writers and OTLP exporters. Concurrent
+close calls share that same result, including failure. Real Windows handle tests
+exercise denied replacement and recovery; they do not establish cloud telemetry
+readiness or validate an aborted benchmark cohort.
