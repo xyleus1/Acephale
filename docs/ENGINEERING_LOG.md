@@ -2,6 +2,12 @@
 
 ## 2026-11-10: qualify the actual Lambda transport
 
+The actual Tempo 3.1.1 binary rejected the earlier v2 configuration's top-level
+`ingester` and `compactor` fields. The configuration now uses the pinned v3
+source's `live_store` and `backend_worker.compaction` fields with unchanged
+five-minute block duration and 48-hour retention. Actual ingestion and querying
+remain required; the static configuration check alone is not readiness.
+
 Both independent cleanup controllers completed real GPU termination canaries.
 The research A100 host passed its driver and memory preflight, and both pinned
 model snapshots downloaded. Serving, training and native scores still require

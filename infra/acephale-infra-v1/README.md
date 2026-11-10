@@ -123,6 +123,16 @@ in the durable dispatcher; the alert is not enforcement. Metrics absent from a
 given experiment are left absent. Telemetry retention is 48 hours; export before
 host cleanup. Application artifacts have their own retention policy.
 
+Tempo uses the pinned 3.1.1 monolithic configuration (`target: all`). Its
+`live_store` owns the five-minute block duration and local WAL; the
+`backend_worker.compaction` block sets 48-hour retention. Tempo 3 removed the
+old top-level `ingester` and `compactor` blocks. See the
+[official migration guide](https://grafana.com/docs/tempo/latest/set-up-for-tracing/setup-tempo/upgrade/)
+and pinned [live-store](https://github.com/grafana/tempo/blob/v3.1.1/modules/livestore/config.go)
+and [backend-worker](https://github.com/grafana/tempo/blob/v3.1.1/modules/backendworker/config.go)
+configuration types. An actual container startup and trace query remain the
+deployment checks; offline configuration validation does not prove ingestion.
+
 ## Bounded Lambda lifecycle
 
 Official API contract: <https://docs.lambda.com/api/cloud>.
