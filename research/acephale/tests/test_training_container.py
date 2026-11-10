@@ -11,6 +11,24 @@ from acephale.contracts_v1 import hash_v1
 from acephale.training_data import hashed
 
 
+def test_system_package_change_invalidates_image_inputs(tmp_path):
+    names = [container.DOCKERFILE, "infra/acephale-infra-v1/trainer-system-packages.txt", ".dockerignore",
+             "research/acephale/pyproject.toml", "research/acephale/training/pyproject.toml",
+             "research/acephale/training/uv.lock"]
+    for name in names:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fixture\n")
+    before = container.build_inputs(tmp_path)
+    packages = tmp_path / "infra/acephale-infra-v1/trainer-system-packages.txt"
+    packages.write_text("gcc=changed-fixture-version\n")
+    after = container.build_inputs(tmp_path)
+    assert hash_v1(before) != hash_v1(after)
+    packages.unlink()
+    with pytest.raises(ValueError, match="regular source files"):
+        container.build_inputs(tmp_path)
+
+
 def test_cache_paths_are_writable_retained_and_independent(tmp_path):
     first, second = tmp_path / "first", tmp_path / "second"
     environment = container.writable_environment(first)

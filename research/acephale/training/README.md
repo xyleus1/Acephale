@@ -10,6 +10,12 @@ The lock pins Python 3.12, PyTorch 2.13.0, Transformers 5.10.1, PEFT 0.21.0,
 TRL 1.16.0, Accelerate 1.15.0 and Datasets 5.2.0. Serving has its own environment.
 The canonical image definition is
 [`trainer.Dockerfile`](../../../infra/acephale-infra-v1/trainer.Dockerfile).
+Its C compiler and development-header dependency closure is pinned in
+[`trainer-system-packages.txt`](../../../infra/acephale-infra-v1/trainer-system-packages.txt)
+and included in the image-input hash. The image retains its complete installed
+package inventory at `/usr/local/share/acephale-trainer-packages.tsv`. TRL's fused
+loss uses Triton's C driver build even when `torch_compile` is disabled. Missing
+locked system packages fail the build; no newer package is substituted.
 
 ## Prepare actual compiled examples
 

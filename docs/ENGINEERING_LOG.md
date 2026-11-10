@@ -144,3 +144,12 @@ been covered by the local runs described above.
 No paid model request, cloud provisioning, live benchmark result or performance
 gain is reported by this entry. Production database publication and live serving
 remain outstanding. See [STATE](STATE.md) for exact evidence boundaries and logs.
+# 2026-11-10: Actual C compiler prerequisite
+
+The original trainer's installed TRL/Triton path reproduced `Failed to find C
+compiler` in a CPU-only probe. On the exact pinned Python base, installing GCC
+`4:12.2.0-3` and libc headers `2.36-9+deb12u14` added 32 packages without upgrading
+any existing package, then compiled and imported a Python C extension. The full
+closure is now pinned and hashed as a trainer build input. The complete image
+package inventory is retained for inspection. This change adds no CUDA optimizer
+evidence and does not modify model or Python package versions.

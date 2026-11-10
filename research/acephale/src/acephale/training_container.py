@@ -51,7 +51,7 @@ def checked(command: list[str], *, timeout: float = 30) -> str:
 
 
 def build_inputs(source: Path) -> list[dict]:
-    names = {DOCKERFILE, ".dockerignore", "research/acephale/pyproject.toml", "research/acephale/training/pyproject.toml",
+    names = {DOCKERFILE, "infra/acephale-infra-v1/trainer-system-packages.txt", ".dockerignore", "research/acephale/pyproject.toml", "research/acephale/training/pyproject.toml",
              "research/acephale/training/uv.lock"}
     for root in (source / "research/acephale/src", source / "src/lib/acephale/contracts"):
         names.update(path.relative_to(source).as_posix() for path in root.rglob("*") if path.is_file() and "__pycache__" not in path.parts)

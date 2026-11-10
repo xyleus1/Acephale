@@ -137,3 +137,13 @@ or native task accuracy.
 Keep initial failures, targeted repairs and full-suite runs distinguishable in
 verification records. Never transform a fixed single test into an invented fresh
 all-passing full-suite result, and never count overlapping reruns twice.
+# 2026-11-10: Pin the trainer's required C toolchain
+
+Actual installed TRL 1.16 source invokes its fused LM head independently of the
+`torch_compile` and Liger flags. Triton's driver build failed in the original
+trainer image because no C compiler existed. Add only the observed GCC and libc
+development-header closure: 32 exact Debian package versions, included in the
+image-input hash and retained installed-package inventory. A CPU-only probe on
+the pinned Python base compiled and imported a C extension. Keep model, Python,
+training recipe and network-isolated runtime behavior unchanged; require a fresh
+image receipt and actual CUDA smoke before claiming readiness.

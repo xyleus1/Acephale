@@ -4,6 +4,13 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+The actual trainer CPU probe also reproduced a missing C compiler in Triton's
+driver build. The trainer now pins GCC, development headers and their complete
+32-package added dependency closure, with that file bound into image receipts.
+A disposable exact-base-image probe compiled and imported a Python C extension;
+this does not establish GPU training. Build a new observed trainer image before
+using this change. Model and Python dependency pins remain unchanged.
+
 Trainer launches now create writable per-run home and cache directories beneath
 the retained output mount. `launch.json` binds their explicit environment and
 the host launcher's source hash. This repairs the observed host-UID `HOME=/`
