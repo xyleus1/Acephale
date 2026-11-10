@@ -4,6 +4,12 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+Controller-only repair: the versions metadata amendment binds immutable plan and
+financial fields, excluding controller-managed trainingWindows alongside leases
+and overheads. Adding an authorized training lease must not invalidate heartbeat
+checks. The cumulative 7,200-second training ceiling and provider deadlines remain
+unchanged. Do not rewrite existing ledgers or amendments to apply this repair.
+
 Native stop diagnostics now retain only a classified split-guard reason and
 finite heartbeat age/limit. The three-second freshness ceiling is unchanged.
 Remote OTLP rejection or SDK shutdown failure marks the export receipt incomplete

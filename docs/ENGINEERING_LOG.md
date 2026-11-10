@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-10: Preserve heartbeat binding after training admission
+
+Issuing a valid training lease added trainingWindows to the ledger and incorrectly
+changed the immutable financial binding, rejecting the existing metadata amendment
+on the next heartbeat. Exclude that dynamic record collection from the binding.
+Twelve metadata tests and 31 controller tests passed. The new regression issues
+two real local training leases under an unchanged amendment, rejects a third at
+the 7,200-second cumulative ceiling without writing it, and still rejects a changed
+financial limit. These tests use temporary fixtures, with no live ledger, API,
+model or infrastructure mutation.
+
 ## 2026-11-10: provide writable trainer home and caches
 
 An actual image03 probe running as the Linux host UID observed unwritable `HOME=/`

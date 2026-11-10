@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-10: Training windows are operational ledger records
+
+Exclude trainingWindows from the immutable versions-amendment financial binding,
+as already done for leases and overheads. The controller appends these windows
+only after its active-lease, idle-GPU, deadline and cumulative 7,200-second checks.
+All original plan and financial limits remain bound. No ledger or amendment is
+rewritten, and this controller-only repair does not change the frozen research
+runtime, models, predictor recipe or provider deadline.
+
 ## 2026-11-10: retain writable trainer caches per run
 
 Set the trainer's home and library-cache environment explicitly to directories

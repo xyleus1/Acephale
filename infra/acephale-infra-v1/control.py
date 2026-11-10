@@ -558,7 +558,9 @@ def _cuda_metadata_evidence(original_text: str, effective_text: str, evidence: d
 
 
 def _financial_binding_hash(ledger: dict) -> str:
-    return digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads"}})
+    # These append-only operational records change under the controller's own
+    # admission checks; the original plan and financial ceilings do not.
+    return digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads", "trainingWindows"}})
 
 
 def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:

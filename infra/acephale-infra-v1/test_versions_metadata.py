@@ -139,6 +139,36 @@ class VersionsMetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "financial/source"):
             control.checked_bound_ledger(self.ledger)
 
+    def test_real_training_windows_preserve_metadata_binding_and_two_hour_limit(self):
+        amendment = self.record()
+        sidecar = control.versions_amendment_path(self.ledger)
+        original_sidecar = sidecar.read_bytes()
+        now = 1000
+        value = control.read_json(self.ledger)
+        value["leases"].append({"id": "funded", "status": "active", "instanceId": "observed-gpu",
+            "deadline": now + 7200, "quote": {"hardwareProfileHash": "c" * 64}, "studyReservation": "original-reservation"})
+        control.atomic_json(self.ledger, value)
+        probe = self.root / "preflight.json"
+        control.write_new(probe, {"profile": "acephale-training-preflight-v1", "observedAt": now,
+            "hardwareProfile": "a100-40gb-v1", "hardwareProfileHash": "c" * 64, "actorStopped": True, "gpuProcesses": 0})
+        with patch.object(control.time, "time", return_value=now):
+            for index in (1, 2):
+                control.training_lease(self.ledger, "funded", probe, self.root / f"training-{index}.json", 1)
+                checked = control.checked_bound_ledger(self.ledger)
+                self.assertEqual(len(checked["trainingWindows"]), index)
+                self.assertEqual(control.effective_versions_metadata(self.ledger, checked)["amendmentHash"], amendment["contentHash"])
+                self.assertEqual(sidecar.read_bytes(), original_sidecar)
+            before_denial = self.ledger.read_bytes()
+            with self.assertRaisesRegex(ValueError, "two-hour"):
+                control.training_lease(self.ledger, "funded", probe, self.root / "training-denied.json", 0.01)
+            self.assertEqual(self.ledger.read_bytes(), before_denial)
+            self.assertFalse((self.root / "training-denied.json").exists())
+        checked["infrastructureAllocationUsd"] = 36
+        control.atomic_json(self.ledger, checked)
+        with self.assertRaisesRegex(ValueError, "financial/source"):
+            control.checked_bound_ledger(self.ledger)
+        self.assertEqual(sidecar.read_bytes(), original_sidecar)
+
     def test_hardware_profile_change_is_never_amended(self):
         self.record()
         with (self.source / "hardware-profiles.json").open("ab") as stream:
