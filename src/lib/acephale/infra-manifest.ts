@@ -1,3 +1,4 @@
+import { resolvePredictorProfile } from "./predictor-artifact";
 import Ajv2020 from "ajv/dist/2020";
 import schema from "./contracts/infra-manifest-v2.schema.json";
 import { canonical, copy, hash } from "./canonical";
@@ -24,6 +25,15 @@ export function validateInfraManifest(value: unknown): asserts value is InfraExp
   }
   if (manifest.actor.contextWindow !== 32768 || manifest.actor.inputBudget !== 28672 || manifest.actor.outputCap !== 4096
     || manifest.predictor.contextWindow !== 8192 || manifest.predictor.inputBudget !== 7168 || manifest.predictor.outputCap !== 1024) throw new Error("Unexpected initial experiment context limits");
+  if (manifest.actor.trainedPredictor || manifest.actor.predictionProtocol || manifest.actor.binaryTokenIds) throw new Error("Actor weights and protocol cannot be changed by predictor training");
+  const profile = resolvePredictorProfile(manifest.predictor);
+  if (profile.trainedPredictor) {
+    const artifact = profile.trainedPredictor;
+    if (manifest.predictor.servedModel !== artifact.servedModel || manifest.predictor.weightsHash !== artifact.mergedWeightsHash
+      || manifest.predictor.tokenizerHash !== artifact.tokenizerHash || manifest.predictor.chatTemplateHash !== artifact.chatTemplateHash) throw new Error("Manifest serving identity differs from trained predictor artifact");
+    if ([...artifact.weightFitFamilies, ...artifact.calibrationFamilies].some(family => !manifest.data.trainingFamilies.includes(family)
+      || manifest.data.developmentFamilies.includes(family) || manifest.data.heldoutFamilies.includes(family))) throw new Error("Trained predictor family provenance crosses experiment partitions");
+  }
   const families = new Set<string>();
   for (const split of [manifest.data.trainingFamilies, manifest.data.developmentFamilies, manifest.data.heldoutFamilies]) {
     for (const family of split) {

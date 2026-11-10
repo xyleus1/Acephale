@@ -15,9 +15,11 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -27,6 +29,23 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 API = "https://cloud.lambda.com/api/v1"
 PROFILE = "acephale-infra-v1"
+ROOT = HERE.parent.parent
+USER_AGENT = "Acephale-Research-Lifecycle/1.0"
+
+
+def digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+
+def hardware_profile(name: str) -> dict[str, Any]:
+    profiles = read_json(HERE / "hardware-profiles.json")
+    if profiles.get("schemaVersion") != 1 or name not in profiles.get("profiles", {}):
+        raise ValueError("Explicit approved hardware profile required")
+    return {"id": name, **profiles["profiles"][name]}
+
+
+def limits() -> dict[str, Any]:
+    return read_json(HERE / "versions.json")["limits"]
 
 
 def read_json(path: Path) -> Any:
@@ -65,8 +84,9 @@ def finite_number(value: Any, name: str, minimum: float = 0) -> float:
     return value
 
 
-def preflight() -> dict[str, Any]:
+def preflight(hardware: str = "a6000-48gb-v1") -> dict[str, Any]:
     """Inspect program availability and credential presence, never their values."""
+    selected = hardware_profile(hardware)
     programs = {name: shutil.which(name) is not None for name in ("docker", "node", "python", "nvidia-smi", "ssh")}
     blockers = [f"missing_{name}" for name in ("docker", "nvidia-smi") if not programs[name]]
     commands: dict[str, Any] = {}
@@ -85,12 +105,14 @@ def preflight() -> dict[str, Any]:
                     rows = [row.split(",") for row in result.stdout.strip().splitlines()]
                     if not rows or any(len(row) != 3 or int(row[1].strip().split(".")[0]) < 580 for row in rows):
                         blockers.append("driver_below_580")
-                    if not rows or max(float(row[2]) for row in rows) < 46000:
-                        blockers.append("gpu_memory_below_48gb_profile")
+                    if len(rows) != 1 or selected["gpuNameContains"] not in rows[0][0]:
+                        blockers.append("gpu_identity_differs_from_hardware_profile")
+                    if not rows or max(float(row[2]) for row in rows) < selected["minimumGpuMemoryMiB"]:
+                        blockers.append("gpu_memory_below_hardware_profile")
             except (OSError, subprocess.TimeoutExpired, ValueError):
                 commands[name] = {"ok": False}
                 blockers.append(f"failed_{name}")
-    return {"profile": PROFILE, "platform": platform.system(), "python": platform.python_version(),
+    return {"profile": PROFILE, "hardwareProfile": selected, "hardwareProfileHash": digest(selected), "platform": platform.system(), "python": platform.python_version(),
             "programs": programs, "checks": commands,
             "credentialPresence": {name: bool(os.environ.get(name)) for name in ("LAMBDA_API_KEY", "OPENAI_API_KEY")},
             "blockers": sorted(set(blockers)), "readyForGpuExecution": not blockers,
@@ -182,7 +204,8 @@ def lock_images(output: Path) -> dict[str, Any]:
     return {"path": str(output), "sha256": sha256(output), "images": len(locked)}
 
 
-def locked_compose(lock_path: Path, output: Path) -> dict[str, Any]:
+def locked_compose(lock_path: Path, output: Path, hardware: str | None = None,
+                   models_root: Path | None = None, predictor_export: Path | None = None) -> dict[str, Any]:
     lock = read_json(lock_path)
     versions = read_json(HERE / "versions.json")
     if lock.get("profile") != PROFILE:
@@ -195,6 +218,12 @@ def locked_compose(lock_path: Path, output: Path) -> dict[str, Any]:
             raise ValueError("Missing or incompatible immutable image lock")
         pins[name] = pin
     config = read_json(HERE / "compose.json")
+    if hardware is not None:
+        apply_hardware(config, hardware)
+    if predictor_export is not None:
+        if models_root is None:
+            raise ValueError("Explicit model root required for trained predictor serving")
+        apply_predictor_export(config, models_root, predictor_export)
     for name in ("postgres", "grafana", "prometheus", "tempo", "loki", "alloy"):
         config["services"][name]["image"] = pins[name]
     for name in ("actor", "predictor"):
@@ -206,6 +235,143 @@ def locked_compose(lock_path: Path, output: Path) -> dict[str, Any]:
         raise ValueError("Write locked Compose beside compose.json to preserve relative paths")
     write_new(output, config)
     return {"path": str(output), "sha256": sha256(output), "imageLockSha256": sha256(lock_path)}
+
+
+def apply_hardware(value: dict, hardware: str) -> None:
+    selected = hardware_profile(hardware)
+    for role in ("actor", "predictor"):
+        command = value["services"][role]["command"]
+        for flag, setting in (("--max-num-seqs", selected[role + "MaxSequences"]),
+                              ("--gpu-memory-utilization", selected[role + "GpuMemoryUtilization"])):
+            command[command.index(flag) + 1] = str(setting)
+        if int(command[command.index("--max-model-len") + 1]) != selected[role + "Context"]:
+            raise ValueError("Hardware profile cannot change pinned context limits")
+    value["x-acephale-hardware-profile"] = {**selected, "contentHash": digest(selected)}
+
+
+def checked_predictor_export(path: Path) -> dict:
+    # Reuse the training package's verifier; no second artifact/hash contract.
+    sys.path.insert(0, str(ROOT / "research/acephale/src"))
+    try:
+        from acephale.training import verify_export as verify_trained_export
+        artifact = verify_trained_export(path)
+        manifests = [{"path": name, "sha256": sha256(path / name), "bytes": (path / name).stat().st_size}
+                     for name in ("predictor.json", "training-manifest.json", "dataset-manifest.json", "training-receipt.json", "verification.json")]
+        return {"artifact": artifact, "verifiedManifestFiles": manifests,
+                "mergedFiles": read_json(path / "verification.json")["mergedFiles"]}
+    finally:
+        sys.path.pop(0)
+
+
+def apply_predictor_export(value: dict, models_root: Path, predictor_export: Path) -> dict:
+    root, exported = models_root.resolve(), predictor_export.resolve()
+    if predictor_export.is_symlink() or not exported.is_relative_to(root) or exported == root:
+        raise ValueError("Trained export must be a regular directory inside the read-only model root")
+    verified = checked_predictor_export(exported)
+    artifact = verified["artifact"]
+    command = value["services"]["predictor"]["command"]
+    command[command.index("--model") + 1] = "/models/" + (exported / "model").relative_to(root).as_posix()
+    command[command.index("--served-model-name") + 1] = artifact["servedModel"]
+    value["x-acephale-trained-predictor"] = {"artifactHash": artifact["contentHash"], "servedModel": artifact["servedModel"]}
+    return verified
+
+
+def serving_compose(hardware: str, output: Path) -> dict[str, Any]:
+    selected = hardware_profile(hardware)
+    value = read_json(HERE / "compose.json")
+    apply_hardware(value, hardware)
+    if output.resolve().parent != HERE:
+        raise ValueError("Write hardware Compose beside compose.json to preserve mounts")
+    write_new(output, value)
+    return {"path": str(output), "sha256": sha256(output), "hardwareProfileHash": digest(selected), "fitVerified": False}
+
+
+def training_preflight(hardware: str) -> dict[str, Any]:
+    value = preflight(hardware)
+    if value["blockers"]:
+        raise ValueError("GPU training host prerequisites not satisfied")
+    # No environment inspection or arbitrary container commands are serialized.
+    running = subprocess.run(["docker", "ps", "--filter", "label=com.docker.compose.service=actor", "--format", "{{.ID}}"],
+                             text=True, capture_output=True, check=True, timeout=20).stdout.strip()
+    processes = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,process_name,used_gpu_memory", "--format=csv,noheader,nounits"],
+                               text=True, capture_output=True, check=True, timeout=20).stdout.strip()
+    if running or processes:
+        raise ValueError("Stop actor/predictor serving and all GPU compute before training")
+    return {"version": 1, "profile": "acephale-training-preflight-v1", "observedAt": time.time(),
+            "hardwareProfile": hardware, "hardwareProfileHash": digest(hardware_profile(hardware)),
+            "actorStopped": True, "gpuProcesses": 0, "hostPreflight": value}
+
+
+def training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float) -> dict[str, Any]:
+    with ledger_lock(ledger_path):
+        return _training_lease(ledger_path, lease_id, preflight_path, output, hours)
+
+
+def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float) -> dict[str, Any]:
+    ledger = checked_bound_ledger(ledger_path)
+    lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+    current = time.time()
+    checked = read_json(preflight_path)
+    duration = finite_number(hours, "training hours", 0.01)
+    if (lease["status"] != "active" or not lease["instanceId"] or duration > 2
+            or checked.get("profile") != "acephale-training-preflight-v1" or checked.get("actorStopped") is not True
+            or checked.get("gpuProcesses") != 0 or not 0 <= current - checked.get("observedAt", 0) <= 120
+            or checked.get("hardwareProfileHash") != lease["quote"]["hardwareProfileHash"]):
+        raise ValueError("Active funded lease and actual recent idle-GPU preflight required")
+    deadline = min(current + duration * 3600, lease["deadline"])
+    if deadline <= current:
+        raise ValueError("GPU lease expired")
+    windows = ledger.setdefault("trainingWindows", [])
+    if sum(row["reservedSeconds"] for row in windows) + deadline - current > 7200:
+        raise ValueError("Combined training windows exceed the approved two-hour ceiling")
+    if output.exists():
+        raise ValueError("Training lease output must be new")
+    value = {"version": 1, "profile": "acephale-training-lease-v1", "phase": "predictor_training", "status": "active",
+             "leaseId": lease_id, "instanceId": lease["instanceId"], "hardwareProfile": checked["hardwareProfile"],
+             "startedAt": current, "deadline": deadline, "actorStopped": True,
+             "studyReservation": lease["studyReservation"], "studyBindingHash": ledger["planHash"],
+             "providerLeaseHash": digest(lease), "preflightHash": sha256(preflight_path)}
+    windows.append({"leaseId": lease_id, "reservedSeconds": deadline - current, "startedAt": current, "deadline": deadline,
+                    "receiptHash": digest(value)})
+    atomic_json(ledger_path, ledger)
+    write_new(output, value)
+    return value
+
+
+def watchdog_state(ledger_path: Path, lease_id: str) -> dict[str, Any]:
+    ledger = checked_bound_ledger(ledger_path)
+    lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+    if lease["status"] not in {"reserved", "launching", "launch_unknown", "active", "termination_requested", "terminated"}:
+        raise ValueError("Lease funding has not completed")
+    return {"version": 1, "profile": PROFILE, "planHash": ledger["planHash"], "leaseId": lease_id,
+            "expectedName": lease["name"], "instanceId": lease["instanceId"], "status": lease["status"],
+            "reservedAt": lease["reservedAt"], "deadline": lease["deadline"], "setupDeadline": lease["setupDeadline"],
+            "ready": lease["ready"], "ownerHeartbeatAt": time.time(), "ownerHeartbeatTimeoutSeconds": 120,
+            "purpose": lease.get("purpose", "research"), "recoveryControllerId": lease.get("recoveryControllerId")}
+
+
+def provider_receipt(client: Any, ledger_path: Path, lease_id: str, ssh_observation: Path, output: Path) -> dict:
+    ledger = checked_bound_ledger(ledger_path)
+    lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+    if lease["status"] != "active" or not lease["instanceId"]:
+        raise ValueError("Active funded instance required")
+    item = client.request("GET", "/instances/" + lease["instanceId"])
+    ssh = read_json(ssh_observation)
+    if (item.get("id") != lease["instanceId"] or item.get("name") != lease["name"] or item.get("status") != "active"
+            or item.get("instance_type", {}).get("name") != lease["quote"]["instanceType"]
+            or ssh.get("host") != item.get("ip") or ssh.get("port") != 22 or ssh.get("user") != "ubuntu"
+            or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", ssh.get("hostKeySha256", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", ssh.get("machineIdSha256", ""))):
+        raise ValueError("Live provider identity and pinned SSH host observation disagree")
+    ipaddress.ip_address(item["ip"])
+    value = {"version": 1, "profile": PROFILE, "provider": "lambda", "observedAt": time.time(),
+             "leaseId": lease_id, "leaseName": lease["name"], "hardwareProfile": lease["quote"]["hardwareProfile"],
+             "hardwareProfileHash": lease["quote"]["hardwareProfileHash"], "instance": item,
+             "ssh": ssh, "providerResponseHash": digest(item), "studyBindingHash": ledger["planHash"],
+             "launchImageId": lease["quote"]["imageId"]}
+    value["contentHash"] = digest(value)
+    write_new(output, value)
+    return {"path": str(output), "sha256": sha256(output), "instanceId": item["id"]}
 
 
 class LambdaClient:
@@ -223,7 +389,7 @@ class LambdaClient:
         self._last_request = time.monotonic()
         data = None if payload is None else json.dumps(payload, allow_nan=False).encode()
         request = urllib.request.Request(API + path, data=data, method=method,
-            headers={"Authorization": "Bearer " + self._key, "Content-Type": "application/json", "Accept": "application/json"})
+            headers={"Authorization": "Bearer " + self._key, "Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT})
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 raise RuntimeError("Provider redirect rejected; credentials were not forwarded")
@@ -239,23 +405,25 @@ class LambdaClient:
         return value["data"]
 
 
-def quote(client: Any, region: str, now: float | None = None) -> dict[str, Any]:
+def quote(client: Any, region: str, now: float | None = None, hardware: str = "a100-40gb-v1") -> dict[str, Any]:
+    selected = hardware_profile(hardware)
     kinds = client.request("GET", "/instance-types")
-    item = kinds.get("gpu_1x_a6000")
-    if not item or region not in {value["name"] for value in item["regions_with_capacity"]}:
-        raise ValueError("Requested A6000 region has no reported capacity")
+    item = kinds.get(selected["instanceType"])
+    if not item or region not in {value["name"] for value in item.get("regions_with_capacity_available", [])}:
+        raise ValueError("Requested hardware profile region has no reported capacity")
     instance_type = item["instance_type"]
     cents = finite_number(instance_type["price_cents_per_hour"], "price", 1)
-    if instance_type["specs"]["gpus"] != 1 or instance_type.get("architecture", "x86_64") != "x86_64":
+    if instance_type["name"] != selected["instanceType"] or instance_type["specs"]["gpus"] != 1 or instance_type.get("architecture", "x86_64") != "x86_64":
         raise ValueError("Unexpected hardware shape")
-    if cents > 125:
-        raise ValueError("Current quote exceeds $1.25/hour")
+    if cents > limits()["hourlyUsd"] * 100:
+        raise ValueError("Current quote exceeds the authorized hourly ceiling")
     images = client.request("GET", "/images")
     compatible = [image for image in images if image["family"] == "gpu-base-24-04" and image["architecture"] == "x86_64" and image["region"]["name"] == region]
     if not compatible:
         raise ValueError("Required GPU Base 24.04 image unavailable")
     image = max(compatible, key=lambda value: (value["created_time"], value["id"]))
     return {"profile": PROFILE, "quotedAt": time.time() if now is None else now, "region": region,
+            "hardwareProfile": hardware, "hardwareProfileHash": digest(selected),
             "instanceType": instance_type["name"], "hourlyUsd": cents / 100,
             "imageId": image["id"], "imageFamily": image["family"], "specs": instance_type["specs"]}
 
@@ -275,6 +443,7 @@ def ledger_lock(path: Path):
 
 
 def init_ledger(path: Path, overall_reserved_usd: float, prior_infra_usd: float, prior_hours: float) -> dict[str, Any]:
+    """Legacy unbound slice constructor. Unbound slices cannot launch instances."""
     overall = finite_number(overall_reserved_usd, "overall reservations")
     infra = finite_number(prior_infra_usd, "prior infrastructure")
     hours = finite_number(prior_hours, "prior GPU hours")
@@ -287,29 +456,126 @@ def init_ledger(path: Path, overall_reserved_usd: float, prior_infra_usd: float,
     return value
 
 
+def load_plan(path: Path) -> dict[str, Any]:
+    value = read_json(path)
+    if value.get("version") != 1 or value.get("provider") != "lambda" or value.get("profile") != PROFILE:
+        raise ValueError("Explicit versioned Lambda launch plan required")
+    hardware_profile(value.get("hardwareProfile", ""))
+    for key in ("studyCheckpointHash", "sourceCommit"):
+        length = 64 if key.endswith("Hash") else 40
+        if not re.fullmatch(r"[a-f0-9]{" + str(length) + r"}", value.get(key, "")):
+            raise ValueError(f"Invalid {key}")
+    for key in ("studyLedgerPath", "studyCheckpointPath", "infrastructureLedgerPath", "exportRoot"):
+        if not isinstance(value.get(key), str) or not value[key]:
+            raise ValueError(f"Explicit {key} required")
+        value[key] = str((path.parent / value[key]).resolve())
+    for key in ("region", "sshKeyName", "firewallRulesetId", "deploymentId"):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", value.get(key, "")):
+            raise ValueError(f"Invalid {key}")
+    return value
+
+
+def study_budget(plan: dict[str, Any], operation: str, lease: dict[str, Any] | None = None) -> dict[str, Any]:
+    request = {"provider": "lambda", "operation": operation, "ledgerPath": plan["studyLedgerPath"],
+               "checkpointPath": plan["studyCheckpointPath"], "checkpointHash": plan["studyCheckpointHash"],
+               "sliceLedgerPath": plan["infrastructureLedgerPath"], "deploymentHash": digest(plan)}
+    if lease:
+        request.update(reservationId="lambda-infra:" + lease["id"], maximumMicrodollars=lease["reservedMicrodollars"], requireNewReservation=True)
+    with tempfile.TemporaryDirectory(prefix="acephale-lambda-budget-") as directory:
+        request_path = Path(directory) / "request.json"
+        write_new(request_path, request)
+        try:
+            result = subprocess.run(["node", "--import", "tsx", "scripts/acephale-aws-budget.ts", str(request_path)],
+                                    cwd=ROOT, text=True, capture_output=True, timeout=180, check=False, shell=False)
+        except (OSError, subprocess.SubprocessError):
+            raise RuntimeError("Original study budget operation uncertain; reservations retained") from None
+        if result.returncode:
+            raise RuntimeError("Original study budget operation rejected; reservations retained")
+        return json.loads(result.stdout)
+
+
+def init_bound_ledger(path: Path, plan: dict[str, Any], prior_hours: float, *, budget=study_budget) -> dict[str, Any]:
+    if path.resolve() != Path(plan["infrastructureLedgerPath"]).resolve() or path.exists():
+        raise ValueError("Only a new explicitly bound infrastructure slice may initialize")
+    hours = finite_number(prior_hours, "reconciled prior GPU hours")
+    if hours > 24:
+        raise ValueError("Reconciled GPU hours exceed the original limit")
+    checkpoint = budget(plan, "bind")
+    prior = checkpoint["infrastructureMicrodollars"] / 1_000_000
+    if prior > 35:
+        raise ValueError("Original infrastructure allocation exhausted")
+    value = {"profile": PROFILE, "schemaVersion": 2, "provider": "lambda", "plan": plan, "planHash": digest(plan),
+             "versionsSha256": sha256(HERE / "versions.json"), "hardwareProfilesSha256": sha256(HERE / "hardware-profiles.json"),
+             "initialStudyEvidence": checkpoint, "overallReservedAtInitializationUsd": checkpoint["committedMicrodollars"] / 1_000_000,
+             "priorInfraUsd": prior, "priorGpuHours": hours, "infrastructureAllocationUsd": 35,
+             "computeAllocationUsd": 30, "protectedContingencyUsd": 65, "leases": [], "overheads": []}
+    write_new(path, value)
+    return value
+
+
+def checked_bound_ledger(path: Path) -> dict[str, Any]:
+    value = read_json(path)
+    plan = value.get("plan", {})
+    if (value.get("schemaVersion") != 2 or value.get("provider") != "lambda" or value.get("profile") != PROFILE
+            or value.get("planHash") != digest(plan) or Path(plan.get("infrastructureLedgerPath", "")).resolve() != path.resolve()
+            or value.get("versionsSha256") != sha256(HERE / "versions.json")
+            or value.get("hardwareProfilesSha256") != sha256(HERE / "hardware-profiles.json")):
+        raise ValueError("Original-study-bound Lambda slice and exact source profiles required")
+    return value
+
+
+def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *, budget=study_budget) -> dict[str, Any]:
+    if str(uuid.UUID(reservation_id)) != reservation_id:
+        raise ValueError("Explicit unique overhead reservation UUID required")
+    maximum = finite_number(maximum_usd, "overhead allowance", 0.01)
+    with ledger_lock(path):
+        value = checked_bound_ledger(path)
+        all_rows = value["leases"] + value.get("overheads", [])
+        if any(row["id"] == reservation_id for row in all_rows):
+            raise ValueError("Overhead reservation already attempted")
+        if value["priorInfraUsd"] + sum(row["reservedUsd"] for row in all_rows) + maximum > 35:
+            raise ValueError("Original infrastructure allocation exhausted")
+        charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in all_rows)
+        if charges + maximum > 5:
+            raise ValueError("Associated infrastructure charges exceed five dollars")
+        row = {"id": reservation_id, "kind": "watchdog_storage_export", "status": "reservation_pending",
+               "reservedUsd": maximum, "reservedMicrodollars": math.ceil(maximum * 1_000_000)}
+        value["overheads"].append(row)
+        atomic_json(path, value)
+        row["studyReservation"] = budget(value["plan"], "reserve", row)
+        row["status"] = "reserved"
+        atomic_json(path, value)
+        return row
+
+
 def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: float, extra_allowance_usd: float,
                   now: float) -> dict[str, Any]:
     hours = finite_number(hours, "session hours", 0.01)
-    allowance = finite_number(extra_allowance_usd, "tax/storage/export allowance", 1)
+    allowance = finite_number(extra_allowance_usd, "tax/storage/export allowance", 0)
     rate = finite_number(current_quote["hourlyUsd"], "hourly quote", 0.01)
     quoted_at = finite_number(current_quote["quotedAt"], "quote timestamp")
-    if not 0 <= now - quoted_at <= 300 or rate > 1.25 or hours > 8:
+    selected = hardware_profile(current_quote.get("hardwareProfile", ""))
+    if not 0 <= now - quoted_at <= 300 or rate > limits()["hourlyUsd"] or hours > limits()["sessionHours"]:
         raise ValueError("Expired quote, excessive rate, or session longer than eight hours")
-    if current_quote["instanceType"] != "gpu_1x_a6000" or current_quote["imageFamily"] != "gpu-base-24-04":
+    if (current_quote["instanceType"] != selected["instanceType"] or current_quote["imageFamily"] != "gpu-base-24-04"
+            or current_quote.get("hardwareProfileHash") != digest(selected)):
         raise ValueError("Unapproved instance or image")
     leases = ledger["leases"]
     if any(lease["status"] != "terminated" for lease in leases):
         raise ValueError("Another lease is active or unresolved")
     used_hours = ledger["priorGpuHours"] + sum(lease["reservedHours"] for lease in leases)
-    reserved = ledger["priorInfraUsd"] + sum(lease["reservedUsd"] for lease in leases)
+    reserved = ledger["priorInfraUsd"] + sum(lease["reservedUsd"] for lease in leases + ledger.get("overheads", []))
     cost = round(rate * hours + allowance, 6)
-    if used_hours + hours > 24 or reserved + cost > 35:
+    compute = ledger.get("priorComputeUsd", ledger["priorInfraUsd"]) + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
+    charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
+    if used_hours + hours > 24 or reserved + cost > 35 or compute + rate * hours > 30 or charges + allowance > 5:
         raise ValueError("Cumulative infrastructure allocation exceeded")
     # Do not release reservations after termination without invoice reconciliation.
-    return {"id": uuid.uuid4().hex, "status": "reserved", "quote": current_quote,
+    return {"id": str(uuid.uuid4()), "status": "reserved", "quote": current_quote,
             "reservedAt": now, "deadline": now + hours * 3600,
-            "setupDeadline": now + 1800, "reservedHours": hours,
-            "reservedUsd": cost, "instanceId": None, "ready": False}
+            "setupDeadline": now + min(1800, hours * 3600), "reservedHours": hours,
+            "reservedUsd": cost, "reservedComputeUsd": round(rate * hours, 6),
+            "reservedMicrodollars": math.ceil(cost * 1_000_000), "instanceId": None, "ready": False}
 
 
 def validate_firewall(client: Any, ruleset_id: str, region: str) -> None:
@@ -325,33 +591,117 @@ def validate_firewall(client: Any, ruleset_id: str, region: str) -> None:
             raise ValueError("Firewall must allow only SSH from restricted source networks; global rules are included")
 
 
-def launch(client: Any, ledger_path: Path, region: str, ssh_key_name: str, hours: float,
-           extra_allowance_usd: float, watchdog_receipt: Path, now: float | None = None,
-           firewall_ruleset_id: str | None = None) -> dict[str, Any]:
+def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_usd: float,
+                  *, now: float | None = None, budget=study_budget, purpose: str = "research",
+                  recovery_controller_id: str | None = None) -> dict[str, Any]:
     current = time.time() if now is None else now
-    watchdog = read_json(watchdog_receipt)
-    if watchdog.get("profile") != PROFILE or watchdog.get("controllerKind") != "independent_always_on" or watchdog.get("maxPollSeconds", 999) > 60:
-        raise ValueError("Independent always-on watchdog enrollment is required")
-    if not 0 <= current - finite_number(watchdog.get("verifiedAt"), "watchdog verification") <= 300:
-        raise ValueError("Watchdog enrollment is stale")
-    if watchdog.get("ledgerPath") != str(ledger_path.resolve()):
-        raise ValueError("Watchdog is not enrolled for this ledger")
+    if purpose not in {"research", "cleanup_canary"} or (purpose == "cleanup_canary" and not 0 < hours <= 1 / 6):
+        raise ValueError("Cleanup canary must reserve at most ten minutes")
+    if purpose == "cleanup_canary" and not re.fullmatch(r"acephale-[a-z0-9-]+", recovery_controller_id or ""):
+        raise ValueError("Canary must identify the independent controller being tested")
     with ledger_lock(ledger_path):
-        ledger = read_json(ledger_path)
-        current_quote = quote(client, region, current)
-        validate_firewall(client, firewall_ruleset_id or "", region)
+        ledger = checked_bound_ledger(ledger_path)
+        plan = ledger["plan"]
+        budget(plan, "inspect")
+        current_quote = quote(client, plan["region"], current, plan["hardwareProfile"])
+        validate_firewall(client, plan["firewallRulesetId"], plan["region"])
         lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current)
         lease["name"] = "acephale-infra-" + lease["id"]
+        lease["purpose"] = purpose
+        lease["recoveryControllerId"] = recovery_controller_id
+        lease["status"] = "reservation_pending"
         ledger["leases"].append(lease)
         atomic_json(ledger_path, ledger)
-        # Exactly one launch attempt. An uncertain response is not retried.
+        lease["studyReservation"] = budget(plan, "reserve", lease)
+        lease["status"] = "reserved"
+        atomic_json(ledger_path, ledger)
+        return lease.copy()
+
+
+def watchdog_enrollments(receipt_path: Path, ledger: dict[str, Any], lease: dict[str, Any], now: float) -> list[dict[str, Any]]:
+    data = read_json(receipt_path)
+    values = data.get("controllers", [])
+    if data.get("version") != 1 or len(values) != 2:
+        raise ValueError("Two actual independent watchdog enrollments required")
+    hosts, controllers, regions = set(), set(), set()
+    recovery_required = lease.get("purpose") != "cleanup_canary"
+    if not recovery_required and lease["reservedHours"] > 1 / 6:
+        raise ValueError("Canary exceeds ten minutes")
+    for value in values:
+        if (value.get("profile") != PROFILE or value.get("controllerKind") != "independent_always_on"
+                or value.get("hostingKind") != "aws_lambda" or value.get("leaseId") != lease["id"]
+                or value.get("expectedName") != lease["name"] or value.get("planHash") != ledger["planHash"]
+                or value.get("deadline") != lease["deadline"] or value.get("setupDeadline") != lease["setupDeadline"]
+                or not 0 < value.get("maxPollSeconds", 999) <= 60 or value.get("readOnlyProbeSucceeded") is not True
+                or (recovery_required and value.get("recoveryTestPassed") is not True)
+                or not re.fullmatch(r"[a-f0-9]{64}", value.get("codeSha256", ""))
+                or value.get("codeSha256") != sha256(HERE / "lambda_gpu_watchdog.py")
+                or (recovery_required and not re.fullmatch(r"[a-f0-9]{64}", value.get("recoveryEvidenceSha256") or ""))
+                or not 0 <= now - finite_number(value.get("verifiedAt"), "watchdog verification") <= 300
+                or not re.fullmatch(r"arn:aws:lambda:[a-z0-9-]+:\d{12}:function:acephale-[a-z0-9-]+", value.get("hostId", ""))):
+            raise ValueError("Missing, stale or incompatible live watchdog enrollment")
+        hosts.add(value["hostId"])
+        controllers.add(value.get("controllerId"))
+        regions.add(value["hostId"].split(":")[3])
+    if len(hosts) != 2 or len(controllers) != 2 or len(regions) != 2 or None in controllers:
+        raise ValueError("Watchdogs must be separate controllers in separate regions")
+    return values
+
+
+def request_canary_termination(ledger_path: Path, lease_id: str) -> dict:
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+        if lease.get("purpose") != "cleanup_canary" or lease["reservedHours"] > 1 / 6 or lease["status"] != "active":
+            raise ValueError("Only an active funded cleanup canary accepts this test trigger")
+        lease["status"] = "termination_requested"
+        atomic_json(ledger_path, ledger)
+        return {"leaseId": lease_id, "status": lease["status"], "providerCalls": 0}
+
+
+def observe_termination(client: Any, ledger_path: Path, lease_id: str) -> dict:
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+        if not lease["instanceId"]:
+            raise ValueError("Known instance identity required for termination observation")
+        instances = client.request("GET", "/instances")
+        matches = [row for row in instances if row.get("id") == lease["instanceId"] or row.get("name") == lease["name"]]
+        if matches and (len(matches) != 1 or matches[0].get("id") != lease["instanceId"]
+                        or matches[0].get("name") != lease["name"] or matches[0].get("status") != "terminated"):
+            raise ValueError("Provider has not verified exact-instance termination")
+        lease["status"] = "terminated"
+        lease["terminationVerifiedAt"] = time.time()
+        lease["terminationEvidenceHash"] = digest(instances)
+        atomic_json(ledger_path, ledger)
+        return lease.copy()
+
+
+def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path,
+           *, now: float | None = None, budget=study_budget) -> dict[str, Any]:
+    current = time.time() if now is None else now
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        plan = ledger["plan"]
+        lease = next(item for item in ledger["leases"] if item["id"] == lease_id)
+        if lease["status"] != "reserved" or not lease.get("studyReservation") or current >= lease["setupDeadline"]:
+            raise ValueError("Only an unattempted, funded lease within setup window can launch")
+        if any(item["id"] != lease_id and item["status"] != "terminated" for item in ledger["leases"]):
+            raise ValueError("Another unresolved lease blocks launch")
+        enrollments = watchdog_enrollments(watchdog_receipt, ledger, lease, current)
+        current_quote = quote(client, plan["region"], current, plan["hardwareProfile"])
+        if any(current_quote[key] != lease["quote"][key] for key in ("region", "instanceType", "imageId", "hardwareProfileHash")) or current_quote["hourlyUsd"] > lease["quote"]["hourlyUsd"]:
+            raise ValueError("Provider quote changed after reservation; no launch attempted")
+        validate_firewall(client, plan["firewallRulesetId"], plan["region"])
+        budget(plan, "inspect")
+        lease["watchdogs"] = enrollments
         lease["status"] = "launching"
         atomic_json(ledger_path, ledger)
         try:
             result = client.request("POST", "/instance-operations/launch", {
-                "region_name": region, "instance_type_name": "gpu_1x_a6000", "ssh_key_names": [ssh_key_name],
-                "name": lease["name"], "image": {"id": current_quote["imageId"]},
-                "firewall_rulesets": [{"id": firewall_ruleset_id}]})
+                "region_name": plan["region"], "instance_type_name": current_quote["instanceType"],
+                "ssh_key_names": [plan["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
+                "firewall_rulesets": [{"id": plan["firewallRulesetId"]}]})
             ids = result.get("instance_ids", [])
             if len(ids) != 1:
                 raise RuntimeError("Ambiguous launch response")
@@ -434,7 +784,8 @@ def watchdog_tick(client: Any, ledger_path: Path, now: float | None = None) -> l
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("preflight")
+    preflight_command = commands.add_parser("preflight")
+    preflight_command.add_argument("--hardware-profile", default="a6000-48gb-v1")
     commands.add_parser("validate-config")
     download = commands.add_parser("download-models")
     download.add_argument("--root", type=Path, required=True)
@@ -444,22 +795,58 @@ def main(argv: list[str] | None = None) -> int:
     render = commands.add_parser("locked-compose")
     render.add_argument("--lock", type=Path, required=True)
     render.add_argument("--output", type=Path, required=True)
+    render.add_argument("--hardware-profile")
+    render.add_argument("--models-root", type=Path)
+    render.add_argument("--predictor-export", type=Path)
+    hardware_compose = commands.add_parser("serving-compose")
+    hardware_compose.add_argument("--hardware-profile", required=True)
+    hardware_compose.add_argument("--output", type=Path, required=True)
+    training_probe = commands.add_parser("training-preflight")
+    training_probe.add_argument("--hardware-profile", required=True)
+    training_probe.add_argument("--output", type=Path, required=True)
+    trainer = commands.add_parser("training-lease")
+    trainer.add_argument("--ledger", type=Path, required=True)
+    trainer.add_argument("--lease-id", required=True)
+    trainer.add_argument("--preflight", type=Path, required=True)
+    trainer.add_argument("--output", type=Path, required=True)
+    trainer.add_argument("--hours", type=float, required=True)
+    state = commands.add_parser("watchdog-state")
+    state.add_argument("--ledger", type=Path, required=True)
+    state.add_argument("--lease-id", required=True)
+    state.add_argument("--output", type=Path, required=True)
+    identity = commands.add_parser("provider-receipt")
+    identity.add_argument("--ledger", type=Path, required=True)
+    identity.add_argument("--lease-id", required=True)
+    identity.add_argument("--ssh-observation", type=Path, required=True)
+    identity.add_argument("--output", type=Path, required=True)
     pricing = commands.add_parser("quote")
     pricing.add_argument("--region", required=True)
     pricing.add_argument("--output", type=Path, required=True)
+    pricing.add_argument("--hardware-profile", required=True)
     initialize = commands.add_parser("init-ledger")
     initialize.add_argument("--ledger", type=Path, required=True)
-    initialize.add_argument("--overall-reserved-usd", type=float, required=True)
-    initialize.add_argument("--prior-infra-usd", type=float, required=True)
+    initialize.add_argument("--plan", type=Path, required=True)
     initialize.add_argument("--prior-gpu-hours", type=float, required=True)
+    overhead = commands.add_parser("reserve-overhead")
+    overhead.add_argument("--ledger", type=Path, required=True)
+    overhead.add_argument("--reservation-id", required=True)
+    overhead.add_argument("--maximum-usd", type=float, required=True)
+    prepare = commands.add_parser("prepare-lease")
+    prepare.add_argument("--ledger", type=Path, required=True)
+    prepare.add_argument("--hours", type=float, required=True)
+    prepare.add_argument("--extra-allowance-usd", type=float, required=True)
+    prepare.add_argument("--purpose", choices=["research", "cleanup_canary"], default="research")
+    prepare.add_argument("--recovery-controller-id")
+    canary_stop = commands.add_parser("request-canary-termination")
+    canary_stop.add_argument("--ledger", type=Path, required=True)
+    canary_stop.add_argument("--lease-id", required=True)
+    observe_stop = commands.add_parser("observe-termination")
+    observe_stop.add_argument("--ledger", type=Path, required=True)
+    observe_stop.add_argument("--lease-id", required=True)
     start = commands.add_parser("launch")
     start.add_argument("--ledger", type=Path, required=True)
-    start.add_argument("--region", required=True)
-    start.add_argument("--ssh-key-name", required=True)
-    start.add_argument("--hours", type=float, required=True)
-    start.add_argument("--extra-allowance-usd", type=float, required=True)
+    start.add_argument("--lease-id", required=True)
     start.add_argument("--watchdog-receipt", type=Path, required=True)
-    start.add_argument("--firewall-ruleset-id", required=True)
     ready = commands.add_parser("mark-ready")
     ready.add_argument("--ledger", type=Path, required=True)
     ready.add_argument("--lease-id", required=True)
@@ -474,7 +861,7 @@ def main(argv: list[str] | None = None) -> int:
     watchdog.add_argument("--ledger", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "preflight":
-        value = preflight()
+        value = preflight(args.hardware_profile)
     elif args.command == "validate-config":
         value = validate_config()
     elif args.command == "download-models":
@@ -482,28 +869,56 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "lock-images":
         value = lock_images(args.output)
     elif args.command == "locked-compose":
-        value = locked_compose(args.lock, args.output)
+        value = locked_compose(args.lock, args.output, args.hardware_profile, args.models_root, args.predictor_export)
+    elif args.command == "serving-compose":
+        value = serving_compose(args.hardware_profile, args.output)
+    elif args.command == "training-preflight":
+        value = training_preflight(args.hardware_profile)
+        write_new(args.output, value)
+    elif args.command == "training-lease":
+        value = training_lease(args.ledger, args.lease_id, args.preflight, args.output, args.hours)
+    elif args.command == "watchdog-state":
+        value = watchdog_state(args.ledger, args.lease_id)
+        atomic_json(args.output, value)
+    elif args.command == "request-canary-termination":
+        value = request_canary_termination(args.ledger, args.lease_id)
     elif args.command == "init-ledger":
-        value = init_ledger(args.ledger, args.overall_reserved_usd, args.prior_infra_usd, args.prior_gpu_hours)
+        value = init_bound_ledger(args.ledger, load_plan(args.plan), args.prior_gpu_hours)
+    elif args.command == "reserve-overhead":
+        value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd)
     elif args.command == "mark-ready":
         smoke = read_json(args.smoke_receipt)
         if smoke.get("profile") != PROFILE or smoke.get("leaseId") != args.lease_id or smoke.get("passed") is not True:
             raise ValueError("A passing smoke receipt for this lease is required")
         with ledger_lock(args.ledger):
-            value = read_json(args.ledger)
+            value = checked_bound_ledger(args.ledger)
             lease = next(item for item in value["leases"] if item["id"] == args.lease_id)
             if time.time() >= lease["setupDeadline"] or lease["status"] != "active":
                 raise ValueError("Lease not active within setup window")
+            if smoke.get("hardwareProfileHash") != lease["quote"]["hardwareProfileHash"]:
+                raise ValueError("Smoke hardware identity differs from the funded profile")
+            required = ({"pinnedModels", "driver", "actorStopped", "cudaTraining", "export", "watchdogRecovery"}
+                        if smoke.get("purpose") == "predictor_training" else
+                        {"pinnedModels", "pinnedImages", "driver", "concurrentModels", "toolParsing", "telemetry", "export", "watchdogRecovery"})
+            if not required <= set(smoke.get("checks", {})) or any(smoke["checks"][name] is not True for name in required):
+                raise ValueError("Actual smoke checks required for the declared serving or training purpose")
             lease["ready"] = True
             lease["smokeReceiptSha256"] = sha256(args.smoke_receipt)
             atomic_json(args.ledger, value)
     else:
         client = LambdaClient(os.environ.get("LAMBDA_API_KEY", ""))
         if args.command == "quote":
-            value = quote(client, args.region)
+            value = quote(client, args.region, hardware=args.hardware_profile)
             write_new(args.output, value)
+        elif args.command == "prepare-lease":
+            value = prepare_lease(client, args.ledger, args.hours, args.extra_allowance_usd, purpose=args.purpose,
+                                  recovery_controller_id=args.recovery_controller_id)
+        elif args.command == "provider-receipt":
+            value = provider_receipt(client, args.ledger, args.lease_id, args.ssh_observation, args.output)
+        elif args.command == "observe-termination":
+            value = observe_termination(client, args.ledger, args.lease_id)
         elif args.command == "launch":
-            value = launch(client, args.ledger, args.region, args.ssh_key_name, args.hours, args.extra_allowance_usd, args.watchdog_receipt, firewall_ruleset_id=args.firewall_ruleset_id)
+            value = launch(client, args.ledger, args.lease_id, args.watchdog_receipt)
         elif args.command == "terminate":
             value = terminate(client, args.ledger, args.lease_id, args.export_root, args.export_receipt, args.emergency)
         elif args.command == "watchdog":

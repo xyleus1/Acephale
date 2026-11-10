@@ -7,9 +7,9 @@ stack. The deployment definitions are inert until an operator explicitly launche
 ## Verified here versus required on the GPU host
 
 The offline lifecycle tests and static configuration checks run without Docker,
-credentials, model weights, or provider calls. This checkout's Windows host has
-no Docker or NVIDIA command available. No GPU model was downloaded, no container
-was started, no provider account was contacted, and no resource was provisioned.
+credentials, model weights, or provider calls. Their results establish code
+behavior only. Actual deployment, training and evaluation require retained
+provider, container, model, export and cleanup receipts.
 
 The version list is a source pin, not a claim of deployed compatibility.
 Container image resolution, actual PostgreSQL version, driver compatibility,
@@ -33,15 +33,18 @@ are missing. Static validation does not replace `docker compose config`.
 
 ## Images and models
 
-Use a Linux x86-64 host with a 48 GB NVIDIA GPU, driver 580 or newer, Docker and
-Compose. Keep the pinned vLLM image's Torch, CUDA and Transformers packages intact.
+Use an explicit hardware profile from `hardware-profiles.json`. The original
+48 GB A6000 guard remains intact. The A100 40 GB profile requires at least 39,000
+MiB observed VRAM, actor concurrency one, actor context 32,768 and predictor
+context 8,192. Both profiles require driver 580 or newer, Docker and Compose.
+Keep the pinned vLLM image's Torch, CUDA and Transformers packages intact.
 Do not install another Torch wheel over them.
 
 Resolve exact container contents before deployment:
 
 ```text
 python infra/acephale-infra-v1/control.py lock-images --output infra/acephale-infra-v1/images.resolved.json
-python infra/acephale-infra-v1/control.py locked-compose --lock infra/acephale-infra-v1/images.resolved.json --output infra/acephale-infra-v1/compose.resolved.json
+python infra/acephale-infra-v1/control.py locked-compose --lock infra/acephale-infra-v1/images.resolved.json --hardware-profile a100-40gb-v1 --output infra/acephale-infra-v1/compose.resolved.json
 ```
 
 These are explicit image-pull operations. They stop if a pinned tag is unavailable
@@ -129,34 +132,35 @@ Do not use a public advertised price as a launch quote. `quote` obtains current
 image ID using read-only API calls. Authentication is loaded only for explicitly
 requested provider commands.
 
-The original durable study ledger must first reserve the infrastructure allocation
-inside the total $500 ceiling with its $65 protected contingency. The infrastructure
-ledger below enforces only that allocated infrastructure slice. It is not a second
-source of truth for unrelated model spending. Initialization requires reconciled
-historical amounts; it does not default to the old checkpoint.
+The original durable study journal remains authoritative. The Lambda controller
+uses the same exclusive infrastructure pointer as the AWS controller, preserving
+unknown reservations and preventing another slice from resetting GPU hours.
+The approved limits are $500 total, $35 infrastructure, $30 GPU compute, $5
+associated charges, $65 protected contingency, $2.50/hour, eight hours per session
+and 24 cumulative GPU hours. Credits do not raise these limits. The observed
+A100 rate was $1.99/hour; every launch rechecks the actual quote and capacity.
 
 ```text
-python infra/acephale-infra-v1/control.py init-ledger --ledger /var/lib/acephale/infra-ledger.json --overall-reserved-usd RECONCILED_TOTAL --prior-infra-usd RECONCILED_INFRA --prior-gpu-hours RECONCILED_HOURS
-python infra/acephale-infra-v1/control.py quote --region REGION --output /var/lib/acephale/current-quote.receipt.json
+python infra/acephale-infra-v1/control.py init-ledger --ledger SLICE --plan PLAN --prior-gpu-hours RECONCILED_HOURS
+python infra/acephale-infra-v1/control.py reserve-overhead --ledger SLICE --reservation-id UNIQUE_UUID --maximum-usd 5
+python infra/acephale-infra-v1/control.py quote --hardware-profile a100-40gb-v1 --region REGION --output NEW_QUOTE
 ```
 
-Launch requires a separate always-on controller enrolled for the same ledger.
-Install the supplied service/timer examples on that controller, configure its
-provider credential in an external environment file, verify the timer is active,
-and exercise watchdog recovery with a simulated lease before producing an
-enrollment receipt. The receipt is an operator attestation, not proof that a
-future machine/network outage cannot happen. The controller must not be the rented
-VM or a laptop subject to standby. Run a second provider-control watchdog on an
-independent controller before paid work; these source files do not establish that
-such a controller already exists.
-
-An enrollment JSON receipt contains `profile: "acephale-infra-v1"`,
-`controllerKind: "independent_always_on"`, `maxPollSeconds: 60` or lower,
-`verifiedAt` as Unix seconds, and `ledgerPath` as the ledger's resolved path.
-It must be verified within five minutes of launch.
+See [LAMBDA_CONTROL.md](LAMBDA_CONTROL.md) for exact plan/config schemas and the
+two-region AWS cleanup-controller procedure. A normal lease requires actual
+invocation receipts from both controllers, each with a completed provider
+termination test. AWS hosts the small cleanup functions; the GPU remains on
+Lambda. The token is held in Secrets Manager. Neither function can launch GPUs.
+Private S3 lease state pins the exact registered name, optional instance ID,
+setup deadline and hard deadline. Owner heartbeat expiry after 120 seconds
+triggers cleanup independently of the laptop. Each minute schedule is configured
+delivery, not a provider availability guarantee.
 
 ```text
-python infra/acephale-infra-v1/control.py launch --ledger /var/lib/acephale/infra-ledger.json --region REGION --ssh-key-name EXISTING_KEY_NAME --firewall-ruleset-id RESTRICTED_RULESET --hours 4 --extra-allowance-usd 2 --watchdog-receipt /var/lib/acephale/watchdog.receipt.json
+python infra/acephale-infra-v1/control.py prepare-lease --ledger SLICE --hours 4 --extra-allowance-usd 0
+python infra/acephale-infra-v1/lambda_watchdog_deploy.py publish --receipt DEPLOYMENT --ledger SLICE --lease-id LEASE_ID
+python infra/acephale-infra-v1/lambda_watchdog_deploy.py enroll --receipt DEPLOYMENT --output ENROLLMENT
+python infra/acephale-infra-v1/control.py launch --ledger SLICE --lease-id LEASE_ID --watchdog-receipt ENROLLMENT
 ```
 
 Launch fetches a fresh quote and reserves before one physical launch attempt.
@@ -164,19 +168,19 @@ The supplied regional firewall ruleset and existing global rules must permit onl
 TCP port 22 from restricted CIDRs (IPv4 /24 or narrower; IPv6 /64 or narrower).
 The tool does not change existing account-wide rules. A broad existing rule blocks
 launch and must be resolved independently without disrupting other workloads.
-This legacy Lambda controller retains its stricter maximum price of $1.25/hour.
-The AWS controller uses the $2.50/hour cap explicitly authorized on 2026-11-06
-and recorded in `versions.json`; see [AWS_CONTROL.md](AWS_CONTROL.md).
-For either provider, maximum session is eight hours; cumulative reservations
-cannot exceed 24 GPU-hours or $35. At least $1 per session is reserved for tax,
-billing lag and related overhead. Choose an allowance covering the actual account's
-taxes and charges; it is not an automatic invoice estimate. Unknown launch charges
-remain reserved and block another launch. No retry creates a second instance.
+Associated charges are reserved once through the original journal. Zero extra
+allowance is permitted when the separate $5 overhead reservation covers the run.
+Unknown launch charges remain reserved and block another launch. No automatic
+retry creates a second instance. See [AWS_CONTROL.md](AWS_CONTROL.md) for the
+separate EC2 controller, which shares the original infrastructure allocation.
 
 The watchdog terminates at the 30-minute setup deadline unless a passing smoke
 receipt is registered with `mark-ready`. A smoke receipt must be generated from
 actual CUDA allocation, both resident models, parser, continuity and telemetry
-checks; include `profile`, `leaseId`, `passed: true` and detailed check results.
+checks; include `profile`, `leaseId`, `hardwareProfileHash`, `passed: true` and
+detailed check results. The distinct `predictor_training` readiness purpose
+requires stopped serving, an idle GPU, actual CUDA training, pinned models,
+verified export and watchdog recovery. It does not assert serving fit.
 `mark-ready` hashes this receipt. It does not execute those checks itself.
 
 Normal termination requires a verified local export receipt. The receipt contains

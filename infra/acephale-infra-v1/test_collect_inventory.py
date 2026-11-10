@@ -20,6 +20,37 @@ def write(path, value):
 
 
 class InventoryTests(unittest.TestCase):
+    def test_lambda_identity_uses_provider_ip_pinned_ssh_and_machine_id(self):
+        selected = inventory.hardware_profile("a100-40gb-v1")
+        machine = self.host / "etc/machine-id"
+        machine.parent.mkdir(parents=True)
+        machine.write_bytes(b"fixture-machine-id\n")
+        identifier = "11111111-1111-4111-8111-111111111111"
+        item = {"id": "instance1", "name": "acephale-infra-" + identifier, "ip": "192.0.2.1", "status": "active",
+                "instance_type": {"name": "gpu_1x_a100_sxm4"}}
+        value = {"version": 1, "profile": "acephale-infra-v1", "provider": "lambda", "leaseId": identifier,
+                 "leaseName": item["name"], "hardwareProfile": selected["id"], "hardwareProfileHash": inventory.digest(selected),
+                 "instance": item, "providerResponseHash": inventory.digest(item), "studyBindingHash": "a" * 64,
+                 "launchImageId": "image-fixture", "ssh": {"host": item["ip"], "port": 22, "user": "ubuntu",
+                 "hostKeySha256": "SHA256:" + "a" * 43, "machineIdSha256": inventory.file_hash(machine)}}
+        value["contentHash"] = inventory.digest(value)
+        write(self.provider, value)
+        hardware, evidence = inventory.lambda_identity(self.provider, self.host, selected)
+        self.assertEqual(hardware["provider"], "lambda")
+        self.assertEqual(evidence["identityReceipt"], value)
+        machine.write_bytes(b"different-machine\n")
+        with self.assertRaises(ValueError):
+            inventory.lambda_identity(self.provider, self.host, selected)
+
+    def test_a100_memory_guard_requires_explicit_matching_profile(self):
+        text = "NVIDIA A100-SXM4-40GB, 580.95.05, 40536, GPU-fixture\n"
+        with self.assertRaises(ValueError):
+            inventory.gpu_inventory(text, self.allocations, self.host, 580)
+        actual, _ = inventory.gpu_inventory(text, self.allocations, self.host, 580, inventory.hardware_profile("a100-40gb-v1"))
+        self.assertEqual(actual["gpuMemoryBytes"], 40536 * 1024**2)
+        with self.assertRaises(ValueError):
+            inventory.gpu_inventory(text.replace("A100", "A10"), self.allocations, self.host, 580, inventory.hardware_profile("a100-40gb-v1"))
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

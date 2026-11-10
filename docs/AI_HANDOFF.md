@@ -1,6 +1,6 @@
 # Acephale handoff
 
-Updated 2026-11-07. Work only in this standalone research checkout. Read
+Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
@@ -8,6 +8,20 @@ The active question is whether source-grounded goals improve a PASTE-inspired
 read prefetcher over an otherwise identical neutral-memory prefetcher. Actor
 weights, messages, tools and task limits stay fixed. This is infrastructure
 research; no live performance advantage has been established.
+
+The latest authorized extension fine-tunes only the pinned 0.8B predictor with
+LoRA, retaining the fixed actor. See the [training guide](../research/acephale/training/README.md)
+and [Lambda lifecycle](../infra/acephale-infra-v1/LAMBDA_CONTROL.md). Runtime
+binary-hit ranking, disjoint fitting/calibration families, production-compiled
+examples and immutable merged identities are implemented. A reviewed goal
+annotation is still required before goal-labelled fitting; the prepared human
+review packet is pending. Candidate-only training requires real closed traces.
+
+The latest local implementation checks passed: Node 217 plus two database
+skips, Python 304 with the installed native environment and no skips, deployment
+141, contract/type checks and lint with zero errors. See STATE for the initial
+Python failures and repairs. No real GPU training or performance result follows
+from these tests. Keep actual subsequent deployment/training receipts separate.
 
 The TypeScript core and service live under `src/lib/acephale` and
 `services/acephale-runtime`; Python/native evaluation is `research/acephale`.

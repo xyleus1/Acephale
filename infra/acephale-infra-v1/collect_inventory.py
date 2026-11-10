@@ -17,6 +17,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+from control import apply_hardware, apply_predictor_export, hardware_profile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -233,7 +234,28 @@ def aws_identity(receipt_path: Path, host_root: Path) -> tuple[dict, dict]:
         "identityMethod": "DescribeInstances receipt matched to local DMI board_asset_tag"}
 
 
-def gpu_inventory(text: str, processes: str, host_root: Path, minimum_driver: int) -> tuple[dict, dict]:
+def lambda_identity(receipt_path: Path, host_root: Path, selected: dict) -> tuple[dict, dict]:
+    receipt = read(receipt_path)
+    item, ssh = receipt.get("instance", {}), receipt.get("ssh", {})
+    body = {key: value for key, value in receipt.items() if key != "contentHash"}
+    if (receipt.get("version") != 1 or receipt.get("profile") != "acephale-infra-v1" or receipt.get("provider") != "lambda"
+            or receipt.get("contentHash") != digest(body) or receipt.get("providerResponseHash") != digest(item)
+            or receipt.get("hardwareProfile") != selected["id"] or receipt.get("hardwareProfileHash") != digest(selected)
+            or receipt.get("leaseName") != "acephale-infra-" + receipt.get("leaseId", "")
+            or item.get("name") != receipt["leaseName"] or item.get("status") != "active"
+            or item.get("instance_type", {}).get("name") != selected["instanceType"]
+            or not re.fullmatch(r"[a-zA-Z0-9_-]{1,100}", item.get("id", ""))
+            or ssh.get("host") != item.get("ip") or ssh.get("port") != 22 or ssh.get("user") != "ubuntu"
+            or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", ssh.get("hostKeySha256", ""))
+            or ssh.get("machineIdSha256") != file_hash(host_root / "etc/machine-id")
+            or not SHA.fullmatch(receipt.get("studyBindingHash", "")) or not receipt.get("launchImageId")):
+        raise ValueError("Lambda provider receipt does not match pinned SSH host identity and hardware")
+    return {"provider": "lambda", "instanceType": selected["instanceType"], "imageId": receipt["launchImageId"]}, {
+        "name": "lambda", "receiptSha256": file_hash(receipt_path), "instanceId": item["id"], "identityReceipt": receipt,
+        "identityMethod": "Lambda API IP + pinned SSH host key + local machine-id"}
+
+
+def gpu_inventory(text: str, processes: str, host_root: Path, minimum_driver: int, selected: dict | None = None) -> tuple[dict, dict]:
     rows = list(csv.reader(text.strip().splitlines(), skipinitialspace=True))
     if len(rows) != 1 or len(rows[0]) != 4:
         raise ValueError("The initial profile requires exactly one observed GPU")
@@ -241,7 +263,9 @@ def gpu_inventory(text: str, processes: str, host_root: Path, minimum_driver: in
     if not name or not uuid.startswith("GPU-") or not re.fullmatch(r"\d+(?:\.\d+)+", driver):
         raise ValueError("Incomplete NVIDIA GPU inventory")
     memory_bytes = int(memory) * 1024**2
-    if int(driver.split(".")[0]) < minimum_driver or memory_bytes < 45_000 * 1024**2:
+    minimum_mib = selected["minimumGpuMemoryMiB"] if selected else 45_000
+    if (int(driver.split(".")[0]) < minimum_driver or memory_bytes < minimum_mib * 1024**2
+            or (selected and selected["gpuNameContains"] not in name)):
         raise ValueError("Driver or GPU memory is below the pinned 48 GB profile")
     allocations = []
     for row in csv.reader(processes.strip().splitlines(), skipinitialspace=True):
@@ -268,9 +292,15 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
             source: Path = ROOT, host_root: Path = Path("/"), project: str = "acephale-infra-v1",
             python: str = sys.executable, node: str = "node",
             orchestrator_receipt: Path | None = None,
+            hardware_profile_name: str | None = None,
+            predictor_export: Path | None = None,
             runner: Callable[[list[str], Path], str] = run_readonly) -> tuple[dict, dict]:
     models, source = models.resolve(), source.resolve()
     versions, compose = read(HERE / "versions.json"), read(HERE / "compose.json")
+    selected = hardware_profile(hardware_profile_name) if hardware_profile_name else None
+    if selected:
+        apply_hardware(compose, hardware_profile_name)
+    trained = apply_predictor_export(compose, models, predictor_export) if predictor_export else None
     lock = read(images_lock)
     expected_image = versions["images"]["vllm"]
     locked = lock.get("images", {}).get("vllm", {})
@@ -287,14 +317,24 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
     orchestrator = checked_orchestrator(
         read(orchestrator_receipt) if orchestrator_receipt else orchestrator_inventory(
             source=source, python=python, node=node, runner=runner), commit, versions)
-    provider, provider_evidence = aws_identity(provider_receipt, host_root)
+    provider, provider_evidence = (lambda_identity(provider_receipt, host_root, selected)
+                                  if read(provider_receipt).get("provider") == "lambda" and selected
+                                  else aws_identity(provider_receipt, host_root))
     hardware, gpu_evidence = gpu_inventory(
         runner(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,uuid", "--format=csv,noheader,nounits"], source),
         runner(["nvidia-smi", "--query-compute-apps=pid,gpu_uuid,used_gpu_memory", "--format=csv,noheader,nounits"], source),
-        host_root, versions["minimumDriverMajor"])
+        host_root, versions["minimumDriverMajor"], selected)
     identities, model_evidence, containers, serving = {}, {}, {}, {}
     for role, context in (("actor", (32768, 28672, 4096)), ("predictor", (8192, 7168, 1024))):
-        identities[role], model_evidence[role] = model_identity(models, role, versions["models"][role], context)
+        if role == "predictor" and trained:
+            artifact = trained["artifact"]
+            identities[role] = {**artifact["base"], "servedModel": artifact["servedModel"], "weightsHash": artifact["mergedWeightsHash"],
+                "tokenizerHash": artifact["tokenizerHash"], "chatTemplateHash": artifact["chatTemplateHash"], "trainedPredictor": artifact,
+                "precision": versions["models"][role]["dtype"], "contextWindow": context[0], "inputBudget": context[1], "outputCap": context[2],
+                "temperature": 0, "topP": 1, "thinking": False, "weightsFrozen": True}
+            model_evidence[role] = trained
+        else:
+            identities[role], model_evidence[role] = model_identity(models, role, versions["models"][role], context)
         ids = runner(DOCKER + ["ps", "--no-trunc", "--filter", f"label=com.docker.compose.project={project}",
                                "--filter", f"label=com.docker.compose.service={role}", "--format", "{{.ID}}"], source).split()
         if len(ids) != 1 or not CONTAINER.fullmatch(ids[0]) or ids[0] in {c["id"] for c in containers.values()}:
@@ -331,7 +371,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
     final_hardware, final_gpu = gpu_inventory(
         runner(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,uuid", "--format=csv,noheader,nounits"], source),
         runner(["nvidia-smi", "--query-compute-apps=pid,gpu_uuid,used_gpu_memory", "--format=csv,noheader,nounits"], source),
-        host_root, versions["minimumDriverMajor"])
+        host_root, versions["minimumDriverMajor"], selected)
     if final_hardware != hardware or final_gpu["gpuUuid"] != gpu_evidence["gpuUuid"]:
         raise ValueError("GPU hardware changed during inventory collection")
     for saved in containers.values():
@@ -363,6 +403,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
                 "orchestratorInventory": orchestrator,
                 "orchestratorReceiptSha256": file_hash(orchestrator_receipt) if orchestrator_receipt else None,
                 "imageLockSha256": file_hash(images_lock), "sourcePinsSha256": file_hash(HERE / "versions.json"),
+                "hardwareProfile": selected, "hardwareProfileHash": digest(selected) if selected else None,
                 "sourceComposeSha256": file_hash(HERE / "compose.json"),
                 "networkCalls": 0, "modelCalls": 0, "smokeReadinessVerified": False,
                 "requestSettings": "Pinned experiment policy, not an observed inference request"}
@@ -407,6 +448,8 @@ def main(argv=None) -> int:
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--node-executable", default="node")
     parser.add_argument("--compose-project", default="acephale-infra-v1")
+    parser.add_argument("--hardware-profile")
+    parser.add_argument("--predictor-export", type=Path)
     parser.add_argument("--orchestrator-inventory", type=Path,
                         help="Observed receipt from the actual local benchmark host; avoids probing benchmark tools on this GPU host")
     args = parser.parse_args(argv)
@@ -416,7 +459,8 @@ def main(argv=None) -> int:
         parser.error("Inventory output must be a new directory")
     deployment, evidence = collect(args.models_root, args.images_lock, args.provider_receipt,
                                    python=args.python_executable, node=args.node_executable,
-                                   project=args.compose_project, orchestrator_receipt=args.orchestrator_inventory)
+                                   project=args.compose_project, orchestrator_receipt=args.orchestrator_inventory,
+                                   hardware_profile_name=args.hardware_profile, predictor_export=args.predictor_export)
     print(json.dumps(write_inventory(args.output, deployment, evidence), indent=2))
     return 0
 

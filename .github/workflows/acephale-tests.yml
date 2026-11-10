@@ -3,7 +3,7 @@ name: Acephale research tests
 on:
   pull_request:
   push:
-    branches: [main, codex/acephale-standalone]
+    branches: [main, codex/acephale-standalone, codex/predictor-lora-v1]
 
 permissions:
   contents: read

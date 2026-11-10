@@ -1,7 +1,47 @@
 # Acephale state
 
-Updated 2026-11-07. This records the standalone research checkout, not historical
+Updated 2026-11-10. This records the standalone research checkout, not historical
 benchmark results.
+
+## Predictor training implementation
+
+The scoped Qwen3.5-0.8B LoRA experiment now has a separate locked training
+environment, production prompt export, partition/provenance checks, a bounded
+CUDA trainer, adapter reload/merge verification and immutable derived-model
+identities. Runtime ranking can use binary token probabilities with separate
+calibration. The actor remains fixed. The Lambda A100 profile, original-journal
+binding and two independent cleanup-controller implementation are included.
+
+Current local verification on 2026-11-10:
+
+| Check | Observed result |
+| --- | --- |
+| Generated contracts and TypeScript | Passed |
+| Full Node suite | 217 passed, two PostgreSQL-dependent tests skipped |
+| Full Python research rerun with the pinned native environment | 304 passed, no skips |
+| Full deployment unittest suite | 141 passed |
+| ESLint | Zero errors, 33 explicit-any warnings |
+
+The initial Python run had 300 passes, one native-environment skip and two
+failures: an exact console-entrypoint expectation needed the new training CLI,
+and a Node subprocess timed out. The entrypoint check was corrected. The
+original 30-second subprocess limit passed in focused verification and the
+subsequent full run; it was not relaxed. The full rerun above enabled the
+installed native environment. These are software tests, not GPU training or
+live benchmark scores.
+
+The historical seed import identified 99 valid requested-goal annotations;
+three in previously flagged overlapping families were quarantined. A 20-case
+human review packet was prepared from the remaining 96. Review remains pending
+at this implementation checkpoint. No goal-labelled training, actual weight
+change or native performance gain is established by this entry.
+
+Read-only provider verification found the selected A100 40 GB profile available
+at $1.99/hour. A public SSH key and restricted access rules were configured;
+no paid GPU had launched at this checkpoint. Real watchdog recovery, CUDA
+qualification, training and paired evaluation remain separate execution stages.
+See the [training guide](../research/acephale/training/README.md) and
+[Lambda runbook](../infra/acephale-infra-v1/LAMBDA_CONTROL.md).
 
 ## Implemented scope
 

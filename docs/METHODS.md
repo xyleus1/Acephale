@@ -26,8 +26,9 @@ The complete source pins live in
 The default models use bfloat16 with vLLM 0.32.0, pinned image digest, PyTorch
 2.13.0/CUDA 13.0.3, `qwen3_xml` tool parsing and `qwen3` reasoning parsing. Thinking
 is disabled for this profile. Actor context is 32,768 tokens: 28,672 input plus
-4,096 output. Predictor context is 8,192: 7,168 plus 1,024. No weight training,
-adapter merging or model substitution is part of the primary study.
+4,096 output. Predictor context is 8,192: 7,168 plus 1,024. The fixed-predictor
+configuration remains an explicit baseline. The separately declared predictor
+LoRA experiment below changes only the auxiliary predictor's weights.
 
 The official OpenAI SDK targets local compatible endpoints through
 `LocalChatModelPort`. It preserves real tool-call IDs and assistant continuation,
@@ -162,6 +163,50 @@ speculative consumption rates are prediction/execution metrics, not task success
 Native task subsets disclose their denominator and pinned environment. Generated
 tasks are a custom tau-compatible pilot. Neither is an official full-suite score
 unless that complete benchmark was actually run under its stated protocol.
+
+## Predictor LoRA experiment
+
+The 2026-11-10 extension fits only the pinned Qwen3.5-0.8B predictor. The actor,
+its available tools and authoritative execution remain unchanged. Separate goal
+and ranking prompts use the same predictor checkpoint. A predicted goal or score
+does not authorize execution. The deterministic scheduler retains all read-only,
+current-source, freshness, cancellation and exact-match rules.
+
+The production TypeScript compiler exports the exact bounded prompts used for
+training. Goal targets omit server-owned revision hashes. Next-batch labels join
+only after the public candidate window is frozen; future calls and evaluation
+state never enter prompts or retrieval. Ranking targets contain an action class
+and one binary hit per candidate in that frozen order. Inference requests both
+0 and 1 token log probabilities, normalizes each raw pair and calibrates the
+result on reserved families before selecting at most three candidates. These
+remain independent candidate marginals, not an action-universe distribution.
+The legacy numeric ranking protocol remains versioned separately.
+
+Weight fitting, calibration/reliability, development and test use disjoint
+families. Frozen memory for the trained predictor contains only weight-fitting
+families. Historical requested-goal annotations may bootstrap goal supervision
+after provenance and human-review checks. Source-reported APIGen trajectories
+do not become verified native workflows. The known overlapping baggage families
+are quarantined from that seed import. Native tool labels require actual closed
+authoritative traces; illustrative test fixtures are not training results.
+
+Training uses the separate Linux dependency lock: PyTorch 2.13.0, Transformers
+5.10.1, PEFT 0.21.0, TRL 1.16.0, Accelerate 1.15.0 and Datasets 5.2.0. BF16 LoRA
+has rank 16, alpha 32 and dropout 0.05, with explicit Qwen text attention,
+feed-forward and gated-delta projection targets. Vision, embeddings, language
+head and base parameters stay frozen. Completion-only cross entropy uses
+AdamW at 1e-4, weight decay 0.01, gradient clipping 1, warmup 0.03,
+microbatch 1, accumulation 16, checkpointing and at most 8,192 total tokens.
+Seeds 17 and 29 each have at most three epochs or 500 optimizer steps; both
+together have at most two GPU hours within the existing infrastructure budget.
+
+The trainer verifies the funded lease, actual CUDA environment, pinned source
+and model/tokenizer receipts. It records gradients, finite losses, changed LoRA
+weights and unchanged base hashes. Export preserves the adapter, merges a new
+immutable checkpoint and checks reloaded/merged logits. Serving artifacts bind
+the derived weights, source, partitions and protocol; old calibration or timing
+profiles cannot validate a new checkpoint. Run execution and measured outcomes
+are recorded separately in [STATE](STATE.md).
 
 ## Relationship to prior methods
 

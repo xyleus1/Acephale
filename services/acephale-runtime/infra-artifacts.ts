@@ -1,3 +1,4 @@
+import { validatePredictorModelIdentity, type PredictorModelIdentity } from "../../src/lib/acephale/predictor-artifact";
 import { copy, hash } from "../../src/lib/acephale/canonical";
 import { expectedInfraSaving, type InfraOpportunity } from "../../src/lib/acephale/infra-session";
 
@@ -20,13 +21,13 @@ export interface InfraGoalReliabilityArtifact {
   version: 1; sourceDatasetHash: string; families: string[]; annotationHash: string;
   auditedCount: number; acceptedCount: number; unsupportedBindings: number;
   gradedCount: number; agreedCount: number; reliability: number; contentHash: string;
-  provenance?: { model: { repository: string; revision: string }; memoryHash: string;
+  provenance?: { model: PredictorModelIdentity; memoryHash: string;
     predictorContractHash: string; candidateCompilerHash: string; retrievalHash: string; [key: string]: unknown };
 }
 export interface InfraArtifactScope {
   datasetHash: string; allowedFamilies: string[]; excludedFamilies?: string[];
   opportunityProfile?: InfraOpportunityProfile;
-  predictor?: { model: { repository: string; revision: string }; memoryHash: string;
+  predictor?: { model: PredictorModelIdentity; memoryHash: string;
     predictorContractHash: string; candidateCompilerHash: string; retrievalHash: string };
 }
 export function checkedArtifact<T extends { contentHash: string }>(value: T): T {
@@ -67,6 +68,10 @@ export function validateInfraGoalReliabilityArtifact(value: InfraGoalReliability
     || !Number.isSafeInteger(artifact.agreedCount) || artifact.agreedCount < 0 || artifact.agreedCount > artifact.gradedCount
     || !Number.isFinite(artifact.reliability) || Math.abs(artifact.reliability - wilsonLower(artifact.agreedCount, artifact.gradedCount)) > 1e-12) {
     throw new Error("Goal reliability lacks a valid independent audit/calibration");
+  }
+  if (scope.predictor) {
+    const trained = scope.predictor.model.trainedPredictor ? validatePredictorModelIdentity(scope.predictor.model).trainedPredictor : undefined;
+    if (trained && artifact.families.some(family => !trained.calibrationFamilies.includes(family) || trained.weightFitFamilies.includes(family))) throw new Error("Goal reliability must exclude weight fitting families");
   }
   if (scope.predictor && (!artifact.provenance
     || hash(artifact.provenance.model) !== hash(scope.predictor.model)

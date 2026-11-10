@@ -68,6 +68,20 @@ spend. Reservations cover all attempts/concurrency and maximum billable output.
 
 ## 3. Collect fixed-actor traces with causal shadow prediction
 
+For the scoped predictor-weight experiment, also follow the
+[training environment guide](../research/acephale/training/README.md). Compile
+examples through `npm run acephale:training-export -- CONFIG.json`, using the
+actual pinned tokenizer endpoint and immutable family plan. A review packet
+can be compiled while review is pending; preparing goal-labelled training data
+requires the completed attributed review. Candidate-only preparation still
+requires observed authoritative traces and the same partition checks.
+
+Do not reuse the fixed-predictor calibration, goal-reliability or opportunity
+artifacts after training. Publish the derived predictor artifact, fit new maps
+on reserved calibration families and measure its actual serving configuration.
+Memory for that path may contain only weight-fitting families. Preserve the
+untrained predictor as an explicit comparison and keep the actor fixed.
+
 Create a collection plan with explicit official task IDs, family partitions,
 seeds, caps and reachable endpoints. This is a shape example, not executable data:
 

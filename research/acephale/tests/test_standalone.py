@@ -8,12 +8,13 @@ import pytest
 
 from acephale.infra_cli import main
 from acephale.native_common import REVISION, drain_trial, read, summarize_costs, write
+from acephale.training_cli import main as training_main
 
 
 def test_console_entry_and_help_are_the_current_infrastructure_pipeline(capsys):
     root = Path(__file__).resolve().parents[1]
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    assert project["project"]["scripts"] == {"acephale": "acephale.infra_cli:main"}
+    assert project["project"]["scripts"] == {"acephale": "acephale.infra_cli:main", "acephale-train": "acephale.training_cli:main"}
     with pytest.raises(SystemExit) as stopped:
         main(["--help"])
     assert stopped.value.code == 0
@@ -21,6 +22,12 @@ def test_console_entry_and_help_are_the_current_infrastructure_pipeline(capsys):
     for command in ("export", "pilot", "fit-calibration", "native", "score-panel-replay"):
         assert command in output
     assert "import-v5" not in output
+    with pytest.raises(SystemExit) as stopped:
+        training_main(["--help"])
+    assert stopped.value.code == 0
+    output = capsys.readouterr().out
+    for command in ("prepare", "verify", "train", "smoke", "export", "evaluate"):
+        assert command in output
 
 
 def test_native_checkout_pin_matches_the_lock():

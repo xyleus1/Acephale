@@ -16,7 +16,7 @@ import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-c
 import { infraOpportunityProfile, NATIVE_PROFILE_PROTOCOL } from "../services/acephale-runtime/infra-opportunity-profile";
 import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/acephale-runtime/infra-memory-services";
 import { episodicRetrievalProfileHash } from "../src/lib/acephale/episodic-retrieval";
-import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/acephale-runtime/infra-predictors";
+import { InfraLocalPredictors, predictorContractHash } from "../services/acephale-runtime/infra-predictors";
 import { localActorDecision, localActorMessages } from "../services/acephale-runtime/local-actor";
 import type { PublicBoundary } from "../services/acephale-runtime/actor";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
@@ -97,7 +97,7 @@ export async function prepareNativeProfile(configurationPath: string, output: st
   const body = { version: 2, kind: "native_component_profile", configuration: config, configurationHash: hash(config),
     profile: infraOpportunityProfile(manifest, "native", { stream: config.stream ?? true, retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : undefined }), budgetJournalPrefix,
     manifestHash: hash(manifest), sourceDatasetHash: dataset.manifest.bundle_hash, memoryHash: memory.contentHash,
-    candidateCompilerHash: infraCandidateCompilerHash("native"), predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
+    candidateCompilerHash: infraCandidateCompilerHash("native"), predictorContractHash: predictorContractHash(manifest.predictor),
     protocol: NATIVE_PROFILE_PROTOCOL, rowIds: selected.map(row => row.checkpoint_id), benchmarkClaim: false,
     rows: selected.map((row, ordinal) => ({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash,
       family_id: row.family_id, split: row.split, episode_id: row.episode_id, ordinal, baselineFirst: ordinal % 2 === 0,
@@ -213,7 +213,7 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
   }
   const retrieval = memoryServices?.perRun(`profile:${row.checkpoint_id}`, "neutral_memory_prefetch", row.family_id);
   if (hash(plan.profile) !== hash(infraOpportunityProfile(manifest, "native", { stream: config.stream ?? true, retrievalHash: retrieval?.profileHash }))) throw new Error("Measured deployment or actual retrieval profile changed");
-  const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
+  const predictor = new InfraLocalPredictors(model, { ...manifest.predictor, memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
     ...(retrieval ? { retrieveMemory: retrieval.retrieve, retrievalProfileHash: retrieval.profileHash } : {}) });
   const guard = nativeSplitGuard(config, manifest, resolve(configurationPath)), interruption = new AbortController();
   const guardIdentity = guard?.();

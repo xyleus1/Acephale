@@ -15,6 +15,7 @@ from acephale.contracts_v1 import hash_v1
 from acephale.infra_admission import validate_predicted_goals
 from acephale.infra_data import read_jsonl, verify_bundle
 from acephale.storage import file_hash
+from acephale.training_data import calibration_families
 
 BOUNDS = tuple(index / 10 for index in range(1, 11))
 PROBABILITY_SEMANTICS = "independent_next_batch_hit"
@@ -158,8 +159,14 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
             joined.append({"checkpoint_id": key, "input_hash": prefix["input_hash"], "family_id": prefix["family_id"], "split": prefix["split"], "candidate_id": score["candidateId"], "invocation_hash": identity, "raw_probability": score["probability"], "exact_match": int(identity in actual), "action": raw["action"]})
     if any(len(partitions) != 1 for partitions in family_partitions.values()):
         raise ValueError("A family crosses fitting and validation partitions")
-    fitting = [row for row in joined if row["split"] == "train"]
+    reserved_calibration = calibration_families(model)
+    fitting = [row for row in joined if row["split"] == "train" and (reserved_calibration is None or row["family_id"] in reserved_calibration)]
     validation = [row for row in joined if row["split"] == "development"]
+    if reserved_calibration is not None:
+        if reserved_calibration & {row["family_id"] for row in validation}:
+            raise ValueError("Calibration families overlap model-selection development")
+        if {row["family_id"] for row in fitting} != reserved_calibration:
+            raise ValueError("Every declared calibration family requires observed fitting scores")
     if not fitting or not validation:
         raise ValueError("Observed raw candidate scores required in both training and development families")
     counts = [{"count": 0, "successes": 0} for _ in BOUNDS]

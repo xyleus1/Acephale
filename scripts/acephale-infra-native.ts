@@ -1,3 +1,4 @@
+import { predictorModelIdentity } from "../src/lib/acephale/predictor-artifact";
 import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
@@ -18,7 +19,7 @@ import { episodicRetrievalProfileHash, validateEpisodeEmbeddings, type FrozenEpi
 import { TrialLedger } from "../services/acephale-runtime/provider";
 import { NativeGateway, NativeReadExecutor } from "../services/acephale-runtime/gateway-client";
 import { NativeReadPolicy } from "../services/acephale-runtime/native-read-policy";
-import { INFRA_PREDICTOR_CONTRACT_HASH, InfraLocalPredictors, validateInfraCalibration, type InfraProbabilityCalibration } from "../services/acephale-runtime/infra-predictors";
+import { predictorContractHash, InfraLocalPredictors, validateInfraCalibration, type InfraProbabilityCalibration } from "../services/acephale-runtime/infra-predictors";
 import { InfraNativeBoundaryWorker } from "../services/acephale-runtime/infra-native-worker";
 import { InfraTelemetry } from "../services/acephale-runtime/infra-telemetry";
 import { nativeSplitGuard } from "../services/acephale-runtime/infra-split-guard";
@@ -153,8 +154,8 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
     if (!artifacts.goalReliability) throw new Error("Goal conditioning requires an audited reliability artifact");
     validateInfraGoalReliabilityArtifact(artifacts.goalReliability, { ...artifactScope,
       allowedFamilies: manifest.data.trainingFamilies, predictor: {
-      model: { repository: manifest.predictor.repository, revision: manifest.predictor.revision },
-      memoryHash: memory.contentHash, predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
+      model: predictorModelIdentity(manifest.predictor),
+      memoryHash: memory.contentHash, predictorContractHash: predictorContractHash(manifest.predictor),
       candidateCompilerHash: infraCandidateCompilerHash("native"),
       retrievalHash: artifactScope.opportunityProfile.retrievalHash,
     } });
@@ -205,7 +206,7 @@ export function buildInfraNativeWorkers(configuration: InfraNativeConfiguration,
       const compiler = createInfraNativeCandidates(artifacts.memory!, toolsByName, invocation => policy.eligible(invocation), {
         allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: [...artifacts.manifest.data.heldoutFamilies, run.familyId],
       });
-      const shadow = new InfraLocalPredictors(predictor!, { memory: artifacts.memory!, record,
+      const shadow = new InfraLocalPredictors(predictor!, { ...artifacts.manifest.predictor, memory: artifacts.memory!, record,
         allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: [...artifacts.manifest.data.heldoutFamilies, run.familyId] });
       return { runId: run.runId, worker: new InfraNativeBoundaryWorker(workerConfiguration, actor, record, undefined, undefined,
         async (frame, signal) => { policy.updateFrame(frame); const candidates = compiler.candidates(frame);
@@ -215,7 +216,7 @@ export function buildInfraNativeWorkers(configuration: InfraNativeConfiguration,
     const scheduler = new SpeculationScheduler(run.runId, reads, event => record({ ...event, arm: run.arm }), capacity);
     const retriever = memoryServices?.perRun(run.runId, run.arm, run.familyId);
     if (artifacts.embeddings && !retriever) throw new Error("Episodic retrieval configuration is not connected to its execution port");
-    const predictors = new InfraLocalPredictors(predictor!, { calibration: artifacts.calibration!, memory: artifacts.memory,
+    const predictors = new InfraLocalPredictors(predictor!, { ...artifacts.manifest.predictor, calibration: artifacts.calibration!, memory: artifacts.memory,
       ...(retriever ? { retrieveMemory: retriever.retrieve, retrievalProfileHash: retriever.profileHash } : {}),
       expectedCandidateCompilerHash: infraCandidateCompilerHash("native"),
       allowedFamilies: artifacts.manifest.data.trainingFamilies, excludeFamilies: [...artifacts.manifest.data.heldoutFamilies, run.familyId], record });

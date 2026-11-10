@@ -1,5 +1,37 @@
 # Acephale decisions
 
+## 2026-11-10: train the small predictor, retain the fixed actor
+
+Implement an explicitly scoped LoRA experiment on the pinned Qwen3.5-0.8B
+auxiliary predictor. This extends the earlier fixed-weight decision without
+changing Qwen3.5-9B actor weights, prompt, tool catalog or native limits. Goal
+conditioning guides speculative read selection; the scheduler remains the
+authorization and execution boundary. No actor fine-tuning, model soup or RL
+is part of this experiment.
+
+Use production-compiled prompts, completion-only supervised loss, the separate
+locked PyTorch/Transformers/PEFT/TRL environment and immutable adapter/merged
+artifacts. Replace uncalibrated numeric score generation in the trained path
+with a versioned binary-hit protocol using both raw token log probabilities.
+Keep the existing predictor protocol as an explicit baseline.
+
+Reserve disjoint weight-fitting, calibration/reliability, development and test
+families. Memory for trained predictors excludes every non-fitting family.
+Existing APIGen labels need source checks and the declared 20-example human
+review before goal supervision. Preserve the research-only license and do not
+represent source-reported trajectories as independent native replay.
+
+Use the explicitly qualified A100 40 GB profile if current Lambda capacity,
+price and serving/training checks pass. Stop actor serving during training.
+Cap two seeds together at two GPU hours, retain the $500 original journal,
+$35 infrastructure ceiling, protected contingency and unresolved reservations.
+Provider credits do not create a new allowance. Bind provider leases to that
+same original ledger, independent cleanup controllers and verified exports.
+
+No benchmark gain follows from these implementation choices. Select the
+checkpoint with development evidence, freeze it, and measure matched replay
+and paired native trials before asserting accuracy or latency improvement.
+
 ## 2026-11-07: standalone fixed-actor infrastructure study
 
 Acephale contains only the research runtime, tools, data preparation, evaluation,

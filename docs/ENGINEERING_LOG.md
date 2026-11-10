@@ -1,5 +1,28 @@
 # Acephale engineering log
 
+## 2026-11-10: bounded predictor LoRA and binary ranking
+
+Added production-compiler training export with public-prefix goal targets and
+observed next-batch candidate labels. The binary runtime protocol records raw
+0/1 token probabilities, calibrates candidate marginals and preserves the
+existing deterministic scheduler. Added disjoint fitting/calibration family
+checks to memory, calibration and reliability paths, plus immutable trained
+weight identities through replay, profiling, inventory and live launchers.
+
+Added the isolated PyTorch/Transformers/PEFT/TRL lock, explicit Qwen text-module
+LoRA targets, completion-only loss, bounded GPU lease enforcement, frozen-base
+and gradient checks, adapter reload and merged-logit verification. A Docker
+launcher records observed image identity and keeps actor serving stopped.
+Added the A100 40 GB profile and Lambda lifecycle bound to the original journal,
+with two regional off-host cleanup controllers and real recovery-canary gates.
+
+Verification: type/contracts passed; full Node 217 passed and two database tests
+skipped; full Python rerun 304 passed with the pinned native environment; full
+deployment suite 141 passed; lint zero errors and 33 warnings. Initial Python
+failures and their resolution are retained in STATE. Goal review is pending;
+no GPU weight change, live benchmark score or measured improvement is claimed
+at this implementation checkpoint.
+
 ## 2026-11-07: standalone research separation
 
 Established an independent goal-conditioned tool-prefetch study with a fixed actor.

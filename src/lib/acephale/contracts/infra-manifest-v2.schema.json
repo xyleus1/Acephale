@@ -71,10 +71,111 @@
       "type": "object", "additionalProperties": false,
       "required": ["repository", "revision", "servedModel", "weightsHash", "tokenizerHash", "chatTemplateHash", "precision", "contextWindow", "inputBudget", "outputCap", "temperature", "topP", "thinking", "weightsFrozen"],
       "properties": {
+        "trainedPredictor": { "$ref": "#/$defs/TrainedPredictorArtifact" },
+        "predictionProtocol": { "enum": ["rank_marginals_v2", "rank_binary_v1"] },
+        "binaryTokenIds": { "$ref": "#/$defs/BinaryTokenIds" },
         "repository": { "type": "string", "minLength": 1 }, "revision": { "$ref": "#/$defs/GitRevision" }, "servedModel": { "type": "string", "minLength": 1 },
         "weightsHash": { "$ref": "#/$defs/Sha256" }, "tokenizerHash": { "$ref": "#/$defs/Sha256" }, "chatTemplateHash": { "$ref": "#/$defs/Sha256" },
         "precision": { "const": "bfloat16" }, "contextWindow": { "type": "integer", "minimum": 1 }, "inputBudget": { "type": "integer", "minimum": 1 },
         "outputCap": { "type": "integer", "minimum": 1 }, "temperature": { "const": 0 }, "topP": { "const": 1 }, "thinking": { "const": false }, "weightsFrozen": { "const": true }
+      }
+    }
+,
+    "BinaryTokenIds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zero",
+        "one"
+      ],
+      "properties": {
+        "zero": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "one": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+,
+    "TrainedPredictorArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "base",
+        "adapterHash",
+        "mergedWeightsHash",
+        "tokenizerHash",
+        "chatTemplateHash",
+        "trainingManifestHash",
+        "weightFitFamilies",
+        "calibrationFamilies",
+        "protocol",
+        "binaryTokenIds",
+        "servedModel",
+        "contentHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "acephale-trained-predictor"
+        },
+        "base": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "revision"
+          ],
+          "properties": {
+            "repository": {
+              "const": "Qwen/Qwen3.5-0.8B"
+            },
+            "revision": {
+              "const": "2fc06364715b967f1860aea9cf38778875588b17"
+            }
+          }
+        },
+        "adapterHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "mergedWeightsHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "tokenizerHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "chatTemplateHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "trainingManifestHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "weightFitFamilies": {
+          "$ref": "#/$defs/Families"
+        },
+        "calibrationFamilies": {
+          "$ref": "#/$defs/Families"
+        },
+        "protocol": {
+          "const": "rank_binary_v1"
+        },
+        "binaryTokenIds": {
+          "$ref": "#/$defs/BinaryTokenIds"
+        },
+        "servedModel": {
+          "type": "string",
+          "pattern": "^acephale-predictor-[a-f0-9]{12}$"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/Sha256"
+        }
       }
     }
   }

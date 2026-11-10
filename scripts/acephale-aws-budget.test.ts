@@ -7,15 +7,15 @@ import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 import { awsBudget, type AwsBudgetRequest } from "./acephale-aws-budget";
 
-function fixture() {
+function fixture(provider?: "aws" | "lambda") {
   const directory = mkdtempSync(join(tmpdir(), "acephale-aws-budget-")), path = join(directory, "original.jsonl"), checkpointPath = join(directory, "checkpoint.json");
   const owner = new DurableBudget(path); owner.ledger.reserve("original-unknown", "training", 2_000_000);
   const entries = owner.ledger.snapshot(); owner.close();
   const checkpoint = { version: 1, ledgerPathHash: hash(resolve(path)), entriesHash: hash(entries), entries };
   writeFileSync(checkpointPath, canonical(checkpoint));
-  const request: AwsBudgetRequest = { operation: "reserve", ledgerPath: path, checkpointPath, checkpointHash: hash(checkpoint),
+  const request: AwsBudgetRequest = { ...(provider ? { provider } : {}), operation: "reserve", ledgerPath: path, checkpointPath, checkpointHash: hash(checkpoint),
     sliceLedgerPath: join(directory, "aws-slice.json"), deploymentHash: "b".repeat(64),
-    reservationId: "aws-infra:11111111-1111-4111-8111-111111111111", maximumMicrodollars: 4_400_000 };
+    reservationId: `${provider ?? "aws"}-infra:11111111-1111-4111-8111-111111111111`, maximumMicrodollars: 4_400_000 };
   awsBudget({ ...request, operation: "bind" });
   const cleanup = () => { const target = resolve(directory); if (!target.startsWith(resolve(tmpdir()) + sep) || !target.includes("acephale-aws-budget-")) throw new Error("Unsafe cleanup"); rmSync(target, { recursive: true, force: true }); };
   return { path, request, cleanup };
@@ -32,6 +32,22 @@ test("AWS reservations append once to the original journal and retain unknown hi
     const owner = new DurableBudget(f.path);
     assert.equal(owner.ledger.snapshot().find(row => row.id === "original-unknown")!.actual, undefined);
     owner.close();
+  } finally { f.cleanup(); }
+});
+
+test("Lambda uses the same original journal and exclusive cross-provider binding", () => {
+  const f = fixture("lambda");
+  try {
+    const before = readFileSync(f.path), result = awsBudget(f.request), after = readFileSync(f.path);
+    assert.equal(result.infrastructureMicrodollars, 4_400_000);
+    assert.ok(after.subarray(0, before.length).equals(before));
+    assert.deepEqual(awsBudget(f.request), result);
+    assert.throws(() => awsBudget({ ...f.request, provider: "aws", operation: "bind" }), /EEXIST/);
+    assert.throws(() => awsBudget({ ...f.request, provider: "aws", operation: "inspect" }), /binding/);
+    assert.throws(() => awsBudget({ ...f.request, reservationId: "aws-infra:11111111-1111-4111-8111-111111111111" }), /reservation/i);
+    const budget = new DurableBudget(f.path);
+    assert.equal(budget.ledger.snapshot().find(row => row.id === "original-unknown")!.actual, undefined);
+    budget.close();
   } finally { f.cleanup(); }
 });
 

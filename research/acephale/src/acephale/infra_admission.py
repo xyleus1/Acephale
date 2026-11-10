@@ -254,7 +254,12 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
     audit = audit_gate(pilot, reviews)
     if not audit["goal_conditioning_allowed"]:
         raise ValueError("Human audit gate failed; goal-conditioned execution remains disabled")
-    training = [row for row in predictions if row["split"] == "train"]
+    from acephale.training_data import calibration_families
+
+    reserved_calibration = calibration_families(model)
+    training = [row for row in predictions if row["split"] == "train" and (reserved_calibration is None or row["family_id"] in reserved_calibration)]
+    if reserved_calibration is not None and {row["family_id"] for row in training} != reserved_calibration:
+        raise ValueError("Every declared calibration family requires independent goal grading")
     grades = read_jsonl(grades_path)
     grade_map = {row["checkpoint_id"]: row for row in grades}
     if not training or len(grade_map) != len(grades) or set(grade_map) != {row["checkpoint_id"] for row in training}:
@@ -284,7 +289,7 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
             "provenance": {"model": model, "memoryHash": manifest["memoryHash"], "predictorContractHash": manifest["predictorContractHash"],
                            "candidateCompilerHash": manifest["candidateCompilerHash"], "retrievalHash": manifest["retrievalHash"], "predictionManifestHash": manifest["contentHash"],
                            "predictionRowsHash": hashes[str(paths[1])], "pilotHash": file_hash(pilot_path), "reviewsHash": file_hash(reviews_path),
-                           "gradesHash": file_hash(grades_path), "method": "training_replay_full_cohort_wilson_lower_95"}}
+                           "gradesHash": file_hash(grades_path), "method": "reserved_calibration_full_cohort_wilson_lower_95" if reserved_calibration is not None else "training_replay_full_cohort_wilson_lower_95"}}
     if any(file_hash(path) != hashes[str(path)] for path in paths):
         raise ValueError("Goal evidence changed during aggregation")
     artifact = {**body, "contentHash": hash_v1(body)}

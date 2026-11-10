@@ -12,14 +12,14 @@ export type GitRevision = string;
 export type Sha256 = string;
 /**
  * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
- * via the `definition` "ImageDigest".
- */
-export type ImageDigest = string;
-/**
- * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
  * via the `definition` "Families".
  */
 export type Families = string[];
+/**
+ * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
+ * via the `definition` "ImageDigest".
+ */
+export type ImageDigest = string;
 
 export interface InfraExperimentManifestV2 {
   version: 2;
@@ -100,6 +100,9 @@ export interface InfraExperimentManifestV2 {
  * via the `definition` "ModelIdentity".
  */
 export interface ModelIdentity {
+  trainedPredictor?: TrainedPredictorArtifact;
+  predictionProtocol?: "rank_marginals_v2" | "rank_binary_v1";
+  binaryTokenIds?: BinaryTokenIds;
   repository: string;
   revision: GitRevision;
   servedModel: string;
@@ -114,4 +117,35 @@ export interface ModelIdentity {
   topP: 1;
   thinking: false;
   weightsFrozen: true;
+}
+/**
+ * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
+ * via the `definition` "TrainedPredictorArtifact".
+ */
+export interface TrainedPredictorArtifact {
+  schemaVersion: 1;
+  kind: "acephale-trained-predictor";
+  base: {
+    repository: "Qwen/Qwen3.5-0.8B";
+    revision: "2fc06364715b967f1860aea9cf38778875588b17";
+  };
+  adapterHash: Sha256;
+  mergedWeightsHash: Sha256;
+  tokenizerHash: Sha256;
+  chatTemplateHash: Sha256;
+  trainingManifestHash: Sha256;
+  weightFitFamilies: Families;
+  calibrationFamilies: Families;
+  protocol: "rank_binary_v1";
+  binaryTokenIds: BinaryTokenIds;
+  servedModel: string;
+  contentHash: Sha256;
+}
+/**
+ * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
+ * via the `definition` "BinaryTokenIds".
+ */
+export interface BinaryTokenIds {
+  zero: number;
+  one: number;
 }

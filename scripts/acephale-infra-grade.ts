@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { canonical, copy, hash } from "../src/lib/acephale/canonical";
 import { validateGoals } from "../src/lib/acephale/compiler";
 import type { GoalSet } from "../src/lib/acephale/contracts/generated";
-import { INFRA_MODEL_PINS } from "../src/lib/acephale/infra-manifest";
+import { validatePredictorModelIdentity } from "../src/lib/acephale/predictor-artifact";
 import { RESEARCH_MODELS, ResponsesModelPort, type ModelPort, type ModelRequest } from "../src/lib/acephale/model";
 import { countTokens } from "../src/lib/acephale/tokens";
 import { ImmutableEventLog } from "../services/acephale-runtime/artifacts";
@@ -59,7 +59,7 @@ export function verifyInfraGoalReplay(bundle: string, predictionDirectory: strin
   const predictions = lines(join(predictionDirectory, "predictions.jsonl")) as Prediction[];
   if (contentHash !== hash(body) || manifest.kind !== "uncalibrated_prediction_replay" || manifest.executionAllowed !== false
     || manifest.inferGoals !== true || manifest.sourceDatasetHash !== dataset.manifest.bundle_hash
-    || hash(manifest.model) !== hash(INFRA_MODEL_PINS.predictor)
+    || hash(manifest.model) !== hash(validatePredictorModelIdentity(manifest.model))
     || ["memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash"].some(key => !/^[0-9a-f]{64}$/.test(manifest[key]))
     || !predictions.length || new Set(predictions.map(row => row.checkpoint_id)).size !== predictions.length
     || hash(manifest.rowIds) !== hash(predictions.map(row => row.checkpoint_id))) throw new Error("Closed frozen goal replay required");

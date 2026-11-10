@@ -16,6 +16,7 @@ or guarantee improvements in task accuracy, logical tool-call count or latency.
 - [Collection, memory, calibration and evaluation commands](docs/RUNBOOK.md)
 - [Current verification, execution gates and limitations](docs/STATE.md)
 - [Research Python package](research/acephale/README.md)
+- [Scoped predictor LoRA training](research/acephale/training/README.md)
 - [Pinned serving and deployment configuration](infra/acephale-infra-v1/README.md)
 
 ## Local checks

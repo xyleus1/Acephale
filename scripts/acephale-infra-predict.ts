@@ -4,12 +4,12 @@ import { pathToFileURL } from "node:url";
 import { hash, copy, canonical } from "../src/lib/acephale/canonical";
 import type { Candidate, ExecutionFrame, Json, GoalSet } from "../src/lib/acephale/contracts/generated";
 import { validateContract } from "../src/lib/acephale/contracts/validate";
-import { INFRA_MODEL_PINS } from "../src/lib/acephale/infra-manifest";
+import { predictorModelIdentity, resolvePredictorProfile, type PredictorProfile } from "../src/lib/acephale/predictor-artifact";
 import { LocalChatModelPort } from "../src/lib/acephale/infra-model";
 import { LEXICAL_MEMORY_RETRIEVAL_HASH, validateMemoryArtifact } from "../src/lib/acephale/experience-memory";
 import { createInfraNativeCandidates } from "../services/acephale-runtime/infra-candidates";
 import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-compiler-identity";
-import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/acephale-runtime/infra-predictors";
+import { InfraLocalPredictors, predictorContractHash } from "../services/acephale-runtime/infra-predictors";
 import { NativeReadPolicy } from "../services/acephale-runtime/native-read-policy";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
 import { documentPublicInput, verifyDocumentBundle } from "./acephale-infra-document-data";
@@ -21,7 +21,7 @@ import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/acephale-runtime/infra-hosted-workers";
 import type { EpisodicRetrievalPort } from "../src/lib/acephale/episodic-retrieval";
 
-interface PublicRow {
+export interface PublicRow {
   checkpoint_id: string; input_hash: string; episode_id: string; family_id: string; split: string; domain: string; through_seq: number;
   environment_version: string; tool_schema_hash: string; runtime_tool_schema_hash?: string;
   checkpoint_number?: number;
@@ -98,7 +98,7 @@ export function publicInfraFrame(row: PublicRow, snapshotId: string): ExecutionF
   validateContract("ExecutionFrame", frame); return frame;
 }
 export interface InfraPredictionEpisodicConfig { embeddingsPath: string; budgetDirectory: string; ledgerCheckpointPath: string }
-export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean; fixedPanel?: boolean; partition?: "calibration" | "test"; episodic?: InfraPredictionEpisodicConfig }) {
+export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean; fixedPanel?: boolean; partition?: "calibration" | "test"; episodic?: InfraPredictionEpisodicConfig; predictor?: PredictorProfile }) {
   const inventory = JSON.parse(await readFile(join(input.bundle, "manifest.json"), "utf8"));
   const documents = !!inventory.files?.["document-lineage.json"];
   const pilot = documents ? verifyDocumentBundle(input.bundle) : verifyInfraPilotBundle(input.bundle);
@@ -111,7 +111,9 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   const output = resolve(input.output); await mkdir(output, { recursive: false });
   if (documents && memory.repositorySnapshotId !== `infra-documents:${pilot.manifest.bundle_hash}`) throw new Error("Document memory belongs to another dataset");
   const candidateCompilerHash = infraCandidateCompilerHash(documents ? "documents" : "native");
-  const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: INFRA_MODEL_PINS.predictor.repository, contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024 });
+  const profile = resolvePredictorProfile(input.predictor);
+  const modelIdentity = predictorModelIdentity(input.predictor);
+  const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: profile.trainedPredictor?.servedModel ?? modelIdentity.repository, contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024 });
   let budget: DurableBudget | undefined, memoryServices: ReturnType<typeof createInfraMemoryServices> | undefined;
   let episodicLineage: Record<string, string> | null = null;
   const retrievalEvents: Record<string, unknown>[] = [];
@@ -129,11 +131,11 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
       record: event => retrievalEvents.push(event) });
     episodicLineage = { embeddingsHash: embeddings.contentHash, ledgerCheckpointHash: hash(checkpoint), budgetPathHash: hash(ledgerPath) };
   }
-  const lineage = { version: 2, kind: "uncalibrated_prediction_replay", model: INFRA_MODEL_PINS.predictor, memoryHash: memory.contentHash,
+  const lineage = { version: 2, kind: "uncalibrated_prediction_replay", model: modelIdentity, memoryHash: memory.contentHash,
     probabilitySemantics: "independent_next_batch_hit", predictionMode: input.fixedPanel ? "fixed_panel" : "selected_candidates",
     panelSelection: input.fixedPanel ? "first_three_common_compiler_candidates_before_goal_inference_v1" : null,
     partition: input.partition ?? "calibration",
-    predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash,
+    predictorContractHash: predictorContractHash(input.predictor), candidateCompilerHash,
     retrievalHash: memoryServices?.profileHash ?? LEXICAL_MEMORY_RETRIEVAL_HASH, episodic: episodicLineage,
     sourceDatasetHash: pilot.manifest.bundle_hash, limit: input.limit, selection: "family-partition-round-robin-v1", inferGoals: input.inferGoals, rowIds: rows.map(row => row.checkpoint_id), executionAllowed: false };
   await writeFile(join(output, "manifest.json"), canonical({ ...lineage, contentHash: hash(lineage) }) + "\n", { flag: "wx" });
@@ -149,7 +151,7 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
     candidates = input.fixedPanel ? selectInfraCandidatePanel(universe) : universe;
     lifetime.throwIfAborted();
     const retrieval = memoryServices?.perRun(`prediction:${row.checkpoint_id}`, "neutral_memory_prefetch", row.family_id);
-    const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: pilot.expected, excludeFamilies: [row.family_id],
+    const predictor = new InfraLocalPredictors(model, { ...input.predictor, memory, allowedFamilies: pilot.expected, excludeFamilies: [row.family_id],
       ...(retrieval ? { retrieveMemory: freezeInfraReplayRetrieval(retrieval.retrieve), retrievalProfileHash: retrieval.profileHash } : {}) });
     const signal = AbortSignal.any([lifetime, AbortSignal.timeout(120000)]);
       const goals: GoalSet = input.inferGoals ? await predictor.inferGoals(frame, signal) : frame.goals;
@@ -174,18 +176,19 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const [bundle, memory, output, baseUrl, limit = "100", condition = "neutral", mode = "selected_candidates", partition = "calibration", episodicConfig] = process.argv.slice(2);
-  if (!bundle || !memory || !output || !baseUrl || !["neutral", "goals"].includes(condition) || !["selected_candidates", "fixed_panel"].includes(mode) || !["calibration", "test"].includes(partition)) throw new Error("Usage: acephale-infra-predict.ts BUNDLE MEMORY OUTPUT LOCAL_MODEL_URL [LIMIT] [neutral|goals] [selected_candidates|fixed_panel] [calibration|test] [EPISODIC_CONFIG_JSON]");
+  const [bundle, memory, output, baseUrl, limit = "100", condition = "neutral", mode = "selected_candidates", partition = "calibration", episodicConfig, predictorConfig] = process.argv.slice(2);
+  if (!bundle || !memory || !output || !baseUrl || !["neutral", "goals"].includes(condition) || !["selected_candidates", "fixed_panel"].includes(mode) || !["calibration", "test"].includes(partition)) throw new Error("Usage: acephale-infra-predict.ts BUNDLE MEMORY OUTPUT LOCAL_MODEL_URL [LIMIT] [neutral|goals] [selected_candidates|fixed_panel] [calibration|test] [EPISODIC_CONFIG_JSON_OR_-] [PREDICTOR_PROFILE_JSON]");
   const run = async () => {
     let episodic: InfraPredictionEpisodicConfig | undefined;
-    if (episodicConfig) {
+    if (episodicConfig && episodicConfig !== "-") {
       const configuration = JSON.parse(await readFile(episodicConfig, "utf8"));
       if (hash(Object.keys(configuration).sort()) !== hash(["budgetDirectory", "embeddingsPath", "ledgerCheckpointPath"])
         || Object.values(configuration).some(value => typeof value !== "string" || !value)) throw new Error("Episodic replay config requires only artifact and original-journal paths");
       const base = dirname(resolve(episodicConfig));
       episodic = { embeddingsPath: resolve(base, configuration.embeddingsPath), budgetDirectory: resolve(base, configuration.budgetDirectory), ledgerCheckpointPath: resolve(base, configuration.ledgerCheckpointPath) };
     }
-    return runInfraPrediction({ bundle, memory, output, baseUrl, limit: Number(limit), inferGoals: condition === "goals", fixedPanel: mode === "fixed_panel", partition: partition as "calibration" | "test", episodic });
+    return runInfraPrediction({ bundle, memory, output, baseUrl, limit: Number(limit), inferGoals: condition === "goals", fixedPanel: mode === "fixed_panel", partition: partition as "calibration" | "test", episodic,
+      predictor: predictorConfig ? JSON.parse(await readFile(predictorConfig, "utf8")) : undefined });
   };
   run().then(result => console.log(JSON.stringify(result)))
     .catch(error => { console.error(error instanceof Error ? error.message : "Prediction replay failed"); process.exitCode = 1; });
