@@ -10,8 +10,12 @@ import type { BoundaryWorker } from "./service";
 export interface InfraHostedConfiguration {
   allocation: Allocation; maxCostMicrodollarsPerRun: number;
   maxSteps: number; maxErrors: number; timeoutSeconds: number;
+  evaluationType?: "ALL" | "ALL_WITH_NL_ASSERTIONS";
 }
 export function validateInfraHosted(value: InfraHostedConfiguration, stage: string) {
+  if (value?.evaluationType !== undefined && !["ALL", "ALL_WITH_NL_ASSERTIONS"].includes(value.evaluationType)) {
+    throw new Error("Unsupported native evaluation type");
+  }
   const allocation = stage === "collection" ? "training" : stage;
   if (!value || value.allocation !== allocation || !Object.hasOwn(ALLOCATIONS, value.allocation)
     || !Number.isSafeInteger(value.maxCostMicrodollarsPerRun) || value.maxCostMicrodollarsPerRun < 1

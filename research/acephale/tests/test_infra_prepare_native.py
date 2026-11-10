@@ -44,6 +44,25 @@ def test_preparation_builds_runtime_valid_base_only_nonheldout_collection(tmp_pa
     assert result.returncode == 0, result.stderr
 
 
+def test_explicit_additive_audit_binds_config_but_preserves_actor_and_private_task_bytes():
+    _, plan, deployment, catalog = inputs()
+    baseline, baseline_manifest, baseline_tasks = build_collection(plan, deployment, catalog, "b" * 40, "a" * 64)
+    assert baseline["hosted"]["evaluationType"] == "ALL"
+    plan["evaluationType"] = "ALL_WITH_NL_ASSERTIONS"
+    audited, audited_manifest, audited_tasks = build_collection(plan, deployment, catalog, "b" * 40, "a" * 64)
+    assert audited["hosted"]["evaluationType"] == "ALL_WITH_NL_ASSERTIONS"
+    assert hash_v1(audited) != hash_v1(baseline)
+    assert audited_tasks == baseline_tasks and audited["runs"] == baseline["runs"]
+    assert audited_manifest["actor"] == baseline_manifest["actor"]
+    assert audited_manifest["data"] == baseline_manifest["data"]
+    assert audited_manifest["protocol"] == baseline_manifest["protocol"]
+    assert {key: value for key, value in audited.items() if key != "hosted"} == {key: value for key, value in baseline.items() if key != "hosted"}
+    for value in ("ALL_IGNORE_BASIS", "NL_ASSERTIONS", None, True):
+        plan["evaluationType"] = value
+        with pytest.raises(ValueError, match="evaluation type"):
+            build_collection(plan, deployment, catalog, "b" * 40, "a" * 64)
+
+
 @pytest.mark.parametrize("case", ["duplicate", "family", "missing-task", "unobserved", "seeds"])
 def test_preparation_refuses_ambiguous_or_fabricated_inputs(case):
     _, plan, deployment, catalog = inputs()

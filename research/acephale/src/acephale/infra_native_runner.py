@@ -32,6 +32,7 @@ from acephale.native_common import (
     await_service_ready,
     close_failed_workers,
     drain_trial,
+    native_evaluation_type,
     native_ports,
     observe_host_health,
     read,
@@ -53,6 +54,7 @@ def validate_task_bundle(configuration: dict, manifest: dict, bundle: dict) -> d
         raise ValueError("Native upstream revision mismatch")
     if not configuration.get("hosted"):
         raise ValueError("Native launcher requires budgeted hosted user and evaluator ports")
+    native_evaluation_type(configuration["hosted"].get("evaluationType", "ALL"))
     indexed = {}
     for item in bundle.get("tasks", []):
         key = (item["domain"], item["taskId"])
@@ -180,6 +182,7 @@ class NativeTauExecutor:
                         "isRead": True, "durationMs": 1000 * (time.perf_counter() - started)})
 
         run_id, hosted = run["runId"], self.configuration["hosted"]
+        evaluation_type = native_evaluation_type(hosted.get("evaluationType", "ALL"))
         row = _empty_row(run)
         artifact = {"record": row, "simulation": {"messages": []}, "verdict": None}
         samples = []
@@ -214,10 +217,10 @@ class NativeTauExecutor:
                 "authoritativeCalls": environment.authoritative_calls, "speculativeCalls": environment.speculative_calls,
                 "freshnessChecks": environment.refresh_calls, "revalidationCalls": 0})
             evaluation_started = time.perf_counter()
-            reward = evaluate(simulation=simulation, task=task, evaluation_type=EvaluationType.ALL,
+            reward = evaluate(simulation=simulation, task=task, evaluation_type=EvaluationType[evaluation_type],
                 solo_mode=False, domain=run["domain"], strict_replay=True) if simulation else None
-            verdict = {**assess_official_reward(task, reward),
-                "evaluatorVersion": f"tau2:{REVISION}:ALL",
+            verdict = {**assess_official_reward(task, reward, evaluation_type=evaluation_type),
+                "evaluatorVersion": f"tau2:{REVISION}:{evaluation_type}",
                 "judgeModel": MODELS["teacher"]}
             artifact.update({"verdict": verdict, "officialRewardInfo": reward.model_dump(mode="json") if reward else None})
             # A judge failure cannot release cost uncertainty or report full drain.

@@ -17,7 +17,7 @@ from acephale.infra_native_runner import (
     validate_task_bundle,
     verify_sources,
 )
-from acephale.native_common import read, write
+from acephale.native_common import native_evaluation_type, read, write
 
 
 def empty_shadow_memory(snapshot_id: str) -> dict:
@@ -42,6 +42,7 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
     if type(plan.get("shadowPrediction", False)) is not bool or plan.get("stage", "collection") != "collection":
         raise ValueError("Shadow collection requires an explicit boolean and collection stage")
     shadow = plan.get("shadowPrediction", False)
+    evaluation_type = native_evaluation_type(plan.get("evaluationType", "ALL"))
     if shadow and not plan.get("predictorBaseUrl"):
         raise ValueError("Shadow prediction requires the pinned predictor endpoint")
     if plan.get("memoryPath") and (not shadow or shadow_memory is None):
@@ -95,7 +96,7 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
               "taskBundleHash": hash_v1(bundle), "hosted": {"allocation": "training",
                   "maxCostMicrodollarsPerRun": plan.get("maxCostMicrodollarsPerRun", 1_250_000),
                   "maxSteps": plan.get("maxSteps", 40), "maxErrors": plan.get("maxErrors", 5),
-                  "timeoutSeconds": plan.get("timeoutSeconds", 600)}}
+                  "timeoutSeconds": plan.get("timeoutSeconds", 600), "evaluationType": evaluation_type}}
     if plan.get("predictorBaseUrl"):
         config["predictorBaseUrl"] = plan["predictorBaseUrl"]
     if shadow:

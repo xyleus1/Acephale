@@ -36,6 +36,21 @@ The pinned native source is `sierra-research/tau2-bench`, commit
 according to `research/acephale/benchmarks.lock.json`. Preserve official task bytes,
 policies and evaluator behavior. Do not silently replace a missing checkout.
 
+Native collection preparation accepts an explicit plan `evaluationType` of
+`ALL` (default) or `ALL_WITH_NL_ASSERTIONS`. The latter invokes the pinned upstream
+additive NL audit through the existing budgeted teacher port. It preserves each
+task's original reward basis and native reward; it does not use an ignore-basis
+mode. Declare this change before dispatch, within the same per-trial cost cap.
+The frozen configuration records `hosted.evaluationType` and each raw verdict
+records the exact evaluator mode and a separate `constraintAudit` status.
+
+A known constraint count requires nonempty returned assertions with exact
+multiset coverage of the private task assertions. Missing or partial audits and
+tasks with no assertions remain unknown. Additive audit failure cannot invent a
+zero count or alter the official reward; teacher exceptions retain the existing
+failure and cost-accounting path. Private assertion text stays in evaluator
+artifacts, outside actor messages, public prefixes and training examples.
+
 ## 2. Keep the existing budget
 
 Configure the private original journal location outside source control and pass
