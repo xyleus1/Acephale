@@ -44,6 +44,30 @@ scoped IAM roles, Python 3.12 AWS Lambda functions, minute EventBridge schedules
 and three-day log groups. A creation receipt is persisted after every stage.
 The token never appears in that receipt or a command argument.
 
+No reserved Lambda concurrency is required. Each controller serializes scheduled
+and manual invocations using its private `controller-lock.json`: conditional
+`If-None-Match` creation, ETag-matched reclamation after 60 seconds, and ETag-matched
+release. The function timeout is 45 seconds. Lost ownership or expiry blocks
+provider operations and enrollment publication. Busy manual enrollment retries
+at most six times, ten seconds apart. The AWS conditional-write contract is
+documented in [S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html).
+
+`plan.sourceCommit` identifies the original financial-plan initialization, not
+permission to silently relabel later code. If readiness fixes require a later
+commit, keep the existing plan, journal, pointer, slice and reservations unchanged.
+After committing a clean descendant checkout, write a new external amendment:
+
+```text
+python infra/acephale-infra-v1/control.py record-source-amendment --ledger SLICE --output NEW_AMENDMENT --reason "Observed provider readiness correction" --readiness-evidence READINESS_JSON
+```
+
+Add `sourceAmendmentPath` to the external cleanup config. Deployment verifies the
+executing commit, original plan hash, unchanged hardware/model pins and exact
+controller source hashes, then embeds the amendment in its receipt. Recording an
+amendment only inspects the original journal; it creates no new budget binding
+or financial reservation. Experiment inventories continue to record the actual
+executing commit.
+
 ```text
 python infra/acephale-infra-v1/lambda_watchdog_deploy.py deploy --config CONFIG --receipt NEW_DEPLOYMENT_RECEIPT
 ```

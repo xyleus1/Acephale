@@ -43,6 +43,19 @@ qualification, training and paired evaluation remain separate execution stages.
 See the [training guide](../research/acephale/training/README.md) and
 [Lambda runbook](../infra/acephale-infra-v1/LAMBDA_CONTROL.md).
 
+The [predictor-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42885472272)
+passed for `3f23ae0c55a6d3fab0973e70b8bc097aebb90260`: 220 Node tests passed
+without skips, Python had 302 passes and two environment/platform skips, and
+141 deployment tests passed. Real disposable PostgreSQL/pgvector integration
+ran in CI. The final local training/entrypoint focused check passed 25 tests
+after the trained-model evaluation mount adjustment; Ruff also passed.
+
+The source-only native cohort audit is explicitly provisional. Its keyword
+taxonomy can split equivalent cancellation/refund requests into different
+families. Proposed IDs must receive semantic overlap review before collection
+or evaluation; the original 24-family target is not established by this audit.
+Neither a lack of lexical matches nor a task-count target proves independence.
+
 ## Implemented scope
 
 - Shared TypeScript contracts, current-source binding, workflow/episodic memory,

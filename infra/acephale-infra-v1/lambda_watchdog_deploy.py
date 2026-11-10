@@ -15,7 +15,7 @@ import re
 import time
 import zipfile
 
-from control import atomic_json, checked_bound_ledger, digest, read_json, sha256, study_budget, watchdog_state, write_new
+from control import atomic_json, checked_bound_ledger, deployment_source, digest, read_json, sha256, study_budget, watchdog_state, write_new
 from lambda_gpu_watchdog import Provider, select_instance
 
 HERE = Path(__file__).resolve().parent
@@ -40,13 +40,13 @@ def template(name, bucket, secret_arn, code_hash):
             "Policies": [{"PolicyName": "exact-lease-cleanup", "PolicyDocument": {"Version": "2012-10-17", "Statement": [
                 {"Effect": "Allow", "Action": "secretsmanager:GetSecretValue", "Resource": secret_arn},
                 {"Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::" + bucket},
-                {"Effect": "Allow", "Action": "s3:GetObject", "Resource": ["arn:aws:s3:::" + bucket + "/state.json", "arn:aws:s3:::" + bucket + "/recovery.json", "arn:aws:s3:::" + bucket + "/pending/*"]},
-                {"Effect": "Allow", "Action": "s3:PutObject", "Resource": ["arn:aws:s3:::" + bucket + "/evidence/*", "arn:aws:s3:::" + bucket + "/pending/*", "arn:aws:s3:::" + bucket + "/recovery.json", "arn:aws:s3:::" + bucket + "/enrollment.json"]},
+                {"Effect": "Allow", "Action": "s3:GetObject", "Resource": ["arn:aws:s3:::" + bucket + "/state.json", "arn:aws:s3:::" + bucket + "/recovery.json", "arn:aws:s3:::" + bucket + "/pending/*", "arn:aws:s3:::" + bucket + "/controller-lock.json"]},
+                {"Effect": "Allow", "Action": "s3:PutObject", "Resource": ["arn:aws:s3:::" + bucket + "/evidence/*", "arn:aws:s3:::" + bucket + "/pending/*", "arn:aws:s3:::" + bucket + "/recovery.json", "arn:aws:s3:::" + bucket + "/enrollment.json", "arn:aws:s3:::" + bucket + "/controller-lock.json"]},
                 {"Effect": "Allow", "Action": ["logs:CreateLogStream", "logs:PutLogEvents"], "Resource": {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/" + name + ":*"}}
             ]}}]}},
         "Function": {"Type": "AWS::Lambda::Function", "DependsOn": "Logs", "Properties": {
             "FunctionName": name, "Role": {"Fn::GetAtt": ["Role", "Arn"]}, "Runtime": "python3.12",
-            "Handler": "lambda_gpu_watchdog.handler", "Timeout": 45, "MemorySize": 128, "ReservedConcurrentExecutions": 1,
+            "Handler": "lambda_gpu_watchdog.handler", "Timeout": 45, "MemorySize": 128,
             "Code": {"S3Bucket": bucket, "S3Key": "package.zip"},
             "Environment": {"Variables": {"STATE_BUCKET": bucket, "STATE_KEY": "state.json", "TOKEN_SECRET_ARN": secret_arn,
                                             "CONTROLLER_ID": name, "CODE_SHA256": code_hash}}}},
@@ -66,6 +66,8 @@ def package_bytes():
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         info = zipfile.ZipInfo("lambda_gpu_watchdog.py", date_time=(2026, 11, 10, 0, 0, 0))
+        info.create_system = 3
+        info.external_attr = 0o100644 << 16
         info.compress_type = zipfile.ZIP_DEFLATED
         archive.writestr(info, (HERE / "lambda_gpu_watchdog.py").read_bytes())
     return out.getvalue()
@@ -74,6 +76,7 @@ def package_bytes():
 def deploy(config_path, receipt_path):
     config = configuration(config_path)
     budget = checked_bound_ledger(Path(config["infrastructureLedgerPath"]))
+    source = deployment_source(budget, Path(config["sourceAmendmentPath"]) if config.get("sourceAmendmentPath") else None)
     overhead = next((row for row in budget.get("overheads", []) if row["id"] == config.get("overheadReservationId")), None)
     if not overhead or overhead.get("status") != "reserved" or not overhead.get("studyReservation") or overhead["reservedUsd"] > 5:
         raise ValueError("Funded original-journal overhead reservation within five dollars required")
@@ -83,7 +86,7 @@ def deploy(config_path, receipt_path):
         raise ValueError("Load LAMBDA_API_KEY securely before deployment")
     archive, code_hash = package_bytes(), sha256(HERE / "lambda_gpu_watchdog.py")
     value = {"version": 1, "config": config, "configHash": digest(config), "createdAt": time.time(),
-             "codeSha256": code_hash, "packageSha256": hashlib.sha256(archive).hexdigest(), "controllers": []}
+             "codeSha256": code_hash, "packageSha256": hashlib.sha256(archive).hexdigest(), "sourceProvenance": source, "controllers": []}
     write_new(receipt_path, value)
     for index, region in enumerate(config["regions"]):
         aws = session(config, region)
@@ -158,14 +161,24 @@ def publish(receipt_path, ledger, lease_id):
     return {"leaseId": lease_id, "stateHash": digest(state), "ownerHeartbeatAt": state["ownerHeartbeatAt"]}
 
 
+def invoke_enrollment(client, function_arn, code_hash, *, sleeper=time.sleep):
+    for attempt in range(7):
+        result = client.invoke(FunctionName=function_arn, InvocationType="RequestResponse", Payload=b"{}")
+        value = json.loads(result["Payload"].read())
+        if result.get("FunctionError") or value.get("hostId") != function_arn or value.get("codeSha256") != code_hash:
+            raise ValueError("Actual controller invocation did not establish healthy enrollment")
+        if value.get("status") != "busy":
+            return value
+        if attempt < 6:
+            sleeper(10)
+    raise ValueError("Controller remained busy through bounded enrollment retries")
+
+
 def enroll(receipt_path, output):
     receipt, controllers = checked_receipt(receipt_path), []
     for row in receipt["controllers"]:
         aws = session(receipt["config"], row["region"])
-        result = aws.client("lambda").invoke(FunctionName=row["functionArn"], InvocationType="RequestResponse", Payload=b"{}")
-        value = json.loads(result["Payload"].read())
-        if result.get("FunctionError") or value.get("hostId") != row["functionArn"] or value.get("codeSha256") != receipt["codeSha256"]:
-            raise ValueError("Actual controller invocation did not establish healthy enrollment")
+        value = invoke_enrollment(aws.client("lambda"), row["functionArn"], receipt["codeSha256"])
         persisted = json.loads(aws.client("s3").get_object(Bucket=row["bucket"], Key="enrollment.json", ExpectedBucketOwner=row["account"])["Body"].read())
         if persisted != value:
             raise ValueError("Controller enrollment was not durably exported")

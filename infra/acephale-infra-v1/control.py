@@ -524,6 +524,68 @@ def checked_bound_ledger(path: Path) -> dict[str, Any]:
     return value
 
 
+def committed_source(initial_commit: str) -> str:
+    def git(*arguments):
+        result = subprocess.run(["git", *arguments], cwd=ROOT, capture_output=True, text=True, timeout=30)
+        if result.returncode:
+            raise ValueError("Source revision must descend from the original committed plan")
+        return result.stdout.strip()
+    if git("status", "--porcelain=v1", "--untracked-files=normal"):
+        raise ValueError("Source provenance requires a clean committed checkout")
+    current = git("rev-parse", "HEAD")
+    if not re.fullmatch(r"[a-f0-9]{40}", current):
+        raise ValueError("Invalid executing source revision")
+    git("merge-base", "--is-ancestor", initial_commit, current)
+    return current
+
+
+def controller_source_files() -> list[dict]:
+    return [{"path": name, "sha256": sha256(HERE / name)} for name in
+            ("control.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json")]
+
+
+def record_source_amendment(ledger_path: Path, output: Path, reason: str, readiness_evidence: Path,
+                            *, source_probe=committed_source, budget=study_budget) -> dict:
+    """Append external provenance, never rewrite a financial binding or reservation."""
+    ledger = checked_bound_ledger(ledger_path)
+    initial = ledger["plan"]["sourceCommit"]
+    current = source_probe(initial)
+    if current == initial or not reason.strip() or len(reason) > 1024 or not readiness_evidence.is_file():
+        raise ValueError("A distinct committed amendment, reason and existing readiness evidence are required")
+    before = sha256(ledger_path)
+    evidence = budget(ledger["plan"], "inspect")
+    if sha256(ledger_path) != before:
+        raise ValueError("Infrastructure slice changed while recording source amendment")
+    value = {"version": 1, "profile": "acephale-source-amendment-v1", "planHash": ledger["planHash"],
+             "initialSourceCommit": initial, "executingSourceCommit": current, "recordedAt": time.time(),
+             "reason": reason.strip(), "readinessEvidenceSha256": sha256(readiness_evidence),
+             "infrastructureSliceSha256": before, "originalJournalEvidence": evidence,
+             "versionsSha256": ledger["versionsSha256"], "hardwareProfilesSha256": ledger["hardwareProfilesSha256"],
+             "sourceFiles": controller_source_files(), "financialBindingChanged": False}
+    value["contentHash"] = digest(value)
+    write_new(output, value)
+    return value
+
+
+def deployment_source(ledger: dict, amendment: Path | None, *, source_probe=committed_source) -> dict:
+    initial = ledger["plan"]["sourceCommit"]
+    current = source_probe(initial)
+    if current == initial:
+        return {"initialSourceCommit": initial, "executingSourceCommit": current, "amendment": None}
+    if amendment is None:
+        raise ValueError("A source-amendment receipt is required after the initial plan commit")
+    value = read_json(amendment)
+    if (value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("version") != 1 or value.get("profile") != "acephale-source-amendment-v1"
+            or value.get("planHash") != ledger["planHash"] or value.get("initialSourceCommit") != initial
+            or value.get("executingSourceCommit") != current or value.get("financialBindingChanged") is not False
+            or value.get("versionsSha256") != ledger["versionsSha256"]
+            or value.get("hardwareProfilesSha256") != ledger["hardwareProfilesSha256"]
+            or value.get("sourceFiles") != controller_source_files()):
+        raise ValueError("Source-amendment receipt does not bind the unchanged plan and executing code")
+    return {"initialSourceCommit": initial, "executingSourceCommit": current, "amendment": value}
+
+
 def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *, budget=study_budget) -> dict[str, Any]:
     if str(uuid.UUID(reservation_id)) != reservation_id:
         raise ValueError("Explicit unique overhead reservation UUID required")
@@ -831,6 +893,11 @@ def main(argv: list[str] | None = None) -> int:
     overhead.add_argument("--ledger", type=Path, required=True)
     overhead.add_argument("--reservation-id", required=True)
     overhead.add_argument("--maximum-usd", type=float, required=True)
+    source_amendment = commands.add_parser("record-source-amendment")
+    source_amendment.add_argument("--ledger", type=Path, required=True)
+    source_amendment.add_argument("--output", type=Path, required=True)
+    source_amendment.add_argument("--reason", required=True)
+    source_amendment.add_argument("--readiness-evidence", type=Path, required=True)
     prepare = commands.add_parser("prepare-lease")
     prepare.add_argument("--ledger", type=Path, required=True)
     prepare.add_argument("--hours", type=float, required=True)
@@ -886,6 +953,8 @@ def main(argv: list[str] | None = None) -> int:
         value = init_bound_ledger(args.ledger, load_plan(args.plan), args.prior_gpu_hours)
     elif args.command == "reserve-overhead":
         value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd)
+    elif args.command == "record-source-amendment":
+        value = record_source_amendment(args.ledger, args.output, args.reason, args.readiness_evidence)
     elif args.command == "mark-ready":
         smoke = read_json(args.smoke_receipt)
         if smoke.get("profile") != PROFILE or smoke.get("leaseId") != args.lease_id or smoke.get("passed") is not True:

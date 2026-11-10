@@ -60,6 +60,7 @@ class ControlTests(unittest.TestCase):
             return result
         self.budget = budget
         self.plan = {"version": 1, "provider": "lambda", "profile": control.PROFILE, "hardwareProfile": "a100-40gb-v1",
+                     "sourceCommit": "a" * 40,
                      "region": "test-region", "sshKeyName": "research-key", "firewallRulesetId": "firewall-1",
                      "infrastructureLedgerPath": str(self.ledger.resolve())}
         self.initial = control.init_bound_ledger(self.ledger, self.plan, 0, budget=self.budget)
@@ -94,6 +95,28 @@ class ControlTests(unittest.TestCase):
         result = control.validate_config()
         self.assertTrue(result["valid"])
         self.assertFalse(result["containerExecutionValidated"])
+
+    def test_source_amendment_preserves_original_slice_and_binding(self):
+        evidence, output = self.root / "readiness.json", self.root / "source-amendment.json"
+        control.write_new(evidence, {"awsConcurrentExecutions": 10, "reservedConcurrencyAvailable": False})
+        before = self.ledger.read_bytes()
+        value = control.record_source_amendment(self.ledger, output, "Use conditional S3 locks for observed account quota", evidence,
+            source_probe=lambda _: "b" * 40, budget=self.budget)
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.assertEqual(value["planHash"], self.initial["planHash"])
+        self.assertFalse(value["financialBindingChanged"])
+        self.assertEqual(self.budget_calls[-1], "inspect")
+        actual = control.deployment_source(self.initial, output, source_probe=lambda _: "b" * 40)
+        self.assertEqual(actual["executingSourceCommit"], "b" * 40)
+        with self.assertRaisesRegex(ValueError, "required"):
+            control.deployment_source(self.initial, None, source_probe=lambda _: "b" * 40)
+        with self.assertRaisesRegex(ValueError, "does not bind"):
+            control.deployment_source(self.initial, output, source_probe=lambda _: "c" * 40)
+        value["planHash"] = "f" * 64
+        value["contentHash"] = control.digest({key: item for key, item in value.items() if key != "contentHash"})
+        control.atomic_json(output, value)
+        with self.assertRaisesRegex(ValueError, "does not bind"):
+            control.deployment_source(self.initial, output, source_probe=lambda _: "b" * 40)
 
     def test_missing_actual_capacity_field_is_not_assumed_available(self):
         request = self.client.request

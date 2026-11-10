@@ -55,7 +55,7 @@ will write. Relative paths below resolve beside `split-guard.json`:
   "inventoryEvidencePath": "deployment-inventory/inventory-evidence.json",
   "sshDestination": "ubuntu@YOUR_VERIFIED_GPU_HOST",
   "sshPort": 22,
-  "expectedInstanceId": "YOUR_OBSERVED_EC2_INSTANCE_ID",
+  "expectedInstanceId": "YOUR_OBSERVED_PROVIDER_INSTANCE_ID",
   "localPorts": {"actor": 18000, "predictor": 18001, "otlp": 14318},
   "maximumLifetimeSeconds": 3600
 }
@@ -67,6 +67,12 @@ known-hosts store. The guard uses `StrictHostKeyChecking=yes` and `BatchMode=yes
 It never auto-accepts a host key, asks for a password, stores a private key or
 changes the SSH configuration. The SSH user must be able to run `python3` and
 read local Docker container status on the GPU host.
+
+For Lambda, additionally set `provider: "lambda"`, `knownHostsPath`,
+`expectedHostKeySha256` and `expectedMachineIdSha256`. The dedicated known-hosts
+file contains exactly the observed host's ed25519 key. The inventory includes
+the actual Lambda API receipt and machine-id hash; it never invents an EC2 ID.
+Initial host trust is a recorded operator observation, not provider attestation.
 
 The guard verifies the actual inventory hash, instance ID, deployment sections
 and manifest source identity. It owns all three loopback listeners with
@@ -93,7 +99,7 @@ Then use the prepared native collection command from
 and benchmark interpreter. Configure the OpenAI key securely as the final
 credential step. The guard is independent of that key.
 
-The guard performs read-only SSH probes of the remote EC2 DMI identity, exact
+The guard performs read-only SSH probes of the bound provider host identity, exact
 inventory-bound container IDs/image IDs/start times, model health/model catalogs,
 and collector listener. It also checks the model catalogs through its own local
 forwards. Heartbeat freshness uses the Windows observation clock after those

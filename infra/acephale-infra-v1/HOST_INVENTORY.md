@@ -11,7 +11,8 @@ new output directory, after all observations pass.
 ## Prerequisites on the actual host
 
 Use the existing image/model startup procedure in [README.md](README.md).
-Both pinned model containers must already be resident on the same 48 GB GPU.
+Both pinned model containers must already be resident on the same GPU, matching
+the explicitly selected 48 GB A6000 or 40 GB A100 hardware profile.
 The collector verifies the exact current Compose command, image digest,
 read-only model mount, downloaded model receipts, process IDs and actual NVIDIA
 memory allocations. A running container without a resident allocation fails.
@@ -33,8 +34,10 @@ For AWS, copy the raw `DescribeInstances` evidence file emitted by
 links its path and hash. The collector selects the instance matching the local
 `/sys/devices/virtual/dmi/id/board_asset_tag` and reads its instance type and AMI.
 An arbitrary AWS account ID or manually typed instance type is insufficient.
-No AWS credential is needed on the GPU host for this step. This initial collector
-supports AWS identity; another provider requires an explicit identity adapter.
+No AWS credential is needed on the GPU host for this step. For Lambda, use the
+controller's actual `provider-receipt` output and pass
+`--hardware-profile a100-40gb-v1`. That adapter binds the live provider instance,
+operator-pinned SSH key and host machine-id. See [LAMBDA_CONTROL.md](LAMBDA_CONTROL.md).
 
 ## Split Windows orchestration and Linux GPU serving
 

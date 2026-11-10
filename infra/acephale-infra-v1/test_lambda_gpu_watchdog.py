@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import lambda_gpu_watchdog as watchdog
@@ -39,6 +40,11 @@ class S3:
     class Missing(Exception):
         pass
 
+    class Conditional(Exception):
+        def __init__(self, status=412):
+            self.response = {"ResponseMetadata": {"HTTPStatusCode": status}, "Error": {
+                "Code": "PreconditionFailed" if status == 412 else "ConditionalRequestConflict"}}
+
     def __init__(self, state):
         self.objects = {"state.json": json.dumps(state).encode()} if state else {}
         self.exceptions = SimpleNamespace(NoSuchKey=self.Missing)
@@ -46,12 +52,16 @@ class S3:
     def get_object(self, **kwargs):
         if kwargs["Key"] not in self.objects:
             raise self.Missing()
-        return {"Body": io.BytesIO(self.objects[kwargs["Key"]])}
+        data = self.objects[kwargs["Key"]]
+        return {"Body": io.BytesIO(data), "ETag": '"' + hashlib.sha256(data).hexdigest() + '"'}
 
     def put_object(self, **kwargs):
         if kwargs.get("IfNoneMatch") == "*" and kwargs["Key"] in self.objects:
-            raise ValueError("Immutable receipt collision")
+            raise self.Conditional()
+        if kwargs.get("IfMatch") and (kwargs["Key"] not in self.objects or self.get_object(Key=kwargs["Key"])["ETag"] != kwargs["IfMatch"]):
+            raise self.Conditional()
         self.objects[kwargs["Key"]] = kwargs["Body"]
+        return {"ETag": self.get_object(Key=kwargs["Key"])["ETag"]}
 
 
 class WatchdogTests(unittest.TestCase):
@@ -99,7 +109,8 @@ class WatchdogTests(unittest.TestCase):
                "TOKEN_SECRET_ARN": "test-arn", "CONTROLLER_ID": "acephale-test-1"}
         secret = SimpleNamespace(get_secret_value=lambda **_: {"SecretString": "test-only-token"})
         aws = SimpleNamespace(client=lambda name: s3 if name == "s3" else secret)
-        context = SimpleNamespace(invoked_function_arn="arn:aws:lambda:us-east-2:123456789012:function:acephale-test-1", aws_request_id=request)
+        context = SimpleNamespace(invoked_function_arn="arn:aws:lambda:us-east-2:123456789012:function:acephale-test-1", aws_request_id=request,
+                                  get_remaining_time_in_millis=lambda: 45000)
         with patch.dict(os.environ, env), patch.dict("sys.modules", {"boto3": aws}), patch.object(watchdog, "Provider", return_value=provider), patch.object(watchdog.time, "time", return_value=1201):
             return watchdog.handler({}, context)
 
@@ -124,6 +135,37 @@ class WatchdogTests(unittest.TestCase):
         self.assertTrue(proof["actualProviderTermination"])
         self.assertEqual(proof["instanceId"], "instance1")
 
+    def test_acknowledged_termination_survives_followup_observation_failure(self):
+        state, client = lease(), Provider(lease(), asynchronous=True)
+        s3 = S3(state)
+        original = client.request
+        def failed_verification(method, path, payload=None):
+            if method == "GET" and client.instance["status"] == "terminating":
+                raise RuntimeError("read-only status request timed out")
+            return original(method, path, payload)
+        with patch.object(client, "request", side_effect=failed_verification):
+            with self.assertRaises(RuntimeError):
+                self.invoke(s3, client)
+        pending = json.loads(s3.objects["pending/" + state["leaseId"] + ".json"])
+        self.assertTrue(pending["terminationRequested"])
+        self.assertFalse(pending["terminationVerified"])
+        self.assertNotIn("recovery.json", s3.objects)
+        client.instance["status"] = "terminated"
+        result = self.invoke(s3, client, "recovered")
+        self.assertTrue(result["recoveryTestPassed"])
+
+    def test_malformed_success_response_is_not_termination_acknowledgment(self):
+        for response in (None, [], {}, {"error": "failed"}, {"data": {"terminated_instances": []}},
+                         {"data": {"terminated_instances": [{"id": "other-instance"}]}},
+                         {"data": {"terminated_instances": [{"id": "instance1", "name": "other-owner"}]}}):
+            state, client = lease(), Provider(lease())
+            original = client.request
+            client.request = lambda method, path, payload=None: response if method == "POST" else original(method, path, payload)
+            acknowledgments = []
+            with self.assertRaisesRegex(ValueError, "acknowledgment"):
+                watchdog.tick(state, client, 1201, on_termination_ack=acknowledgments.append)
+            self.assertEqual(acknowledgments, [])
+
     def test_template_has_scoped_secret_and_storage_and_minute_schedule(self):
         value = deployment.template("acephale-test-1", "private-bucket", "arn:secret:test", "a" * 64)
         resources = value["Resources"]
@@ -131,8 +173,82 @@ class WatchdogTests(unittest.TestCase):
         statements = resources["Role"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"]
         self.assertEqual(statements[0]["Resource"], "arn:secret:test")
         self.assertFalse(any(row["Resource"] == "*" for row in statements))
-        self.assertEqual(resources["Function"]["Properties"]["ReservedConcurrentExecutions"], 1)
+        self.assertNotIn("ReservedConcurrentExecutions", resources["Function"]["Properties"])
+        self.assertEqual(resources["Function"]["Properties"]["Timeout"], 45)
+        for action in ("s3:GetObject", "s3:PutObject"):
+            row = next(value for value in statements if value["Action"] == action)
+            self.assertIn("arn:aws:s3:::private-bucket/controller-lock.json", row["Resource"])
         self.assertEqual(deployment.package_bytes(), deployment.package_bytes())
+        with zipfile.ZipFile(io.BytesIO(deployment.package_bytes())) as archive:
+            item = archive.getinfo("lambda_gpu_watchdog.py")
+            self.assertEqual(item.create_system, 3)
+            self.assertEqual(item.external_attr >> 16, 0o100644)
+
+    def test_conditional_lock_serializes_invocations_and_releases_only_own_etag(self):
+        s3 = S3(None)
+        first = watchdog.ControllerLock.acquire(s3, "bucket", "one", 1000)
+        self.assertIsNotNone(first)
+        self.assertIsNone(watchdog.ControllerLock.acquire(s3, "bucket", "two", 1059))
+        second = watchdog.ControllerLock.acquire(s3, "bucket", "two", 1060)
+        self.assertIsNotNone(second)
+        first.release()
+        with patch.object(watchdog.time, "time", return_value=1061):
+            second.check()
+            with self.assertRaisesRegex(ValueError, "expired"):
+                first.check()
+        self.assertEqual(json.loads(s3.objects[watchdog.LOCK_KEY])["owner"], "two")
+        second.release()
+        self.assertIsNotNone(watchdog.ControllerLock.acquire(s3, "bucket", "three", 1061))
+
+    def test_stale_lock_reclaim_loses_etag_race_without_overwriting_new_owner(self):
+        s3 = S3(None)
+        watchdog.ControllerLock.acquire(s3, "bucket", "old", 1000)
+        original = s3.put_object
+        def raced(**kwargs):
+            if "IfMatch" in kwargs:
+                s3.objects[watchdog.LOCK_KEY] = json.dumps({"version": 1, "owner": "winner", "acquiredAt": 1061, "expiresAt": 1121}).encode()
+            return original(**kwargs)
+        with patch.object(s3, "put_object", side_effect=raced):
+            self.assertIsNone(watchdog.ControllerLock.acquire(s3, "bucket", "loser", 1061))
+        self.assertEqual(json.loads(s3.objects[watchdog.LOCK_KEY])["owner"], "winner")
+
+    def test_conditional_conflict_and_unknown_error_never_admit_unlocked_work(self):
+        s3 = S3(None)
+        with patch.object(s3, "put_object", side_effect=S3.Conditional(409)):
+            self.assertIsNone(watchdog.ControllerLock.acquire(s3, "bucket", "one", 1000))
+        with patch.object(s3, "put_object", side_effect=RuntimeError("unavailable")):
+            with self.assertRaises(RuntimeError):
+                watchdog.ControllerLock.acquire(s3, "bucket", "one", 1000)
+
+    def test_busy_handler_makes_no_provider_calls_or_enrollment(self):
+        s3, client = S3(lease()), Provider(lease())
+        watchdog.ControllerLock.acquire(s3, "private-bucket", "scheduled-invocation", 1200)
+        result = self.invoke(s3, client)
+        self.assertEqual(result["status"], "busy")
+        self.assertEqual(client.calls, [])
+        self.assertNotIn("enrollment.json", s3.objects)
+
+    def test_fresh_heartbeat_before_termination_cancels_stale_cleanup(self):
+        state, client = lease(), Provider(lease())
+        with patch.object(watchdog.time, "time", return_value=1201):
+            result = watchdog.tick(state, client, 1201, refresh_state=lambda: {**state, "ownerHeartbeatAt": 1201})
+        self.assertFalse(result["terminationRequested"])
+        self.assertEqual([call[0] for call in client.calls], ["GET"])
+
+    def test_enrollment_busy_retries_are_bounded_and_never_fabricate_success(self):
+        arn, code = "arn:test", "a" * 64
+        busy = {"status": "busy", "hostId": arn, "codeSha256": code}
+        ready = {"hostId": arn, "codeSha256": code, "readOnlyProbeSucceeded": True}
+        responses = [busy, ready]
+        client = SimpleNamespace(invoke=lambda **_: {"Payload": io.BytesIO(json.dumps(responses.pop(0)).encode())})
+        sleeps = []
+        self.assertEqual(deployment.invoke_enrollment(client, arn, code, sleeper=sleeps.append), ready)
+        self.assertEqual(sleeps, [10])
+        client.invoke = lambda **_: {"Payload": io.BytesIO(json.dumps(busy).encode())}
+        sleeps.clear()
+        with self.assertRaisesRegex(ValueError, "busy"):
+            deployment.invoke_enrollment(client, arn, code, sleeper=sleeps.append)
+        self.assertEqual(sleeps, [10] * 6)
 
 
 if __name__ == "__main__":
