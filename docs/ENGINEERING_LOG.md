@@ -1,5 +1,25 @@
 # Acephale engineering log
 
+## 2026-11-10: preserve the aborted native cohort and repair metrics publication
+
+The first real base collection retained two successful tasks and ten execution
+errors after a Windows metrics-file `EPERM` terminated its service. All 22 actor
+requests that reached the model completed; nine later slots never dispatched an
+actor request. The closed cohort remains ineligible for fitting and unchanged.
+Hosted usage cost was $0.009232; no superiority or live speedup is established.
+
+Atomic publication now uses uniquely owned temporary files, bounded Windows
+sharing retries and a cache updated only after successful replacement. It never
+deletes or truncates the live metrics file. Concurrent closure joins writers and
+SDK exporters even after a local error. Fourteen focused tests passed, including
+actual Windows sharing denial/recovery, concurrent updates and fatal-error drain.
+
+Before recovery, task-source inspection found six airline tasks with eleven
+configured NL assertions skipped by the ordinary reward basis; all six selected
+retail tasks have empty assertions. The explicitly selected upstream audit mode
+preserves reward computation and records only complete, actually evaluated
+assertion coverage. Unknown constraint counts cannot create positive workflows.
+
 ## 2026-11-10: second serving qualification and transport diagnosis
 
 Actual concurrent models, tool-call continuation, raw binary log probabilities,

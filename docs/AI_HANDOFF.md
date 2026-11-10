@@ -4,6 +4,20 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+Latest native result: the original 12-slot cohort is closed and aborted after two
+successes. A Windows metrics-file replacement error prevented subsequent actor
+requests. Ten infrastructure-censored errors remain in its denominator; only two
+native rewards were actually evaluated. Do not import this cohort for training
+or report its short failed-slot timings as a gain. The metrics publication fix
+has passed actual Windows lock tests. A separately declared full recovery cohort
+must use new committed source, inventory, guard and original-journal reservations.
+
+Optional `ALL_WITH_NL_ASSERTIONS` uses the pinned upstream evaluator while keeping
+the original reward basis. It can audit existing airline assertions; retail's
+empty assertions remain unknown. Private assertion text never enters actor or
+training inputs. Current training is candidate-only, with zero optimizer steps
+at this checkpoint. Consult the private operator handoff for live resources.
+
 Latest checkpoint: the second GPU lease passed actual qualification and its
 235-file export was independently verified. Source was `ae71b86`. The lease
 was marked ready and its existing cleanup controllers remain authoritative.

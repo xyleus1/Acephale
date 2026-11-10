@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-10: recover a full training cohort without erasing failed slots
+
+Preserve the first aborted 12-slot cohort and its two observed successes. After
+the concrete telemetry repair, declare a new complete cohort with the same task
+variants, order, seed and actor under a new experiment ID. Do not selectively
+replace failures, merge partial receipts or label the first cohort completed.
+Both attempts remain in reporting and all dispatch costs use the original journal.
+
+Permit explicit upstream `ALL_WITH_NL_ASSERTIONS` for declared constraint audits.
+It retains each task's original reward basis and pinned budgeted teacher. Known
+constraint counts require nonempty actual results and complete multiset coverage;
+absent or incomplete assertions remain unknown. This measures the configured
+assertions, not comprehensive policy compliance, and supplies no goal supervision.
+
 ## 2026-11-10: preserve freshness while removing repeated SSH setup
 
 Actual fresh SSH probes exceeded the 2.5-second observation deadline before

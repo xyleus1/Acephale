@@ -3,6 +3,37 @@
 Updated 2026-11-10. This records the standalone research checkout, not historical
 benchmark results.
 
+## First native collection: retained infrastructure failure
+
+The first 12-slot base collection closed with two successful tasks and ten
+execution errors, retaining every declared slot. A Windows `EPERM` replacing
+`metrics.prom` poisoned telemetry and terminated the service. All 22 recorded
+actor requests completed; the ten errors are infrastructure-censored failures,
+not ten independently evaluated actor failures. Only two actual native rewards
+exist, both 1.0. Study pass1 is 2/12; this aborted cohort is ineligible for fitting.
+
+Stage wall time was 159.240 seconds. Successful-task time with actor/user drain
+had mean/median 32.576 seconds and observed p90 35.591 seconds, with only two
+samples. The shorter elapsed times of aborted slots are not a latency improvement.
+Hosted simulator/judge usage cost was $0.009232 with no unknown provider charges;
+GPU reservation and invoice reconciliation remain separate.
+
+The metrics writer now preserves atomic replacement, retries transient Windows
+sharing failures, skips unchanged snapshots and drains SDK exporters on failure.
+Fourteen focused tests passed, including actual Windows locked-file reproduction,
+old-snapshot preservation and successful replacement after unlock.
+
+A separate full recovery cohort is predeclared; the original failed cohort is
+never replaced or relabelled. The optional upstream assertion-audit mode preserves
+the official reward basis. Six selected airline tasks have eleven configured NL
+assertions; the six retail tasks have none. Missing or incomplete checks stay
+unknown, and constraint scope is limited to those declared assertions.
+
+The locked trainer image has built successfully, but no optimizer step or trained
+predictor result exists at this checkpoint. Native SDK traces and two span metrics
+reach the remote observability stack; full native metrics and redacted lifecycle
+logs remain local Windows artifacts until separately verified publication.
+
 ## Actual second deployment and pre-dispatch transport check
 
 The second A100 lease passed actual serving, database, tool-call continuation,
