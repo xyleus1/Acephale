@@ -23,8 +23,11 @@ The complete source pins live in
 | Predictor | `Qwen/Qwen3.5-0.8B` | `2fc06364715b967f1860aea9cf38778875588b17` |
 | Optional capacity ablation | `Qwen/Qwen3.5-2B` | `15852e8c16360a2fea060d615a32b45270f8a8fc` |
 
-The default models use bfloat16 with vLLM 0.32.0, pinned image digest, PyTorch
-2.13.0/CUDA 13.0.3, `qwen3_xml` tool parsing and `qwen3` reasoning parsing. Thinking
+The default models use bfloat16 with vLLM 0.32.0, a pinned image digest and PyTorch
+2.13.0. The immutable image declares CUDA base release 13.0.2; PyTorch separately
+reports compile CUDA 13.0. Installed toolkit/component observations are retained
+without inferring an entire toolkit patch from either value. Serving uses
+`qwen3_xml` tool parsing and `qwen3` reasoning parsing. Thinking
 is disabled for this profile. Actor context is 32,768 tokens: 28,672 input plus
 4,096 output. Predictor context is 8,192: 7,168 plus 1,024. The fixed-predictor
 configuration remains an explicit baseline. The separately declared predictor

@@ -33,7 +33,10 @@ export interface InfraExperimentManifestV2 {
     imageDigest: ImageDigest;
     vllm: "0.32.0";
     torch: "2.13.0";
-    cuda: "13.0.3";
+    /**
+     * Immutable serving image CUDA release declaration; installed toolkit and Torch compile CUDA remain separately observed in the bound inventory.
+     */
+    cuda: "13.0.2";
     transformers: string;
     node: "22.23.4";
     python: string;

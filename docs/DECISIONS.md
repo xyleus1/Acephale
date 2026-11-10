@@ -1,5 +1,20 @@
 # Acephale decisions
 
+## 2026-11-10: correct CUDA metadata without replacing the serving image
+
+The raw pinned OCI index, linux/amd64 manifest and config establish an image
+CUDA_VERSION of 13.0.2. The upstream Dockerfile's 13.0.3 default did not describe
+this built image. Keep the exact image digest, actor/predictor revisions,
+hardware settings and budgets. Record `servingCuda=13.0.2`,
+`servingCudaSource=immutable_image_cuda_version` and `servingTorchCuda=13.0`.
+Collect actual toolkit/component metadata separately; neither value establishes
+an entire installed toolkit patch.
+
+The original financial slice retains its original versions hash. A creation-only
+sidecar permits exactly these three metadata corrections after verifying the
+complete raw OCI digest chain and unchanged financial/model/hardware identities.
+It cannot authorize a different image, model, budget or hardware profile.
+
 ## 2026-11-10: preserve provider identity across both runtime guards
 
 Lambda execution uses its actual API association, pinned SSH host key and local

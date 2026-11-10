@@ -35,17 +35,44 @@ packages = sorted([{'name': d.metadata['Name'], 'version': d.version} for d in m
                   key=lambda r: (r['name'].lower(), r['version']))
 print(json.dumps({'python': platform.python_version(), 'packages': packages}))
 """
-SERVING_PROBE = """
-import importlib.metadata as m, json, platform
+IMAGE_CUDA_PROBE = '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CUDA_VERSION"}}{{println .}}{{end}}{{end}}'
+CUDA_PROBE = """
+import hashlib, json, os, shutil, subprocess
 from pathlib import Path
+
+def cuda_observations(root=Path('/'), runner=subprocess.run, which=shutil.which, environment=os.environ):
+    path = root / 'usr/local/cuda/version.json'
+    version_file = None
+    if path.is_file():
+        raw = path.read_bytes()
+        version_file = {'path': '/usr/local/cuda/version.json', 'sha256': hashlib.sha256(raw).hexdigest(),
+                        'document': json.loads(raw.decode('utf-8'))}
+    executable = which('dpkg-query')
+    components = {'available': executable is not None, 'returnCode': None, 'packages': []}
+    if executable:
+        result = runner([executable, '--show', '--showformat=${binary:Package}\\t${Version}\\t${db:Status-Status}\\n',
+                         'cuda-toolkit*', 'cuda-cudart*', 'cuda-nvcc*', 'cuda-nvrtc*', 'libcublas*'],
+                        capture_output=True, text=True, check=False, timeout=10)
+        components['returnCode'] = result.returncode
+        if result.returncode not in (0, 1):
+            raise ValueError('CUDA package metadata query failed')
+        for line in result.stdout.splitlines():
+            fields = line.split('\\t')
+            if len(fields) != 3:
+                raise ValueError('Malformed CUDA package metadata')
+            components['packages'].append(dict(zip(('name', 'version', 'status'), fields)))
+        components['packages'].sort(key=lambda row: row['name'])
+    return {'versionFile': version_file, 'dpkg': components,
+            'environmentCudaVersion': environment.get('CUDA_VERSION')}
+"""
+SERVING_PROBE = CUDA_PROBE + """
+import importlib.metadata as m, json, platform
 import torch
 packages = sorted([{'name': d.metadata['Name'], 'version': d.version} for d in m.distributions()],
                   key=lambda r: (r['name'].lower(), r['version']))
-cuda_file = Path('/usr/local/cuda/version.json')
-cuda = json.loads(cuda_file.read_text()).get('cuda', {}).get('version') if cuda_file.is_file() else None
 print(json.dumps({'python': platform.python_version(), 'packages': packages,
     'vllm': m.version('vllm'), 'torch': m.version('torch'), 'transformers': m.version('transformers'),
-    'cuda': cuda or torch.version.cuda, 'torchCuda': torch.version.cuda}))
+    'cudaObservations': cuda_observations(), 'torchCuda': torch.version.cuda}))
 """
 NODE_PROBE = """
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
@@ -91,6 +118,79 @@ def record(path: Path, relative: str) -> dict:
     if path.is_symlink() or not path.is_file():
         raise ValueError("Inventory requires regular local files")
     return {"path": relative, "bytes": path.stat().st_size, "sha256": file_hash(path)}
+
+
+def image_cuda_identity(observed: str, image_id: str, image_digest: str) -> dict:
+    rows = [row for row in observed.splitlines() if row]
+    if (not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id) or len(rows) > 1
+            or any(not row.startswith("CUDA_VERSION=") for row in rows)):
+        raise ValueError("Ambiguous immutable image CUDA_VERSION metadata")
+    return {"imageId": image_id, "imageDigest": image_digest,
+            "source": "docker.image.inspect.Config.Env.CUDA_VERSION",
+            "version": rows[0].partition("=")[2] if rows else None}
+
+
+def cuda_identity(packages: dict, image_cuda: dict, versions: dict) -> dict:
+    """Keep image-base release, installed toolkit evidence and Torch compilation separate."""
+    observed = packages.get("cudaObservations", {})
+    toolkit = []
+    version_file = observed.get("versionFile")
+    if version_file is not None:
+        if (version_file.get("path") != "/usr/local/cuda/version.json"
+                or not SHA.fullmatch(version_file.get("sha256", "")) or not isinstance(version_file.get("document"), dict)):
+            raise ValueError("CUDA version-file provenance is incomplete")
+        value = version_file["document"].get("cuda", {}).get("version")
+        if isinstance(value, str) and re.fullmatch(r"\d+\.\d+\.\d+", value):
+            toolkit.append({"version": value, "source": "version_file", "path": version_file["path"],
+                            "jsonPointer": "/cuda/version", "sha256": version_file["sha256"]})
+    components = observed.get("dpkg", {})
+    if not isinstance(components.get("available"), bool) or not isinstance(components.get("packages"), list):
+        raise ValueError("CUDA component package observation is missing")
+    for row in components["packages"]:
+        if (row.get("status") == "installed" and re.fullmatch(r"cuda-toolkit(?:-\d+-\d+)?(?::[a-z0-9]+)?", row.get("name", ""))):
+            match = re.fullmatch(r"(?:\d+:)?(\d+\.\d+\.\d+)(?:-[A-Za-z0-9.+~]+)?", row.get("version", ""))
+            if match:
+                toolkit.append({"version": match[1], "source": "dpkg_toolkit_metapackage", "package": row["name"], "packageVersion": row["version"]})
+    if len({row["version"] for row in toolkit}) > 1:
+        raise ValueError("Conflicting installed CUDA toolkit release evidence")
+    source = versions.get("servingCudaSource", "toolkit")
+    if source == "immutable_image_cuda_version":
+        selected = image_cuda.get("version")
+        if (not isinstance(selected, str) or not re.fullmatch(r"\d+\.\d+\.\d+", selected)
+                or observed.get("environmentCudaVersion") != selected):
+            raise ValueError("Container CUDA_VERSION differs from the exact immutable image CUDA release")
+    elif source == "toolkit":
+        if not toolkit:
+            raise ValueError("Exact installed CUDA toolkit patch is unavailable; Torch or image defaults cannot establish it")
+        selected = toolkit[0]["version"]
+    else:
+        raise ValueError("Unknown pinned CUDA identity source")
+    torch_cuda = packages.get("torchCuda")
+    if (selected != versions["servingCuda"] or not isinstance(torch_cuda, str)
+            or not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", torch_cuda)
+            or torch_cuda.split(".")[:2] != selected.split(".")[:2]
+            or versions.get("servingTorchCuda", torch_cuda) != torch_cuda):
+        raise ValueError("Observed serving packages/CUDA do not match the pinned runtime")
+    return {"version": selected, "source": source,
+            "image": image_cuda,
+            "containerEnvironment": {"name": "CUDA_VERSION", "value": observed.get("environmentCudaVersion")},
+            "toolkit": toolkit[0] if toolkit else None, "toolkitObservations": toolkit,
+            "torch": {"version": torch_cuda, "source": "torch.version.cuda"},
+            "versionFile": version_file, "componentPackages": components,
+            "fullToolkitReleaseAsserted": source == "toolkit"}
+
+
+def validate_serving_packages(packages: dict, image_cuda: dict, versions: dict) -> dict:
+    """Shared pure validation for an early image probe and final resident inventory."""
+    if (image_cuda.get("imageDigest") != versions["images"]["vllm"]
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_cuda.get("imageId", ""))
+            or image_cuda.get("source") != "docker.image.inspect.Config.Env.CUDA_VERSION"):
+        raise ValueError("CUDA metadata is not bound to the pinned serving image")
+    identity = cuda_identity(packages, image_cuda, versions)
+    if (packages.get("vllm") != "0.32.0" or packages.get("torch", "").split("+")[0] != versions["servingTorch"]
+            or not packages.get("transformers") or not packages.get("packages")):
+        raise ValueError("Observed serving packages/CUDA do not match the pinned runtime")
+    return {**packages, "cuda": identity["version"], "cudaIdentity": identity}
 
 
 def run_readonly(argv: list[str], cwd: Path) -> str:
@@ -313,6 +413,9 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
     if not any(isinstance(value, str) and value.endswith("@" + expected_image.split("@", 1)[1])
                for value in actual_digests):
         raise ValueError("Resident Docker image content digest differs from the immutable pin")
+    # Emit only this public version key, never the complete image/container environment.
+    image_cuda = image_cuda_identity(runner(DOCKER + ["image", "inspect", "--format", IMAGE_CUDA_PROBE,
+                                                     locked["imageId"]], source), locked["imageId"], expected_image)
     commit = source_identity(source, runner)
     orchestrator = checked_orchestrator(
         read(orchestrator_receipt) if orchestrator_receipt else orchestrator_inventory(
@@ -354,10 +457,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
             raise ValueError("Both model containers must have resident NVIDIA allocations")
         packages = json.loads(runner(DOCKER + ["exec", "--env", "PYTHONDONTWRITEBYTECODE=1",
                                              ids[0], "python3", "-B", "-c", SERVING_PROBE], source))
-        if (packages.get("vllm") != "0.32.0" or packages.get("torch", "").split("+")[0] != versions["servingTorch"]
-                or packages.get("cuda") != versions["servingCuda"] or not packages.get("transformers")
-                or not packages.get("packages")):
-            raise ValueError("Observed serving packages/CUDA do not match the pinned runtime")
+        packages = validate_serving_packages(packages, image_cuda, versions)
         # Raw command/mount data is deliberately not persisted; it could contain unintended secrets.
         containers[role] = {"id": ids[0], "imageId": container["image"], "startedAt": container["startedAt"],
                             "commandHash": digest(container["command"]), "modelMountReadOnly": True,

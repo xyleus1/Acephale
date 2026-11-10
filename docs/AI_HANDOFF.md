@@ -11,6 +11,14 @@ Python's Lambda identity and provenance checks. Do not infer completed serving,
 training or native evaluation from these milestones; inspect the latest private
 lease and qualification receipts before continuing or launching another host.
 
+The first research lease has now terminated after its setup deadline. Protocol,
+concurrent-inference and telemetry checks passed and their bytes were exported,
+but final deployment inventory failed on an incorrect CUDA metadata expectation.
+There are still zero native trials and zero optimizer steps for this execution.
+Do not reuse its readiness status, host identity or reservation as a new lease.
+An evidence-backed metadata correction and repeatable startup are being prepared;
+keep image/model pins and the original budget journal unchanged.
+
 The active question is whether source-grounded goals improve a PASTE-inspired
 read prefetcher over an otherwise identical neutral-memory prefetcher. Actor
 weights, messages, tools and task limits stay fixed. This is infrastructure

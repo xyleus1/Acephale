@@ -2,6 +2,15 @@
 
 ## 2026-11-10: qualify the actual Lambda transport
 
+The first research lease reached its setup deadline before a valid final
+deployment inventory existed. Provider-confirmed termination followed verified
+artifact export. Actual concurrent model/tool/probability/telemetry checks passed;
+native trials and optimizer steps remained zero. The immutable OCI image chain
+revealed CUDA_VERSION=13.0.2, contradicting the earlier 13.0.3 expectation.
+Record image-release identity and Torch compile identity separately; do not infer
+an entire installed toolkit release from either an environment field or a Docker
+source-file default.
+
 Live qualification confirmed tool-call continuation, concurrent inference and
 stored traces, then exposed missing lifecycle-log discovery. Enable the pinned
 Alloy file source's built-in glob matching. The actual serving image provides

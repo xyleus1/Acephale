@@ -18,7 +18,7 @@
       "required": ["imageDigest", "vllm", "torch", "cuda", "transformers", "node", "python", "dependencyLockHash", "packageInventoryHash", "toolParser"],
       "properties": {
         "imageDigest": { "$ref": "#/$defs/ImageDigest" },
-        "vllm": { "const": "0.32.0" }, "torch": { "const": "2.13.0" }, "cuda": { "const": "13.0.3" },
+        "vllm": { "const": "0.32.0" }, "torch": { "const": "2.13.0" }, "cuda": { "const": "13.0.2", "description": "Immutable serving image CUDA release declaration; installed toolkit and Torch compile CUDA remain separately observed in the bound inventory." },
         "transformers": { "type": "string", "minLength": 1 }, "node": { "const": "22.23.4" }, "python": { "type": "string", "minLength": 1 },
         "dependencyLockHash": { "$ref": "#/$defs/Sha256" }, "packageInventoryHash": { "$ref": "#/$defs/Sha256" }, "toolParser": { "const": "qwen3_xml" }
       }

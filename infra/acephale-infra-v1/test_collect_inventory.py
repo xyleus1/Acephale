@@ -6,6 +6,7 @@ import importlib.util
 import json
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 
@@ -87,8 +88,12 @@ class InventoryTests(unittest.TestCase):
             "mounts": [{"Type": "bind", "Source": str(self.models.resolve()), "Destination": "/models", "RW": False}]}
             for role, letter in (("actor", "b"), ("predictor", "c"))}
         self.packages = {"python": "3.12.16", "vllm": "0.32.0", "torch": "2.13.0+cu130",
-                         "transformers": "fixture-version", "cuda": "13.0.3", "torchCuda": "13.0",
+                         "transformers": "fixture-version", "torchCuda": "13.0",
+                         "cudaObservations": {"versionFile": None, "environmentCudaVersion": "13.0.2",
+                             "dpkg": {"available": True, "returnCode": 0, "packages": [
+                                 {"name": "cuda-cudart-13-0", "version": "13.0.96-1", "status": "installed"}]}},
                          "packages": [{"name": "vllm", "version": "0.32.0"}]}
+        self.image_cuda = "CUDA_VERSION=13.0.2\n"
         self.gpu = "NVIDIA Fixture GPU, 580.95.05, 49140, GPU-fixture\n"
         self.allocations = "101, GPU-fixture, 25000\n202, GPU-fixture, 5000\n"
         self.commands, self.dirty, self.bad_digest = [], False, False
@@ -112,6 +117,8 @@ class InventoryTests(unittest.TestCase):
             self.assertEqual(argv[:3], inventory.DOCKER)
             args = argv[3:]
             if args[0] == "image":
+                if inventory.IMAGE_CUDA_PROBE in args:
+                    return self.image_cuda
                 return json.dumps(["fixture@sha256:" + "f" * 64] if self.bad_digest else [self.pins["images"]["vllm"]])
             if args[0] == "ps":
                 role = "actor" if "label=com.docker.compose.service=actor" in args else "predictor"
@@ -248,7 +255,7 @@ for (const name of ['actor','predictor','runtime','hardware']) {
             with self.assertRaisesRegex(ValueError, "below"):
                 self.collect()
         self.gpu = "Fixture, 580.10, 49140, GPU-fixture"
-        self.packages["cuda"] = "13.0"
+        self.packages["torchCuda"] = "13.1"
         with self.assertRaisesRegex(ValueError, "packages/CUDA"):
             self.collect()
         self.dirty = True
@@ -276,6 +283,73 @@ for (const name of ['actor','predictor','runtime','hardware']) {
         self.assertNotIn("mounts", evidence["containers"]["actor"])
         self.assertEqual(evidence["networkCalls"], 0)
         self.assertEqual(evidence["modelCalls"], 0)
+
+    def test_cuda_release_is_exact_image_metadata_not_an_invented_toolkit_patch(self):
+        deployment, evidence = self.collect()
+        observed = evidence["packageInventory"]["serving"]["actor"]
+        identity = observed["cudaIdentity"]
+        self.assertEqual(deployment["runtime"]["cuda"], "13.0.2")
+        self.assertEqual(identity["source"], "immutable_image_cuda_version")
+        self.assertEqual(identity["image"]["imageId"], self.image_id)
+        self.assertEqual(identity["torch"], {"version": "13.0", "source": "torch.version.cuda"})
+        self.assertIsNone(identity["toolkit"])
+        self.assertFalse(identity["fullToolkitReleaseAsserted"])
+        self.assertEqual(identity["componentPackages"]["packages"][0]["version"], "13.0.96-1")
+
+    def test_missing_partial_overridden_and_conflicting_cuda_identities_fail_closed(self):
+        for value in ("", "CUDA_VERSION=13.0\n", "CUDA_VERSION=13.0.3\n", "CUDA_VERSION=13.0.2\nCUDA_VERSION=13.0.3\n"):
+            with self.subTest(image_value=value), self.assertRaises(ValueError):
+                self.image_cuda = value
+                self.collect()
+        self.image_cuda = "CUDA_VERSION=13.0.2\n"
+        for value in (None, "13.0", "13.0.3"):
+            with self.subTest(container_value=value), self.assertRaisesRegex(ValueError, "Container CUDA_VERSION"):
+                self.packages["cudaObservations"]["environmentCudaVersion"] = value
+                self.collect()
+
+    def test_actual_toolkit_observation_remains_distinct_from_base_release(self):
+        self.packages["cudaObservations"]["versionFile"] = {
+            "path": "/usr/local/cuda/version.json", "sha256": "e" * 64,
+            "document": {"cuda": {"version": "13.0.3"}}}
+        _, evidence = self.collect()
+        identity = evidence["packageInventory"]["serving"]["actor"]["cudaIdentity"]
+        self.assertEqual(identity["version"], "13.0.2")
+        self.assertEqual(identity["toolkit"]["version"], "13.0.3")
+        self.assertEqual(identity["toolkit"]["source"], "version_file")
+        self.assertFalse(identity["fullToolkitReleaseAsserted"])
+
+    def test_legacy_toolkit_pin_cannot_be_satisfied_by_torch_or_image_declaration(self):
+        legacy = {**self.pins, "servingCuda": "13.0.3"}
+        del legacy["servingCudaSource"]
+        image = inventory.image_cuda_identity("CUDA_VERSION=13.0.3", self.image_id, self.pins["images"]["vllm"])
+        with self.assertRaisesRegex(ValueError, "toolkit patch is unavailable"):
+            inventory.validate_serving_packages(self.packages, image, legacy)
+        self.packages["cudaObservations"]["dpkg"]["packages"].append(
+            {"name": "cuda-toolkit-13-0", "version": "13.0.3-1", "status": "installed"})
+        result = inventory.validate_serving_packages(self.packages, image, legacy)
+        self.assertEqual(result["cudaIdentity"]["toolkit"]["source"], "dpkg_toolkit_metapackage")
+        self.assertTrue(result["cudaIdentity"]["fullToolkitReleaseAsserted"])
+
+    def test_actual_cuda_probe_reads_only_whitelisted_version_and_package_sources(self):
+        namespace = {}
+        exec(inventory.CUDA_PROBE, namespace)
+        calls = []
+        def query(argv, **kwargs):
+            calls.append(argv)
+            self.assertFalse(kwargs["check"])
+            return SimpleNamespace(returncode=1, stdout="cuda-cudart-13-0\t13.0.96-1\tinstalled\n")
+        observed = namespace["cuda_observations"](root=self.host, runner=query, which=lambda _: "/usr/bin/dpkg-query",
+            environment={"CUDA_VERSION": "13.0.2", "PRIVATE_FIXTURE": "must-not-be-captured"})
+        self.assertIsNone(observed["versionFile"])
+        self.assertNotIn("must-not-be-captured", json.dumps(observed))
+        self.assertEqual(calls[0][0], "/usr/bin/dpkg-query")
+        self.assertEqual(observed["dpkg"]["returnCode"], 1)
+        path = self.host / "usr/local/cuda/version.json"
+        write(path, {"cuda": {"version": "13.0.3"}})
+        observed = namespace["cuda_observations"](root=self.host, which=lambda _: None, environment={})
+        self.assertEqual(observed["versionFile"]["sha256"], inventory.file_hash(path))
+        self.assertEqual(observed["versionFile"]["document"], {"cuda": {"version": "13.0.3"}})
+        self.assertFalse(observed["dpkg"]["available"])
 
     def test_orchestrator_receipt_requires_no_docker_gpu_cloud_journal_or_credentials(self):
         value = inventory.orchestrator_inventory(source=self.source, python="fixture-python", node="fixture-node",

@@ -267,7 +267,7 @@ function manifest(): InfraExperimentManifestV2 {
     version: 2, profile: "acephale-infra-v1", experimentId: "fixture-only", createdAt: "2026-11-05T00:00:00Z", sourceCommit: "b".repeat(40),
     actor: { ...identity, ...INFRA_MODEL_PINS.actor, contextWindow: 32768, inputBudget: 28672, outputCap: 4096 },
     predictor: { ...identity, ...INFRA_MODEL_PINS.predictor, servedModel: "predictor", contextWindow: 8192, inputBudget: 7168, outputCap: 1024 },
-    runtime: { imageDigest: INFRA_MODEL_PINS.image, vllm: "0.32.0", torch: "2.13.0", cuda: "13.0.3", transformers: "5.16.1-fixture",
+    runtime: { imageDigest: INFRA_MODEL_PINS.image, vllm: "0.32.0", torch: "2.13.0", cuda: "13.0.2", transformers: "5.16.1-fixture",
       node: "22.23.4", python: "3.12.16", dependencyLockHash: sha, packageInventoryHash: sha, toolParser: "qwen3_xml" },
     hardware: { provider: "fixture", instanceType: "fixture", imageId: "fixture", gpu: "fixture", gpuCount: 1, gpuMemoryBytes: 48 * 1024 ** 3,
       driver: "580-fixture", cpu: "fixture", ramBytes: 100 * 1024 ** 3 },

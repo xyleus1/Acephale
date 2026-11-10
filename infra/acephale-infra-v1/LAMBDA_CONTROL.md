@@ -44,6 +44,23 @@ scoped IAM roles, Python 3.12 AWS Lambda functions, minute EventBridge schedules
 and three-day log groups. A creation receipt is persisted after every stage.
 The token never appears in that receipt or a command argument.
 
+An existing financial slice may predate the explicit CUDA identity correction.
+Keep its original `versionsSha256`, journal and reservations unchanged. After a
+clean committed correction, record the one supported metadata amendment:
+
+```text
+python infra/acephale-infra-v1/control.py record-versions-metadata-amendment --ledger SLICE --original-versions EXACT_ORIGINAL_VERSIONS_JSON --oci-evidence RAW_OCI_DIRECTORY --reason "Correct CUDA identity metadata from the unchanged pinned OCI image"
+```
+
+The directory contains exact `pinned-manifest.json`,
+`linux-amd64-manifest.json` and `linux-amd64-config.json` bytes. The new adjacent
+`SLICE.versions-metadata-amendment.json` is creation-only and binds their complete
+digest chain, old/new versions bytes, source and unchanged financial identity.
+Only image CUDA release 13.0.2, its explicit identity source and Torch compile
+CUDA 13.0 are permitted. Missing or altered evidence fails closed. Existing
+cleanup controllers can remain when their actual deployed handler hash matches;
+this local metadata repair does not relax recovery or enrollment checks.
+
 No reserved Lambda concurrency is required. Each controller serializes scheduled
 and manual invocations using its private `controller-lock.json`: conditional
 `If-None-Match` creation, ETag-matched reclamation after 60 seconds, and ETag-matched

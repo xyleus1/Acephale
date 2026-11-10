@@ -3,6 +3,28 @@
 Updated 2026-11-10. This records the standalone research checkout, not historical
 benchmark results.
 
+## Actual GPU qualification, first attempt
+
+Both independent cleanup controllers passed real termination canaries. A leased
+A100 40 GB then ran the exact actor and predictor concurrently, using 31,741 MiB.
+Observed checks passed for an actual tool call and its continuation ID, structured
+binary output with raw token probabilities, and retrieval from Tempo, Prometheus,
+Loki and Grafana. This was an infrastructure fixture, not a native task score.
+The raw evidence was exported and its archive SHA-256 independently verified.
+
+The final deployment inventory did not pass before the 30-minute setup deadline.
+The host was terminated and provider absence was verified. No optimizer step or
+native trial ran; the compute reservation remains until billing reconciliation.
+The immutable serving image declares CUDA base release 13.0.2, whereas the earlier
+manifest incorrectly expected 13.0.3. PyTorch separately reports compile CUDA
+13.0. Correcting these metadata meanings must preserve the original image/model
+identities and financial binding, with observed package details retained.
+
+Actual startup also identified and repaired Tempo 3 configuration, Alloy file
+discovery, the inventory Python executable and Node/Python Lambda guard parity.
+Starting the predictor to health before the actor avoided the initial concurrent
+memory-profiling failure without changing the model or GPU-memory settings.
+
 ## Predictor training implementation
 
 The scoped Qwen3.5-0.8B LoRA experiment now has a separate locked training

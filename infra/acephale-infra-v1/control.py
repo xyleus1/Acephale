@@ -513,15 +513,124 @@ def init_bound_ledger(path: Path, plan: dict[str, Any], prior_hours: float, *, b
     return value
 
 
-def checked_bound_ledger(path: Path) -> dict[str, Any]:
+def _checked_bound_ledger_identity(path: Path) -> dict[str, Any]:
     value = read_json(path)
     plan = value.get("plan", {})
     if (value.get("schemaVersion") != 2 or value.get("provider") != "lambda" or value.get("profile") != PROFILE
             or value.get("planHash") != digest(plan) or Path(plan.get("infrastructureLedgerPath", "")).resolve() != path.resolve()
-            or value.get("versionsSha256") != sha256(HERE / "versions.json")
             or value.get("hardwareProfilesSha256") != sha256(HERE / "hardware-profiles.json")):
         raise ValueError("Original-study-bound Lambda slice and exact source profiles required")
     return value
+
+
+def versions_amendment_path(ledger_path: Path) -> Path:
+    return ledger_path.with_name(ledger_path.name + ".versions-metadata-amendment.json")
+
+
+def _cuda_metadata_evidence(original_text: str, effective_text: str, evidence: dict) -> dict:
+    """Verify one metadata correction against the unchanged, immutable OCI image."""
+    original, effective = json.loads(original_text), json.loads(effective_text)
+    expected = {**original, "servingCuda": "13.0.2", "servingCudaSource": "immutable_image_cuda_version",
+                "servingTorchCuda": "13.0"}
+    image = "vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34"
+    if (original.get("servingCuda") != "13.0.3" or "servingCudaSource" in original or "servingTorchCuda" in original
+            or effective != expected or original.get("images", {}).get("vllm") != image):
+        raise ValueError("Only the declared three-field CUDA identity metadata correction is permitted")
+    if set(evidence) != {"indexUtf8", "manifestUtf8", "configUtf8"} or any(not isinstance(v, str) for v in evidence.values()):
+        raise ValueError("Complete raw immutable OCI evidence required")
+    hashes = {key: "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest() for key, text in evidence.items()}
+    index, manifest, config = (json.loads(evidence[key]) for key in ("indexUtf8", "manifestUtf8", "configUtf8"))
+    candidates = [row for row in index.get("manifests", []) if row.get("platform") == {"architecture": "amd64", "os": "linux"}]
+    if (hashes["indexUtf8"] != image.split("@", 1)[1] or len(candidates) != 1
+            or candidates[0].get("digest") != hashes["manifestUtf8"]
+            or candidates[0].get("size") != len(evidence["manifestUtf8"].encode("utf-8"))
+            or manifest.get("config", {}).get("digest") != hashes["configUtf8"]
+            or manifest.get("config", {}).get("size") != len(evidence["configUtf8"].encode("utf-8"))
+            or config.get("architecture") != "amd64" or config.get("os") != "linux"):
+        raise ValueError("Raw OCI index, platform manifest and config do not match the pinned digest chain")
+    environment = config.get("config", {}).get("Env", [])
+    if [row for row in environment if row.startswith("CUDA_VERSION=")] != ["CUDA_VERSION=13.0.2"]:
+        raise ValueError("Pinned image does not establish the declared CUDA image-base release")
+    return {"image": image, "indexDigest": hashes["indexUtf8"], "platformDigest": hashes["manifestUtf8"],
+            "configDigest": hashes["configUtf8"], "cudaIdentitySource": "immutable_image_cuda_version",
+            "cudaImageBaseRelease": "13.0.2", "torchCudaRequiredAtQualification": "13.0",
+            "installedToolkitPatchEstablished": False}
+
+
+def _financial_binding_hash(ledger: dict) -> str:
+    return digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads"}})
+
+
+def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
+    current = sha256(HERE / "versions.json")
+    if ledger.get("versionsSha256") == current:
+        return {"originalVersionsSha256": current, "effectiveVersionsSha256": current, "amendmentHash": None}
+    path = versions_amendment_path(ledger_path)
+    if not path.is_file():
+        raise ValueError("Original source versions changed without an append-only metadata amendment")
+    value = read_json(path)
+    if (value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("version") != 1 or value.get("profile") != "acephale-versions-metadata-amendment-v1"
+            or value.get("planHash") != ledger["planHash"] or value.get("financialBindingChanged") is not False
+            or value.get("financialBindingHash") != _financial_binding_hash(ledger)
+            or value.get("originalVersionsSha256") != ledger["versionsSha256"]
+            or value.get("effectiveVersionsSha256") != current
+            or value.get("hardwareProfilesSha256") != ledger["hardwareProfilesSha256"]
+            or value.get("initialSourceCommit") != ledger["plan"]["sourceCommit"]
+            or not re.fullmatch(r"[a-f0-9]{40}", str(value.get("executingSourceCommit", "")))
+            or not isinstance(value.get("reason"), str) or not value["reason"].strip()):
+        raise ValueError("Metadata amendment does not bind the original financial/source identities")
+    for name, target in (("originalVersionsUtf8", ledger["versionsSha256"]), ("effectiveVersionsUtf8", current)):
+        if not isinstance(value.get(name), str) or hashlib.sha256(value[name].encode("utf-8")).hexdigest() != target:
+            raise ValueError("Metadata amendment raw versions bytes changed")
+    observed = _cuda_metadata_evidence(value["originalVersionsUtf8"], value["effectiveVersionsUtf8"], value.get("ociEvidence", {}))
+    if value.get("observedCudaIdentity") != observed:
+        raise ValueError("Metadata amendment OCI evidence summary changed")
+    return {"originalVersionsSha256": ledger["versionsSha256"], "effectiveVersionsSha256": current,
+            "amendmentHash": value["contentHash"]}
+
+
+def checked_bound_ledger(path: Path) -> dict[str, Any]:
+    value = _checked_bound_ledger_identity(path)
+    effective_versions_metadata(path, value)
+    return value
+
+
+def record_versions_metadata_amendment(ledger_path: Path, original_versions: Path, oci_directory: Path, reason: str,
+                                      *, source_probe=None, budget=study_budget) -> dict:
+    """Write one immutable sidecar; leave the original ledger and journal untouched."""
+    source_probe = source_probe or committed_source
+    with ledger_lock(ledger_path):
+        ledger = _checked_bound_ledger_identity(ledger_path)
+        output = versions_amendment_path(ledger_path)
+        if output.exists():
+            raise ValueError("Metadata amendment already exists and cannot be overwritten")
+        original = original_versions.read_bytes().decode("utf-8")
+        effective = (HERE / "versions.json").read_bytes().decode("utf-8")
+        if hashlib.sha256(original.encode("utf-8")).hexdigest() != ledger["versionsSha256"]:
+            raise ValueError("Original versions bytes do not match the existing ledger")
+        evidence = {key: (oci_directory / name).read_bytes().decode("utf-8") for key, name in
+                    (("indexUtf8", "pinned-manifest.json"), ("manifestUtf8", "linux-amd64-manifest.json"),
+                     ("configUtf8", "linux-amd64-config.json"))}
+        observed = _cuda_metadata_evidence(original, effective, evidence)
+        current = source_probe(ledger["plan"]["sourceCommit"])
+        if not re.fullmatch(r"[a-f0-9]{40}", current) or current == ledger["plan"]["sourceCommit"] or not reason.strip() or len(reason) > 1024:
+            raise ValueError("Distinct clean committed source and explicit bounded reason required")
+        before, versions_before = sha256(ledger_path), sha256(HERE / "versions.json")
+        journal = budget(ledger["plan"], "inspect")
+        if sha256(ledger_path) != before or sha256(HERE / "versions.json") != versions_before:
+            raise ValueError("Original infrastructure/source changed while recording metadata amendment")
+        value = {"version": 1, "profile": "acephale-versions-metadata-amendment-v1", "planHash": ledger["planHash"],
+                 "initialSourceCommit": ledger["plan"]["sourceCommit"], "executingSourceCommit": current,
+                 "recordedAt": time.time(), "reason": reason.strip(), "originalVersionsSha256": ledger["versionsSha256"],
+                 "effectiveVersionsSha256": versions_before, "originalVersionsUtf8": original, "effectiveVersionsUtf8": effective,
+                 "hardwareProfilesSha256": ledger["hardwareProfilesSha256"], "ociEvidence": evidence,
+                 "observedCudaIdentity": observed, "infrastructureSliceSha256": before, "originalJournalEvidence": journal,
+                 "financialBindingHash": _financial_binding_hash(ledger), "financialBindingChanged": False}
+        value["contentHash"] = digest(value)
+        write_new(output, value)
+        effective_versions_metadata(ledger_path, ledger)
+        return value
 
 
 def committed_source(initial_commit: str) -> str:
@@ -561,7 +670,8 @@ def record_source_amendment(ledger_path: Path, output: Path, reason: str, readin
              "reason": reason.strip(), "readinessEvidenceSha256": sha256(readiness_evidence),
              "infrastructureSliceSha256": before, "originalJournalEvidence": evidence,
              "versionsSha256": ledger["versionsSha256"], "hardwareProfilesSha256": ledger["hardwareProfilesSha256"],
-             "sourceFiles": controller_source_files(), "financialBindingChanged": False}
+             "sourceFiles": controller_source_files(), "financialBindingChanged": False,
+             "effectiveVersionsMetadata": effective_versions_metadata(ledger_path, ledger)}
     value["contentHash"] = digest(value)
     write_new(output, value)
     return value
@@ -580,6 +690,9 @@ def deployment_source(ledger: dict, amendment: Path | None, *, source_probe=comm
             or value.get("planHash") != ledger["planHash"] or value.get("initialSourceCommit") != initial
             or value.get("executingSourceCommit") != current or value.get("financialBindingChanged") is not False
             or value.get("versionsSha256") != ledger["versionsSha256"]
+            or value.get("effectiveVersionsMetadata", {"originalVersionsSha256": ledger["versionsSha256"],
+                "effectiveVersionsSha256": ledger["versionsSha256"], "amendmentHash": None})
+                != effective_versions_metadata(Path(ledger["plan"]["infrastructureLedgerPath"]), ledger)
             or value.get("hardwareProfilesSha256") != ledger["hardwareProfilesSha256"]
             or value.get("sourceFiles") != controller_source_files()):
         raise ValueError("Source-amendment receipt does not bind the unchanged plan and executing code")
@@ -898,6 +1011,11 @@ def main(argv: list[str] | None = None) -> int:
     source_amendment.add_argument("--output", type=Path, required=True)
     source_amendment.add_argument("--reason", required=True)
     source_amendment.add_argument("--readiness-evidence", type=Path, required=True)
+    metadata_amendment = commands.add_parser("record-versions-metadata-amendment")
+    metadata_amendment.add_argument("--ledger", type=Path, required=True)
+    metadata_amendment.add_argument("--original-versions", type=Path, required=True)
+    metadata_amendment.add_argument("--oci-evidence", type=Path, required=True)
+    metadata_amendment.add_argument("--reason", required=True)
     prepare = commands.add_parser("prepare-lease")
     prepare.add_argument("--ledger", type=Path, required=True)
     prepare.add_argument("--hours", type=float, required=True)
@@ -955,6 +1073,11 @@ def main(argv: list[str] | None = None) -> int:
         value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd)
     elif args.command == "record-source-amendment":
         value = record_source_amendment(args.ledger, args.output, args.reason, args.readiness_evidence)
+    elif args.command == "record-versions-metadata-amendment":
+        artifact = record_versions_metadata_amendment(args.ledger, args.original_versions, args.oci_evidence, args.reason)
+        value = {"path": str(versions_amendment_path(args.ledger)), "contentHash": artifact["contentHash"],
+                 "originalVersionsSha256": artifact["originalVersionsSha256"], "effectiveVersionsSha256": artifact["effectiveVersionsSha256"],
+                 "financialBindingChanged": False}
     elif args.command == "mark-ready":
         smoke = read_json(args.smoke_receipt)
         if smoke.get("profile") != PROFILE or smoke.get("leaseId") != args.lease_id or smoke.get("passed") is not True:
