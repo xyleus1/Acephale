@@ -262,7 +262,12 @@ export class LocalChatModelPort {
         ...(request.responseFormat ? { response_format: { type: "json_schema", json_schema: request.responseFormat } } : {}) };
       controller.signal.throwIfAborted();
       const dispatchStart = process.hrtime.bigint();
-      this.emit(request.id, "model_dispatch", { inputHash, inputTokens, omittedGroups, attempt: 0 });
+      this.emit(request.id, "model_dispatch", { inputHash, inputTokens, omittedGroups, attempt: 0,
+        compiledMessagesHash: hash(messages), compiledTokenIdsHash: hash(compiled.tokenIds),
+        selectedMessageIndexes: [...selected], compilerVersion: "acephale-local-input-v1",
+        requestContractHash: hash({ maxOutputTokens: request.maxOutputTokens, temperature: 0, topP: 1,
+          seed: request.seed ?? 0, stream: this.stream, responseFormat: request.responseFormat ?? null,
+          logprobTokenIds: request.logprobTokenIds ?? null, tools, enableThinking: false }) });
       dispatched = true;
       // The supported SDK owns HTTP transport. Keep the bounded protocol parser,
       // including terminal SSE and real call-ID validation, on its raw response.

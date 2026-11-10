@@ -76,7 +76,7 @@ export function validateInfraCalibration(value: InfraProbabilityCalibration) {
       || hash([...conditional.fittingFamilies].sort()) !== hash([...value.fittingFamilies].sort())
       || hash([...conditional.validationFamilies].sort()) !== hash([...value.validationFamilies].sort())
       || conditional.predictionMode !== value.predictionMode
-      || ["model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash", "predictionManifestHash", "predictionRowsHash"]
+      || ["model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash", "predictionManifestHash", "predictionRowsHash", "reviewedSelection"]
         .some(key => hash(neutralProvenance[key] ?? null) !== hash(conditionalProvenance[key] ?? null))) {
       throw new Error("Conditional calibration is not bound to the same frozen replay");
     }
@@ -132,6 +132,7 @@ export class InfraLocalPredictors {
     result: Awaited<ReturnType<LocalChatModelPort["complete"]>>) {
     this.options.record?.({ type: "infra_predictor_compiled", runId: frame.runId, checkpoint: frame.boundary, role,
       compilerVersion: INFRA_PREDICTOR_COMPILER, preparedHash: input.preparedHash, inputHash: result.inputHash,
+      compiledMessagesHash: hash(input.messages.filter((_, index) => result.compiler.selectedMessageIndexes.includes(index))),
       inputTokens: result.inputTokens, tokenizerCalls: result.compiler.tokenizerCalls,
       selected: input.units.filter(unit => result.compiler.selectedMessageIndexes.includes(unit.messageIndex)).map(unit => unit.id),
       omitted: [...input.historyWindowOmissions.map(id => `source:${id}`), ...result.compiler.omittedGroups],

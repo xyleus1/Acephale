@@ -8,6 +8,7 @@ import { decodeBinaryRanking } from "../services/acephale-runtime/infra-binary-r
 import { InfraLocalPredictors, predictorContractHash, type InfraProbabilityCalibration } from "../services/acephale-runtime/infra-predictors";
 import { compileGoalTrainingExample, compileRankTrainingExamples, trainingPartition, type TrainingSource, type GoalDraft } from "../services/acephale-runtime/infra-training-export";
 import { historicalGoalSource } from "./acephale-training-export";
+import { LEXICAL_MEMORY_RETRIEVAL_HASH } from "../src/lib/acephale/experience-memory";
 
 const scope = { tenantId: "fixture", principalId: "fixture", authorizationVersion: "v1", environmentVersion: "v1", toolSchemaHash: hash("tools") };
 const frame: ExecutionFrame = { schemaVersion: 1, runId: "fixture", boundary: 1, snapshotId: "frozen", scope,
@@ -97,6 +98,22 @@ test("binary predictor uses the production compiler and keeps legacy output prot
   assert.equal(request.response_format.json_schema.name, "rank_binary_v1");
   assert.deepEqual(request.logprob_token_ids, [15, 16]);
   assert.equal(new InfraLocalPredictors(modelFixture().port, { predictionProtocol: "rank_marginals_v2" }).profile.protocol, "rank_marginals_v2");
+});
+test("reviewed family selection provenance survives canonical calibration and runtime loading", () => {
+  const profile = { predictionProtocol: "rank_binary_v1" as const, binaryTokenIds: { zero: 15, one: 16 } };
+  const selectionBody = { version: 1, weightFitFamilies: ["fit"], calibrationFamilies: ["cal"], developmentFamilies: ["dev"],
+    testFamilies: ["test"], sourceDesignReviewHash: hash("review"), partitionHash: hash("partition"), memoryHash: hash("memory") };
+  const selection = { ...selectionBody, contentHash: hash(selectionBody) };
+  const body = { version: 2 as const, probabilitySemantics: "independent_next_batch_hit" as const,
+    predictionMode: "selected_candidates" as const, fittingFamilies: ["cal"], validationFamilies: ["dev"],
+    sourceDatasetHash: hash("dataset"), bins: [{ upper: 1, probability: 0.5, count: 2 }],
+    provenance: { model: predictorModelIdentity(profile), memoryHash: hash("memory"), condition: "neutral",
+      predictorContractHash: predictorContractHash(profile), candidateCompilerHash: hash("compiler"), retrievalHash: LEXICAL_MEMORY_RETRIEVAL_HASH,
+      reviewedSelection: selection } };
+  const calibration = JSON.parse(JSON.stringify({ ...body, contentHash: hash(body) }));
+  const runtime = new InfraLocalPredictors(modelFixture().port, { ...profile, calibration, expectedCandidateCompilerHash: hash("compiler") });
+  assert.equal(runtime.contractHash, body.provenance.predictorContractHash);
+  assert.equal(calibration.provenance.reviewedSelection.contentHash, hash(selectionBody));
 });
 test("training goal export uses the actual compiler, excludes target metadata and checks visible sources", async () => {
   const fake = modelFixture();

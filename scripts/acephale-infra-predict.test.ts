@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { hash } from "../src/lib/acephale/canonical";
-import { freezeInfraReplayRetrieval, publicInfraFrame, selectInfraCandidatePanel, selectInfraReplayRows } from "./acephale-infra-predict";
+import { freezeInfraReplayRetrieval, publicInfraFrame, sealInfraReplayAudit, selectInfraCandidatePanel, selectInfraReplayRows } from "./acephale-infra-predict";
 import { mixInfraDecisions } from "../src/lib/acephale/infra-session";
 
 test("public replay reconstructs only current sources and rejects changed or future inputs", () => {
@@ -68,4 +68,13 @@ test("goal reliability attenuates conditional ranking instead of acting as a boo
   assert.equal(low.scores[0].candidateId, "A"); assert.equal(high.scores[0].candidateId, "B");
   assert.ok(Math.abs(low.scores.find(score => score.candidateId === "B")!.probability - 0.009) < 1e-12);
   assert.throws(() => mixInfraDecisions(neutral, conditional, 2));
+});
+test("replay audit retains failed request evidence and cannot mutate after sealing", () => {
+  const events = [{ type: "model_failed", code: "timeout", latencyMs: 12 }];
+  const audit = sealInfraReplayAudit(events, 14);
+  events[0].latencyMs = 99;
+  assert.equal(audit.events[0].latencyMs, 12);
+  const { contentHash, ...body } = audit;
+  assert.equal(contentHash, hash(body));
+  assert.throws(() => sealInfraReplayAudit([], Number.NaN));
 });

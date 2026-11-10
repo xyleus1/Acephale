@@ -82,6 +82,31 @@ on reserved calibration families and measure its actual serving configuration.
 Memory for that path may contain only weight-fitting families. Preserve the
 untrained predictor as an explicit comparison and keep the actor fixed.
 
+For the weight comparison, explicitly set the base profile to
+`{"predictionProtocol":"rank_binary_v1","binaryTokenIds":{"zero":ACTUAL_ZERO_ID,"one":ACTUAL_ONE_ID}}`.
+Each trained profile contains `{"trainedPredictor":FULL_PREDICTOR_ARTIFACT}`.
+Use actual tokenizer IDs, identical frozen bundle/memory and the same limit for
+all profiles. Run selected-candidate replay for admission calibration, and a
+separate fixed-panel replay for matched raw prediction scoring:
+
+```text
+node --import tsx scripts/acephale-infra-predict.ts BUNDLE FIT_MEMORY SELECTED_REPLAY URL LIMIT neutral selected_candidates calibration - PROFILE_JSON
+python -m acephale.infra_cli fit-calibration --bundle BUNDLE --predictions SELECTED_REPLAY --partitions PARTITION_APPROVED_JSON --memory FIT_MEMORY --output CALIBRATION
+node --import tsx scripts/acephale-infra-predict.ts BUNDLE FIT_MEMORY PANEL_REPLAY URL LIMIT neutral fixed_panel calibration - PROFILE_JSON
+python -m acephale.infra_cli compare-predictor-replays --bundle BUNDLE --partitions PARTITION_APPROVED_JSON --memory FIT_MEMORY --prediction base_binary=BASE_PANEL_REPLAY --prediction lora_17=SEED17_PANEL_REPLAY --prediction lora_29=SEED29_PANEL_REPLAY --output COMPARISON
+```
+
+The comparison validates the review chain, exact weight identities, shared ordered
+panels and dispatched inputs, then excludes fit/calibration rows from scoring.
+It retains every declared development checkpoint, including failures. Replay
+timings are not live latency. Earlier replays without dispatch audits cannot be
+resealed into this comparison; rerun them. Because the audit implementation is
+part of the compiler hash, apply it before compiling training inputs and freeze
+one source revision for export, all weight replays and calibration. Original
+closed collection artifacts retain their own source identity across that phase.
+Fixed-panel top-3 hit rate is panel coverage; compare top-1 and binary losses to
+assess ranking there, and use selected-candidate replay for operational top-3.
+
 After importing a candidate-only cohort, build its runtime memory with
 `node --import tsx scripts/acephale-infra-memory.ts --fresh-fit BUNDLE
 PARTITION_APPROVED_JSON NEW_OUTPUT_DIR`. The reviewed partition must have its

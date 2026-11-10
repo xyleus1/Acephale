@@ -174,7 +174,8 @@ def report_trials(design: TrialDesign, results: list[TrialResult], *, seed: int 
     }
 
 
-def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootstrap_samples: int = 2000) -> dict[str, Any]:
+def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootstrap_samples: int = 2000,
+                           allow_unavailable_panels: bool = False) -> dict[str, Any]:
     """Score independent exact-read hit marginals on identical fixed panels.
 
     A positive is membership anywhere in the immediate next authoritative
@@ -185,6 +186,7 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
         raise ValueError("A declared fixed-panel cohort is required")
     groups: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     identities: dict[str, str] = {}
+    observed_panels: dict[str, str] = {}
     partitions: dict[str, str] = {}
     scored: dict[tuple[str, str], dict[str, float]] = {}
     for row in rows:
@@ -206,9 +208,14 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
                 raise ValueError("Unique exact invocation identities required")
         if len(panel) > 3 or row.get("panel_hash") != hash_v1(sorted(panel)):
             raise ValueError("Fixed panel hash or size differs")
-        identity = hash_v1({"family": family, "split": split, "panel": sorted(panel), "panel_available": row.get("panel_available", True), "actual": sorted(actual)})
+        identity = hash_v1({"family": family, "split": split, "actual": sorted(actual), **({} if allow_unavailable_panels else {
+            "panel": sorted(panel), "panel_available": row.get("panel_available", True)})})
         if identities.setdefault(checkpoint, identity) != identity:
             raise ValueError("Conditions must share identical panels, labels and checkpoint identities")
+        if row.get("panel_available", True):
+            panel_identity = hash_v1(sorted(panel))
+            if observed_panels.setdefault(checkpoint, panel_identity) != panel_identity:
+                raise ValueError("Conditions must share identical observed panels")
         status = row.get("status")
         if status not in {"completed", "failed", "not_dispatched", "unobserved_actor_action"}:
             raise ValueError("Unknown fixed-panel prediction status")
@@ -267,7 +274,8 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
             for metric in ("binary_log_loss_nats", "brier")}})
     return {"schema_version": "acephale-fixed-panel-report-v2", "probability_semantics": "independent_next_batch_hit",
             "conditions": summaries, "paired_comparisons": comparisons,
-            "identical_candidate_panels": True, "identical_checkpoint_sets": True,
+            "identical_candidate_panels": all(row.get("panel_available", True) for row in rows),
+            "identical_observed_candidate_panels": True, "identical_checkpoint_sets": True,
             "test_partition_only": all(row["split"] == "test" for row in rows), "heldout_claim": False,
             "interpretation": "Checkpoint-mean binary log loss for membership anywhere in the next authoritative batch, not full-action cross-entropy or true conditional entropy",
             "limitations": ["At most three preselected candidates; panel coverage is reported separately", "Partition labels alone do not verify fresh held-out tasks or a preregistered freeze", "Missing predictions remain declared failures without invented probabilities", "Paired loss differences use jointly scored checkpoints only", "Task success, physical execution work and prediction hit rate are separate outcomes"]}

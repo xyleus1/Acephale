@@ -98,6 +98,12 @@ export function publicInfraFrame(row: PublicRow, snapshotId: string): ExecutionF
   validateContract("ExecutionFrame", frame); return frame;
 }
 export interface InfraPredictionEpisodicConfig { embeddingsPath: string; budgetDirectory: string; ledgerCheckpointPath: string }
+/** Preserve failed requests as well as successful compilation and dispatch evidence. */
+export function sealInfraReplayAudit(events: Record<string, unknown>[], rowWallMs: number) {
+  if (!Number.isFinite(rowWallMs) || rowWallMs < 0) throw new Error("Invalid replay wall time");
+  const body = { version: 1, events: copy(events), rowWallMs };
+  return { ...body, contentHash: hash(body) };
+}
 export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean; fixedPanel?: boolean; partition?: "calibration" | "test"; episodic?: InfraPredictionEpisodicConfig; predictor?: PredictorProfile }) {
   const inventory = JSON.parse(await readFile(join(input.bundle, "manifest.json"), "utf8"));
   const documents = !!inventory.files?.["document-lineage.json"];
@@ -113,7 +119,9 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   const candidateCompilerHash = infraCandidateCompilerHash(documents ? "documents" : "native");
   const profile = resolvePredictorProfile(input.predictor);
   const modelIdentity = predictorModelIdentity(input.predictor);
-  const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: profile.trainedPredictor?.servedModel ?? modelIdentity.repository, contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024 });
+  let rowEvents: Record<string, unknown>[] = [];
+  const record = (event: Record<string, unknown>) => rowEvents.push(copy(event));
+  const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: profile.trainedPredictor?.servedModel ?? modelIdentity.repository, contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record });
   let budget: DurableBudget | undefined, memoryServices: ReturnType<typeof createInfraMemoryServices> | undefined;
   let episodicLineage: Record<string, string> | null = null;
   const retrievalEvents: Record<string, unknown>[] = [];
@@ -134,7 +142,9 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   const lineage = { version: 2, kind: "uncalibrated_prediction_replay", model: modelIdentity, memoryHash: memory.contentHash,
     probabilitySemantics: "independent_next_batch_hit", predictionMode: input.fixedPanel ? "fixed_panel" : "selected_candidates",
     panelSelection: input.fixedPanel ? "first_three_common_compiler_candidates_before_goal_inference_v1" : null,
-    partition: input.partition ?? "calibration",
+    partition: input.partition ?? "calibration", compilerAuditVersion: 1,
+    predictionProtocol: profile.protocol, binaryTokenIds: profile.binaryTokenIds ?? null,
+    serving: { contextWindow: 8192, inputBudget: 7168, outputCap: 1024, temperature: 0, topP: 1, seed: 0, stream: true, enableThinking: false },
     predictorContractHash: predictorContractHash(input.predictor), candidateCompilerHash,
     retrievalHash: memoryServices?.profileHash ?? LEXICAL_MEMORY_RETRIEVAL_HASH, episodic: episodicLineage,
     sourceDatasetHash: pilot.manifest.bundle_hash, limit: input.limit, selection: "family-partition-round-robin-v1", inferGoals: input.inferGoals, rowIds: rows.map(row => row.checkpoint_id), executionAllowed: false };
@@ -142,6 +152,9 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   let completed = 0;
   const lifetime = AbortSignal.timeout(2 * 3600 * 1000);
   for (const row of rows) {
+    rowEvents = [];
+    const rowStarted = performance.now();
+    const audit = () => sealInfraReplayAudit(rowEvents, performance.now() - rowStarted);
     const expiredBeforeRow = lifetime.aborted;
     let candidates: Candidate[] | undefined;
     try {
@@ -151,7 +164,7 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
     candidates = input.fixedPanel ? selectInfraCandidatePanel(universe) : universe;
     lifetime.throwIfAborted();
     const retrieval = memoryServices?.perRun(`prediction:${row.checkpoint_id}`, "neutral_memory_prefetch", row.family_id);
-    const predictor = new InfraLocalPredictors(model, { ...input.predictor, memory, allowedFamilies: pilot.expected, excludeFamilies: [row.family_id],
+    const predictor = new InfraLocalPredictors(model, { ...input.predictor, memory, allowedFamilies: pilot.expected, excludeFamilies: [row.family_id], record,
       ...(retrieval ? { retrieveMemory: freezeInfraReplayRetrieval(retrieval.retrieve), retrievalProfileHash: retrieval.profileHash } : {}) });
     const signal = AbortSignal.any([lifetime, AbortSignal.timeout(120000)]);
       const goals: GoalSet = input.inferGoals ? await predictor.inferGoals(frame, signal) : frame.goals;
@@ -159,12 +172,13 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
       const neutral = await rank(frame, candidates, frame.goals, signal);
       const conditional = input.inferGoals ? await rank(frame, candidates, goals, signal) : null;
       await appendFile(join(output, "predictions.jsonl"), canonical({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash, family_id: row.family_id,
-        split: row.split, candidates, ...(input.fixedPanel ? { candidatePanel: candidates.map(candidate => candidate.id), panelHash: hash(candidates.map(candidate => candidate.id).sort()) } : {}),
-        goals, neutral, conditional, status: "completed" }) + "\n"); completed++;
+        split: row.split, candidates, orderedCandidatePoolHash: hash(candidates), ...(input.fixedPanel ? { candidatePanel: candidates.map(candidate => candidate.id), panelHash: hash(candidates.map(candidate => candidate.id).sort()) } : {}),
+        goals, neutral, conditional, status: "completed", audit: audit() }) + "\n"); completed++;
     } catch (error) {
       await appendFile(join(output, "predictions.jsonl"), canonical({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash, family_id: row.family_id,
-        split: row.split, ...(input.fixedPanel && candidates ? { candidates, candidatePanel: candidates.map(candidate => candidate.id), panelHash: hash(candidates.map(candidate => candidate.id).sort()) } : {}),
-        status: expiredBeforeRow ? "not_dispatched" : "failed", errorType: error instanceof Error ? error.name : "Error" }) + "\n");
+        split: row.split, ...(candidates ? { candidates, orderedCandidatePoolHash: hash(candidates), ...(input.fixedPanel ? {
+          candidatePanel: candidates.map(candidate => candidate.id), panelHash: hash(candidates.map(candidate => candidate.id).sort()) } : {}) } : {}),
+        status: expiredBeforeRow ? "not_dispatched" : "failed", errorType: error instanceof Error ? error.name : "Error", audit: audit() }) + "\n");
     }
   }
   await memoryServices?.drain();

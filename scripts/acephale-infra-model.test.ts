@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { LocalChatModelPort, type InfraChatMessage, type InfraModelEvent, type InfraFunctionTool } from "../src/lib/acephale/infra-model";
 import { freezeInfraManifest, INFRA_MODEL_PINS, validateInfraManifest, type InfraExperimentManifestV2 } from "../src/lib/acephale/infra-manifest";
 import { localActorDecision, localActorMessages } from "../services/acephale-runtime/local-actor";
+import { hash } from "../src/lib/acephale/canonical";
 
 const tool: InfraFunctionTool = { type: "function", function: { name: "get_document", parameters: {
   type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false,
@@ -62,6 +63,35 @@ test("candidate window measurement uses the real tokenizer without generating", 
   const controller = new AbortController(); controller.abort();
   await assert.rejects(port.measureInputTokens(messages, controller.signal));
   assert.equal(bodies.length, 1);
+});
+
+test("dispatch audit preserves actual model-independent inputs even when generation fails", async () => {
+  const events: InfraModelEvent[] = [];
+  const { port } = mockPort(new Response("unavailable", { status: 503 }), { record: event => events.push(event) });
+  await assert.rejects(port.complete(request), /HTTP 503/);
+  const dispatch = events.find(event => event.type === "model_dispatch")!;
+  assert.equal(dispatch.compiledMessagesHash, hash(messages));
+  assert.equal(dispatch.compiledTokenIdsHash, hash(Array(8).fill(1)));
+  assert.deepEqual(dispatch.selectedMessageIndexes, [0, 1]);
+  assert.deepEqual(dispatch.omittedGroups, []);
+  assert.equal(dispatch.inputTokens, 8);
+  assert.match(String(dispatch.requestContractHash), /^[a-f0-9]{64}$/);
+  assert.ok(events.some(event => event.type === "model_failed" && event.dispatched === true));
+  assert.ok(!events.some(event => event.type === "model_completed"));
+});
+
+test("prompt audit hashes stay identical across weight names while request identities remain distinct", async () => {
+  const events: InfraModelEvent[][] = [];
+  for (const model of ["base-fixture", "trained-fixture"]) {
+    const recorded: InfraModelEvent[] = []; events.push(recorded);
+    const port = new LocalChatModelPort({ baseUrl: "http://localhost:8000/v1", model, stream: false,
+      record: event => recorded.push(event), fetch: (async url => new URL(String(url)).pathname === "/tokenize"
+        ? tokenResponse() : Response.json({ ...completion(), model })) as typeof fetch });
+    await port.complete(request);
+  }
+  const [base, trained] = events.map(items => items.find(event => event.type === "model_dispatch")!);
+  assert.notEqual(base.inputHash, trained.inputHash);
+  for (const key of ["compiledMessagesHash", "compiledTokenIdsHash", "requestContractHash"]) assert.equal(base[key], trained[key]);
 });
 
 test("SDK retryable HTTP failures make exactly one physical generation attempt", async () => {
