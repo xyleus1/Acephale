@@ -117,6 +117,24 @@ seconds fail; native dispatch accepts at most three-second-old heartbeats.
 Immutable numbered publications retain failures, and the newest degraded or
 malformed publication never falls back to an older healthy one.
 
+One persistent pinned SSH process owns both the three forwards and the read-only
+remote probe loop. `ExitOnForwardFailure=yes` applies before the remote `READY`
+frame. Startup has a ten-second deadline and publishes degraded heartbeats while
+connecting; `READY` alone never establishes health. Every subsequent observation
+uses a fresh random nonce and increasing sequence. The remote process collects
+its observations after receiving that request and echoes both correlation fields.
+The guard rejects unsolicited, malformed, mismatched or late responses. Local
+model-catalog checks share the same 2.5-second total deadline, including the remote
+probe. The pinned known-hosts file is rechecked on every observation.
+
+The implementation uses bounded queues and reader threads on Windows, with SSH
+multiplexing explicitly disabled. A failure publishes degraded status before
+terminating and draining the owned process and readers. That closes the forwards
+and probe channel together. Reconnection requires confirmed drain; late responses
+cannot enter a replacement session. Final status records both `probeClosed` and
+`tunnelClosed`. The standalone one-shot observation helper remains available for
+diagnostics, but the running guard does not reconnect for each observation.
+
 The Node native service checks the bound heartbeat before startup and every 500
 ms while running. Tunnel exits, stale health, another instance, changed serving
 containers, substituted models, endpoint changes or another manifest abort the
