@@ -1,9 +1,9 @@
 /** Bridge audited fresh native inputs to frozen runtime memory. */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve, relative, isAbsolute } from "node:path";
+import { basename, dirname, join, resolve, relative, isAbsolute } from "node:path";
 import { canonical, hash } from "../src/lib/acephale/canonical";
-import { buildMemoryArtifact, validateMemoryArtifact, type FrozenExperienceMemory, type MemoryMessage, type MemoryRun } from "../src/lib/acephale/experience-memory";
+import { buildMemoryArtifact, validateMemoryArtifact, type FrozenExperienceMemory, type MemoryMessage, type MemoryRun, type MemoryFamilySelection } from "../src/lib/acephale/experience-memory";
 import { INFRA_MODEL_PINS } from "../src/lib/acephale/infra-manifest";
 import { extractMemoryEpisodes } from "../src/lib/acephale/trace-extractor";
 import { extractCausalMemoryMisses } from "../src/lib/acephale/causal-memory";
@@ -62,6 +62,17 @@ export function validateFreshInfraMemoryBinding(input: FrozenExperienceMemory,
   }
   if (memory.runs.some(run => run.split !== "train" || !bundle.expected.includes(run.familyId))) throw new Error("Fresh memory contains non-training families");
   const additional = memory.sourceFiles.filter(file => core.get(nameOf(file.path)) !== file.sha256);
+  if (memory.familySelection) {
+    const selection = memory.familySelection;
+    if (selection.sourceDatasetHash !== bundle.manifest.bundle_hash
+      || selection.weightFitFamilies.some(family => !bundle.expected.includes(family))
+      || bundle.expected.some(family => ![...selection.weightFitFamilies, ...selection.calibrationFamilies].includes(family))
+      || memory.repositorySnapshotId !== `${baseId}:weight-fit:${selection.contentHash}`
+      || additional.length !== 3 || additional.some(file => (({ "weight-fit-partitions.json": selection.partitionSourceSha256,
+        "weight-fit-partition-proposal.json": selection.partitionProposalSourceSha256, "weight-fit-source-review.json": selection.sourceDesignReviewSha256 } as Record<string, string>)[nameOf(file.path)] !== file.sha256))
+      || memory.misses.length) throw new Error("Weight fitting memory derivation differs from its frozen source partition");
+    return { kind: "weight_fit" as const, snapshotId: memory.repositorySnapshotId, selectionHash: selection.contentHash };
+  }
   if (memory.repositorySnapshotId === baseId) {
     if (additional.length || memory.misses.length) throw new Error("Base fresh memory contains an undeclared causal derivation");
     return { kind: "base" as const, snapshotId: baseId };
@@ -76,7 +87,7 @@ export function validateFreshInfraMemoryBinding(input: FrozenExperienceMemory,
   return { kind: "causal" as const, snapshotId: memory.repositorySnapshotId };
 }
 
-export function bridgeFreshInfraMemory(bundleDirectory: string, output: string) {
+export function bridgeFreshInfraMemory(bundleDirectory: string, output: string, options: { partitionsPath?: string } = {}) {
   if (existsSync(output)) throw new Error("Runtime memory output must be a new directory");
   const bundle = verifyInfraPilotBundle(bundleDirectory);
   if (bundle.lineage.fresh_qwen_traces !== true) throw new Error("Fresh native bundle required");
@@ -88,6 +99,56 @@ export function bridgeFreshInfraMemory(bundleDirectory: string, output: string) 
     || rows.length !== bundle.lineage.episodes) throw new Error("Fresh declared runs were omitted or repeated");
   const sourceFiles = ["manifest.json", "runtime-runs.jsonl", "metadata.jsonl", "lineage.json", "cohort-receipt.json"].map(name => ({
     path: resolve(bundleDirectory, name), sha256: sha(join(bundleDirectory, name)) }));
+  const partitionBytes = options.partitionsPath ? readFileSync(options.partitionsPath) : undefined;
+  const partition = partitionBytes ? JSON.parse(partitionBytes.toString("utf8")) : undefined;
+  const reviewedSources: { originalPath: string; outputName: string; bytes: Buffer; sha256: string }[] = [];
+  let selectionBody: Omit<MemoryFamilySelection, "contentHash" | "eligibleRunIds"> | undefined;
+  if (partition) {
+    const { contentHash, ...body } = partition;
+    if (partition.schemaVersion !== 1 || partition.kind !== "acephale-candidate-only-family-partition"
+      || contentHash !== hash(body) || partition.executionAuthorized !== true || partition.evaluationEligible !== true
+      || partition.efficacyClaimAllowed !== false || partition.review?.status !== "completed"
+      || partition.review?.reviewerKind !== "assistant_source_design" || partition.review?.humanAnnotationLabelReview !== false
+      || !/^[a-f0-9]{64}$/.test(partition.review?.sourceDesignReviewHash ?? "")) throw new Error("Fit-only memory requires the completed source-design partition review");
+    const loadReviewedSource = (name: string, outputName: string) => {
+      const originalPath = resolve(dirname(options.partitionsPath!), name), bytes = readFileSync(originalPath);
+      const value = JSON.parse(bytes.toString("utf8")), { contentHash: digest, ...sourceBody } = value;
+      if (digest !== hash(sourceBody)) throw new Error("Source-design review artifact hash mismatch");
+      const source = { originalPath, outputName, bytes, sha256: createHash("sha256").update(bytes).digest("hex") };
+      reviewedSources.push(source); return { value, source };
+    };
+    const review = loadReviewedSource("source-design-review.json", "weight-fit-source-review.json");
+    const proposal = loadReviewedSource("partition.json", "weight-fit-partition-proposal.json");
+    if (review.value.kind !== "acephale-source-family-review" || review.value.reviewer?.kind !== "assistant_source_design"
+      || review.value.humanAnnotationLabelReview !== false || review.value.historicalAPIGenExcluded !== true
+      || review.value.contentHash !== partition.review.sourceDesignReviewHash
+      || review.value.partitionProposalHash !== proposal.value.contentHash
+      || ["weightFitFamilies", "calibrationFamilies", "developmentFamilies", "testFamilies"].some(key => hash(partition[key]) !== hash(proposal.value[key]))) {
+      throw new Error("Approved family lists differ from the exact source-reviewed partition proposal");
+    }
+    const seen = new Set<string>();
+    for (const [key, expectedSplit] of [["weightFitFamilies", "train"], ["calibrationFamilies", "train"], ["developmentFamilies", "development"], ["testFamilies", "test"]]) {
+      const families = partition[key];
+      if (!Array.isArray(families) || !families.length) throw new Error("Explicit nonempty weight fitting and evaluation family lists required");
+      for (const family of families) {
+        if (typeof family !== "string" || !family || seen.has(family)) throw new Error("Fit-only memory partitions overlap");
+        seen.add(family);
+        const sourceSplit = bundle.split.families[family];
+        if (sourceSplit !== undefined && sourceSplit !== expectedSplit) throw new Error("Fit-only partition reassigns an original source split");
+      }
+    }
+    if (partition.weightFitFamilies.some((family: string) => !bundle.expected.includes(family))
+      || bundle.expected.some(family => ![...partition.weightFitFamilies, ...partition.calibrationFamilies].includes(family))) throw new Error("Fit-only partition does not cover the declared source training families");
+    selectionBody = { version: 1, kind: "weight_fit", sourceDatasetHash: bundle.manifest.bundle_hash,
+      partitionHash: contentHash, partitionSourceSha256: createHash("sha256").update(partitionBytes!).digest("hex"),
+      partitionProposalHash: proposal.value.contentHash, partitionProposalSourceSha256: proposal.source.sha256,
+      sourceDesignReviewHash: partition.review.sourceDesignReviewHash, sourceDesignReviewSha256: review.source.sha256,
+      weightFitFamilies: [...partition.weightFitFamilies].sort(), calibrationFamilies: [...partition.calibrationFamilies].sort(),
+      developmentFamilies: [...partition.developmentFamilies].sort(), testFamilies: [...partition.testFamilies].sort(),
+      selectedRunIds: rows.filter(row => partition.weightFitFamilies.includes(row.familyId)).map(row => row.id).sort() };
+    sourceFiles.push({ path: resolve(output, "weight-fit-partitions.json"), sha256: selectionBody.partitionSourceSha256 });
+    sourceFiles.push(...reviewedSources.map(source => ({ path: resolve(output, source.outputName), sha256: source.sha256 })));
+  }
   const runs: MemoryRun[] = [], episodes = [], exclusions: { runId: string; reason: string }[] = [];
   for (const row of rows) {
     const meta: any = metadata.get(row.id), source = bundle.lineage.fresh_sources[row.id];
@@ -102,6 +163,10 @@ export function bridgeFreshInfraMemory(bundleDirectory: string, output: string) 
       && Number.isSafeInteger(row.constraintViolations) && row.constraintViolations >= 0
       && !censored;
     if (row.contrastiveEligible !== undefined && row.contrastiveEligible !== contrastive) throw new Error("Fresh contrastive eligibility mismatch");
+    // Selection is independent of endpoints and happens before episode extraction or statistics.
+    if (selectionBody && !selectionBody.weightFitFamilies.includes(row.familyId)) {
+      exclusions.push({ runId: row.id, reason: "outside_weight_fitting_partition" }); continue;
+    }
     if (!eligible && !contrastive) { exclusions.push({ runId: row.id, reason: row.split !== "train" ? "not_training" : "endpoint_unknown_or_censored" }); continue; }
     if (meta.verification_tier !== "native_verified" || !Array.isArray(row.messages)) throw new Error("Fresh endpoint lacks verified public messages");
     const run: MemoryRun = { id: row.id, familyId: row.familyId, stage: "v5-training", split: "train", scope: row.scope,
@@ -111,19 +176,33 @@ export function bridgeFreshInfraMemory(bundleDirectory: string, output: string) 
     const extracted = extractMemoryEpisodes(run, row.messages as MemoryMessage[]);
     run.episodeCount = extracted.length; runs.push(run); episodes.push(...extracted);
   }
-  const artifact = buildMemoryArtifact({ repositorySnapshotId: `infra-fresh:${bundle.manifest.bundle_hash}`, sourceFiles, runs, episodes, misses: [] }, { profile: "v5" });
+  const selection = selectionBody ? { ...selectionBody, eligibleRunIds: runs.map(run => run.id).sort() } : undefined;
+  const familySelection = selection ? { ...selection, contentHash: hash(selection) } : undefined;
+  const artifact = buildMemoryArtifact({ repositorySnapshotId: `infra-fresh:${bundle.manifest.bundle_hash}${familySelection ? `:weight-fit:${familySelection.contentHash}` : ""}`,
+    sourceFiles, runs, episodes, misses: [], ...(familySelection ? { familySelection } : {}) }, { profile: "v5" });
   const receipt = { version: "acephale-infra-runtime-memory-bridge-v1", pilotBundleHash: bundle.manifest.bundle_hash,
     contentHash: artifact.contentHash, snapshotId: artifact.repositorySnapshotId, runs: runs.length, episodes: episodes.length,
     families: [...new Set(runs.map(run => run.familyId))].sort(), declaredRuns: rows.length, exclusions,
     runtimeArtifactPath: resolve(output, "runtime/artifact.json"), freshHeldout: false, freshQwenTraces: true,
     readyForPrediction: episodes.length > 0, verifiedFailures: runs.filter(run => !run.success).length,
+    ...(familySelection ? { familySelectionHash: familySelection.contentHash, partitionHash: familySelection.partitionHash,
+      selectionBeforeEpisodeExtraction: true, selectedRuns: familySelection.selectedRunIds.length } : {}),
     label: "Fresh verified training memory; failed endpoints are contrastive examples, not approved workflows" };
   verifyInfraPilotBundle(bundleDirectory);
-  if (sourceFiles.some(file => sha(file.path) !== file.sha256)) throw new Error("Fresh source changed during memory build");
+  const derivedPaths = new Set([resolve(output, "weight-fit-partitions.json"), ...reviewedSources.map(source => resolve(output, source.outputName))]);
+  if (sourceFiles.filter(file => !derivedPaths.has(file.path)).some(file => sha(file.path) !== file.sha256)
+    || reviewedSources.some(source => sha(source.originalPath) !== source.sha256)
+    || options.partitionsPath && sha(options.partitionsPath) !== selectionBody!.partitionSourceSha256) throw new Error("Fresh source changed during memory build");
   mkdirSync(join(output, "runtime"), { recursive: true });
+  if (partitionBytes) writeFileSync(join(output, "weight-fit-partitions.json"), partitionBytes, { flag: "wx" });
+  for (const source of reviewedSources) writeFileSync(join(output, source.outputName), source.bytes, { flag: "wx" });
   writeFileSync(join(output, "runtime/artifact.json"), canonical(artifact) + "\n", { flag: "wx" });
   writeFileSync(join(output, "bridge-receipt.json"), canonical(receipt) + "\n", { flag: "wx" });
   return receipt;
+}
+
+export function bridgeFreshFitInfraMemory(bundleDirectory: string, partitionsPath: string, output: string) {
+  return bridgeFreshInfraMemory(bundleDirectory, output, { partitionsPath });
 }
 
 /** Attach genuine training predictions from the exact closed cohort already bound by memory provenance. */
@@ -158,6 +237,9 @@ if (process.argv[1]?.endsWith("acephale-infra-memory.ts")) {
   if (process.argv[2] === "--causal") {
     if (process.argv.length !== 8) throw new Error("Usage: --causal MEMORY COHORT_DIRECTORY EVENTS_RELATIVE PUBLIC_RELATIVE NEW_OUTPUT_FILE");
     console.log(JSON.stringify(attachCausalInfraMemory(resolve(process.argv[3]), resolve(process.argv[4]), process.argv[5], process.argv[6], resolve(process.argv[7])), null, 2));
+  } else if (process.argv[2] === "--fresh-fit") {
+    if (process.argv.length !== 6) throw new Error("Usage: --fresh-fit PILOT_DIRECTORY APPROVED_PARTITIONS_JSON NEW_OUTPUT_DIRECTORY");
+    console.log(JSON.stringify(bridgeFreshFitInfraMemory(resolve(process.argv[3]), resolve(process.argv[4]), resolve(process.argv[5])), null, 2));
   } else {
     if (process.argv[2] !== "--fresh" || process.argv.length !== 5) throw new Error("Usage: acephale-infra-memory.ts --fresh PILOT_DIRECTORY NEW_OUTPUT_DIRECTORY");
     console.log(JSON.stringify(bridgeFreshInfraMemory(resolve(process.argv[3]), resolve(process.argv[4])), null, 2));

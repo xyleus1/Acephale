@@ -82,6 +82,13 @@ on reserved calibration families and measure its actual serving configuration.
 Memory for that path may contain only weight-fitting families. Preserve the
 untrained predictor as an explicit comparison and keep the actor fixed.
 
+After importing a candidate-only cohort, build its runtime memory with
+`node --import tsx scripts/acephale-infra-memory.ts --fresh-fit BUNDLE
+PARTITION_APPROVED_JSON NEW_OUTPUT_DIR`. The reviewed partition must have its
+original `partition.json` proposal and `source-design-review.json` beside it.
+This filters before mining; the legacy `--fresh` command includes all source
+training families and is unsuitable when calibration shares that source split.
+
 Create a collection plan with explicit official task IDs, family partitions,
 seeds, caps and reachable endpoints. This is a shape example, not executable data:
 

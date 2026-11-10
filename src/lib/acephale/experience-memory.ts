@@ -42,18 +42,25 @@ export interface MemoryConfusion {
   scope: MemoryScope; previousTool: string; predictedTool: string; actualTool: string;
   count: number; runIds: string[]; missIds: string[];
 }
+export interface MemoryFamilySelection {
+  version: 1; kind: "weight_fit"; sourceDatasetHash: string; partitionHash: string; partitionSourceSha256: string;
+  partitionProposalHash: string; partitionProposalSourceSha256: string; sourceDesignReviewHash: string; sourceDesignReviewSha256: string;
+  weightFitFamilies: string[]; calibrationFamilies: string[];
+  developmentFamilies: string[]; testFamilies: string[]; selectedRunIds: string[]; eligibleRunIds: string[]; contentHash: string;
+}
 export interface FrozenExperienceMemory {
   schemaVersion: 1; compilerVersion: "acephale-memory-v3" | "acephale-memory-v5"; repositorySnapshotId: string;
   sourcePolicy: "v1-training-plus-v2-development-only" | "v5-and-permitted-training-only";
   sourceFiles: MemoryFile[]; runs: MemoryRun[]; episodes: MemoryEpisode[]; misses: MemoryMiss[];
   transitions: MemoryTransition[]; confusions: MemoryConfusion[]; contentHash: string;
+  familySelection?: MemoryFamilySelection;
 }
 export interface MemoryRetrieval {
   queryHash: string; artifactHash: string; episodeIds: string[]; hints: string[];
   transitions: MemoryTransition[]; confusions: MemoryConfusion[];
 }
 
-type MemoryInput = Pick<FrozenExperienceMemory, "repositorySnapshotId" | "sourceFiles" | "runs" | "episodes" | "misses">;
+type MemoryInput = Pick<FrozenExperienceMemory, "repositorySnapshotId" | "sourceFiles" | "runs" | "episodes" | "misses" | "familySelection">;
 const validated = new WeakSet<object>();
 const indexes = new WeakMap<object, { runs: Map<string, MemoryRun>; terms: Map<string, Set<string>> }>();
 const digest = (value: string) => /^[a-f0-9]{64}$/.test(value);
@@ -115,7 +122,8 @@ export function memoryStatistics(input: MemoryInput) {
 export function buildMemoryArtifact(input: MemoryInput, options: { profile?: "v3" | "v5" } = {}): FrozenExperienceMemory {
   const body = { schemaVersion: 1 as const, compilerVersion: options.profile === "v5" ? "acephale-memory-v5" as const : "acephale-memory-v3" as const,
     sourcePolicy: options.profile === "v5" ? "v5-and-permitted-training-only" as const : "v1-training-plus-v2-development-only" as const, repositorySnapshotId: input.repositorySnapshotId,
-    sourceFiles: copy(input.sourceFiles), runs: copy(input.runs), episodes: copy(input.episodes), misses: copy(input.misses), ...memoryStatistics(input) };
+    sourceFiles: copy(input.sourceFiles), runs: copy(input.runs), episodes: copy(input.episodes), misses: copy(input.misses),
+    ...(input.familySelection ? { familySelection: copy(input.familySelection) } : {}), ...memoryStatistics(input) };
   return validateMemoryArtifact({ ...body, contentHash: hash(body) });
 }
 
@@ -162,6 +170,31 @@ export function validateMemoryArtifact(value: unknown): FrozenExperienceMemory {
       || !Number.isInteger(run.episodeCount) || run.episodeCount < 0 || !run.termination
       || !Array.isArray(run.sourceFiles) || !run.sourceFiles.length || run.sourceFiles.some(file => !files.has(fileKey(file)))) throw new Error("Invalid or contaminated memory run");
     runMap.set(run.id, run);
+  }
+  if (artifact.familySelection) {
+    const selection = artifact.familySelection, { contentHash: selectionHash, ...selectionBody } = selection;
+    if (selection.version !== 1 || selection.kind !== "weight_fit" || selectionHash !== hash(selectionBody)
+      || [selection.sourceDatasetHash, selection.partitionHash, selection.partitionSourceSha256, selection.partitionProposalHash,
+        selection.partitionProposalSourceSha256, selection.sourceDesignReviewHash, selection.sourceDesignReviewSha256].some(value => !digest(value))
+      || !selection.weightFitFamilies?.length) throw new Error("Invalid frozen memory family selection");
+    const families = new Set<string>();
+    for (const list of [selection.weightFitFamilies, selection.calibrationFamilies, selection.developmentFamilies, selection.testFamilies]) {
+      if (!Array.isArray(list)) throw new Error("Missing memory family partition");
+      for (const family of list) {
+        if (typeof family !== "string" || !family || families.has(family)) throw new Error("Memory family selection partitions overlap");
+        families.add(family);
+      }
+    }
+    for (const ids of [selection.selectedRunIds, selection.eligibleRunIds]) {
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== "string" || !id) || new Set(ids).size !== ids.length
+        || hash(ids) !== hash([...ids].sort())) throw new Error("Invalid frozen memory run selection");
+    }
+    if (hash([...runMap.keys()].sort()) !== hash(selection.eligibleRunIds)
+      || selection.eligibleRunIds.some(id => !selection.selectedRunIds.includes(id))
+      || artifact.runs.some(run => !selection.weightFitFamilies.includes(run.familyId))
+      || [["weight-fit-partitions.json", selection.partitionSourceSha256], ["weight-fit-partition-proposal.json", selection.partitionProposalSourceSha256],
+        ["weight-fit-source-review.json", selection.sourceDesignReviewSha256]].some(([name, sha]) => artifact.sourceFiles.filter(file =>
+          file.path.split(/[\\/]/).at(-1) === name && file.sha256 === sha).length !== 1)) throw new Error("Memory includes runs outside its frozen weight fitting selection");
   }
   const episodeMap = new Map<string, MemoryEpisode>();
   const decisions = new Set<string>();

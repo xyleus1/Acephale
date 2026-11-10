@@ -56,6 +56,22 @@ families. Proposed IDs must receive semantic overlap review before collection
 or evaluation; the original 24-family target is not established by this audit.
 Neither a lack of lexical matches nor a task-count target proves independence.
 
+A subsequent source-design review defines a smaller candidate-only pilot with
+two semantic families per partition, two task variants per family. It excludes
+all APIGen examples from its weights and memory. The source review is an
+assistant's task-design review, not the required human annotation-quality audit.
+The `--fresh-fit` memory builder now filters to weight-fitting families before
+episode extraction, binds the reviewed partition chain and preserves original
+source files. Its focused tests passed 14 cases and TypeScript validation passed.
+The original APIGen seed split remains ineligible pending semantic regrouping.
+
+Two AWS cleanup controllers have now been deployed within the existing overhead
+reservation. The account's observed concurrency limit of ten required
+conditional S3 locking instead of reserved Lambda concurrency. The first real
+GPU recovery canary completed with provider-confirmed termination. Further
+canary, serving and training status is retained in private operator receipts;
+this is still not a trained-model or native benchmark result.
+
 ## Implemented scope
 
 - Shared TypeScript contracts, current-source binding, workflow/episodic memory,
