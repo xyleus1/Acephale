@@ -9,6 +9,11 @@ financial fields, excluding controller-managed trainingWindows alongside leases
 and overheads. Adding an authorized training lease must not invalidate heartbeat
 checks. The cumulative 7,200-second training ceiling and provider deadlines remain
 unchanged. Do not rewrite existing ledgers or amendments to apply this repair.
+Three hardware/watchdog inputs now have scoped LF checkout attributes. Their Git
+blobs already contained LF; Windows autocrlf changed physical bytes and broke
+existing hash bindings. Keep the exact original pinned bytes when operating this
+separate controller checkout. The control.py implementation is unchanged by this
+checkout repair, and the research runtime remains separately frozen.
 
 Native stop diagnostics now retain only a classified split-guard reason and
 finite heartbeat age/limit. The three-second freshness ceiling is unchanged.

@@ -9,6 +9,13 @@ All original plan and financial limits remain bound. No ledger or amendment is
 rewritten, and this controller-only repair does not change the frozen research
 runtime, models, predictor recipe or provider deadline.
 
+## 2026-11-10: Preserve pinned controller input bytes on checkout
+
+Set LF checkout attributes only for hardware-profiles.json, lambda_gpu_watchdog.py
+and lambda_watchdog_deploy.py. Existing receipts bind their LF bytes, already
+present in Git objects. Windows autocrlf conversion is not a new hardware profile
+or watchdog release and must not require rewriting immutable ledger bindings.
+
 ## 2026-11-10: retain writable trainer caches per run
 
 Set the trainer's home and library-cache environment explicitly to directories

@@ -11,6 +11,12 @@ the 7,200-second cumulative ceiling without writing it, and still rejects a chan
 financial limit. These tests use temporary fixtures, with no live ledger, API,
 model or infrastructure mutation.
 
+Root restored the three hardware/watchdog inputs from the exact original LF
+bytes after proving normalized content identical. Scoped .gitattributes now
+preserves those bytes on future Windows checkouts. The pinned hashes and the
+unchanged controller implementation were verified before commit; no ledger,
+amendment or research runtime file was rewritten by this checkout repair.
+
 ## 2026-11-10: provide writable trainer home and caches
 
 An actual image03 probe running as the Linux host UID observed unwritable `HOME=/`
