@@ -181,8 +181,11 @@ only after the public candidate window is frozen; future calls and evaluation
 state never enter prompts or retrieval. Ranking targets contain an action class
 and one binary hit per candidate in that frozen order. Inference requests both
 0 and 1 token log probabilities, normalizes each raw pair and calibrates the
-result on reserved families before selecting at most three candidates. These
-remain independent candidate marginals, not an action-universe distribution.
+result on reserved families before selecting at most three candidates. Each
+bit describes a separate candidate-hit event, so scores are not normalized
+across candidates. The decoder is autoregressive: a bit probability conditions
+on the previously generated action and bits. These are not independent joint
+predictions or unconditional marginals, and require free-running calibration.
 The legacy numeric ranking protocol remains versioned separately.
 
 Weight fitting, calibration/reliability, development and test use disjoint

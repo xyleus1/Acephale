@@ -1,5 +1,24 @@
 # Acephale engineering log
 
+## 2026-11-10: second serving qualification and transport diagnosis
+
+Actual concurrent models, tool-call continuation, raw binary log probabilities,
+PostgreSQL/pgvector, queried telemetry and observed deployment inventory passed.
+The 235-file archive was independently rehashed before the lease was marked
+ready. A PostgreSQL catalog check replaced an operator-side assumption that a
+regclass value always prints its schema; original failed startup evidence stays
+in the archive. This changed no database state or source/model identity.
+
+Before native dispatch, repeated SSH handshakes exceeded the unchanged guard
+observation deadline. Three diagnostic probes took 2,503/2,727/2,774 ms. The
+guard failed closed and drained its tunnel. No native trial, hosted trial
+reservation or optimizer step was produced by this attempt at collection.
+The transport repair must preserve nonce freshness, identity checks and bounded
+shutdown; the 12-task design and existing financial journal remain unchanged.
+
+CI at `ae71b86` passed Node 223 without skips, Python 304 with two skips,
+deployment 166, types and lint. See STATE for the exact run and artifact identity.
+
 ## 2026-11-10: qualify the actual Lambda transport
 
 The first research lease reached its setup deadline before a valid final

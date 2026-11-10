@@ -3,6 +3,35 @@
 Updated 2026-11-10. This records the standalone research checkout, not historical
 benchmark results.
 
+## Actual second deployment and pre-dispatch transport check
+
+The second A100 lease passed actual serving, database, tool-call continuation,
+binary-logprob, telemetry and deployment-inventory checks at source
+`ae71b861e3aca8919c66073bc37fbc5d6c2e53da`. Independent local verification
+rehashed all 235 exported files. Archive SHA-256 is
+`5458afcfc315612a8df23695e897621403313fa484a842a69ac1b2d0a8c1d358`.
+The lease was marked ready before its setup deadline; both cleanup controllers
+received that state. This qualification contains no native score or optimizer step.
+
+The 12-task base-only collection was prepared but not dispatched. Its initial
+split-host guard failed closed: three diagnostic SSH probes alone took 2,503,
+2,727 and 2,774 ms, exceeding the 2,500 ms observation budget before local
+endpoint checks. The guard and its owned tunnel were drained. A persistent
+authenticated probe transport must pass before dispatch; increasing the
+freshness allowance is not the remedy. Original preparation and failed health
+observations remain immutable, with zero hosted trial calls at this checkpoint.
+
+The completed [CI run for this source](https://github.com/xyleus1/Acephale/actions/runs/42895723953)
+passed 223 Node tests with no skips, 304 Python tests with two platform/environment
+skips and 166 deployment tests. Types, ESLint and Ruff passed. These counts
+supersede earlier software totals only for this exact revision.
+
+A deeper public-prefix APIGen review grouped all 17 overlapping calibration
+records with their fitting comparators. Conservative exclusion against the
+frozen native objectives left five candidate records in two families, none
+approved for fitting. More family diversity and a relevant human review are
+needed; reshuffling these rows cannot produce four independent partitions.
+
 ## Actual GPU qualification, first attempt
 
 Both independent cleanup controllers passed real termination canaries. A leased

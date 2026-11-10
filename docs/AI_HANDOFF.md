@@ -4,6 +4,26 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+Latest checkpoint: the second GPU lease passed actual qualification and its
+235-file export was independently verified. Source was `ae71b86`. The lease
+was marked ready and its existing cleanup controllers remain authoritative.
+Consult the private operator handoff for the live lease, heartbeat and hard
+deadline; never infer that a host is still active from this document.
+
+No native task or optimizer step ran at this checkpoint. The prepared 12-task
+base collection stopped before dispatch because fresh SSH handshakes exceeded
+the split guard's 2.5-second observation budget. The guard/tunnel were drained.
+Preserve those failed observations and original prepared inputs. A new committed
+transport fix, observed inventory and preparation are required before collection.
+Do not weaken freshness checks or reuse the previous healthy status.
+
+Two independent audits also found a base-versus-trained calibration-family
+mismatch and insufficient independent APIGen goal families. Keep candidate-only
+training separate from goal supervision, compare every weight variant with
+identical prompts/candidate order/calibration families, and retain both seeds.
+
+The following entries preserve earlier execution history:
+
 Current execution receipts are maintained outside the checkout. Both real
 cleanup canaries completed, the research A100 passed its hardware preflight,
 and both pinned model snapshots downloaded. The Node split guard now matches

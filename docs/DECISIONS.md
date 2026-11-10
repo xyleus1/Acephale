@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-10: preserve freshness while removing repeated SSH setup
+
+Actual fresh SSH probes exceeded the 2.5-second observation deadline before
+native dispatch. Reuse a bounded authenticated SSH session for fresh correlated
+probes and owned forwarding. Never reuse a previous observation as a fresh one,
+extend the three-second status lifetime, or admit work during connection setup.
+Preserve failed startup evidence and bind the repaired source to new deployment
+and preparation artifacts. The original task design, models and budgets remain.
+
+Untrained and trained binary predictors must share the same reviewed calibration
+families, candidate order and compiled prompts. Compare raw fixed-panel scores
+separately from full-window selection; a three-candidate panel's top-three hit
+rate is coverage, not proof of improved ranking. Report both training seeds.
+
 ## 2026-11-10: correct CUDA metadata without replacing the serving image
 
 The raw pinned OCI index, linux/amd64 manifest and config establish an image
