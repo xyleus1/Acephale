@@ -4,6 +4,13 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+Current execution receipts are maintained outside the checkout. Both real
+cleanup canaries completed, the research A100 passed its hardware preflight,
+and both pinned model snapshots downloaded. The Node split guard now matches
+Python's Lambda identity and provenance checks. Do not infer completed serving,
+training or native evaluation from these milestones; inspect the latest private
+lease and qualification receipts before continuing or launching another host.
+
 The active question is whether source-grounded goals improve a PASTE-inspired
 read prefetcher over an otherwise identical neutral-memory prefetcher. Actor
 weights, messages, tools and task limits stay fixed. This is infrastructure

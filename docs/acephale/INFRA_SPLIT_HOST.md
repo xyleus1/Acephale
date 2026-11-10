@@ -73,6 +73,15 @@ For Lambda, additionally set `provider: "lambda"`, `knownHostsPath`,
 file contains exactly the observed host's ed25519 key. The inventory includes
 the actual Lambda API receipt and machine-id hash; it never invents an EC2 ID.
 Initial host trust is a recorded operator observation, not provider attestation.
+Both the Python publisher and Node consumer validate the receipt content hash,
+provider response, approved hardware profile, active lease name, API instance
+and IP association, pinned key and machine identity. Their heartbeat provenance
+includes those exact bindings and the dedicated known-hosts file's bytes. A
+changed file invalidates running checks even when its added text is a comment.
+Use `ubuntu@OBSERVED_IP` for Lambda, as an alias cannot establish the required
+receipt association. Select its private key through a narrowly scoped OpenSSH
+`Host OBSERVED_IP` configuration with `IdentityFile` and `IdentitiesOnly yes`;
+the guard does not accept or persist a key itself.
 
 The guard verifies the actual inventory hash, instance ID, deployment sections
 and manifest source identity. It owns all three loopback listeners with

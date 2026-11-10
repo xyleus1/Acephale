@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-10: preserve provider identity across both runtime guards
+
+Lambda execution uses its actual API association, pinned SSH host key and local
+machine-id hash. Python and Node must verify the same receipt and compute the
+same heartbeat provenance; a permissive instance-ID regex alone is insufficient.
+AWS's existing identity path remains separately validated. An observed host key
+is operator-pinned trust, not provider attestation.
+
 ## 2026-11-10: train the small predictor, retain the fixed actor
 
 Implement an explicitly scoped LoRA experiment on the pinned Qwen3.5-0.8B

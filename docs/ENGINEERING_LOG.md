@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## 2026-11-10: qualify the actual Lambda transport
+
+Both independent cleanup controllers completed real GPU termination canaries.
+The research A100 host passed its driver and memory preflight, and both pinned
+model snapshots downloaded. Serving, training and native scores still require
+their own observed receipts. These infrastructure observations do not establish
+model quality.
+
+Readiness inspection found that the Python split guard supported Lambda while
+the Node consumer still required AWS instance IDs. The Node guard now checks
+the same API receipt, host key, machine identity and dedicated known-hosts file,
+and includes them in the exact heartbeat provenance. It also fences later
+known-hosts changes. Cross-language tests exercise Python publications through
+the actual Node consumer for both providers.
+
 ## 2026-11-10: bounded predictor LoRA and binary ranking
 
 Added production-compiler training export with public-prefix goal targets and

@@ -4,6 +4,10 @@ import base64
 import hashlib
 import io
 import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -161,3 +165,23 @@ def test_lambda_guard_detects_known_hosts_changes_before_contacting_remote(tmp_p
         stream.write("# changed after startup\n")
     with pytest.raises(ValueError, match="changed"):
         observe(config, provenance, runner=lambda *_args, **_kwargs: pytest.fail("Remote probe must not run"))
+
+
+@pytest.mark.parametrize("provider", ["aws", "lambda"])
+def test_actual_node_checker_accepts_python_guard_provenance(tmp_path, provider):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is required for the cross-language heartbeat check")
+    _, provenance = (lambda_fixture if provider == "lambda" else fixture)(tmp_path)
+    publish(tmp_path, 1, provenance, True, {"remoteInstanceId": provenance["expectedInstanceId"]})
+    script = """const fs=require('node:fs'); const path=require('node:path');
+const {nativeSplitGuard}=require('./services/acephale-runtime/infra-split-guard.ts');
+const directory=process.argv[1];
+const config=JSON.parse(fs.readFileSync(path.join(directory,'configuration.json'),'utf8'));
+const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));
+console.log(JSON.stringify(nativeSplitGuard(config,manifest,path.join(directory,'configuration.json'))()));"""
+    result = subprocess.run([node, "--import", "tsx", "-e", script, str(tmp_path)],
+                            cwd=Path(__file__).resolve().parents[3], capture_output=True, text=True, timeout=20,
+                            env={**os.environ, "ACEPHALE_HOST_STATUS_FILE": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["endpointProvenanceHash"] == hash_v1(provenance)

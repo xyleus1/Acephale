@@ -1,6 +1,40 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { hash } from "../../src/lib/acephale/canonical";
+
+const sha256 = (value: Buffer) => createHash("sha256").update(value).digest("hex");
+const hexHash = (value: unknown) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+
+function verifiedKnownHosts(path: string, host: string, port: number, fingerprint: string) {
+  const bytes = readFileSync(path), lines = bytes.toString("utf8").split(/\r?\n/)
+    .map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
+  const expectedHost = port === 22 ? host : `[${host}]:${port}`, line = lines[0];
+  if (lines.length !== 1 || ![3, 4].includes(line.length) || line[0] !== expectedHost || line[1] !== "ssh-ed25519"
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(line[2])) throw new Error("Dedicated known_hosts must pin the observed Lambda ed25519 key");
+  const raw = Buffer.from(line[2], "base64");
+  if (`SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}` !== fingerprint) throw new Error("Pinned SSH key differs from Lambda receipt");
+  return sha256(bytes);
+}
+
+/** Mirror Python lambda_binding, including its exact heartbeat provenance fields. */
+function lambdaBinding(guard: Record<string, any>, inventory: Record<string, any>, base: string) {
+  const provider = inventory.provider ?? {}, receipt = provider.identityReceipt ?? {}, instance = receipt.instance ?? {}, ssh = receipt.ssh ?? {};
+  const { contentHash: _contentHash, ...body } = receipt;
+  if (provider.name !== "lambda" || receipt.version !== 1 || receipt.provider !== "lambda" || receipt.profile !== "acephale-infra-v1"
+    || receipt.contentHash !== hash(body) || receipt.providerResponseHash !== hash(instance)
+    || receipt.hardwareProfile !== "a100-40gb-v1" || !hexHash(receipt.hardwareProfileHash) || !hexHash(receipt.studyBindingHash)
+    || receipt.leaseName !== `acephale-infra-${receipt.leaseId ?? ""}` || instance.name !== receipt.leaseName || instance.status !== "active"
+    || instance.instance_type?.name !== "gpu_1x_a100_sxm4" || instance.id !== guard.expectedInstanceId || ssh.host !== instance.ip
+    || guard.sshDestination !== `${ssh.user}@${ssh.host}` || ssh.port !== guard.sshPort || ssh.user !== "ubuntu"
+    || typeof ssh.hostKeySha256 !== "string" || !/^SHA256:[A-Za-z0-9+/]{43}$/.test(ssh.hostKeySha256)
+    || ssh.hostKeySha256 !== guard.expectedHostKeySha256 || !hexHash(ssh.machineIdSha256) || ssh.machineIdSha256 !== guard.expectedMachineIdSha256
+    || typeof guard.knownHostsPath !== "string" || !guard.knownHostsPath) throw new Error("Lambda API association and pinned SSH/machine identity differ");
+  const knownHostsPath = resolve(base, guard.knownHostsPath), knownHostsHash = verifiedKnownHosts(knownHostsPath, ssh.host, ssh.port, ssh.hostKeySha256);
+  return { provider: "lambda", providerReceiptHash: receipt.contentHash, hostKeySha256: ssh.hostKeySha256,
+    machineIdSha256: ssh.machineIdSha256, knownHostsHash, knownHostsPath, sshHost: ssh.host,
+    identityMethod: "Lambda API IP + pinned SSH host key + local machine-id" };
+}
 
 /** Bind the locally clocked heartbeat to this manifest and the exact private forwards. */
 export function nativeSplitGuard(configuration: { splitGuardPath?: string; actorBaseUrl: string; predictorBaseUrl?: string; otlpBaseUrl?: string },
@@ -8,8 +42,9 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
   if (!configuration.splitGuardPath) return undefined;
   const guardPath = resolve(dirname(configurationPath), configuration.splitGuardPath);
   const guard = JSON.parse(readFileSync(guardPath, "utf8"));
+  const provider = guard.provider ?? "aws", instancePattern = provider === "aws" ? /^i-[0-9a-f]{8,17}$/ : /^[a-zA-Z0-9_-]{1,100}$/;
   if (guard.version !== 1 || !/^[A-Za-z0-9_.@-]+$/.test(guard.sshDestination) || guard.sshDestination.startsWith("-")
-    || !/^i-[0-9a-f]{8,17}$/.test(guard.expectedInstanceId) || !Number.isInteger(guard.sshPort) || guard.sshPort < 1 || guard.sshPort > 65535
+    || !["aws", "lambda"].includes(provider) || !instancePattern.test(guard.expectedInstanceId) || !Number.isInteger(guard.sshPort) || guard.sshPort < 1 || guard.sshPort > 65535
     || !guard.localPorts || Object.keys(guard.localPorts).sort().join() !== "actor,otlp,predictor"
     || Object.values(guard.localPorts).some(port => !Number.isInteger(port) || Number(port) < 1024 || Number(port) > 65535)
     || new Set(Object.values(guard.localPorts)).size !== 3) throw new Error("Invalid native split guard provenance");
@@ -18,7 +53,9 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
   if (deployment.observed !== true || deployment.evidenceHash !== hash(inventory) || inventory.provider?.instanceId !== guard.expectedInstanceId
     || deployment.sourceCommit !== (manifest as { sourceCommit?: string }).sourceCommit
     || ["actor", "predictor", "runtime", "hardware"].some(key => hash(deployment[key] ?? null) !== hash((manifest as Record<string, unknown>)[key] ?? null))) throw new Error("Split guard inventory differs from frozen experiment");
+  const providerBinding = provider === "lambda" ? lambdaBinding(guard, inventory, dirname(guardPath)) : undefined;
   const servingContainers = Object.fromEntries(["actor", "predictor"].map(role => [role, Object.fromEntries(["id", "imageId", "startedAt"].map(key => [key, inventory.containers[role][key]]))]));
+  if (Object.values(servingContainers).some(container => !hexHash(container.id))) throw new Error("Observed serving container identities required");
   const endpoints = Object.fromEntries(Object.entries(guard.localPorts).map(([role, port]) => [role, `http://127.0.0.1:${port}`]));
   for (const [role, value] of [["actor", configuration.actorBaseUrl], ["predictor", configuration.predictorBaseUrl], ["otlp", configuration.otlpBaseUrl]]) {
     if (!value || value.replace(/\/$/, "").replace(/\/v1$/, "") !== endpoints[role!]) throw new Error("Native model/telemetry endpoints differ from guard-owned tunnels");
@@ -27,9 +64,10 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
     sshPort: guard.sshPort, expectedInstanceId: guard.expectedInstanceId, endpoints,
     remotePorts: { actor: 8000, predictor: 8001, otlp: 4318 },
     deploymentEvidenceHash: deployment.evidenceHash, servingContainers,
-    servedModels: { actor: manifest.actor.servedModel, predictor: manifest.predictor.servedModel } };
+    servedModels: { actor: manifest.actor.servedModel, predictor: manifest.predictor.servedModel }, ...providerBinding };
   const expected = hash(provenance);
   return () => {
+    if (providerBinding && verifiedKnownHosts(providerBinding.knownHostsPath, providerBinding.sshHost, guard.sshPort, providerBinding.hostKeySha256) !== providerBinding.knownHostsHash) throw new Error("Pinned SSH identity file changed after guard startup");
     const directory = process.env.ACEPHALE_HOST_STATUS_FILE;
     if (!directory) throw new Error("Split execution requires its local heartbeat directory");
     const name = readdirSync(directory).filter(name => /^\d{16}\.json$/.test(name)).sort().at(-1);
