@@ -163,4 +163,3 @@ final degraded publication and cancellation before any SSH launch. Thirty-three
 focused guard tests passed; Ruff passed. An initial worktree-only run lacked
 `tsx` and failed two cross-language tests; installing the local dependency
 junction allowed both to pass. No benchmark or model call was made by these tests.
-

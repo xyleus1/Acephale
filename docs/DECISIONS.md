@@ -155,4 +155,3 @@ The guard's optional thread stop event permits a daemon-independent Windows
 supervisor to stop it normally after its native child ends. It retains the same
 freshness checks, bounded probe, SSH ownership and final degraded publication.
 The event does not authorize restarting trials or releasing unknown charges.
-
