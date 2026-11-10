@@ -4,6 +4,13 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+Trainer launches now create writable per-run home and cache directories beneath
+the retained output mount. `launch.json` binds their explicit environment and
+the host launcher's source hash. This repairs the observed host-UID `HOME=/`
+problem without granting root or network access. It does not establish CUDA
+training readiness or provide a missing C compiler; inspect actual image
+prerequisites and perform the real smoke before optimizer-result claims.
+
 Latest native result: the original 12-slot cohort is closed and aborted after two
 successes. A Windows metrics-file replacement error prevented subsequent actor
 requests. Ten infrastructure-censored errors remain in its denominator; only two

@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## 2026-11-10: provide writable trainer home and caches
+
+An actual image03 probe running as the Linux host UID observed unwritable `HOME=/`
+and `/.cache`. The host launcher now creates and write-tests separate per-run
+home, XDG, Hugging Face, datasets, Torch, Inductor and Triton directories beneath
+`/output`. Launch receipts record the environment and launcher source hash.
+The existing non-root user, network isolation and read-only input mounts remain.
+Twenty-seven focused training/launcher tests pass. This is prerequisite repair,
+not a successful optimizer step or a claim that a C compiler is installed.
+
 ## 2026-11-10: preserve the aborted native cohort and repair metrics publication
 
 The first real base collection retained two successful tasks and ten execution

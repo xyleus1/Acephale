@@ -18,6 +18,29 @@ from acephale.training_data import hashed, verify_hashed, write_new
 
 DOCKERFILE = "infra/acephale-infra-v1/trainer.Dockerfile"
 LABEL = "org.acephale.training-inputs"
+CACHE_ENVIRONMENT = {
+    "HOME": "/output/home",
+    "XDG_CACHE_HOME": "/output/cache/xdg",
+    "HF_HOME": "/output/cache/huggingface",
+    "HF_HUB_CACHE": "/output/cache/huggingface/hub",
+    "HF_DATASETS_CACHE": "/output/cache/huggingface/datasets",
+    "TORCH_HOME": "/output/cache/torch",
+    "TORCHINDUCTOR_CACHE_DIR": "/output/cache/torchinductor",
+    "TRITON_CACHE_DIR": "/output/cache/triton",
+}
+
+
+def writable_environment(output: Path) -> dict[str, str]:
+    """Keep host-UID home and library caches in this run's retained output."""
+    for value in CACHE_ENVIRONMENT.values():
+        path = output.joinpath(*value.removeprefix("/output/").split("/"))
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # A real write checks ACLs as well as ownership/mode; remove only this probe.
+        probe = path / (".write-probe-" + uuid.uuid4().hex)
+        with probe.open("xb") as stream:
+            stream.write(b"cache preflight\n")
+        probe.unlink()
+    return dict(CACHE_ENVIRONMENT)
 
 
 def checked(command: list[str], *, timeout: float = 30) -> str:
@@ -92,10 +115,13 @@ def run(args) -> dict:
         raise ValueError("Actor container must actually be stopped before training")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    environment = writable_environment(output)
     name = "acephale-train-" + uuid.uuid4().hex
     command = ["docker", "run", "--rm", "--init", "--name", name, "--gpus", "all", "--network", "none",
                "--user", f"{os.getuid()}:{os.getgid()}", "--stop-timeout", "30",
                "--env", "ACEPHALE_TRAINER_IMAGE_DIGEST=" + image_id]
+    for key, value in environment.items():
+        command.extend(["--env", key + "=" + value])
     trained_evaluation = args.action == "evaluate" and (args.model.parent / "predictor.json").is_file()
     model_mount, model_target = (args.model.parent, "/trained-export") if trained_evaluation else (args.model, "/model")
     model_argument = "/trained-export/" + args.model.name if trained_evaluation else "/model"
@@ -117,7 +143,8 @@ def run(args) -> dict:
     if args.action == "evaluate":
         command.extend(["--partition", args.partition])
     write_new(output / "launch.json", hashed({"imageReceiptHash": receipt["contentHash"], "imageId": image_id,
-              "leaseHash": hash_v1(lease), "actorContainer": args.actor_container, "action": args.action, "containerName": name}))
+              "leaseHash": hash_v1(lease), "actorContainer": args.actor_container, "action": args.action, "containerName": name,
+              "environment": environment, "launcherSourceHash": file_hash(Path(__file__))}))
     process = None
     next_actor_check = 0.0
     try:

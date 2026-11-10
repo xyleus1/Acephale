@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-10: retain writable trainer caches per run
+
+Set the trainer's home and library-cache environment explicitly to directories
+inside its existing writable output mount. Create and verify them as the actual
+host UID, record the environment and launcher hash, and preserve caches with run
+artifacts. Do not change image/model pins, use root, enable network access or
+write into immutable model/data mounts to solve the observed unwritable home.
+
 ## 2026-11-10: recover a full training cohort without erasing failed slots
 
 Preserve the first aborted 12-slot cohort and its two observed successes. After
