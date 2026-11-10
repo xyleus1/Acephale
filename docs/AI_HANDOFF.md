@@ -127,3 +127,10 @@ development and budgeted heldout trials. Consult STATE for evidence limits.
 
 Historical artifact bytes and reports remain in the original checkout/history.
 Do not rename/reseal them as current data or import them without provenance review.
+
+The persistent split guard's local catalog requests now share the remaining
+2.5-second observation deadline, instead of an undocumented 0.5-second sublimit.
+The 3-second consumer freshness bound, nonce checks and confirmed drain before
+reconnect are unchanged. Failed observations publish only a fixed stage name and
+elapsed/remaining/budget milliseconds, never exception messages. A new deployment
+inventory and read-only guard soak must qualify this source before paid trials.

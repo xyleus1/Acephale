@@ -176,3 +176,23 @@ and cancellation, and verify an aborted CLI exits 1. No frozen cohort is changed
 and these fixtures establish no native reward or model performance.
 Typecheck and schema generation checks passed. All 31 focused Node tests passed
 without skips; ESLint completed with zero errors and 35 existing warnings.
+
+# 2026-11-10: Shared observation deadline and safe guard diagnostics
+
+A Normal-priority read-only soak still failed on a degraded TimeoutError after
+149 Node checks, 78.687 seconds into the requested 120-second consumer window.
+Its largest publication gap was 1,405.5 ms; the guard drained successfully. This
+does not prove which suboperation timed out because the old publication retained
+only the exception type. The local HTTP requests had an undocumented 0.5-second
+sublimit. Both parallel catalogs now receive the remaining overall 2.5-second
+budget. The legacy serial observer also uses its remaining total budget.
+
+Failure publications add only remote_probe/local_actor/local_predictor/overall
+stage and numeric elapsed, remaining and budget fields. The consumer still
+rejects observations older than 3 seconds. No retry can overlap an undrained
+probe. Focused guard tests: 37 passed; Ruff passed. A real loopback HTTP test
+checks two concurrent 0.6-second responses. Tests also cover shared-deadline
+exhaustion, bounded failure metadata, poisoned-session rejection and managed drain.
+The first run had 35 fixture setup errors from an inaccessible global pytest
+temporary directory and two passes; the subsequent explicit new output directory
+resolved that environment failure. These checks made no model/provider calls.

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from test_infra_split_guard import fixture, lambda_fixture, responses
@@ -195,9 +196,87 @@ def test_remote_and_local_work_share_one_total_deadline(tmp_path, monkeypatch):
             observe_persistent(provenance, session, opener=slow_local)
         assert time.monotonic()-started < 0.18
         assert session.failed
+        assert session.observation_diagnostics["observationStage"] == "overall"
+        assert session.observation_diagnostics["observationBudgetMs"] == 100
+        assert session.observation_diagnostics["observationRemainingMs"] == 0
     finally:
         session.close()
     assert all(not worker.is_alive() for worker in session.workers)
+
+
+def test_real_local_catalogs_may_take_point_six_seconds_within_total_budget(tmp_path):
+    config, provenance = fixture(tmp_path)
+    _, local = responses(provenance)
+    calls = []
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            role = "actor" if self.path.startswith("/actor/") else "predictor"
+            calls.append(role)
+            time.sleep(0.6)
+            body = json.dumps(local[role]).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        def log_message(self, *_args):
+            pass
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    provenance["endpoints"] = {role: f"http://127.0.0.1:{server.server_port}/{role}" for role in ("actor", "predictor")}
+    session, _, launches = responder(config, provenance)
+    try:
+        ready(session)
+        observed = observe_persistent(provenance, session)
+        assert 600 <= observed["observationElapsedMs"] < 2500
+        assert observed["observationBudgetMs"] == 2500
+        assert observed["observationRemainingMs"] > 0
+        assert sorted(calls) == ["actor", "predictor"] and len(launches) == 1
+    finally:
+        session.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+    assert all(not worker.is_alive() for worker in session.workers)
+
+
+@pytest.mark.parametrize("role", ["actor", "predictor"])
+def test_failed_catalog_records_only_bounded_stage_and_elapsed_fields(tmp_path, role):
+    config, provenance = fixture(tmp_path)
+    session, opener, _ = responder(config, provenance)
+    def failed_catalog(url, **kwargs):
+        if (":18000/" in url) == (role == "actor"):
+            raise TimeoutError("private exception details must never be published")
+        return opener(url, **kwargs)
+    try:
+        ready(session)
+        with pytest.raises(TimeoutError):
+            observe_persistent(provenance, session, opener=failed_catalog)
+        diagnostics = session.observation_diagnostics
+        assert diagnostics["observationStage"] == "local_" + role
+        assert 0 <= diagnostics["observationElapsedMs"] < 2500
+        assert diagnostics["observationBudgetMs"] == 2500
+        assert "private" not in json.dumps(diagnostics)
+        with pytest.raises(RuntimeError, match="unavailable"):
+            session.request(time.monotonic()+1)
+    finally:
+        session.close()
+    assert all(not worker.is_alive() for worker in session.workers)
+
+
+def test_remote_timeout_has_remote_stage_and_cannot_be_reused(tmp_path, monkeypatch):
+    config, provenance = fixture(tmp_path)
+    session, _, launches = responder(config, provenance, delay=0.1)
+    try:
+        ready(session)
+        monkeypatch.setattr("acephale.infra_split_guard.OBSERVATION_SECONDS", 0.03)
+        with pytest.raises(TimeoutError):
+            observe_persistent(provenance, session)
+        assert session.observation_diagnostics["observationStage"] == "remote_probe"
+        assert session.observation_diagnostics["observationRemainingMs"] == 0
+        assert session.failed and len(launches) == 1 and not session.workers
+    finally:
+        session.close()
 
 
 def test_identity_mismatch_and_key_change_cannot_reuse_session(tmp_path):

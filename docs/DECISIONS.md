@@ -167,3 +167,12 @@ queue and publication failures remain fatal. Request counters do not prove
 backend durability, and a post-run export cannot relabel an earlier rejection.
 This follows the OpenTelemetry
 [runtime error contract](https://opentelemetry.io/docs/specs/otel/error-handling/).
+
+# One observation budget for remote and local identity checks
+
+Use the same 2.5-second deadline for the fresh SSH observation and parallel local
+model catalogs. Remove the separate 0.5-second HTTP cap; do not increase the total
+deadline or the 3-second consumer freshness limit. Publish fixed diagnostic stage
+names and numeric timings only. Exceptions still poison the current session and
+replacement requires confirmed drain. A failed soak remains failed; this change
+requires a fresh compatible inventory and read-only soak before native dispatch.

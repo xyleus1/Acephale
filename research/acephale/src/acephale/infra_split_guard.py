@@ -222,6 +222,7 @@ class PersistentProbeSession:
         self.closed = False
         self.failed = False
         self.workers = []
+        self.observation_diagnostics = {}
         self.process = popen(persistent_probe_command(config, provenance), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=stderr if stderr is not None else subprocess.DEVNULL, text=True, encoding="utf-8",
                              errors="strict", bufsize=1, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
@@ -323,17 +324,27 @@ class PersistentProbeSession:
 
 
 def observe_persistent(provenance: dict, session: PersistentProbeSession, *, opener=urllib.request.urlopen):
+    monotonic_started = session.clock()
+    deadline = monotonic_started + OBSERVATION_SECONDS
+    diagnostics = {"observationStage": "remote_probe", "observationBudgetMs": OBSERVATION_SECONDS * 1000}
+    session.observation_diagnostics = diagnostics
     try:
-        return _observe_persistent(provenance, session, opener=opener)
+        observed = _observe_persistent(provenance, session, opener=opener, deadline=deadline, diagnostics=diagnostics)
     except Exception:
         session.failed = True
         raise
+    finally:
+        completed = session.clock()
+        diagnostics.update(observationElapsedMs=(completed-monotonic_started)*1000,
+                           observationRemainingMs=max(0, deadline-completed)*1000)
+    return {**observed, **diagnostics}
 
 
-def _observe_persistent(provenance: dict, session: PersistentProbeSession, *, opener):
-    started, deadline = time.time() * 1000, session.clock() + OBSERVATION_SECONDS
+def _observe_persistent(provenance: dict, session: PersistentProbeSession, *, opener, deadline, diagnostics):
+    started = time.time() * 1000
     verify_pinned_identity_file(provenance)
     remote, correlation = session.request(deadline)
+    diagnostics["observationStage"] = "overall"
     local, results = {}, queue.Queue(maxsize=2)
 
     def endpoint(role):
@@ -341,7 +352,7 @@ def _observe_persistent(provenance: dict, session: PersistentProbeSession, *, op
             remaining = deadline - session.clock()
             if remaining <= 0:
                 raise TimeoutError("Local endpoint observation deadline exceeded")
-            with opener(provenance["endpoints"][role] + "/v1/models", timeout=min(0.5, remaining)) as response:
+            with opener(provenance["endpoints"][role] + "/v1/models", timeout=remaining) as response:
                 body = response.read(MAX_PROBE_LINE_BYTES + 1)
             if len(body) > MAX_PROBE_LINE_BYTES:
                 raise ValueError("Local model catalog exceeds bounded observation size")
@@ -362,6 +373,7 @@ def _observe_persistent(provenance: dict, session: PersistentProbeSession, *, op
         except queue.Empty:
             raise TimeoutError("Local endpoint observation deadline exceeded") from None
         if error:
+            diagnostics["observationStage"] = "local_" + role
             raise error
         local[role] = value
     for worker in session.workers:
@@ -392,12 +404,16 @@ def verify_observation(provenance: dict, remote: dict, local_models: dict):
 
 def observe(config: dict, provenance: dict, *, runner=subprocess.run, opener=urllib.request.urlopen):
     started = time.time() * 1000
+    deadline = time.monotonic() + OBSERVATION_SECONDS
     verify_pinned_identity_file(provenance)
     remote = runner(probe_command(config, provenance), capture_output=True, text=True, check=True, timeout=2.5,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     remote_value, local = json.loads(remote.stdout), {}
     for role in ("actor", "predictor"):
-        with opener(provenance["endpoints"][role] + "/v1/models", timeout=0.5) as response:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Local endpoint observation deadline exceeded")
+        with opener(provenance["endpoints"][role] + "/v1/models", timeout=remaining) as response:
             local[role] = json.load(response)
     verify_observation(provenance, remote_value, local)
     completed = time.time() * 1000
@@ -437,7 +453,10 @@ def run_guard(configuration: Path, output: Path, *, stop_event: threading.Event 
                         details = observe_persistent(provenance, session)
                         publish(output, sequence, provenance, True, details)
                 except Exception as error:
-                    publish(output, sequence, provenance, False, {"errorType": type(error).__name__})
+                    # Only bounded locally generated stage/timing fields escape;
+                    # provider/HTTP exception messages may contain private data.
+                    diagnostics = getattr(session, "observation_diagnostics", {}) if session else {}
+                    publish(output, sequence, provenance, False, {"errorType": type(error).__name__, **diagnostics})
                     if session:
                         session.close()
                         session = None
