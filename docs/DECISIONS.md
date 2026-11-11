@@ -202,3 +202,13 @@ failed row, and do not invent a dispatched prompt or score. Completed or
 dispatched predictions still require exact full-panel agreement. Pin this
 reporting-only correction separately from previously frozen execution source;
 never modify or reseal its immutable inputs.
+# 2026-11-11: Give the explicit one-step smoke a positive learning rate
+
+Select smoke mode explicitly from the smoke CLI, require exactly one optimizer
+step and set its effective warmup ratio to zero. Record that ratio and mode in
+the immutable training specification. Preserve the declared fitting recipe,
+including 0.03 warmup for both seeds, and do not infer smoke mode from max-steps
+alone. The pinned scheduler rounds the original smoke warmup to one step; the
+actual first step then applies learning rate zero. Keep all gradient, adapter
+change, frozen-base, lease and reload/merge checks. Preserve failed attempts and
+use a separate source-bound recovery declaration for the trainer change.

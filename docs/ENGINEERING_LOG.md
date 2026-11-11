@@ -237,3 +237,25 @@ e374489048f0637938895ef2ac073b03009ab05a8b98be219f8b81ebafbd10ce and skips
 when ACEPHALE_FIXED_PANEL_REPLAY_FIXTURE is absent. No native trace, model request,
 weight, training input or original replay artifact changed. This separate report
 revision does not retroactively change the source identity of execution.
+# 2026-11-11: Explicit positive-learning-rate smoke
+
+The real one-step smoke reached global step 1 with learning rate 0.0 and nonzero
+gradient norm; independently exported checkpoint bytes matched the initial
+adapter and every LoRA B tensor remained zero. Pinned Transformers 5.10.1/PyTorch
+2.13.0 CPU reproduction confirmed the single warmup step causes no update.
+Smoke now explicitly uses zero warmup, records its effective recipe and leaves
+both full fitting recipes unchanged. Failure receipts retain computed after
+hashes and gradient counts without inventing unavailable hashes.
+
+Thirty focused training, CLI-routing and container tests passed with a new local
+temporary directory; Ruff passed. The initial default temporary-directory run
+had 12 passes and 18 fixture setup errors from the existing inaccessible Windows
+pytest directory. These checks are not a successful real-model smoke or a model
+accuracy result. Frozen runtime, datasets and earlier failure artifacts remain
+separate from the new trainer source.
+
+The exact pinned trainer image also passed a CPU-only scheduler/AdamW regression:
+the old one-step schedule did not change the parameter, explicit smoke used
+learning rate 1e-4 and changed it, and the complete nine-step fitting learning
+rates and parameter trajectory were identical. No real model or GPU was loaded
+for that proof; a repaired actual CUDA smoke remains a separate required check.
