@@ -128,6 +128,14 @@ remained enforced. The numerical cause is not yet established; a possible
 training-versus-reload forward precision difference requires a separate test.
 Missing trained rows are not replaced with base predictions or selected retries.
 
+Subsequent repository revision `4e216a4` uses one explicit BF16 autocast,
+inference-mode and evaluation-mode context for training, reload and merged-model
+probes. It binds that context into new artifacts and rejects legacy probes;
+strict tolerances remain unchanged. Source inspection establishes the former
+context inconsistency, but this change has not passed an actual Qwen/GPU reload.
+Its optional real PyTorch CPU roundtrip test was skipped because Torch was absent.
+It was not applied to, or used to relabel, the failed source-`83bddc7` experiment.
+
 The complete failed sequence was exported and independently verified: 32 files
 including actual adapter weights, optimizer state, tokenizer, TensorBoard,
 receipts and logs. Thirty-three reproducible cache files have individual omission

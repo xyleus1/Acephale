@@ -202,3 +202,13 @@ does not touch .venv, models or private outputs. Keep this integration change
 separate from frozen runtime 2d89765, trainer 83bddc7 and actual permission-overlay
 image receipts; no historical image has been rebuilt or resealed by this change.
 See the training guide for the opt-in, real Docker CPU regression.
+
+## Future probe precision context
+
+The common probe helper now explicitly applies BF16 autocast, inference mode and
+eval mode at training capture, adapter reload and merged inference. Versioned
+context is bound to specification, saved probe and export verification; legacy
+or altered contexts fail closed. Keep frozen source 83bddc7 and its failed Qwen
+reload outcome unchanged. This source fix has 37 focused passing tests and one
+real CPU PyTorch/PEFT regression skipped because local Torch is absent. No actual
+Qwen reload recovery, trained-model comparison or performance gain is proven.

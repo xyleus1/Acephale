@@ -236,3 +236,15 @@ Report mixed fitting/calibration/development native success separately from
 development-only success. Candidate-pool coverage is not ranking accuracy, and
 autoregressive binary probabilities are not independent marginals or full-action
 entropy. Keep absent results and unknown outcomes explicit.
+
+## Match precision context across training verification probes
+
+Pinned Accelerate 1.15.0 prepares native-AMP models by wrapping forward with
+autocast and FP32 output conversion. PEFT 0.21.0 defaults to promoting low-precision
+adapter weights to FP32. The former saved probe inherited that wrapper while a
+fresh export forward lacked an explicit equivalent context. Use the same explicit
+BF16 autocast/inference/eval helper at all three probe sites and bind its versioned
+context to immutable artifacts. Reject legacy probes instead of resealing them.
+Keep existing reload/merge tolerances and full-vocabulary/top-token checks. This
+method inconsistency is established; attributing every observed Qwen logit error
+to it still requires a new authorized actual-model experiment.

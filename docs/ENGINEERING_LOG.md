@@ -313,3 +313,23 @@ Full integration CI for `b7ab0fe` passed 237 Node tests (two skips), 391 Python
 tests (six skips, including the two opt-in Docker cases) and 167 deployment
 tests, plus Types, ESLint and Ruff. This supersedes software totals for that
 revision only and does not establish successful predictor export.
+
+## 2026-11-11: Explicit and artifact-bound verification precision
+
+The retained real smoke completed one optimizer step with a changed adapter and
+unchanged frozen-base hash, then failed adapter reload parity before merging.
+Pinned-image CPU source inspection found the post-Trainer AMP wrapper differed
+from the fresh export forward context. The future-only helper makes all three
+probe calls explicitly consistent and records/requires the context in every
+verification artifact. Old failure artifacts and tolerances remain unchanged.
+
+Thirty-seven focused training/container/CLI/context tests passed, including the
+real verify_export entry with a complete synthetic valid artifact chain, legacy
+metadata rejection and rehashed context tampering. Ruff passed.
+Separate existing calibration/evaluation checks passed all 32 tests.
+A tiny real BF16-base/FP32-LoRA CPU roundtrip regression is included but skipped
+locally
+because Torch is absent; no package download or additional paid run was made.
+The earlier Docker-permission fixture also could not run on the terminated host
+because its research environment lacked pytest; the failure log is retained.
+These checks do not establish repaired real-model reload or benchmark gains.

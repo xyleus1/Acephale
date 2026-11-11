@@ -33,6 +33,9 @@ TARGET_SUFFIXES = {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj
                    "in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a", "out_proj"}
 TOKENIZER_FILES = {"tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "added_tokens.json",
                    "vocab.json", "merges.txt", "chat_template.jinja"}
+PROBE_CONTEXT = {"version": 1, "deviceType": "cuda", "autocastDtype": "bfloat16",
+                 "inferenceMode": True, "modelMode": "eval", "selection": "last_token_full_vocabulary",
+                 "outputDtype": "float32"}
 
 
 def training_versions() -> dict[str, str]:
@@ -206,6 +209,22 @@ def effective_training_recipe(steps: int, *, smoke: bool = False) -> dict[str, A
     return {**RECIPE, "maxSteps": steps, "warmupRatio": 0.0 if smoke else RECIPE["warmupRatio"]}
 
 
+def _probe_logits(model, input_ids, *, device_type: str = "cuda"):
+    """Use one explicit precision context with or without Accelerate's wrapper."""
+    import torch
+
+    if model.training or input_ids.device.type != device_type:
+        raise ValueError("Probe requires eval mode and matching input device")
+    with torch.inference_mode(), torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+        return model(input_ids=input_ids).logits[:, -1, :].float().cpu()
+
+
+def _verify_probe_context(probe: dict, specification: dict) -> None:
+    expected = hash_v1(PROBE_CONTEXT)
+    if hash_v1(probe.get("context")) != expected or hash_v1(specification.get("probeContext")) != expected:
+        raise ValueError("Exact declared probe precision context required; legacy probes cannot be resealed")
+
+
 def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, seed: int,
           max_steps: int = 500, maximum_seconds: int = 3600, smoke: bool = False) -> dict[str, Any]:
     manifest = verify_dataset(dataset)
@@ -243,6 +262,7 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     output.mkdir(parents=True, exist_ok=False)
     specification = hashed({"schemaVersion": 1, "base": BASE, "datasetManifestHash": manifest["contentHash"],
         "seed": seed, "mode": "smoke" if smoke else "fit", "recipe": recipe, "versions": versions, "implementation": implementation, "targets": targets,
+        "probeContext": dict(PROBE_CONTEXT),
         "trainableParameters": trainable, "trainableCount": sum(trainable.values()), "binaryTokenIds": binary_ids,
         "leaseHash": hash_v1(lease), "baseReceiptHash": hash_v1(base_receipt), "frozenBeforeHash": frozen_before,
         "adapterBeforeHash": adapter_before})
@@ -299,13 +319,12 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
         model.eval()
         probe = fitting[0]
         ids = torch.tensor([probe["input_ids"][:min(len(probe["input_ids"]), 256)]], device="cuda")
-        with torch.inference_mode():
-            probe_logits = model(input_ids=ids).logits[:, -1, :].float().cpu()
+        probe_logits = _probe_logits(model, ids)
         adapter_dir = output / "adapter"
         model.save_pretrained(adapter_dir, safe_serialization=True)
         tokenizer.save_pretrained(adapter_dir)
         preserve_tokenizer(model_path, adapter_dir)
-        torch.save({"input_ids": ids.cpu(), "logits": probe_logits}, output / "reload-probe.pt")
+        torch.save({"input_ids": ids.cpu(), "logits": probe_logits, "context": dict(PROBE_CONTEXT)}, output / "reload-probe.pt")
         metrics = trainer.evaluate() if development else {}
         receipt = hashed({"schemaVersion": 1, "kind": "acephale-training-receipt", "status": "completed",
             "trainingManifestHash": manifest["contentHash"], "specificationHash": specification["contentHash"],
@@ -346,15 +365,14 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
     import torch
     from peft import PeftModel
 
+    probe = torch.load(run / "reload-probe.pt", map_location="cpu", weights_only=True)
+    _verify_probe_context(probe, specification)
     base, tokenizer = _load_model(model_path)
     model = PeftModel.from_pretrained(base, run / "adapter", is_trainable=False, local_files_only=True).eval()
-    probe = torch.load(run / "reload-probe.pt", map_location="cpu", weights_only=True)
-    with torch.inference_mode():
-        reloaded = model(input_ids=probe["input_ids"].to("cuda")).logits[:, -1, :].float().cpu()
+    reloaded = _probe_logits(model, probe["input_ids"].to("cuda"))
     torch.testing.assert_close(reloaded, probe["logits"], rtol=0.02, atol=0.03)
     merged = model.merge_and_unload(safe_merge=True).eval()
-    with torch.inference_mode():
-        merged_logits = merged(input_ids=probe["input_ids"].to("cuda")).logits[:, -1, :].float().cpu()
+    merged_logits = _probe_logits(merged, probe["input_ids"].to("cuda"))
     torch.testing.assert_close(merged_logits, reloaded, rtol=0.03, atol=0.06)
     if merged_logits.argmax(-1).tolist() != reloaded.argmax(-1).tolist():
         raise ValueError("Merged predictor changed probe top-token decisions")
@@ -378,6 +396,7 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
     write_new(output / "training-receipt.json", receipt)
     write_new(output / "verification.json", hashed({"artifactHash": artifact["contentHash"],
         "receiptHash": receipt["contentHash"], "mergedFiles": merged_files, "adapterFiles": receipt["adapterFiles"],
+        "probeContext": dict(PROBE_CONTEXT),
         "reloadMaximumLogitError": (reloaded - probe["logits"]).abs().max().item(),
         "mergeMaximumLogitError": (merged_logits - reloaded).abs().max().item(), "nativeTaskSuccessMeasured": False,
         "reload": {"atol": 0.03, "rtol": 0.02, "referenceMaximumAbsolute": probe["logits"].abs().max().item(), "allClose": True},
@@ -393,6 +412,7 @@ def verify_export(directory: Path) -> dict[str, Any]:
     dataset = verify_hashed(json.loads((directory / "dataset-manifest.json").read_text(encoding="utf-8")))
     receipt = verify_hashed(json.loads((directory / "training-receipt.json").read_text(encoding="utf-8")))
     verification = verify_hashed(json.loads((directory / "verification.json").read_text(encoding="utf-8")))
+    _verify_probe_context({"context": verification.get("probeContext")}, specification)
     calibration_families({**BASE, "trainedPredictor": artifact})
     if (artifact.get("schemaVersion") != 1 or artifact.get("base") != BASE or artifact.get("protocol") != "rank_binary_v1"
             or specification.get("base") != BASE or dataset.get("base") != BASE

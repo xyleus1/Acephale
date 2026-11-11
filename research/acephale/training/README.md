@@ -113,6 +113,15 @@ binary token IDs. Its served name identifies the derived weights. Reload and
 merge comparisons use complete last-token logits plus matching top-token
 decisions. Real vLLM serving parity must still pass before deployment.
 
+Probe creation, adapter reload and merged inference share explicit bfloat16
+autocast, inference mode and eval mode. The exact versioned context is recorded
+in the specification, saved probe and export verification. This prevents an
+Accelerate-wrapped training forward from being compared with an unwrapped forward
+under a different precision context. Legacy or altered context declarations are
+rejected; do not modify or reseal old probes. Reload and merge tolerances remain
+unchanged. A context-consistency repair does not establish actual model parity
+until a new authorized run passes all checks.
+
 `training_container run --action evaluate --partition development` measures
 teacher-forced completion loss and token accuracy under the same lease. It does
 not measure goal agreement, free-running ranking quality, native reward or
