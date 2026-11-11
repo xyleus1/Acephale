@@ -95,10 +95,12 @@ an enable gate, not a high-confidence task-accuracy guarantee. Goal refresh is
 asynchronous and lower priority; there are no sequential neutral and conditional
 ranking calls on the primary runtime path.
 
-Candidate scores are independent probabilities of exact invocation occurrence
-anywhere in the immediately next authoritative batch. Several may be positive;
-they need not sum to one. `READ`, `NO_READ` and `READ_UNCOVERED` describe prediction
-states without changing which tools the actor is allowed to request.
+Candidate labels indicate exact invocation occurrence anywhere in the immediately
+next authoritative batch. Several may be positive, so scores need not sum to one.
+The binary decoder emits tokens autoregressively; each probability conditions on
+earlier emitted tokens, rather than estimating an independent marginal.
+`READ`, `NO_READ` and `READ_UNCOVERED` describe prediction states without changing
+which tools the actor is allowed to request.
 
 Eligibility defaults to denied. Admitted tools must be audited reads with current
 authorization and source-bound arguments. Defaults are at most two concurrent

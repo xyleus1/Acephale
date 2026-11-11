@@ -272,3 +272,44 @@ baseline fails, and retains private sentinel modes. Local container tests passed
 7 tests; the two Docker cases were skipped because Docker is unavailable locally.
 Actual Linux execution is recorded separately when available. This is packaging
 verification, not an optimizer, prediction-quality or native-task result.
+
+# 2026-11-11: Preserve current pilot evidence and permission recovery
+
+The completed R3 base cohort retained all 12 slots. Its mixed 9/12 native success
+and development-only 1/4 are documented separately, with logical/physical calls,
+latency, usage-derived cost and unknown constraints. Frozen predictor data and
+base replay failures remain unchanged. A2 optimizer progress remains unknown;
+A3's original smoke had one zero-learning-rate step without an adapter update.
+Sequence02 then failed before model load because UID1000 could not read the
+public dependency lockfile. Full failed-stage archives were verified locally.
+
+The external sequence03 declaration binds the actual exact-parent image05
+permission overlay, all 45 copied public byte hashes and an expanded UID1000
+implementation/compiler proof. It changes no main recipe, data, seed or lease
+deadline. Three optional standalone development evaluations were omitted before
+dispatch; main Trainer final development evaluation remains unchanged. These
+provenance checks do not establish successful training or improved accuracy.
+
+Current overview documents now distinguish historical checkpoint statements and
+explain that binary decoder probabilities are autoregressively conditional.
+Integration CI at `30fffe6` passed 237 Node, 391 Python and 167 deployment tests;
+the detailed report lists six platform/environment skips. Later documentation
+edits have no new runtime behavior and do not relabel that CI source identity.
+
+Sequence03 subsequently completed one actual smoke optimizer step and final
+development evaluation. Its sealed optimizer receipt records one gradient check,
+changed adapter hashes and identical frozen-base hashes. The following reload
+parity assertion failed before merge, leaving the smoke export stage failed.
+Neither main seed started; there is no qualified trained predictor or replay.
+Teacher-forced smoke diagnostics are not a task-success or improvement result.
+
+The final sequence03 archive and all 32 payload files were independently rehashed,
+including adapter weights, optimizer state, tokenizer and TensorBoard; 33 cache
+omissions retain individual hashes. Archive SHA-256 is
+`ea939c1a0e04aeeb3e5262259c60597cd3e4e7ee3caf25a8af2e8bcd21738fde`.
+The actual Linux public-permission fixture invocation failed before Docker
+execution because its research environment lacked pytest. It remains unexecuted.
+Full integration CI for `b7ab0fe` passed 237 Node tests (two skips), 391 Python
+tests (six skips, including the two opt-in Docker cases) and 167 deployment
+tests, plus Types, ESLint and Ruff. This supersedes software totals for that
+revision only and does not establish successful predictor export.

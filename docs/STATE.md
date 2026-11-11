@@ -1,9 +1,46 @@
 # Acephale state
 
-Updated 2026-11-10. This records the standalone research checkout, not historical
-benchmark results.
+Updated 2026-11-11. This records the standalone research checkout and the retained
+execution history. Current results are summarized first; dated historical
+checkpoints below do not describe the current optimizer or cohort state.
 
-## First native collection: retained infrastructure failure
+## Current verified checkpoint
+
+The completed R3 base cohort retained all 12 trials: nine mixed-partition native
+successes, one evaluated failure and two incomplete actor responses with unknown
+native reward. Development alone is 1/4, not 9/12. It made 77 logical and physical
+tool calls with no speculation. Mean live latency including drain is 53.897 s;
+including evaluation it is 56.874 s. These are custom tau-compatible pilot
+observations, not an official full benchmark or a paired improvement result.
+
+Frozen data contains 150 public checkpoints and 120 compiled examples: 34 fitting,
+46 calibration and 40 development. Fitting has nine positive candidate bits;
+development pool coverage is 9/19. The base fixed-panel replay completed 145/150
+rows and retains five failures. No trained-weight comparison is yet verified.
+
+A2 optimizer progress remains unknown after infrastructure termination. A3's
+first smoke recorded one zero-learning-rate step with unchanged adapter bytes;
+the next recovery failed before model loading on lockfile permissions. Both full
+failed outcomes are preserved. Sequence03 explicitly binds trainer `83bddc7` and
+a permission-only image05, unchanged seeds/main recipe and the original training
+deadline. Sequence03 then completed one smoke optimizer step and development
+evaluation, recording changed adapter and unchanged frozen-base hashes, but
+failed adapter reload parity before merge. Neither main seed started and no
+trained predictor was qualified for replay. Optional standalone teacher-forced
+evaluations were omitted; main Trainer development evaluation was unchanged.
+The reload mismatch requires diagnosis before another bounded experiment.
+Do not infer current resource status from this document.
+
+See the [detailed pilot report](experiments/predictor-lora-pilot-2026-11-10.md)
+for immutable source/data identities, failure counts and reproduction commands.
+The frozen serving/compiler remains `2d89765`; controller `98fcb938` and reporter
+`f862525` are separately pinned. Integration CI for `b7ab0fe` passed 237 Node,
+391 Python and 167 deployment tests, with eight documented platform/environment
+and opt-in Docker skips across Node/Python. The full failed sequence03 archive
+and all 32 payload files were independently verified; 33 cache omissions retain
+hashes. No performance claim follows from software tests or smoke diagnostics.
+
+## Historical first native collection: retained infrastructure failure
 
 The first 12-slot base collection closed with two successful tasks and ten
 execution errors, retaining every declared slot. A Windows `EPERM` replacing

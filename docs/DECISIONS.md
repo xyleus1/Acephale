@@ -221,3 +221,18 @@ so both the image user and host-UID launcher can read implementation and lock
 hashes. Do not recursively chmod /app, .venv or any mounted data. Preserve the
 failed images and external permission-only recovery receipts as their own actual
 provenance; this final integration fix requires a newly built source-bound image.
+
+# 2026-11-11: Scope permission recovery and report the actual denominator
+
+An exact-parent trainer image may correct public-file read permissions only after
+verifying its parent layers, configuration delta, copied byte hashes and actual
+unprivileged implementation probe. Preserve the failed attempt and bind a new
+recovery declaration. This does not authorize dependency/model substitution,
+checkpoint resume, a new training window or selective seed retry. Optional
+standalone evaluations may be explicitly omitted before dispatch; retain the
+main training/evaluation recipe and describe the resulting measurement gap.
+
+Report mixed fitting/calibration/development native success separately from
+development-only success. Candidate-pool coverage is not ranking accuracy, and
+autoregressive binary probabilities are not independent marginals or full-action
+entropy. Keep absent results and unknown outcomes explicit.

@@ -1,8 +1,39 @@
 # Acephale handoff
 
-Updated 2026-11-10. Work only in this standalone research checkout. Read
+Updated 2026-11-11. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
+
+Current verified checkpoint: R3 completed all 12 base trials, with 9/12 mixed
+partition successes but 1/4 development successes. There were 77 logical and
+physical tool calls and no speculation. The frozen 150 public checkpoints yield
+34 fitting, 46 calibration and 40 development examples. Base fixed-panel replay
+is 145 completed plus five retained failures. See the
+[pilot report](experiments/predictor-lora-pilot-2026-11-10.md) for exact evidence,
+latency/cost definitions and caveats. No trained-predictor comparison or live
+improvement is yet verified.
+
+Preserve A2's unknown optimizer progress, A3's failed one-step zero-learning-rate
+smoke and sequence02's pre-model-load lockfile-permission failure. Sequence03 is
+separately declared against trainer `83bddc7` and permission-only image05, with
+the original main recipe, seeds and lease deadline. Standalone three-way
+teacher-forced evaluation was explicitly omitted; main Trainer final development
+evaluation remains unchanged. Do not resume partial checkpoints, infer successful
+training from a CPU proof, or relabel earlier manifests. Runtime/compiler `2d89765`,
+controller `98fcb938` and reporter `f862525` remain separate provenance identities.
+Sequence03 has now completed one smoke optimizer step and its development
+evaluation, then failed adapter reload parity before merge. Its optimizer receipt
+records changed adapter and unchanged frozen-base hashes; the smoke export stage
+remains failed. Neither main seed started. No qualified trained predictor,
+trained replay or trained calibration exists. Diagnose the exact reload mismatch
+without silently widening tolerance or treating smoke token accuracy as native
+task success.
+Current resources and actual closure receipts live in the private operator
+handoff; this repository does not imply that a lease is still active.
+
+The following implementation notes and checkpoint accounts preserve history.
+Statements such as "zero optimizer steps" or "latest native result" within an
+older checkpoint apply to that checkpoint only, not to the current overview.
 
 Controller-only repair: the versions metadata amendment binds immutable plan and
 financial fields, excluding controller-managed trainingWindows alongside leases
@@ -51,7 +82,7 @@ problem without granting root or network access. It does not establish CUDA
 training readiness or provide a missing C compiler; inspect actual image
 prerequisites and perform the real smoke before optimizer-result claims.
 
-Latest native result: the original 12-slot cohort is closed and aborted after two
+Historical original-cohort result: the 12-slot cohort closed and aborted after two
 successes. A Windows metrics-file replacement error prevented subsequent actor
 requests. Ten infrastructure-censored errors remain in its denominator; only two
 native rewards were actually evaluated. Do not import this cohort for training
@@ -62,10 +93,10 @@ must use new committed source, inventory, guard and original-journal reservation
 Optional `ALL_WITH_NL_ASSERTIONS` uses the pinned upstream evaluator while keeping
 the original reward basis. It can audit existing airline assertions; retail's
 empty assertions remain unknown. Private assertion text never enters actor or
-training inputs. Current training is candidate-only, with zero optimizer steps
-at this checkpoint. Consult the private operator handoff for live resources.
+training inputs. Training was candidate-only, with zero optimizer steps at that
+historical checkpoint. Consult the private operator handoff for live resources.
 
-Latest checkpoint: the second GPU lease passed actual qualification and its
+Historical qualification checkpoint: the second GPU lease passed qualification and its
 235-file export was independently verified. Source was `ae71b86`. The lease
 was marked ready and its existing cleanup controllers remain authoritative.
 Consult the private operator handoff for the live lease, heartbeat and hard
