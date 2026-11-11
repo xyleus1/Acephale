@@ -259,3 +259,16 @@ the old one-step schedule did not change the parameter, explicit smoke used
 learning rate 1e-4 and changed it, and the complete nine-step fitting learning
 rates and parameter trajectory were identical. No real model or GPU was loaded
 for that proof; a repaired actual CUDA smoke remains a separate required check.
+
+## 2026-11-11: Public trainer input permissions
+
+Two actual failures exposed preserved checkout modes: UID 1000 could not import
+root-owned public source, and a later partial repair still left uv.lock unreadable.
+The final integration Dockerfile now normalizes both public trees and explicit
+packaging files after dependency installation, excluding .venv and private paths.
+An opt-in real Docker regression applies the production permission command to
+umask-027 fixtures, verifies both UID 1000 and 10001, checks that the restricted
+baseline fails, and retains private sentinel modes. Local container tests passed
+7 tests; the two Docker cases were skipped because Docker is unavailable locally.
+Actual Linux execution is recorded separately when available. This is packaging
+verification, not an optimizer, prediction-quality or native-task result.

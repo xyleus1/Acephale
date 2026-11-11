@@ -51,6 +51,24 @@ lease and immutable Docker image, and stops its container if the lease fails.
 The source checkout must be clean and committed before image construction.
 All output directories below must be new and outside the checkout.
 
+The image normalizes only public copied source, contracts and packaging-file
+permissions after dependency installation. This supports checkouts created with
+umask 027 and both UID 10001 and the host-UID launcher without recursively changing
+the installed environment, models or private output. A CPU-only regression uses
+the exact Dockerfile permission command, restrictive fixture inputs and both UIDs:
+
+```sh
+# Cache the exact pinned FROM image first; the fixture never pulls implicitly.
+docker pull python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
+ACEPHALE_TEST_DOCKER_PERMISSIONS=1 python -m pytest research/acephale/tests/test_trainer_image_permissions.py -q
+```
+
+Run this from the repository root using the research environment. The fixture
+loads no model or GPU and removes only its own two temporary images. Passing it
+does not replace the actual trainer's host-UID `training_implementation()` and
+compiler checks. A Dockerfile change requires a new source-bound image receipt;
+never relabel an earlier image or recovery attempt as built from this source.
+
 ```text
 python -m acephale.training_container build --source REPOSITORY --output NEW_IMAGE_BUILD
 python -m acephale.training_container run --receipt NEW_IMAGE_BUILD/image-receipt.json --action smoke --dataset NEW_DATASET --model PINNED_PREDICTOR_DIRECTORY --lease TRAINING_LEASE.json --actor-container FULL_STOPPED_ACTOR_CONTAINER_ID --output NEW_SMOKE

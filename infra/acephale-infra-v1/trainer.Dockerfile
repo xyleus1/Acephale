@@ -16,6 +16,14 @@ COPY research/acephale/src ../src
 COPY research/acephale/training/pyproject.toml research/acephale/training/uv.lock ./
 COPY src/lib/acephale/contracts /app/src/lib/acephale/contracts
 RUN uv sync --frozen --no-dev --python /usr/local/bin/python
+# COPY preserves checkout modes. Both the image user and the host-UID launcher
+# must read these public inputs; never recursively change .venv or bind mounts.
+RUN chmod -R a+rX /app/research/acephale/src /app/src/lib/acephale/contracts \
+    && chmod a+r /app/research/acephale/pyproject.toml \
+        /app/research/acephale/training/pyproject.toml \
+        /app/research/acephale/training/uv.lock /tmp/acephale-trainer-packages.txt \
+    && chmod a+rx /app /app/research /app/research/acephale \
+        /app/research/acephale/training /app/src /app/src/lib /app/src/lib/acephale
 RUN useradd --uid 10001 --create-home trainer
 USER 10001
 ENTRYPOINT ["python", "-m", "acephale.training_cli"]

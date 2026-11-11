@@ -212,3 +212,12 @@ alone. The pinned scheduler rounds the original smoke warmup to one step; the
 actual first step then applies learning rate zero. Keep all gradient, adapter
 change, frozen-base, lease and reload/merge checks. Preserve failed attempts and
 use a separate source-bound recovery declaration for the trainer change.
+
+## Normalize public trainer COPY permissions within future builds
+
+Docker COPY preserves restrictive checkout modes. Normalize explicit public
+source/contracts directories, packaging files and required parents after uv sync,
+so both the image user and host-UID launcher can read implementation and lock
+hashes. Do not recursively chmod /app, .venv or any mounted data. Preserve the
+failed images and external permission-only recovery receipts as their own actual
+provenance; this final integration fix requires a newly built source-bound image.

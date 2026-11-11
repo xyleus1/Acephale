@@ -161,3 +161,13 @@ audit proves that path. It retains the original full panel and failed denominato
 it does not supply probabilities or claim a verified dispatched prompt. Keep this
 reporting revision separate from the frozen runtime/training source until all
 execution finishes. Original prediction artifacts must not be rewritten/resealed.
+
+## Future trainer image builds: public COPY permissions
+
+The final integration Dockerfile normalizes only copied public source/contracts,
+packaging files and required parent directories after uv sync. This repairs
+restrictive checkout permissions for both the host UID and image UID 10001. It
+does not touch .venv, models or private outputs. Keep this integration change
+separate from frozen runtime 2d89765, trainer 83bddc7 and actual permission-overlay
+image receipts; no historical image has been rebuilt or resealed by this change.
+See the training guide for the opt-in, real Docker CPU regression.
