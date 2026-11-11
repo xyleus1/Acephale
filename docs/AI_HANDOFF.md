@@ -4,6 +4,16 @@ Updated 2026-11-10. Work only in this standalone research checkout. Read
 [methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
 [decisions](DECISIONS.md) before continuing.
 
+The explicit one-step CUDA smoke now disables warmup and records mode plus the
+effective recipe. Its prior 0.03 warmup rounded to one step, so the only optimizer
+step used learning rate zero despite nonzero gradients. The actual failed
+checkpoint had unchanged adapter bytes. Full seed-17/29 fitting retains the
+declared 0.03 warmup and every original recipe value. All changed-adapter and
+frozen-base assertions remain mandatory; failed runs retain computed hashes or
+null when unavailable. A new qualified trainer source/image and explicit recovery
+declaration are required before another GPU attempt; frozen runtime and earlier
+artifacts are not relabelled by this fix.
+
 Native stop diagnostics now retain only a classified split-guard reason and
 finite heartbeat age/limit. The three-second freshness ceiling is unchanged.
 Remote OTLP rejection or SDK shutdown failure marks the export receipt incomplete

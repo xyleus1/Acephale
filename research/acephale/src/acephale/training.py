@@ -198,15 +198,23 @@ def _load_model(model_path: Path):
     return model, tokenizer
 
 
+def effective_training_recipe(steps: int, *, smoke: bool = False) -> dict[str, Any]:
+    if not 1 <= steps <= 500 or (smoke and steps != 1):
+        raise ValueError("Smoke requires exactly one optimizer step")
+    # ceil(0.03 * 1) creates a single warmup step at learning rate zero.
+    # The smoke must update an adapter; the declared fitting schedule is unchanged.
+    return {**RECIPE, "maxSteps": steps, "warmupRatio": 0.0 if smoke else RECIPE["warmupRatio"]}
+
+
 def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, seed: int,
-          max_steps: int = 500, maximum_seconds: int = 3600) -> dict[str, Any]:
+          max_steps: int = 500, maximum_seconds: int = 3600, smoke: bool = False) -> dict[str, Any]:
     manifest = verify_dataset(dataset)
     lease = validate_training_lease(lease_path)
     base_receipt = verify_base(model_path)
     identities = tokenizer_identity(model_path)
     if identities != (manifest["tokenizerHash"], manifest["chatTemplateHash"]):
         raise ValueError("Dataset tokenizer or template differs from the actual model")
-    if seed not in RECIPE["seeds"] or not 1 <= max_steps <= 500 or not 1 <= maximum_seconds <= 7200:
+    if seed not in RECIPE["seeds"] or not 1 <= max_steps <= 500 or not 1 <= maximum_seconds <= 7200 or (smoke and max_steps != 1):
         raise ValueError("Training recipe bounds exceeded")
     versions = training_versions()
     implementation = training_implementation()
@@ -229,11 +237,12 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     fitting = [tokenize_example(row, tokenizer) for row in load_partition(dataset, "weight_fit")]
     development = [tokenize_example(row, tokenizer) for row in load_partition(dataset, "development")]
     steps = min(max_steps, math.ceil(len(fitting) / 16) * 3)
+    recipe = effective_training_recipe(steps, smoke=smoke)
     binary_ids = binary_token_ids(tokenizer)
     frozen_before, adapter_before = _parameter_hash(model, adapter=False), _parameter_hash(model, adapter=True)
     output.mkdir(parents=True, exist_ok=False)
     specification = hashed({"schemaVersion": 1, "base": BASE, "datasetManifestHash": manifest["contentHash"],
-        "seed": seed, "recipe": {**RECIPE, "maxSteps": steps}, "versions": versions, "implementation": implementation, "targets": targets,
+        "seed": seed, "mode": "smoke" if smoke else "fit", "recipe": recipe, "versions": versions, "implementation": implementation, "targets": targets,
         "trainableParameters": trainable, "trainableCount": sum(trainable.values()), "binaryTokenIds": binary_ids,
         "leaseHash": hash_v1(lease), "baseReceiptHash": hash_v1(base_receipt), "frozenBeforeHash": frozen_before,
         "adapterBeforeHash": adapter_before})
@@ -271,7 +280,7 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
 
     guard = Guard()
     config = SFTConfig(output_dir=str(output / "checkpoints"), learning_rate=1e-4, weight_decay=0.01,
-        max_grad_norm=1.0, warmup_ratio=0.03, per_device_train_batch_size=1, per_device_eval_batch_size=1,
+        max_grad_norm=1.0, warmup_ratio=recipe["warmupRatio"], per_device_train_batch_size=1, per_device_eval_batch_size=1,
         gradient_accumulation_steps=16, gradient_checkpointing=True, bf16=True,
         max_steps=steps, num_train_epochs=3, max_length=8192, packing=False,
         dataset_kwargs={"skip_prepare_dataset": True}, completion_only_loss=True, seed=seed, data_seed=seed,
@@ -281,6 +290,7 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     trainer = SFTTrainer(model=model, processing_class=tokenizer, args=config, data_collator=_collator(tokenizer),
         train_dataset=Dataset.from_list(fitting), eval_dataset=Dataset.from_list(development) if development else None,
         callbacks=[guard])
+    frozen_after = adapter_after = None
     try:
         result = trainer.train()
         frozen_after, adapter_after = _parameter_hash(model, adapter=False), _parameter_hash(model, adapter=True)
@@ -310,6 +320,8 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     except BaseException as error:
         write_new(output / "failure.json", {"status": "failed", "kind": type(error).__name__, "message": str(error),
                     "elapsedSeconds": time.monotonic() - started, "steps": trainer.state.global_step,
+                    "gradientChecks": guard.gradient_checks, "frozenAfterHash": frozen_after,
+                    "adapterAfterHash": adapter_after,
                     "trainingManifestHash": manifest["contentHash"], "paidTrainingMayHaveOccurred": True})
         raise
 

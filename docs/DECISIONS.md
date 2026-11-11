@@ -176,3 +176,14 @@ deadline or the 3-second consumer freshness limit. Publish fixed diagnostic stag
 names and numeric timings only. Exceptions still poison the current session and
 replacement requires confirmed drain. A failed soak remains failed; this change
 requires a fresh compatible inventory and read-only soak before native dispatch.
+
+# 2026-11-11: Give the explicit one-step smoke a positive learning rate
+
+Select smoke mode explicitly from the smoke CLI, require exactly one optimizer
+step and set its effective warmup ratio to zero. Record that ratio and mode in
+the immutable training specification. Preserve the declared fitting recipe,
+including 0.03 warmup for both seeds, and do not infer smoke mode from max-steps
+alone. The pinned scheduler rounds the original smoke warmup to one step; the
+actual first step then applies learning rate zero. Keep all gradient, adapter
+change, frozen-base, lease and reload/merge checks. Preserve failed attempts and
+use a separate source-bound recovery declaration for the trainer change.

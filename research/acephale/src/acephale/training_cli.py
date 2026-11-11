@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> None:
 
         args.output.mkdir(parents=True, exist_ok=False)
         receipt = train(args.dataset, args.model, args.output / "training", args.lease,
-                        seed=17, max_steps=1, maximum_seconds=900)
+                        seed=17, max_steps=1, maximum_seconds=900, smoke=True)
         gc.collect()
         import torch
 
