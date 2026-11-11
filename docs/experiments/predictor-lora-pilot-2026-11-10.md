@@ -1,6 +1,7 @@
 # Predictor LoRA pilot, 2026-11-10
 
-R3 completed the base collection and frozen data preparation. A3 sequence03 completed one real smoke
+R3 completed the base collection and frozen data preparation. A3 sequence03
+completed one real smoke
 optimizer step and development evaluation, then failed adapter reload parity
 during export. Neither main seed started. There is no qualified trained-predictor
 comparison, goal-conditioned result, held-out score or live speedup measurement.
