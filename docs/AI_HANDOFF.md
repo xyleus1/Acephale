@@ -106,3 +106,7 @@ execution. Preserve the old pilot report and its artifacts.
 
 Prior operator history remains in the
 [2026-11-11 checkpoint](https://github.com/xyleus1/Acephale/blob/ab9d26fedcc698898f2935ac1127835d7fbda4c9/docs/AI_HANDOFF.md).
+
+## Explicit provider region routing
+
+`control.py record-region-route` creates a new sidecar for capacity in another declared US region, with the same hardware, an at-most-$1.99 hourly quote, an exact regional image and a restricted regional SSH firewall. Pass it with `prepare-lease --routing-amendment`. The original financial plan, journal, access receipt and prior reservations are preserved. Routing alone never permits bypassing an unresolved lease. Actual replacement admission needs independent predecessor fencing and separate controllers.

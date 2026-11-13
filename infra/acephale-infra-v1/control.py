@@ -416,6 +416,15 @@ def provider_receipt(client: Any, ledger_path: Path, lease_id: str, ssh_observat
     return {"path": str(output), "sha256": sha256(output), "instanceId": item["id"]}
 
 
+class ProviderRequestError(RuntimeError):
+    """Retain bounded status metadata without logging provider bodies or secrets."""
+
+    def __init__(self, status: int, code: str | None):
+        super().__init__(f"Lambda request failed with HTTP {status}; response omitted")
+        self.http_status = status
+        self.provider_code = code
+
+
 class LambdaClient:
     def __init__(self, api_key: str):
         if not api_key:
@@ -439,7 +448,15 @@ class LambdaClient:
             with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
                 value = json.load(response)
         except urllib.error.HTTPError as error:
-            raise RuntimeError(f"Lambda request failed with HTTP {error.code}; response omitted") from None
+            code = None
+            try:
+                body = json.loads(error.read(8192))
+                candidate = body.get("error", {}).get("code")
+                if isinstance(candidate, str) and re.fullmatch(r"[A-Za-z0-9_.:/-]{1,120}", candidate):
+                    code = candidate
+            except (OSError, ValueError, AttributeError):
+                pass
+            raise ProviderRequestError(error.code, code) from None
         except (OSError, ValueError):
             raise RuntimeError("Lambda response uncertain; reservation must remain") from None
         if "data" not in value:
@@ -880,7 +897,7 @@ def committed_source(initial_commit: str) -> str:
 
 def controller_source_files() -> list[dict]:
     return [{"path": name, "sha256": sha256(HERE / name)} for name in
-            ("control.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json")]
+            ("control.py", "provider_routing.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json")]
 
 
 def record_source_amendment(ledger_path: Path, output: Path, reason: str, readiness_evidence: Path,
@@ -1048,7 +1065,10 @@ def record_access_amendment(client: Any, ledger_path: Path, output: Path, ssh_ke
 
 def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_usd: float,
                   *, now: float | None = None, budget=study_budget, purpose: str = "research",
-                  recovery_controller_id: str | None = None, access_amendment: Path | None = None) -> dict[str, Any]:
+                  recovery_controller_id: str | None = None, access_amendment: Path | None = None,
+                  routing_amendment: Path | None = None) -> dict[str, Any]:
+    from provider_routing import checked_route, verify_quote
+
     current = time.time() if now is None else now
     if purpose not in {"research", "cleanup_canary"} or (purpose == "cleanup_canary" and not 0 < hours <= 1 / 6):
         raise ValueError("Cleanup canary must reserve at most ten minutes")
@@ -1057,18 +1077,28 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
     with ledger_lock(ledger_path):
         ledger = checked_bound_ledger(ledger_path)
         plan = ledger["plan"]
+        if routing_amendment and access_amendment:
+            raise ValueError("A regional route already contains its exact authorized access identity")
+        route = checked_route(ledger, read_json(routing_amendment)) if routing_amendment else None
         access = checked_access_amendment(ledger, read_json(access_amendment)) if access_amendment else plan
-        if access_amendment:
+        if route:
+            access = route
+        region = route["region"] if route else plan["region"]
+        if access_amendment or route:
             verify_access_key(client, access)
         budget(plan, "inspect")
-        current_quote = quote(client, plan["region"], current, plan["hardwareProfile"])
-        validate_firewall(client, access["firewallRulesetId"], plan["region"])
+        current_quote = quote(client, region, current, plan["hardwareProfile"])
+        if route:
+            verify_quote(route, current_quote)
+        validate_firewall(client, access["firewallRulesetId"], region)
         lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current)
         lease["name"] = "acephale-infra-" + lease["id"]
         lease["purpose"] = purpose
         lease["recoveryControllerId"] = recovery_controller_id
         if access_amendment:
             lease["accessAmendment"] = access
+        if route:
+            lease["routingAmendment"] = route
         lease["status"] = "reservation_pending"
         ledger["leases"].append(lease)
         atomic_json(ledger_path, ledger)
@@ -1139,6 +1169,8 @@ def observe_termination(client: Any, ledger_path: Path, lease_id: str) -> dict:
 
 def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path,
            *, now: float | None = None, budget=study_budget) -> dict[str, Any]:
+    from provider_routing import checked_route, verify_quote
+
     current = time.time() if now is None else now
     with ledger_lock(ledger_path):
         ledger = checked_bound_ledger(ledger_path)
@@ -1149,20 +1181,26 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         if any(item["id"] != lease_id and item["status"] != "terminated" for item in ledger["leases"]):
             raise ValueError("Another unresolved lease blocks launch")
         enrollments = watchdog_enrollments(watchdog_receipt, ledger, lease, current)
+        route = checked_route(ledger, lease["routingAmendment"]) if "routingAmendment" in lease else None
         access = checked_access_amendment(ledger, lease["accessAmendment"]) if "accessAmendment" in lease else plan
-        if "accessAmendment" in lease:
+        if route:
+            access = route
+        region = route["region"] if route else plan["region"]
+        if "accessAmendment" in lease or route:
             verify_access_key(client, access)
-        current_quote = quote(client, plan["region"], current, plan["hardwareProfile"])
+        current_quote = quote(client, region, current, plan["hardwareProfile"])
+        if route:
+            verify_quote(route, current_quote)
         if any(current_quote[key] != lease["quote"][key] for key in ("region", "instanceType", "imageId", "hardwareProfileHash")) or current_quote["hourlyUsd"] > lease["quote"]["hourlyUsd"]:
             raise ValueError("Provider quote changed after reservation; no launch attempted")
-        validate_firewall(client, access["firewallRulesetId"], plan["region"])
+        validate_firewall(client, access["firewallRulesetId"], region)
         budget(plan, "inspect")
         lease["watchdogs"] = enrollments
         lease["status"] = "launching"
         atomic_json(ledger_path, ledger)
         try:
             result = client.request("POST", "/instance-operations/launch", {
-                "region_name": plan["region"], "instance_type_name": current_quote["instanceType"],
+                "region_name": region, "instance_type_name": current_quote["instanceType"],
                 "ssh_key_names": [access["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
                 "firewall_rulesets": [{"id": access["firewallRulesetId"]}]})
             ids = result.get("instance_ids", [])
@@ -1170,8 +1208,12 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
                 raise RuntimeError("Ambiguous launch response")
             lease["instanceId"] = ids[0]
             lease["status"] = "active"
-        except Exception:
+        except Exception as error:
             lease["status"] = "launch_unknown"
+            lease["launchFailure"] = {"errorType": type(error).__name__,
+                                      "httpStatus": getattr(error, "http_status", None),
+                                      "providerCode": getattr(error, "provider_code", None),
+                                      "responseBodyRetained": False, "reservationReleased": False}
             atomic_json(ledger_path, ledger)
             raise
         atomic_json(ledger_path, ledger)
@@ -1315,6 +1357,13 @@ def main(argv: list[str] | None = None) -> int:
     access_amendment.add_argument("--ssh-key-name", required=True)
     access_amendment.add_argument("--firewall-ruleset-id", required=True)
     access_amendment.add_argument("--reason", required=True)
+    route = commands.add_parser("record-region-route")
+    route.add_argument("--ledger", type=Path, required=True)
+    route.add_argument("--output", type=Path, required=True)
+    route.add_argument("--region", required=True)
+    route.add_argument("--firewall-ruleset-id", required=True)
+    route.add_argument("--access-amendment", type=Path, required=True)
+    route.add_argument("--reason", required=True)
     prepare = commands.add_parser("prepare-lease")
     prepare.add_argument("--ledger", type=Path, required=True)
     prepare.add_argument("--hours", type=float, required=True)
@@ -1322,6 +1371,7 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--purpose", choices=["research", "cleanup_canary"], default="research")
     prepare.add_argument("--recovery-controller-id")
     prepare.add_argument("--access-amendment", type=Path)
+    prepare.add_argument("--routing-amendment", type=Path)
     canary_stop = commands.add_parser("request-canary-termination")
     canary_stop.add_argument("--ledger", type=Path, required=True)
     canary_stop.add_argument("--lease-id", required=True)
@@ -1406,7 +1456,12 @@ def main(argv: list[str] | None = None) -> int:
             write_new(args.output, value)
         elif args.command == "prepare-lease":
             value = prepare_lease(client, args.ledger, args.hours, args.extra_allowance_usd, purpose=args.purpose,
-                                  recovery_controller_id=args.recovery_controller_id, access_amendment=args.access_amendment)
+                                  recovery_controller_id=args.recovery_controller_id, access_amendment=args.access_amendment,
+                                  routing_amendment=args.routing_amendment)
+        elif args.command == "record-region-route":
+            from provider_routing import record_route
+            value = record_route(client, args.ledger, args.output, args.region, args.firewall_ruleset_id,
+                                 args.access_amendment, args.reason)
         elif args.command == "record-access-amendment":
             value = record_access_amendment(client, args.ledger, args.output, args.ssh_key_name, args.firewall_ruleset_id, args.reason)
         elif args.command == "provider-receipt":

@@ -512,3 +512,7 @@ because Torch is absent; no package download or additional paid run was made.
 The earlier Docker-permission fixture also could not run on the terminated host
 because its research environment lacked pytest; the failure log is retained.
 These checks do not establish repaired real-model reload or benchmark gains.
+
+## 2026-11-13: preserve regional launch provenance
+
+Added a creation-only provider routing sidecar. Reservation and dispatch recheck the exact regional hardware/image, price ceiling, existing SSH public key and restricted firewall. The original financial binding and all prior leases remain unchanged. Offline routing tests cover actual launch payloads, altered prices/images/keys, wrong-region firewalls, resealed financial changes and refusal to overwrite a sidecar. No benchmark or cloud execution result follows from these tests.

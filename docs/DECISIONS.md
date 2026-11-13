@@ -388,3 +388,7 @@ Use separate base development-validation trials to supply the declared validatio
 families. Preserve all parent receipts in aggregate imports and keep those trials
 distinct from paired live controls. Annotation reviews may transfer only when
 their exact source, checkpoint and label ancestry is verified.
+
+## 2026-11-13: regional capacity is an explicit operator amendment
+
+A capacity-driven region change must be recorded separately from the original financial plan. It cannot silently change hardware, model recipes or hourly allowance. Region-specific image and firewall identities are verified again before dispatch. An unresolved prior launch retains its reservation and status; a route sidecar by itself is insufficient authority for another launch.
