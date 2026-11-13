@@ -5,6 +5,15 @@ explicit `cohortPaths` list for a combined import. Supply all sealed originals;
 each public prefix routes through its verified owner. Profiling replays only
 previously visible actions and never executes newly measured actor proposals.
 
+## Parent-aware annotation reuse
+
+An original annotation pilot may be used with a verified multi-cohort aggregate
+only through its unique original parent. Verification retains literal public
+JSONL and split hashes, checkpoint ownership and the unchanged audit membership.
+Expanded grading declarations record this parent proof and revalidate it. The
+legacy annotation dispatch cap remains unchanged; larger calibration cohorts need
+explicit bounded batches with already accepted audit labels reused, not rerun.
+
 Multi-cohort memory verification now hashes the retained raw public JSONL lines
 for each parent instead of reserializing them. This fixes a Python/RFC8785 byte
 mismatch without changing original prefixes, parent manifests or failed stages.

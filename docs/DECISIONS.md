@@ -10,6 +10,15 @@ checked by Node before model or read dispatch. One-cohort configuration remains
 supported. This permits combined calibration data without merging native state
 or changing the evaluation split.
 
+## 2026-11-13: Preserve the original audit when aggregating native cohorts
+
+A multi-cohort dataset does not create a new human audit. Reuse the original pilot
+only when its complete parent provenance and exact public prefix identities are
+verified. Record the original-parent proof in downstream annotation expansions.
+Keep calibration-family labels separate from fitting labels and preserve the
+original dispatcher budget cap; additional annotation requires its own declared
+bounded batches and retained provider lineage.
+
 ## 2026-11-13: Verify imported parent prefixes as original bytes
 
 Use literal JSONL source lines for parent-file SHA-256 verification. Parsing is

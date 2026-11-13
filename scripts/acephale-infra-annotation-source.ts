@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { canonical, hash } from "../src/lib/acephale/canonical";
+import { verifyInfraParentDataset } from "./acephale-infra-memory";
 
 const VERSION = "acephale-infra-data-v1";
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -23,7 +24,8 @@ interface Declaration {
   audit: { checkpoint_id: string; reason: string }[];
   source_dataset_hash?: string; source_split_hash?: string;
   expansion?: { originalPilotBundleHash: string; predictionManifestHash: string;
-    originalCount: number; addedCount: number; auditMembershipUnchanged: boolean };
+    originalCount: number; addedCount: number; auditMembershipUnchanged: boolean;
+    originalAuditSource?: ReturnType<typeof verifyInfraParentDataset> };
 }
 
 function verifiedManifest(directory: string, required: string[]): Manifest {
@@ -65,8 +67,21 @@ export function verifyInfraAnnotationSource(pilotDirectory: string, datasetDirec
   const declaration = json(join(pilotDirectory, "pilot.json")) as Declaration;
   const splitHash = hash(split);
   const separate = resolve(pilotDirectory) !== resolve(datasetDirectory);
+  let originalAuditSource: ReturnType<typeof verifyInfraParentDataset> | undefined;
   if ((separate || declaration.source_dataset_hash !== undefined) && declaration.source_dataset_hash !== dataset.bundle_hash
-    || (separate || declaration.source_split_hash !== undefined) && declaration.source_split_hash !== splitHash) throw new Error("Pilot source dataset or split binding mismatch");
+    || (separate || declaration.source_split_hash !== undefined) && declaration.source_split_hash !== splitHash) {
+    if (!/^[a-f0-9]{64}$/.test(declaration.source_dataset_hash ?? "") || !/^[a-f0-9]{64}$/.test(declaration.source_split_hash ?? "")) {
+      throw new Error("Pilot source dataset or split binding mismatch");
+    }
+    try { originalAuditSource = verifyInfraParentDataset(datasetDirectory, declaration.source_dataset_hash!, declaration.source_split_hash!); }
+    catch (cause) { throw new Error("Pilot source dataset or split binding mismatch: original parent verification failed", { cause }); }
+  }
+  if (declaration.expansion?.originalAuditSource) {
+    const recorded = declaration.expansion.originalAuditSource;
+    const verified = verifyInfraParentDataset(datasetDirectory, recorded.sourceDatasetHash, recorded.sourceSplitHash);
+    if (hash(recorded) !== hash(verified)) throw new Error("Expanded original audit parent proof changed");
+    originalAuditSource = verified;
+  }
   const rows = jsonl(join(pilotDirectory, "annotation-inputs.jsonl")) as AnnotationSourceRow[];
   // Expanded replay coverage may exceed the original 100-row pilot. The
   // dispatcher still enforces the unchanged five-dollar annotation cap.
@@ -85,11 +100,14 @@ export function verifyInfraAnnotationSource(pilotDirectory: string, datasetDirec
     const projected: AnnotationSourceRow = { checkpoint_id: original.checkpoint_id, input_hash: original.input_hash,
       request_revision: original.request_revision, input: original.input };
     if (canonical(row) !== canonical(projected)) throw new Error("Annotation input differs from frozen public prefix");
+    if (declaration.source_dataset_hash !== dataset.bundle_hash && originalAuditSource
+      && !originalAuditSource.publicCheckpointIds.includes(row.checkpoint_id)) throw new Error("Original audit checkpoint is outside its verified parent");
   }
   if (!Number.isInteger(declaration.audit_count) || declaration.audit_count < 1 || declaration.audit_count > rows.length
     || !Array.isArray(declaration.audit) || declaration.audit.length !== declaration.audit_count
     || new Set(declaration.audit.map(row => row.checkpoint_id)).size !== declaration.audit_count
     || declaration.audit.some(row => !rows.some(input => input.checkpoint_id === row.checkpoint_id) || !row.reason)) throw new Error("Human audit declaration mismatch");
   const verificationTiers = [...new Set(rows.map(row => episodes.get(publicById.get(row.checkpoint_id)!.episode_id)!.verification_tier))].sort();
-  return { manifest, declaration, rows, sourceDatasetHash: dataset.bundle_hash, sourceSplitHash: splitHash, verificationTiers };
+  return { manifest, declaration, rows, sourceDatasetHash: dataset.bundle_hash, sourceSplitHash: splitHash, verificationTiers,
+    ...(originalAuditSource ? { originalAuditSource } : {}) };
 }

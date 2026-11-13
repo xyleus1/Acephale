@@ -103,7 +103,8 @@ export function expandInfraAnnotationCohort(options: { bundle: string; pilot: st
     checkpoints: rows.map(row => ({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash })),
     source_dataset_hash: replay.dataset.manifest.bundle_hash, source_split_hash: hash(replay.dataset.split),
     expansion: { originalPilotBundleHash: pilot.manifest.bundle_hash, predictionManifestHash: replay.manifest.contentHash,
-      originalCount: pilot.rows.length, addedCount: rows.length - pilot.rows.length, auditMembershipUnchanged: true } };
+      originalCount: pilot.rows.length, addedCount: rows.length - pilot.rows.length, auditMembershipUnchanged: true,
+      ...(pilot.originalAuditSource ? { originalAuditSource: pilot.originalAuditSource } : {}) } };
   mkdirSync(options.output, { recursive: false });
   write(join(options.output, "pilot.json"), declaration);
   writeFileSync(join(options.output, "annotation-inputs.jsonl"), rows.map(row => canonical(row) + "\n").join(""), { flag: "wx", mode: 0o600 });

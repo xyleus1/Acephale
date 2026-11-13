@@ -17,6 +17,16 @@ aggregate and reconstructed four longest prefixes across both sources/domains,
 replaying 37 already visible tool calls. No new actor proposals were executed.
 These checks establish reconstruction, not task accuracy or latency improvement.
 
+## 2026-11-13: Reuse original audits through verified parent lineage
+
+Annotation and grading expansion now accept an original pilot against a native
+aggregate only after the full parent manifest, literal public bytes, split and
+checkpoint ownership pass. New expansion declarations retain that proof; existing
+pilot files stay unchanged. Focused regressions cover byte reserialization, split
+changes, foreign development rows and rehashed proof tampering. The actual
+100-checkpoint pilot and 20 audit cases verified against the closed 72-episode
+aggregate without a provider call. No labels or human-review claims were added.
+
 ## 2026-11-13: Preserve parent JSONL bytes during aggregate verification
 
 The closed auxiliary development import retained all original public prefixes,

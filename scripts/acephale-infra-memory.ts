@@ -131,6 +131,21 @@ export function verifyInfraPilotBundle(directory: string) {
   return { manifest, manifestSha256: sha(join(directory, "manifest.json")), split, memory, lineage, expected, metadata };
 }
 
+/** Reuse an original audit only after its complete parent bytes and ownership pass. */
+export function verifyInfraParentDataset(directory: string, sourceDatasetHash: string, sourceSplitHash: string) {
+  const bundle = verifyInfraPilotBundle(directory);
+  if (bundle.lineage.version !== "acephale-infra-fresh-native-v2") throw new Error("Verified multi-cohort parent provenance required");
+  const aggregate = json(join(directory, "cohort-receipt.json"));
+  const parents = aggregate.parentDatasets.filter((parent: any) => parent.bundleHash === sourceDatasetHash);
+  if (parents.length !== 1 || hash(parents[0].split) !== sourceSplitHash) throw new Error("Original parent dataset or split binding mismatch");
+  const parent = parents[0];
+  return { kind: "acephale-original-native-parent" as const, sourceDatasetHash, sourceSplitHash,
+    aggregateDatasetHash: bundle.manifest.bundle_hash, aggregateReceiptHash: hash(aggregate),
+    aggregateReceiptSha256: sha(join(directory, "cohort-receipt.json")), cohortId: parent.cohortId,
+    publicSha256: parent.manifest.files["public.jsonl"].sha256, splitSha256: parent.manifest.files["split.json"].sha256,
+    publicCheckpointIds: parent.publicCheckpointIds as string[] };
+}
+
 /** Accept one recorded causal derivation, never an arbitrary snapshot prefix/suffix. */
 export function validateFreshInfraMemoryBinding(input: FrozenExperienceMemory,
   bundle: Pick<ReturnType<typeof verifyInfraPilotBundle>, "manifest" | "manifestSha256" | "lineage" | "expected">) {
