@@ -109,6 +109,34 @@ def verify_runtime_identity(manifest: dict):
         raise ValueError("Actual benchmark Node/Python differs from observed runtime inventory")
 
 
+def validate_native_task_source(configuration: dict, task_rows: dict, upstream_root: Path) -> None:
+    """Official bytes or a complete independently verified custom bundle, never an implicit replacement."""
+    custom = None
+    if configuration.get("customTaskBundleDirectory") or configuration.get("customTaskReceiptHash"):
+        from acephale.custom_native_tasks import verify_custom_bundle
+
+        if not configuration.get("customTaskBundleDirectory") or not configuration.get("customTaskReceiptHash"):
+            raise ValueError("Custom native tasks require their verified source directory and receipt")
+        receipt, custom_bundle, partition = verify_custom_bundle(Path(configuration["customTaskBundleDirectory"]), upstream_root)
+        if receipt["contentHash"] != configuration["customTaskReceiptHash"]:
+            raise ValueError("Custom native receipt differs from the frozen configuration")
+        custom = {(row["domain"], row["taskId"]): row for row in custom_bundle["tasks"]}
+        allowed = {"collection": {"weight_fit", "calibration"}, "development": {"development"}, "heldout": {"test"}}
+        if configuration["stage"] == "collection" and configuration.get("collectionPartitions") != ["weight_fit", "calibration"]:
+            raise ValueError("Custom collection requires its explicit fitting/calibration selection")
+        for key, item in task_rows.items():
+            if custom.get(key) != item:
+                raise ValueError("Custom task differs from its independently verified source")
+        for run in configuration["runs"]:
+            if partition["families"].get(run["familyId"]) not in allowed[configuration["stage"]]:
+                raise ValueError("Custom task family crosses the frozen experiment partition")
+    for domain in {row["domain"] for row in configuration["runs"]}:
+        official = {str(task["id"]): task for task in read(upstream_root / f"data/tau2/domains/{domain}/tasks.json")}
+        for (item_domain, task_id), item in task_rows.items():
+            if custom is None and item_domain == domain and item["task"] != official.get(task_id):
+                raise ValueError("Native task differs from its pinned upstream source")
+
+
 class NativeTauExecutor:
     """Only this boundary imports tau2; offline validation needs no hosted SDK."""
 
@@ -127,11 +155,7 @@ class NativeTauExecutor:
         self.configuration, self.task_rows, self.registry = configuration, task_rows, registry
         self.instruction = api_actor_instruction(AGENT_INSTRUCTION)
         self.contexts = {}
-        for domain in {row["domain"] for row in configuration["runs"]}:
-            official = {str(task["id"]): task for task in read(upstream_root / f"data/tau2/domains/{domain}/tasks.json")}
-            for (item_domain, task_id), item in task_rows.items():
-                if item_domain == domain and item["task"] != official.get(task_id):
-                    raise ValueError("Native task differs from its pinned upstream source")
+        validate_native_task_source(configuration, task_rows, upstream_root)
         for run in configuration["runs"]:
             environment = registry.get_env_constructor(run["domain"])(solo_mode=False)
             tools = [tool.openai_schema for tool in environment.get_tools()]
@@ -389,7 +413,7 @@ def run_native(configuration: Path, tasks: Path, output: Path, budget_directory:
     budget_directory, upstream_root = budget_directory.resolve(), upstream_root.resolve()
     config = read(configuration)
     # Freeze absolute artifact paths into the exact service readiness identity.
-    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath"):
+    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath", "customTaskBundleDirectory"):
         if config.get(field):
             config[field] = str((configuration.parent / config[field]).resolve())
     manifest, bundle = read(Path(config["manifestPath"])), read(tasks)

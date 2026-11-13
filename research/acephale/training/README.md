@@ -89,11 +89,14 @@ python -m acephale.training_container run --receipt IMAGE_RECEIPT --action train
 python -m acephale.training_container run --receipt IMAGE_RECEIPT --action export --training-run NEW_SEED17/artifacts --dataset DATASET --model BASE --lease LEASE --actor-container ACTOR_ID --output NEW_EXPORT17
 ```
 
-Repeat with seed 29 and new output paths. Select checkpoints using development
-data only. The default is at most three epochs, 500 steps and one hour per
-training command, within a lease capped at two hours. LoRA uses rank 16, alpha
+Repeat with seed 29 and new output paths. Retain both seeds; do not select a winner
+from held-out results. The default is at most three epochs, 500 steps and one hour
+per command. A v2 lease can explicitly allocate the approved four fitting hours;
+v1 leases retain their two-hour ceiling. Every stage remains inside its provider
+and experiment deadline. LoRA uses rank 16, alpha
 32, dropout 0.05, AdamW at 1e-4, weight decay 0.01, norm clip 1.0, warmup 0.03,
-microbatch 1 and accumulation 16. The exact text attention, Gated DeltaNet and
+effective batch size 16. Use `--micro-batch 4 --gradient-accumulation 4`, or the
+2/8 then 1/16 fallback after measured memory checks. Freeze the profile before fitting. The exact text attention, Gated DeltaNet and
 MLP linear modules are enumerated and verified before training. Vision and base
 weights remain frozen. Prompts are masked with -100; no sample is truncated to
 fit the 8,192-token context or 1,024-token completion limit.
@@ -128,3 +131,20 @@ not measure goal agreement, free-running ranking quality, native reward or
 latency. Those require the frozen prediction replay, independent annotation
 grading and paired native benchmark harnesses. Refit calibration and opportunity
 profiles for the derived predictor identity before speculative execution.
+
+## Run a declared sequence
+
+`python -m acephale.experiment_runner --manifest RUN.json --output NEW_DIRECTORY`
+runs existing commands on Linux or Windows without shell interpolation. Linux
+owns a process group; Windows starts a suspended child inside a kill-on-close
+Job Object before allowing it to run. Timeout and shutdown drain descendants.
+GPU fitting still runs in the qualified Linux container. The manifest binds
+`sourceCommit`, hashed input files, an absolute deadline, maximum duration and an
+ordered list of stages. Each stage supplies argv, a timeout and artifact checks
+with explicit successful result fields. Commands can reference `{source}`,
+`{output}`, `{input:name}` and a completed `{stage:id}`.
+
+Use `--resume` only for the same manifest and verified completed stages. Failed
+or interrupted stages require a separate recovery attempt. Container stages must
+bind the launch receipt and immutable image so timeout cleanup can confirm the
+exact container is gone. The runner does not grant cloud or spending authority.

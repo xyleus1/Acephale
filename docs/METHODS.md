@@ -118,7 +118,8 @@ counts as physical work even when the actor's logical call count stays unchanged
 
 ## Calibration and deployment profiles
 
-Calibration v2 binds `independent_next_batch_hit`, `selected_candidates`, exact
+Calibration v3 binds next-batch invocation membership, the raw score semantics,
+`empirical_next_batch_membership`, `selected_candidates`, and exact
 model/revision, memory, retrieval, prompt and compiler. Training labels fit separate
 neutral and conditional maps using fixed deciles, forward merging of empty bins
 and Laplace(1,1) smoothing. Development results are diagnostics; test labels never
@@ -183,7 +184,9 @@ only after the public candidate window is frozen; future calls and evaluation
 state never enter prompts or retrieval. Ranking targets contain an action class
 and one binary hit per candidate in that frozen order. Inference requests both
 0 and 1 token log probabilities, normalizes each raw pair and calibrates the
-result on reserved families before selecting at most three candidates. Each
+result on reserved families before selecting at most three candidates. New binary
+artifacts declare `autoregressive_binary_conditional`; legacy v2 records retain
+their original metadata and cannot validate a new binary predictor. Each
 bit describes a separate candidate-hit event, so scores are not normalized
 across candidates. The decoder is autoregressive: a bit probability conditions
 on the previously generated action and bits. These are not independent joint
@@ -204,9 +207,12 @@ has rank 16, alpha 32 and dropout 0.05, with explicit Qwen text attention,
 feed-forward and gated-delta projection targets. Vision, embeddings, language
 head and base parameters stay frozen. Completion-only cross entropy uses
 AdamW at 1e-4, weight decay 0.01, gradient clipping 1, warmup 0.03,
-microbatch 1, accumulation 16, checkpointing and at most 8,192 total tokens.
+effective batch size 16, checkpointing and at most 8,192 total tokens. Fit-only
+profiling selects microbatch/accumulation 4/4, 2/8 or 1/16 before either main seed.
 Seeds 17 and 29 each have at most three epochs or 500 optimizer steps; both
-together have at most two GPU hours within the existing infrastructure budget.
+share four additional fitting hours under the explicit v2 budget amendment, with
+a separate 15-minute smoke allowance. Earlier reserved windows remain counted.
+The original v1 lease retains its two-hour limit.
 
 The trainer verifies the funded lease, actual CUDA environment, pinned source
 and model/tokenizer receipts. It records gradients, finite losses, changed LoRA
@@ -230,3 +236,29 @@ supply storage/retrieval, and OpenTelemetry with Grafana/Prometheus/Tempo/Loki/A
 supplies observability. The experimental binding, admission, provenance and
 evaluation contracts remain Acephale code. No vLLM engine-level co-scheduler,
 observation-conditioned actor prelaunch or general tool decoder is claimed.
+
+## Fresh compositional task library
+
+The staged study generates 44 operation-set families across retail and airline,
+with two independent synthetic customers/entity variants per family. Partition
+assignment precedes task construction: 24 families fit weights, six calibrate,
+six develop the runtime and eight are held out subject to the remaining budget.
+The operation sets differ across partitions; their primitive actions deliberately
+overlap. Report that overlap and call this compositional generalization, not
+unseen-intent evaluation. Native tool implementations, policies and product/flight
+catalogs remain pinned. Official task files are not edited or relabeled.
+
+Each blueprint specifies database outcome checks before a reference execution.
+The verifier compares the complete native final database with those checks and
+requires omission of every requested mutation to fail. Native DB reward remains
+the success basis; action-list matching is not required. Live policy assertions
+cover consent and retail authentication separately. These static checks do not
+claim that an actor has completed the task or followed the conversation policy.
+
+The annotation pilot selects 100 fitting prefixes across all 24 families, with
+at least four per family and 50 per domain. It reads only public prefixes and
+optional source-bound candidate-window eligibility. Twenty human reviews are
+selected before annotation. Training requires complete neutral/conditioned/goal
+triplets and at least 48 covered positive-read prefixes. Insufficient data fails
+the preparation stage; repeating rows or importing evaluation families cannot
+satisfy that floor.

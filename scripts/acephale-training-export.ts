@@ -12,9 +12,11 @@ import { createInfraNativeCandidates } from "../services/acephale-runtime/infra-
 import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-compiler-identity";
 import { NativeReadPolicy } from "../services/acephale-runtime/native-read-policy";
 import { documentCandidates } from "../services/acephale-runtime/document-adapter";
-import { compileGoalTrainingExample, compileRankTrainingExamples, type GoalDraft, type TrainingExampleV1,
+import { BINARY_RANKING_INSTRUCTION } from "../services/acephale-runtime/infra-binary-ranking";
+import { compileInfraCandidateWindow } from "../services/acephale-runtime/infra-predictor-input";
+import { compileGoalTrainingExample, compileRankTrainingExamples, compileNativeTrainingExamples, planNativeTrainingExport, type GoalDraft, type TrainingExampleV1,
   type TrainingPartitionPlan, type TrainingSource, type ObservedNextBatch } from "../services/acephale-runtime/infra-training-export";
-import { publicInfraFrame, type PublicRow } from "./acephale-infra-predict";
+import { publicInfraFrame, type PublicRow } from "../services/acephale-runtime/infra-public-checkpoint";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
 import { verifyDocumentBundle } from "./acephale-infra-document-data";
 
@@ -53,12 +55,18 @@ export function historicalGoalSource(queue: Record<string, any>, annotation: Rec
   return { frame, draft, annotationHash: hash(annotation), mapping: { checkpoint: sourceId }, originalDraftHash: hash(originalDraft) };
 }
 export interface TrainingExportConfiguration {
-  schemaVersion: 1; mode: "historical_goals" | "native_ranks"; baseUrl: string; tokenizerDirectory: string; output: string;
-  partitions: string; reviewArtifact: string; queue?: string; annotations?: string; bundle?: string; memory?: string;
+  schemaVersion: 1 | 2; mode: "historical_goals" | "native_ranks" | "native_multitask" | "native_pilot_eligibility"; baseUrl: string; tokenizerDirectory: string; output: string;
+  partitions: string; reviewArtifact?: string; queue?: string; annotations?: string; bundle?: string; memory?: string;
+  fittingCheckpointIds?: string[]; neutralOnlyPartitions?: ("calibration" | "development")[];
 }
 export async function exportTraining(configurationPath: string) {
   const config = json(configurationPath) as TrainingExportConfiguration, base = dirname(resolve(configurationPath));
-  if (config.schemaVersion !== 1 || !["historical_goals", "native_ranks"].includes(config.mode)) throw new Error("Unknown training export configuration");
+  if (![1, 2].includes(config.schemaVersion) || !["historical_goals", "native_ranks", "native_multitask", "native_pilot_eligibility"].includes(config.mode)) throw new Error("Unknown training export configuration");
+  const eligibilityOnly = config.mode === "native_pilot_eligibility";
+  if (eligibilityOnly && config.schemaVersion !== 2) throw new Error("Native pilot eligibility requires v2 configuration");
+  if (!eligibilityOnly && !config.reviewArtifact) throw new Error("Training export requires its review artifact");
+  if (config.mode === "native_multitask" && (config.schemaVersion !== 2 || !config.annotations)) throw new Error("Native multitask export requires v2 configuration and teacher annotations");
+  if (config.mode === "native_ranks" && config.annotations) throw new Error("Use v2 native_multitask to export teacher-conditioned examples");
   const path = (value: string) => resolve(base, value), output = path(config.output);
   if (existsSync(output)) throw new Error("Training export output must be new");
   const rawPartitions = json(path(config.partitions));
@@ -68,11 +76,15 @@ export async function exportTraining(configurationPath: string) {
     developmentFamilies: Object.keys(rawPartitions.families).filter(key => rawPartitions.families[key] === "development"),
     testFamilies: Object.keys(rawPartitions.families).filter(key => rawPartitions.families[key] === "test"),
   } : rawPartitions;
-  const tokenizer = trainingTokenizerIdentity(path(config.tokenizerDirectory)), review = json(path(config.reviewArtifact));
+  const tokenizer = trainingTokenizerIdentity(path(config.tokenizerDirectory)), review = config.reviewArtifact ? json(path(config.reviewArtifact)) : null;
   const model = new LocalChatModelPort({ baseUrl: config.baseUrl, model: PREDICTOR_BASE.repository,
     contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024 });
   const signal = AbortSignal.timeout(30 * 60 * 1000), examples: TrainingExampleV1[] = [], rejected: { id: string; error: string }[] = [];
-  const profile = config.mode === "native_ranks" && json(join(path(config.bundle!), "manifest.json")).files?.["document-lineage.json"] ? "documents" : "native";
+  const excluded: { id: string; reason: string }[] = [];
+  const eligibility: { checkpointId: string; inputHash: string; familyId: string; candidateIds: string[]; candidateWindowHash: string; candidatePoolHash: string }[] = [];
+  let nativeDatasetHash: string | undefined;
+  const profile = config.mode !== "historical_goals" && json(join(path(config.bundle!), "manifest.json")).files?.["document-lineage.json"] ? "documents" : "native";
+  if ((config.mode === "native_multitask" || eligibilityOnly) && profile !== "native") throw new Error("Native training preparation requires a native public bundle");
   const common = { compilerHash: infraCandidateCompilerHash(profile), tokenizerHash: tokenizer.tokenizerHash,
     chatTemplateHash: tokenizer.chatTemplateHash, reviewHash: hash(review) };
   if (config.mode === "historical_goals") {
@@ -94,14 +106,26 @@ export async function exportTraining(configurationPath: string) {
   } else {
     if (!config.bundle || !config.memory) throw new Error("Native export requires verified public bundle and frozen memory");
     const directory = path(config.bundle), bundle = profile === "documents" ? verifyDocumentBundle(directory) : verifyInfraPilotBundle(directory);
+    nativeDatasetHash = bundle.manifest.bundle_hash;
     const memory = validateMemoryArtifact(json(path(config.memory)));
     if (profile === "native") validateFreshInfraMemoryBinding(memory, bundle as ReturnType<typeof verifyInfraPilotBundle>);
     else if (memory.repositorySnapshotId !== `infra-documents:${bundle.manifest.bundle_hash}`) throw new Error("Document memory is from another bundle");
     const publicRows = rows(join(directory, "public.jsonl")) as unknown as PublicRow[];
+    const selection = config.mode === "native_multitask" ? planNativeTrainingExport(publicRows, partitions,
+      { fittingCheckpointIds: config.fittingCheckpointIds!, neutralOnlyPartitions: config.neutralOnlyPartitions! }) : null;
     // Private labels are only joined after each candidate window and prompt have been compiled.
-    const labels = new Map(rows(join(directory, "labels.jsonl")).map(row => [row.checkpoint_id, row]));
-    const annotations = new Map(config.annotations ? rows(path(config.annotations)).map(row => [row.checkpoint_id, row]) : []);
+    const labels = new Map(eligibilityOnly ? [] : rows(join(directory, "labels.jsonl")).map(row => [row.checkpoint_id, row]));
+    const annotationRows = config.annotations ? rows(path(config.annotations)) : [];
+    const annotations = new Map(annotationRows.map(row => [row.checkpoint_id, row]));
+    if (annotations.size !== annotationRows.length) throw new Error("Duplicate teacher annotation checkpoint");
+    if (selection && (annotations.size !== config.fittingCheckpointIds!.length
+      || config.fittingCheckpointIds!.some(id => !annotations.has(id)))) throw new Error("Every selected fitting checkpoint requires its reviewed annotation");
     for (const row of publicRows) {
+      if (eligibilityOnly && !partitions.weightFitFamilies.includes(row.family_id)) continue;
+      const mode = selection?.get(row.checkpoint_id);
+      if (mode === "unselected_fit" || mode === "heldout_excluded") {
+        excluded.push({ id: row.checkpoint_id, reason: mode }); continue;
+      }
       try {
         const frame = publicInfraFrame(row, memory.repositorySnapshotId), policy = profile === "native" ? new NativeReadPolicy(row.domain as "retail" | "airline", frame.scope) : null;
         policy?.updateFrame(frame);
@@ -109,21 +133,40 @@ export async function exportTraining(configurationPath: string) {
           sourceDatasetHash: bundle.manifest.bundle_hash, publicInputHash: row.input_hash };
         const native = profile === "native" ? createInfraNativeCandidates(memory, Object.fromEntries(row.input.tools.map(tool => [tool.name, tool.parameters])),
           invocation => policy!.eligible(invocation), { allowedFamilies: bundle.expected, excludeFamilies: [row.family_id] }) : null;
-        const annotation = annotations.get(row.checkpoint_id);
-        if (annotation && annotation.input_hash !== row.input_hash) throw new Error("Conditioning annotation belongs to another checkpoint");
-        examples.push(...await compileRankTrainingExamples({ model, source, partitions, frame, memory, allowedFamilies: bundle.expected, signal,
-          ...(annotation ? { conditioningGoals: annotation.goalDraft, conditioningAnnotationHash: hash(annotation) } : {}),
-          publicCandidates: native ? current => native.candidates(current) : documentCandidates,
-          readTarget: async () => labels.get(row.checkpoint_id) as unknown as ObservedNextBatch }));
+        if (eligibilityOnly) {
+          if (row.split !== "train" || memory.runs.some(run => !partitions.weightFitFamilies.includes(run.familyId))) throw new Error("Pilot eligibility requires fit-only memory and public fitting rows");
+          const window = await compileInfraCandidateWindow(frame, native!.candidates(frame), BINARY_RANKING_INSTRUCTION, model.inputBudget,
+            messages => model.measureInputTokens(messages, signal));
+          eligibility.push({ checkpointId: row.checkpoint_id, inputHash: row.input_hash, familyId: row.family_id,
+            candidateIds: window.candidates.map(candidate => candidate.id), candidateWindowHash: window.windowHash, candidatePoolHash: window.poolHash });
+          continue;
+        }
+        const options = { model, source, partitions, frame, memory, allowedFamilies: bundle.expected, signal,
+          publicCandidates: native ? (current: ExecutionFrame) => native.candidates(current) : documentCandidates,
+          readTarget: async () => labels.get(row.checkpoint_id) as unknown as ObservedNextBatch };
+        if (mode === "multitask") {
+          if (!row.request_revision) throw new Error("Native goal training requires the original request revision");
+          examples.push(...await compileNativeTrainingExamples({ ...options, annotation: annotations.get(row.checkpoint_id),
+            publicInput: { checkpoint_id: row.checkpoint_id, input_hash: row.input_hash, request_revision: row.request_revision, input: row.input } }));
+        } else examples.push(...await compileRankTrainingExamples(options));
       } catch (error) { rejected.push({ id: row.checkpoint_id, error: error instanceof Error ? error.message : "Compilation failed" }); }
     }
   }
   mkdirSync(output, { recursive: false });
+  if (eligibilityOnly) {
+    const body = { schemaVersion: 1, kind: "acephale-public-window-eligibility", sourceDatasetHash: nativeDatasetHash,
+      partitionsHash: hash(partitions), compilerHash: common.compilerHash, tokenizer, generationCalls: 0, futureLabelsUsed: false,
+      rows: eligibility, rejected, checkpointIds: eligibility.filter(row => row.candidateIds.length).map(row => row.checkpointId) };
+    const artifact = { ...body, contentHash: hash(body) }; write(join(output, "eligibility.json"), artifact); return artifact;
+  }
   writeFileSync(join(output, "compiled.jsonl"), examples.map(row => canonical(row) + "\n").join(""), { flag: "wx", mode: 0o600 });
   write(join(output, "rejected.json"), rejected);
-  const receipt = { schemaVersion: 1, kind: "acephale-training-export", configurationHash: hash(config), partitionsHash: hash(partitions),
+  if (config.mode === "native_multitask") write(join(output, "excluded.json"), excluded);
+  const receipt = { schemaVersion: config.schemaVersion, kind: "acephale-training-export", configurationHash: hash(config), partitionsHash: hash(partitions),
     compilerHash: common.compilerHash, tokenizer, rows: examples.length, rejected: rejected.length, compiledSha256: digest(join(output, "compiled.jsonl")),
-    generationCalls: 0, trainingPerformed: false, reviewHash: hash(review), sourceMode: config.mode };
+    generationCalls: 0, trainingPerformed: false, reviewHash: hash(review), sourceMode: config.mode,
+    ...(config.mode === "native_multitask" ? { selectionHash: hash({ fittingCheckpointIds: config.fittingCheckpointIds,
+      neutralOnlyPartitions: config.neutralOnlyPartitions }), excluded: excluded.length } : {}) };
   write(join(output, "receipt.json"), { ...receipt, contentHash: hash(receipt) }); return receipt;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

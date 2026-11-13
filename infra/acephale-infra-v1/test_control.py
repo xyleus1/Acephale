@@ -401,6 +401,55 @@ class ControlTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             control.locked_compose(path, self.root / "compose.json")
 
+    def access_amendment(self):
+        original = self.client.request
+        self.access_key = {"id": "new-key", "name": "acephale-new-key", "public_key": "ssh-ed25519 test-public-key"}
+        def request(method, path, payload=None):
+            if path == "/ssh-keys":
+                return [self.access_key]
+            if path == "/firewall-rulesets/new-firewall":
+                return original(method, "/firewall-rulesets/firewall-1", payload)
+            return original(method, path, payload)
+        self.client.request = request
+        output = self.root / "new-access.json"
+        before = self.ledger.read_bytes()
+        value = control.record_access_amendment(self.client, self.ledger, output, "acephale-new-key", "new-firewall",
+            "Replace access resources deleted after verified cleanup", source_probe=lambda _: "b" * 40)
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.assertFalse(value["financialBindingChanged"])
+        return output
+
+    def test_access_amendment_preserves_plan_and_binds_actual_launch_resources(self):
+        output = self.access_amendment()
+        self.prepared = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget,
+                                              access_amendment=output)
+        lease = self.launch()
+        payload = next(payload for _, path, payload in self.client.calls if path == "/instance-operations/launch")
+        self.assertEqual(payload["ssh_key_names"], ["acephale-new-key"])
+        self.assertEqual(payload["firewall_rulesets"], [{"id": "new-firewall"}])
+        self.assertEqual(control.read_json(self.ledger)["plan"], self.plan)
+        self.assertEqual(lease["accessAmendment"], control.read_json(output))
+
+    def test_access_public_key_change_after_reservation_blocks_dispatch(self):
+        output = self.access_amendment()
+        self.prepared = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget,
+                                              access_amendment=output)
+        self.access_key["public_key"] = "ssh-ed25519 replaced-public-key"
+        with self.assertRaisesRegex(ValueError, "public-key identity"):
+            self.launch()
+        self.assertFalse(any(path == "/instance-operations/launch" for _, path, _ in self.client.calls))
+        self.assertEqual(control.read_json(self.ledger)["leases"][0]["status"], "reserved")
+
+    def test_resealed_access_amendment_cannot_change_financial_plan(self):
+        output = self.access_amendment()
+        value = control.read_json(output)
+        value["planHash"] = "f" * 64
+        value["contentHash"] = control.digest({key: item for key, item in value.items() if key != "contentHash"})
+        control.atomic_json(output, value)
+        with self.assertRaisesRegex(ValueError, "financial plan"):
+            control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget, access_amendment=output)
+        self.assertEqual(control.read_json(self.ledger)["leases"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

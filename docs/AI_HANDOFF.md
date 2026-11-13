@@ -1,214 +1,47 @@
-# Acephale handoff
+# Working on Acephale
 
-Updated 2026-11-11. Work only in this standalone research checkout. Read
-[methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
-[decisions](DECISIONS.md) before continuing.
+Read [methods](METHODS.md), [state](STATE.md) and [runbook](RUNBOOK.md) first.
+This repository studies goal-conditioned speculative reads with a fixed actor.
 
-Current verified checkpoint: R3 completed all 12 base trials, with 9/12 mixed
-partition successes but 1/4 development successes. There were 77 logical and
-physical tool calls and no speculation. The frozen 150 public checkpoints yield
-34 fitting, 46 calibration and 40 development examples. Base fixed-panel replay
-is 145 completed plus five retained failures. See the
-[pilot report](experiments/predictor-lora-pilot-2026-11-10.md) for exact evidence,
-latency/cost definitions and caveats. No trained-predictor comparison or live
-improvement is yet verified.
+The native exporter now accepts the actual teacher contract. Use explicit v2
+`native_multitask` export for neutral ranking, conditioned ranking and goal targets.
+Goal-labelled dataset preparation still requires 20 attributed human reviews.
+The old APIGen packet cannot certify a fresh native dataset.
 
-Preserve A2's unknown optimizer progress, A3's failed one-step zero-learning-rate
-smoke and sequence02's pre-model-load lockfile-permission failure. Sequence03 is
-separately declared against trainer `83bddc7` and permission-only image05, with
-the original main recipe, seeds and lease deadline. Standalone three-way
-teacher-forced evaluation was explicitly omitted; main Trainer final development
-evaluation remains unchanged. Do not resume partial checkpoints, infer successful
-training from a CPU proof, or relabel earlier manifests. Runtime/compiler `2d89765`,
-controller `98fcb938` and reporter `f862525` remain separate provenance identities.
-Sequence03 has now completed one smoke optimizer step and its development
-evaluation, then failed adapter reload parity before merge. Its optimizer receipt
-records changed adapter and unchanged frozen-base hashes; the smoke export stage
-remains failed. Neither main seed started. No qualified trained predictor,
-trained replay or trained calibration exists. Diagnose the exact reload mismatch
-without silently widening tolerance or treating smoke token accuracy as native
-task success.
-Current resources and actual closure receipts live in the private operator
-handoff; this repository does not imply that a lease is still active.
+Run stages with `python -m acephale.experiment_runner`. The manifest binds source,
+inputs, commands, deadlines and required successful output fields. Resume only
+verified completed stages. Retain any failed or interrupted attempt and declare a
+new recovery manifest; do not silently rerun individual failed trials.
+The runner owns Linux process groups or Windows kill-on-close Job Objects.
+GPU fitting still runs inside the qualified Linux container.
 
-The following implementation notes and checkpoint accounts preserve history.
-Statements such as "zero optimizer steps" or "latest native result" within an
-older checkpoint apply to that checkpoint only, not to the current overview.
+The single training recipe accepts microbatch/accumulation 1/16, 2/8 or 4/4.
+Profile fitting data before choosing one, then freeze it for both seeds. The
+actor and base predictor remain exact repository pins. A trained checkpoint needs
+new calibration, goal-reliability and opportunity measurements before live use.
 
-Controller-only repair: the versions metadata amendment binds immutable plan and
-financial fields, excluding controller-managed trainingWindows alongside leases
-and overheads. Adding an authorized training lease must not invalidate heartbeat
-checks. The cumulative 7,200-second training ceiling and provider deadlines remain
-unchanged. Do not rewrite existing ledgers or amendments to apply this repair.
-Three hardware/watchdog inputs now have scoped LF checkout attributes. Their Git
-blobs already contained LF; Windows autocrlf changed physical bytes and broke
-existing hash bindings. Keep the exact original pinned bytes when operating this
-separate controller checkout. The control.py implementation is unchanged by this
-checkout repair, and the research runtime remains separately frozen.
-The explicit one-step CUDA smoke now disables warmup and records mode plus the
-effective recipe. Its prior 0.03 warmup rounded to one step, so the only optimizer
-step used learning rate zero despite nonzero gradients. The actual failed
-checkpoint had unchanged adapter bytes. Full seed-17/29 fitting retains the
-declared 0.03 warmup and every original recipe value. All changed-adapter and
-frozen-base assertions remain mandatory; failed runs retain computed hashes or
-null when unavailable. A new qualified trainer source/image and explicit recovery
-declaration are required before another GPU attempt; frozen runtime and earlier
-artifacts are not relabelled by this fix.
+The v2 budget policy changes future allocation ceilings through a creation-only
+sidecar on the original journal. Its hash and amendment hash must match execution
+manifests. Original reservations, GPU hours and training windows remain counted.
+Never restart an old heartbeat, reuse an expired lease or create a replacement
+budget. Resolve secure paths through operator configuration.
 
-Native stop diagnostics now retain only a classified split-guard reason and
-finite heartbeat age/limit. The three-second freshness ceiling is unchanged.
-Remote OTLP rejection or SDK shutdown failure marks the export receipt incomplete
-without replacing the original runtime failure or aborted result. Local recording
-and publication failures remain fatal. Accepted counters describe observed
-collector responses, not durable backend storage; historical cohorts are unchanged.
+The fresh 88-task native fixture bundle and 200 omitted-mutation checks passed
+before actor execution. Preserve its generator bytes and receipt. Phase one
+collects 60 fitting/calibration trials with a $0.40 hosted-call cap; development
+and test tasks remain withheld. The 2.5-hour collection lease and later 7.25-hour
+fitting/evaluation lease share the same reserved infrastructure budget, with
+human review between them and no idle paid GPU during review.
 
-The actual trainer CPU probe also reproduced a missing C compiler in Triton's
-driver build. The trainer now pins GCC, development headers and their complete
-32-package added dependency closure, with that file bound into image receipts.
-A disposable exact-base-image probe compiled and imported a Python C extension;
-this does not establish GPU training. Build a new observed trainer image before
-using this change. Model and Python dependency pins remain unchanged.
+The previous smoke failed reload verification after one real optimizer step.
+The explicit precision-context repair still needs an actual Qwen GPU test.
+Neither historical test totals nor a tiny CPU test establish trained performance.
+No main seed or paired live improvement is verified at this checkpoint.
 
-The split-host guard accepts an optional owner stop event. A detached local
-supervisor may own the guard thread and native child together, then stop and
-join the guard through its existing SSH drain and degraded final publication.
-This changes no health deadline or admission check. A daemon-killed cohort must
-remain interrupted; absent closure cannot be replaced by a successful receipt.
+Use `npm run check`, `npm test`, research pytest and deployment tests. Run the
+real Docker permission fixture in CI, and report unavailable integrations as
+skipped. Update STATE and the experiment report with exact new receipts after
+execution. Preserve the old pilot report and its artifacts.
 
-Trainer launches now create writable per-run home and cache directories beneath
-the retained output mount. `launch.json` binds their explicit environment and
-the host launcher's source hash. This repairs the observed host-UID `HOME=/`
-problem without granting root or network access. It does not establish CUDA
-training readiness or provide a missing C compiler; inspect actual image
-prerequisites and perform the real smoke before optimizer-result claims.
-
-Historical original-cohort result: the 12-slot cohort closed and aborted after two
-successes. A Windows metrics-file replacement error prevented subsequent actor
-requests. Ten infrastructure-censored errors remain in its denominator; only two
-native rewards were actually evaluated. Do not import this cohort for training
-or report its short failed-slot timings as a gain. The metrics publication fix
-has passed actual Windows lock tests. A separately declared full recovery cohort
-must use new committed source, inventory, guard and original-journal reservations.
-
-Optional `ALL_WITH_NL_ASSERTIONS` uses the pinned upstream evaluator while keeping
-the original reward basis. It can audit existing airline assertions; retail's
-empty assertions remain unknown. Private assertion text never enters actor or
-training inputs. Training was candidate-only, with zero optimizer steps at that
-historical checkpoint. Consult the private operator handoff for live resources.
-
-Historical qualification checkpoint: the second GPU lease passed qualification and its
-235-file export was independently verified. Source was `ae71b86`. The lease
-was marked ready and its existing cleanup controllers remain authoritative.
-Consult the private operator handoff for the live lease, heartbeat and hard
-deadline; never infer that a host is still active from this document.
-
-No native task or optimizer step ran at this checkpoint. The prepared 12-task
-base collection stopped before dispatch because fresh SSH handshakes exceeded
-the split guard's 2.5-second observation budget. The guard/tunnel were drained.
-Preserve those failed observations and original prepared inputs. A new committed
-transport fix, observed inventory and preparation are required before collection.
-Do not weaken freshness checks or reuse the previous healthy status.
-
-Two independent audits also found a base-versus-trained calibration-family
-mismatch and insufficient independent APIGen goal families. Keep candidate-only
-training separate from goal supervision, compare every weight variant with
-identical prompts/candidate order/calibration families, and retain both seeds.
-
-The following entries preserve earlier execution history:
-
-Current execution receipts are maintained outside the checkout. Both real
-cleanup canaries completed, the research A100 passed its hardware preflight,
-and both pinned model snapshots downloaded. The Node split guard now matches
-Python's Lambda identity and provenance checks. Do not infer completed serving,
-training or native evaluation from these milestones; inspect the latest private
-lease and qualification receipts before continuing or launching another host.
-
-The first research lease has now terminated after its setup deadline. Protocol,
-concurrent-inference and telemetry checks passed and their bytes were exported,
-but final deployment inventory failed on an incorrect CUDA metadata expectation.
-There are still zero native trials and zero optimizer steps for this execution.
-Do not reuse its readiness status, host identity or reservation as a new lease.
-An evidence-backed metadata correction and repeatable startup are being prepared;
-keep image/model pins and the original budget journal unchanged.
-
-The active question is whether source-grounded goals improve a PASTE-inspired
-read prefetcher over an otherwise identical neutral-memory prefetcher. Actor
-weights, messages, tools and task limits stay fixed. This is infrastructure
-research; no live performance advantage has been established.
-
-The latest authorized extension fine-tunes only the pinned 0.8B predictor with
-LoRA, retaining the fixed actor. See the [training guide](../research/acephale/training/README.md)
-and [Lambda lifecycle](../infra/acephale-infra-v1/LAMBDA_CONTROL.md). Runtime
-binary-hit ranking, disjoint fitting/calibration families, production-compiled
-examples and immutable merged identities are implemented. A reviewed goal
-annotation is still required before goal-labelled fitting; the prepared human
-review packet is pending. Candidate-only training requires real closed traces.
-
-The latest local implementation checks passed: Node 217 plus two database
-skips, Python 304 with the installed native environment and no skips, deployment
-141, contract/type checks and lint with zero errors. See STATE for the initial
-Python failures and repairs. No real GPU training or performance result follows
-from these tests. Keep actual subsequent deployment/training receipts separate.
-
-The TypeScript core and service live under `src/lib/acephale` and
-`services/acephale-runtime`; Python/native evaluation is `research/acephale`.
-Serving and research database definitions are `infra/acephale-infra-v1`.
-Entrypoints are `npm run check`, `npm test`, `acephale:infra`,
-`acephale:infra-native`, `acephale:infra-predict` and `acephale:infra-annotate`.
-
-The [main-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
-passed for `d510c1bbc139e09fe9e40ed1145daead87fbfb18`: Node 210 passed with no skips,
-Python 275 passed with two platform/environment skips, and deployment 124 passed.
-Typecheck, ESLint, Ruff and CLI help succeeded. Real disposable PostgreSQL/pgvector
-publication, scoped retrieval, immutable guards and read-only/bound-value tests
-passed. Production database readiness and publication are still outstanding.
-
-Preserve the local repair history: initial Python 276 passed and one ESM fixture
-import failed, followed by all six native-profile tests passing after the fix.
-Both Python CI skips were covered locally: the native fixture in that rerun and
-the Windows sharing test in the initial passing set. Local ESLint recorded zero
-errors and 27 explicit-any warnings. See STATE for exact separate run counts and
-retained logs; do not collapse these into an invented zero-skip Python run.
-
-Preserve the external original budget journal and credentials in secure operator
-configuration. No paid execution or provisioning follows automatically from local
-checks. The remaining sequence is actual serving/database readiness, fresh shadow
-collection, annotation audit, frozen memory/calibration/profiling, paired
-development and budgeted heldout trials. Consult STATE for evidence limits.
-
-Historical artifact bytes and reports remain in the original checkout/history.
-Do not rename/reseal them as current data or import them without provenance review.
-
-The persistent split guard's local catalog requests now share the remaining
-2.5-second observation deadline, instead of an undocumented 0.5-second sublimit.
-The 3-second consumer freshness bound, nonce checks and confirmed drain before
-reconnect are unchanged. Failed observations publish only a fixed stage name and
-elapsed/remaining/budget milliseconds, never exception messages. A new deployment
-inventory and read-only guard soak must qualify this source before paid trials.
-
-The reporting-only failed-panel repair accepts a shortened ordered prefix only
-when the row failed before any model request and the complete tokenizer/window
-audit proves that path. It retains the original full panel and failed denominator;
-it does not supply probabilities or claim a verified dispatched prompt. Keep this
-reporting revision separate from the frozen runtime/training source until all
-execution finishes. Original prediction artifacts must not be rewritten/resealed.
-
-## Future trainer image builds: public COPY permissions
-
-The final integration Dockerfile normalizes only copied public source/contracts,
-packaging files and required parent directories after uv sync. This repairs
-restrictive checkout permissions for both the host UID and image UID 10001. It
-does not touch .venv, models or private outputs. Keep this integration change
-separate from frozen runtime 2d89765, trainer 83bddc7 and actual permission-overlay
-image receipts; no historical image has been rebuilt or resealed by this change.
-See the training guide for the opt-in, real Docker CPU regression.
-
-## Future probe precision context
-
-The common probe helper now explicitly applies BF16 autocast, inference mode and
-eval mode at training capture, adapter reload and merged inference. Versioned
-context is bound to specification, saved probe and export verification; legacy
-or altered contexts fail closed. Keep frozen source 83bddc7 and its failed Qwen
-reload outcome unchanged. This source fix has 37 focused passing tests and one
-real CPU PyTorch/PEFT regression skipped because local Torch is absent. No actual
-Qwen reload recovery, trained-model comparison or performance gain is proven.
+Prior operator history remains in the
+[2026-11-11 checkpoint](https://github.com/xyleus1/Acephale/blob/ab9d26fedcc698898f2935ac1127835d7fbda4c9/docs/AI_HANDOFF.md).

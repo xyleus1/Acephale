@@ -16,7 +16,8 @@ import { infraOpportunityProfile, DOCUMENT_PROFILE_PROTOCOL } from "../services/
 import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/acephale-runtime/infra-memory-services";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/acephale-runtime/infra-hosted-workers";
-import { publicInfraFrame, selectInfraReplayRows } from "./acephale-infra-predict";
+import { publicInfraFrame } from "../services/acephale-runtime/infra-public-checkpoint";
+import { selectInfraReplayRows } from "./acephale-infra-predict";
 import { verifyDocumentBundle } from "./acephale-infra-document-data";
 
 interface ProfileConfig {
@@ -62,6 +63,7 @@ export async function runOpportunityProfile(configurationPath: string, output: s
     const ledgerPath = resolve(path(config.budgetDirectory), "budget.jsonl"), metadata = await stat(ledgerPath);
     if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
     budget = new DurableBudget(ledgerPath);
+    budget.validateManifestPolicy(manifest.budgets);
     validateInfraLedgerCheckpoint(await json(path(config.ledgerCheckpointPath)), budget.ledger, ledgerPath);
     const embeddings = await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory);
     memoryServices = createInfraMemoryServices({ memory, embeddings, databaseUrl: process.env.ACEPHALE_RESEARCH_DATABASE_URL,

@@ -28,6 +28,8 @@ def main(argv: list[str] | None = None) -> None:
     train.add_argument("--seed", type=int, choices=[17, 29], required=True)
     train.add_argument("--max-steps", type=int, default=500)
     train.add_argument("--maximum-seconds", type=int, default=3600)
+    train.add_argument("--micro-batch", type=int, choices=[1, 2, 4], default=1)
+    train.add_argument("--gradient-accumulation", type=int, choices=[4, 8, 16], default=16)
     smoke = commands.add_parser("smoke", help="One actual optimizer step plus reload/merge verification on prepared real examples")
     for name in ("dataset", "model", "output", "lease"):
         smoke.add_argument(f"--{name}", type=Path, required=True)
@@ -55,8 +57,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "train":
         from acephale.training import train
 
+        batch_options = {} if (args.micro_batch, args.gradient_accumulation) == (1, 16) else {
+            "micro_batch": args.micro_batch, "gradient_accumulation": args.gradient_accumulation}
         result = train(args.dataset, args.model, args.output, args.lease, seed=args.seed,
-                       max_steps=args.max_steps, maximum_seconds=args.maximum_seconds)
+                       max_steps=args.max_steps, maximum_seconds=args.maximum_seconds, **batch_options)
     elif args.command == "export":
         from acephale.training import export_model
 

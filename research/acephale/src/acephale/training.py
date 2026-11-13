@@ -17,11 +17,11 @@ from acephale.contracts_v1 import hash_v1
 from acephale.storage import file_hash
 from acephale.training_data import (
     BASE,
-    RECIPE,
     calibration_families,
     file_inventory,
     hashed,
     load_partition,
+    training_recipe,
     verify_dataset,
     verify_hashed,
     write_new,
@@ -48,17 +48,30 @@ def training_versions() -> dict[str, str]:
 def validate_training_lease(path: Path, *, now: float | None = None) -> dict[str, Any]:
     lease = json.loads(path.read_text(encoding="utf-8"))
     now = time.time() if now is None else now
-    if lease.get("version") != 1 or lease.get("profile") != "acephale-training-lease-v1" or lease.get("phase") != "predictor_training" or lease.get("status") != "active" or lease.get("actorStopped") is not True:
+    from acephale.training_data import DIGEST
+
+    version = lease.get("version")
+    maximum_seconds, maximum_reservation = 7200, 35_000_000
+    if version == 2:
+        policy_path = Path(__file__).resolve().parents[4] / "src/lib/acephale/contracts/budget-policy-v2.json"
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        kind = lease.get("trainingKind")
+        if (lease.get("budgetPolicy") != policy or lease.get("budgetPolicyHash") != hash_v1(policy)
+                or not DIGEST.fullmatch(str(lease.get("budgetAmendmentHash", ""))) or kind not in {"smoke", "fit"}):
+            raise ValueError("Version 2 training lease requires the exact approved budget amendment")
+        maximum_seconds = policy["additionalSmokeSeconds"] if kind == "smoke" else policy["maxTrainingWindowSeconds"]
+        maximum_reservation = policy["allocationsMicrodollars"]["infrastructure"]
+    if (type(version) is not int or version not in {1, 2} or lease.get("profile") != f"acephale-training-lease-v{version}"
+            or lease.get("phase") != "predictor_training" or lease.get("status") != "active" or lease.get("actorStopped") is not True):
         raise ValueError("Active predictor-training lease with stopped actor required")
     started, deadline = lease.get("startedAt"), lease.get("deadline")
-    if any(type(value) not in {int, float} or not math.isfinite(value) for value in (started, deadline)) or not started <= now < deadline or not 0 < deadline - started <= 7200:
-        raise ValueError("Training lease is expired or exceeds two hours")
+    if any(type(value) not in {int, float} or not math.isfinite(value) for value in (started, deadline)) or not started <= now < deadline or not 0 < deadline - started <= maximum_seconds:
+        raise ValueError("Training lease is expired or exceeds its approved window")
     if lease.get("hardwareProfile") != "a100-40gb-v1" or not lease.get("instanceId") or not lease.get("leaseId"):
         raise ValueError("Training lease lacks verified hardware/instance identity")
     reservation = lease.get("studyReservation", {})
-    if not str(reservation.get("reservationId", "")).startswith("lambda-infra:") or type(reservation.get("maximumMicrodollars")) is not int or not 0 < reservation["maximumMicrodollars"] <= 35_000_000:
+    if not str(reservation.get("reservationId", "")).startswith("lambda-infra:") or type(reservation.get("maximumMicrodollars")) is not int or not 0 < reservation["maximumMicrodollars"] <= maximum_reservation:
         raise ValueError("Existing study infrastructure reservation required")
-    from acephale.training_data import DIGEST
 
     if any(not DIGEST.fullmatch(str(lease.get(key, ""))) for key in ("studyBindingHash", "providerLeaseHash")):
         raise ValueError("Training lease must bind the original study and provider lease")
@@ -201,12 +214,38 @@ def _load_model(model_path: Path):
     return model, tokenizer
 
 
-def effective_training_recipe(steps: int, *, smoke: bool = False) -> dict[str, Any]:
-    if not 1 <= steps <= 500 or (smoke and steps != 1):
+def effective_training_recipe(steps: int, *, smoke: bool = False, micro_batch: int = 1,
+                              gradient_accumulation: int = 16) -> dict[str, Any]:
+    recipe = training_recipe(micro_batch=micro_batch, gradient_accumulation=gradient_accumulation)
+    if type(steps) is not int or not 1 <= steps <= recipe["maxSteps"] or (smoke and steps != 1):
         raise ValueError("Smoke requires exactly one optimizer step")
     # ceil(0.03 * 1) creates a single warmup step at learning rate zero.
     # The smoke must update an adapter; the declared fitting schedule is unchanged.
-    return {**RECIPE, "maxSteps": steps, "warmupRatio": 0.0 if smoke else RECIPE["warmupRatio"]}
+    return {**recipe, "maxSteps": steps, "warmupRatio": 0.0 if smoke else recipe["warmupRatio"]}
+
+
+def optimizer_steps(example_count: int, max_steps: int, recipe: dict[str, Any]) -> int:
+    if type(example_count) is not int or example_count < 1:
+        raise ValueError("At least one fitting example required")
+    if type(max_steps) is not int or not 1 <= max_steps <= recipe["maxSteps"]:
+        raise ValueError("Optimizer step limit exceeds the recipe")
+    batch = recipe["microBatch"] * recipe["gradientAccumulation"]
+    return min(max_steps, math.ceil(example_count / batch) * recipe["epochs"])
+
+
+def lora_options(recipe: dict[str, Any], targets: list[str]) -> dict[str, Any]:
+    return {"r": recipe["rank"], "lora_alpha": recipe["alpha"], "lora_dropout": recipe["dropout"],
+            "target_modules": targets, "task_type": "CAUSAL_LM", "bias": "none"}
+
+
+def trainer_options(recipe: dict[str, Any]) -> dict[str, Any]:
+    return {"learning_rate": recipe["learningRate"], "weight_decay": recipe["weightDecay"],
+            "max_grad_norm": recipe["gradientClip"], "warmup_ratio": recipe["warmupRatio"],
+            "per_device_train_batch_size": recipe["microBatch"], "per_device_eval_batch_size": 1,
+            "gradient_accumulation_steps": recipe["gradientAccumulation"], "gradient_checkpointing": True,
+            "bf16": recipe["dtype"] == "bfloat16", "max_steps": recipe["maxSteps"],
+            "num_train_epochs": recipe["epochs"], "max_length": recipe["maxLength"], "packing": False,
+            "completion_only_loss": recipe["loss"] == "completion_only_cross_entropy", "optim": "adamw_torch"}
 
 
 def _probe_logits(model, input_ids, *, device_type: str = "cuda"):
@@ -226,14 +265,20 @@ def _verify_probe_context(probe: dict, specification: dict) -> None:
 
 
 def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, seed: int,
-          max_steps: int = 500, maximum_seconds: int = 3600, smoke: bool = False) -> dict[str, Any]:
+          max_steps: int = 500, maximum_seconds: int = 3600, smoke: bool = False,
+          micro_batch: int = 1, gradient_accumulation: int = 16) -> dict[str, Any]:
+    recipe = training_recipe(micro_batch=micro_batch, gradient_accumulation=gradient_accumulation)
     manifest = verify_dataset(dataset)
     lease = validate_training_lease(lease_path)
+    if lease["version"] == 2 and lease["trainingKind"] != ("smoke" if smoke else "fit"):
+        raise ValueError("Training mode differs from the approved lease kind")
     base_receipt = verify_base(model_path)
     identities = tokenizer_identity(model_path)
     if identities != (manifest["tokenizerHash"], manifest["chatTemplateHash"]):
         raise ValueError("Dataset tokenizer or template differs from the actual model")
-    if seed not in RECIPE["seeds"] or not 1 <= max_steps <= 500 or not 1 <= maximum_seconds <= 7200 or (smoke and max_steps != 1):
+    if (type(seed) is not int or seed not in recipe["seeds"] or type(max_steps) is not int
+            or not 1 <= max_steps <= recipe["maxSteps"] or type(maximum_seconds) is not int
+            or not 1 <= maximum_seconds <= 7200 or type(smoke) is not bool or (smoke and max_steps != 1)):
         raise ValueError("Training recipe bounds exceeded")
     versions = training_versions()
     implementation = training_implementation()
@@ -248,15 +293,15 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     deadline = min(started + maximum_seconds, started + lease["deadline"] - time.time())
     model, tokenizer = _load_model(model_path)
     targets = resolve_targets(model)
-    model = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
-                                           target_modules=targets, task_type="CAUSAL_LM", bias="none"))
+    model = get_peft_model(model, LoraConfig(**lora_options(recipe, targets)))
     trainable = {name: parameter.numel() for name, parameter in model.named_parameters() if parameter.requires_grad}
     if not trainable or any("lora_A" not in name and "lora_B" not in name for name in trainable):
         raise ValueError("Only LoRA tensors may receive gradients")
-    fitting = [tokenize_example(row, tokenizer) for row in load_partition(dataset, "weight_fit")]
-    development = [tokenize_example(row, tokenizer) for row in load_partition(dataset, "development")]
-    steps = min(max_steps, math.ceil(len(fitting) / 16) * 3)
-    recipe = effective_training_recipe(steps, smoke=smoke)
+    fitting = [tokenize_example(row, tokenizer, max_length=recipe["maxLength"]) for row in load_partition(dataset, "weight_fit")]
+    development = [tokenize_example(row, tokenizer, max_length=recipe["maxLength"]) for row in load_partition(dataset, "development")]
+    steps = optimizer_steps(len(fitting), max_steps, recipe)
+    recipe = effective_training_recipe(steps, smoke=smoke, micro_batch=micro_batch,
+                                       gradient_accumulation=gradient_accumulation)
     binary_ids = binary_token_ids(tokenizer)
     frozen_before, adapter_before = _parameter_hash(model, adapter=False), _parameter_hash(model, adapter=True)
     output.mkdir(parents=True, exist_ok=False)
@@ -299,14 +344,11 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
             self.gradient_checks += 1
 
     guard = Guard()
-    config = SFTConfig(output_dir=str(output / "checkpoints"), learning_rate=1e-4, weight_decay=0.01,
-        max_grad_norm=1.0, warmup_ratio=recipe["warmupRatio"], per_device_train_batch_size=1, per_device_eval_batch_size=1,
-        gradient_accumulation_steps=16, gradient_checkpointing=True, bf16=True,
-        max_steps=steps, num_train_epochs=3, max_length=8192, packing=False,
-        dataset_kwargs={"skip_prepare_dataset": True}, completion_only_loss=True, seed=seed, data_seed=seed,
+    config = SFTConfig(output_dir=str(output / "checkpoints"), **trainer_options(recipe),
+        dataset_kwargs={"skip_prepare_dataset": True}, seed=seed, data_seed=seed,
         logging_steps=1, save_strategy="steps", save_steps=50, save_total_limit=2,
         eval_strategy="steps" if development else "no", eval_steps=50, report_to=["tensorboard"],
-        remove_unused_columns=False, optim="adamw_torch", dataloader_num_workers=0)
+        remove_unused_columns=False, dataloader_num_workers=0)
     trainer = SFTTrainer(model=model, processing_class=tokenizer, args=config, data_collator=_collator(tokenizer),
         train_dataset=Dataset.from_list(fitting), eval_dataset=Dataset.from_list(development) if development else None,
         callbacks=[guard])

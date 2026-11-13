@@ -82,6 +82,8 @@ export interface InfraExperimentManifestV2 {
     protectedContingencyMicrodollars: 65000000;
     maximumGpuHours: number;
     ledgerCheckpointHash: Sha256;
+    budgetPolicyHash?: Sha256;
+    budgetAmendmentHash?: Sha256;
   };
   protocol: {
     actorContext: "none";

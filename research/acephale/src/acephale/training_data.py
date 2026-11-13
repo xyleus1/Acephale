@@ -25,6 +25,15 @@ RECIPE = {"rank": 16, "alpha": 32, "dropout": 0.05, "learningRate": 1e-4, "weigh
           "seeds": [17, 29], "dtype": "bfloat16", "loss": "completion_only_cross_entropy"}
 
 
+def training_recipe(*, micro_batch: int = 1, gradient_accumulation: int = 16) -> dict[str, Any]:
+    """Allow the declared throughput profiles without changing effective batch size."""
+    if (type(micro_batch) is not int or type(gradient_accumulation) is not int
+            or (micro_batch, gradient_accumulation) not in {(1, 16), (2, 8), (4, 4)}):
+        raise ValueError("Training batch profile must be 1/16, 2/8 or 4/4")
+    return {**RECIPE, "seeds": list(RECIPE["seeds"]), "microBatch": micro_batch,
+            "gradientAccumulation": gradient_accumulation}
+
+
 class TrainingExample(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     schemaVersion: Literal[1]
@@ -192,10 +201,41 @@ def verify_review(pilot: dict[str, Any], reviews: list[dict[str, Any]], annotati
             "annotationHashes": sorted(hash_v1(row) for row in annotations)}
 
 
+def multitask_training_coverage(rows: list[TrainingExample]) -> dict[str, Any] | None:
+    """Count independent fitting checkpoints, not three supervised rows per prefix."""
+    fitting = [row for row in rows if row.partition == "weight_fit"]
+    if not any(row.provenance.get("exportProtocol") == "native-multitask-v2" for row in fitting):
+        return None
+    if any(row.provenance.get("exportProtocol") != "native-multitask-v2" for row in fitting):
+        raise ValueError("Native multitask fitting cannot silently include neutral-only or historical examples")
+    grouped: dict[tuple[str, str, str], list[TrainingExample]] = defaultdict(list)
+    for row in fitting:
+        grouped[row.familyId, row.provenance["sourceDatasetHash"], row.provenance["publicInputHash"]].append(row)
+    counts: dict[str, int] = defaultdict(int)
+    positive = 0
+    for (family, _, _), group in grouped.items():
+        by_kind = {(row.task, row.condition): row for row in group}
+        if len(group) != 3 or set(by_kind) != {("goal", None), ("rank_binary", "neutral"), ("rank_binary", "conditional")}:
+            raise ValueError("Native fitting requires complete goal, neutral and conditional checkpoint triplets")
+        neutral, conditional, goal = by_kind["rank_binary", "neutral"], by_kind["rank_binary", "conditional"], by_kind["goal", None]
+        if (neutral.candidateIds != conditional.candidateIds or neutral.candidateWindowHash != conditional.candidateWindowHash
+                or neutral.completion != conditional.completion or neutral.sourceFrameHash != conditional.sourceFrameHash
+                or neutral.provenance["labelHash"] != conditional.provenance["labelHash"]
+                or conditional.provenance["annotationHash"] != goal.provenance["annotationHash"]):
+            raise ValueError("Native fitting triplet does not preserve matched labels, goals and candidate windows")
+        counts[family] += 1
+        positive += int(any(json.loads(neutral.completion)["hits"]))
+    if len(counts) != 24 or min(counts.values()) < 4 or positive < 48:
+        raise ValueError("Native fitting requires 24 families, four complete checkpoints per family and 48 positive-read checkpoints")
+    return {"protocol": "native-multitask-v2", "fittingFamilies": len(counts), "completeCheckpoints": len(grouped),
+            "positiveReadCheckpoints": positive, "checkpointsPerFamily": dict(sorted(counts.items()))}
+
+
 def _dataset_body(rows: list[dict[str, Any]], review: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
     parsed = [TrainingExample.model_validate(row) for row in rows]
     if not parsed or len({row.id for row in parsed}) != len(parsed):
         raise ValueError("Nonempty unique training example IDs required")
+    coverage = multitask_training_coverage(parsed)
     families: dict[str, set[str]] = defaultdict(set)
     public_partitions: dict[str, set[str]] = defaultdict(set)
     identities: dict[str, set[str]] = defaultdict(set)
@@ -222,6 +262,8 @@ def _dataset_body(rows: list[dict[str, Any]], review: dict[str, Any] | None) -> 
             "datasetHash": dataset_hash, **{key: next(iter(values)) for key, values in identities.items()},
             **{key: sorted(family for family, parts in families.items() if partition in parts) for partition, key in FAMILY_KEYS.items()},
             "recipe": RECIPE, "review": review, "counts": {partition: len(records) for partition, records in grouped.items()}}
+    if coverage is not None:
+        body["multitaskCoverage"] = coverage
     return body, grouped
 
 

@@ -79,9 +79,12 @@ and IP association, pinned key and machine identity. Their heartbeat provenance
 includes those exact bindings and the dedicated known-hosts file's bytes. A
 changed file invalidates running checks even when its added text is a comment.
 Use `ubuntu@OBSERVED_IP` for Lambda, as an alias cannot establish the required
-receipt association. Select its private key through a narrowly scoped OpenSSH
-`Host OBSERVED_IP` configuration with `IdentityFile` and `IdentitiesOnly yes`;
-the guard does not accept or persist a key itself.
+receipt association. Set the optional `identityFilePath` to the existing local
+private-key file, absolute or relative to the guard configuration. The guard
+rejects missing files, directories, symlinks and newline-containing paths, then
+passes the resolved path as `ssh -i` with `IdentitiesOnly=yes`. It never reads,
+hashes or records key material. When omitted, existing OpenSSH identity selection
+applies, including a narrowly scoped `Host OBSERVED_IP` configuration.
 
 The guard verifies the actual inventory hash, instance ID, deployment sections
 and manifest source identity. It owns all three loopback listeners with

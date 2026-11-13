@@ -19,7 +19,7 @@ export interface InfraPredictorInput {
   preparedHash: string;
 }
 const publicSource = (id: string) => /^(?:requirement:|observation:|tool:|event:)/.test(id)
-  || /^(?:current_user_request|current_date|current_time|today|timezone|date_context)$/.test(id);
+  || /^(?:policy|current_user_request|current_date|current_time|today|timezone|date_context)$/.test(id);
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const naturalOrder = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
 const goalReferences = (goals: GoalSet) => goals.hypotheses.flatMap(goal => [...goal.sources, ...goal.constraints.flatMap(constraint => constraint.sources)]);
@@ -33,8 +33,9 @@ export function prepareInfraPredictorInput(frame: ExecutionFrame, options: {
   role: "goal" | "candidate"; instruction: string; candidates?: Candidate[]; goals?: GoalSet; memory?: ContextualMemoryRetrieval | null;
 }): InfraPredictorInput {
   const candidates = options.candidates ?? [];
+  if (Object.hasOwn(frame.sources, "policy") && frame.sources.policy !== frame.policy) throw new Error("Policy source differs from the current server-owned policy");
   const sourceIds = Object.keys(frame.sources).filter(publicSource).sort(naturalOrder);
-  const mandatoryIds = new Set(sourceIds.filter(id => /^requirement:/.test(id) || /^(?:current_user_request|current_date|current_time|today|timezone|date_context)$/.test(id)
+  const mandatoryIds = new Set(sourceIds.filter(id => /^requirement:/.test(id) || /^(?:policy|current_user_request|current_date|current_time|today|timezone|date_context)$/.test(id)
     // Replay retains original event IDs. Exact user text remains mandatory even when the event-kind index is absent.
     || id.startsWith("event:") && typeof frame.sources[id] === "string" && !!frame.sources[id]
       && frame.requestedObjective.includes(frame.sources[id] as string)));

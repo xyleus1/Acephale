@@ -153,6 +153,19 @@ export class LocalChatModelPort {
   }
   private url(path: string) { return `${this.endpoint.toString().replace(/\/$/, "")}${path}`; }
 
+  private async tokenize(input: Record<string, unknown>, signal: AbortSignal): Promise<{ count: number; tokens: number[] }> {
+    const response = await this.transport(this.url("/tokenize"), { method: "POST", signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...input, add_generation_prompt: true, add_special_tokens: false }) });
+    if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
+    const value: unknown = await response.json();
+    if (!isObject(value) || !safeInteger(value.count) || !safeInteger(value.max_model_len, 1)
+      || !Array.isArray(value.tokens) || value.tokens.length !== value.count
+      || value.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
+    if (value.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
+    return { count: value.count, tokens: value.tokens as number[] };
+  }
+
   /** Uses the serving tokenizer and frozen template; does not dispatch generation. */
   async measureInputTokens(messages: InfraChatMessage[], signal?: AbortSignal, tools: InfraFunctionTool[] = []): Promise<number> {
     validateInfraMessages(messages);
@@ -161,16 +174,8 @@ export class LocalChatModelPort {
     const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
     combined.throwIfAborted();
     this.emit(requestId, "model_tokenizer_started", { purpose: "candidate_window" });
-    const response = await this.transport(this.url("/tokenize"), { method: "POST", signal: combined,
-      headers: { "content-type": "application/json" }, body: JSON.stringify({ model: this.model, messages,
-        ...(tools.length ? { tools } : {}), add_generation_prompt: true, add_special_tokens: false,
-        chat_template_kwargs: { enable_thinking: false } }) });
-    if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
-    const value: unknown = await response.json();
-    if (!isObject(value) || !safeInteger(value.count) || !safeInteger(value.max_model_len, 1)
-      || !Array.isArray(value.tokens) || value.tokens.length !== value.count
-      || value.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
-    if (value.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
+    const value = await this.tokenize({ model: this.model, messages, ...(tools.length ? { tools } : {}),
+      chat_template_kwargs: { enable_thinking: false } }, combined);
     this.emit(requestId, "model_tokenizer_completed", { purpose: "candidate_window", inputTokens: value.count, latencyMs: milliseconds(started) });
     return value.count;
   }
@@ -202,17 +207,12 @@ export class LocalChatModelPort {
       const input = { model: this.model, messages, ...(request.tools?.length ? { tools: copy(request.tools) } : {}), chat_template_kwargs: { enable_thinking: false } };
       const started = process.hrtime.bigint();
       this.emit(request.id, "model_tokenizer_started", { attempt: tokenizerCalls });
-      const response = await this.transport(this.url("/tokenize"), { method: "POST", signal: combined,
-        headers: { "content-type": "application/json" }, body: JSON.stringify({ ...input, add_generation_prompt: true, add_special_tokens: false }) });
+      const value = await this.tokenize(input, combined);
       tokenizerCalls++;
-      if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
-      const value: unknown = await response.json(); tokenizerMs += milliseconds(started);
-      if (!isObject(value) || !safeInteger(value.count) || !safeInteger(value.max_model_len, 1)
-        || !Array.isArray(value.tokens) || value.tokens.length !== value.count || value.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
-      if (value.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
+      tokenizerMs += milliseconds(started);
       this.emit(request.id, "model_tokenizer_completed", { inputTokens: value.count, latencyMs: milliseconds(started) });
       if (value.count <= this.inputBudget && value.count + request.maxOutputTokens <= this.contextWindow) return {
-        messages, tokenIds: value.tokens as number[], inputTokens: value.count, inputHash: hash(input),
+        messages, tokenIds: value.tokens, inputTokens: value.count, inputHash: hash(input),
         selectedMessageIndexes: [...selected], omittedGroups, tokenizerCalls, tokenizerMs,
       };
       const next = optionalGroups.shift();

@@ -24,7 +24,7 @@ export function documentPublicInput(boundary: PublicBoundary, frame: ExecutionFr
       description: tool.function.description, side_effects: "read_only", cacheable: tool.function.name === "fetch_document" })),
     events: boundary.messages.map((message, seq) => ({ kind: "message", seq, role: message.role, content: message.content ?? "",
       call_id: message.id ?? null, tool_calls: copy(message.tool_calls ?? []) })),
-    sources: [{ id: "policy", kind: "policy", value: boundary.policy }, ...Object.entries(frame.sources).filter(([id]) => !id.startsWith("_"))
+    sources: [{ id: "policy", kind: "policy", value: boundary.policy }, ...Object.entries(frame.sources).filter(([id]) => id !== "policy" && !id.startsWith("_"))
       .map(([id, value]) => ({ id, kind: id.startsWith("requirement:") ? "user" : "observation", value }))] };
 }
 

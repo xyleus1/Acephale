@@ -197,7 +197,7 @@ def compare_predictor_replays(bundle_directory: Path, predictions: dict[str, Pat
     public = read_jsonl(bundle_directory / "public.jsonl")
     selection = load_reviewed_selection(partitions_path, memory_path, bundle["bundle_hash"], public)
     shared_fields = ("version", "kind", "sourceDatasetHash", "memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash",
-                     "predictionMode", "panelSelection", "partition", "predictionProtocol", "binaryTokenIds", "serving", "selection", "limit", "inferGoals", "rowIds", "compilerAuditVersion", "episodic")
+                     "predictionMode", "rawScoreSemantics", "panelSelection", "partition", "predictionProtocol", "binaryTokenIds", "serving", "selection", "limit", "inferGoals", "rowIds", "compilerAuditVersion", "episodic")
     shared = None
     by_checkpoint: dict[str, dict[str, Any]] = {}
     joined, lineage, times = [], {}, {}

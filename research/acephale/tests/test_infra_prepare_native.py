@@ -63,6 +63,48 @@ def test_explicit_additive_audit_binds_config_but_preserves_actor_and_private_ta
             build_collection(plan, deployment, catalog, "b" * 40, "a" * 64)
 
 
+def test_explicit_budget_amendment_is_bound_without_rewriting_legacy_caps():
+    root, plan, deployment, catalog = inputs()
+    policy = json.loads((root / "src/lib/acephale/contracts/budget-policy-v2.json").read_text())
+    binding = {"budgetPolicyHash": hash_v1(policy), "budgetAmendmentHash": "c" * 64}
+    _, legacy, _ = build_collection(plan, deployment, catalog, "b" * 40, "a" * 64)
+    _, amended, _ = build_collection(plan, deployment, catalog, "b" * 40, "a" * 64, budget_binding=binding)
+    assert legacy["budgets"]["infrastructureMicrodollars"] == 35_000_000
+    assert amended["budgets"]["infrastructureMicrodollars"] == 50_000_000
+    assert all(amended["budgets"][key] == value for key, value in binding.items())
+    for bad in ({"budgetPolicyHash": "d" * 64, "budgetAmendmentHash": "c" * 64},
+                {"budgetPolicyHash": hash_v1(policy)},
+                {**binding, "budgetAmendmentHash": "invalid"}):
+        with pytest.raises(ValueError, match="budget policy binding"):
+            build_collection(plan, deployment, catalog, "b" * 40, "a" * 64, budget_binding=bad)
+
+
+def test_custom_collection_keeps_future_partitions_declared_without_dispatch():
+    _, plan, deployment, catalog = inputs()
+    plan["collectionPartitions"] = ["weight_fit", "calibration"]
+    source = {"directory": "verified-custom", "receiptHash": "c" * 64,
+              "families": {"train": "weight_fit", "dev": "development", "test": "test"},
+              "taskFamilies": {("retail", str(index)): family for index, family in enumerate(("train", "dev", "test"))}}
+    config, manifest, bundle = build_collection(plan, deployment, catalog, "b" * 40, "a" * 64, custom_source=source)
+    assert len(config["runs"]) == 2
+    assert {row["familyId"] for row in config["runs"]} == {"train"}
+    assert len(bundle["tasks"]) == 3
+    assert manifest["data"]["developmentFamilies"] == ["dev"]
+    assert config["customTaskReceiptHash"] == source["receiptHash"]
+    plan["customTaskReceiptHash"] = "d" * 64
+    with pytest.raises(ValueError, match="receipt differs"):
+        build_collection(plan, deployment, catalog, "b" * 40, "a" * 64, custom_source=source)
+    plan["customTaskReceiptHash"] = source["receiptHash"]
+    declared, _, _ = build_collection(plan, deployment, catalog, "b" * 40, "a" * 64, custom_source=source)
+    assert declared == config
+    del plan["customTaskReceiptHash"]
+    with pytest.raises(ValueError, match="Custom learning"):
+        build_collection(plan, deployment, catalog, "b" * 40, "a" * 64)
+    plan["tasks"][1]["split"] = "train"
+    with pytest.raises(ValueError, match="cannot reassign"):
+        build_collection(plan, deployment, catalog, "b" * 40, "a" * 64, custom_source=source)
+
+
 @pytest.mark.parametrize("case", ["duplicate", "family", "missing-task", "unobserved", "seeds"])
 def test_preparation_refuses_ambiguous_or_fabricated_inputs(case):
     _, plan, deployment, catalog = inputs()

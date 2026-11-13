@@ -58,6 +58,58 @@ def test_private_tunnels_use_verified_host_keys_and_exact_loopback_destinations(
     assert provenance["manifestHash"] == hash_v1(json.loads((tmp_path / "manifest.json").read_text()))
 
 
+def test_explicit_ssh_identity_resolves_without_reading_or_recording_key(tmp_path, monkeypatch):
+    fixture(tmp_path)
+    key = tmp_path / "private key"
+    key.write_text("fixture key material must never enter provenance")
+    path = tmp_path / "guard.json"
+    value = json.loads(path.read_text())
+    value["identityFilePath"] = key.name
+    path.write_text(json.dumps(value))
+    original = Path.open
+
+    def open_without_key(self, *args, **kwargs):
+        if self == key:
+            pytest.fail("Guard must not read the private key")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_without_key)
+    config, provenance = load_guard(path)
+    for command in (tunnel_command(config), probe_command(config, provenance)):
+        assert command[command.index("-i") + 1] == str(key.resolve())
+        assert "IdentitiesOnly=yes" in command and "StrictHostKeyChecking=yes" in command
+    assert "identityFilePath" not in provenance
+    assert "fixture key material" not in json.dumps(provenance)
+    key.unlink()
+    with pytest.raises(ValueError, match="identityFilePath"):
+        tunnel_command(config)
+
+
+@pytest.mark.parametrize("value", [None, 1, True, [], "", "missing", ".", "private\nkey", "private\rkey", "private\x00key"])
+def test_invalid_identity_file_rejected_before_ssh(tmp_path, value):
+    fixture(tmp_path)
+    path = tmp_path / "guard.json"
+    config = json.loads(path.read_text())
+    config["identityFilePath"] = value
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError, match="identityFilePath"):
+        load_guard(path)
+
+
+def test_identity_symlink_is_rejected_before_resolution(tmp_path, monkeypatch):
+    fixture(tmp_path)
+    key = tmp_path / "key"
+    key.write_text("fixture")
+    path = tmp_path / "guard.json"
+    config = json.loads(path.read_text())
+    config["identityFilePath"] = key.name
+    path.write_text(json.dumps(config))
+    original = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda self: self == key or original(self))
+    with pytest.raises(ValueError, match="symlinks"):
+        load_guard(path)
+
+
 def test_mismatched_native_urls_wrong_remote_host_and_model_are_rejected(tmp_path):
     _, provenance = fixture(tmp_path)
     remote, local = responses(provenance)

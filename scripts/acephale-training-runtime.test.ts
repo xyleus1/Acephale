@@ -6,7 +6,8 @@ import { LocalChatModelPort, type InfraTokenLogprob } from "../src/lib/acephale/
 import { PREDICTOR_BASE, predictorModelIdentity, validateTrainedPredictor, type TrainedPredictorArtifact } from "../src/lib/acephale/predictor-artifact";
 import { decodeBinaryRanking } from "../services/acephale-runtime/infra-binary-ranking";
 import { InfraLocalPredictors, predictorContractHash, type InfraProbabilityCalibration } from "../services/acephale-runtime/infra-predictors";
-import { compileGoalTrainingExample, compileRankTrainingExamples, trainingPartition, type TrainingSource, type GoalDraft } from "../services/acephale-runtime/infra-training-export";
+import { compileGoalTrainingExample, compileRankTrainingExamples, compileNativeTrainingExamples, planNativeTrainingExport, trainingPartition, type TrainingSource, type GoalDraft } from "../services/acephale-runtime/infra-training-export";
+import { annotationGoalDraft, bindTeacherDraft, type InfraAnnotationInput } from "../services/acephale-runtime/infra-goal-annotation";
 import { historicalGoalSource } from "./acephale-training-export";
 import { LEXICAL_MEMORY_RETRIEVAL_HASH } from "../src/lib/acephale/experience-memory";
 
@@ -104,7 +105,8 @@ test("reviewed family selection provenance survives canonical calibration and ru
   const selectionBody = { version: 1, weightFitFamilies: ["fit"], calibrationFamilies: ["cal"], developmentFamilies: ["dev"],
     testFamilies: ["test"], sourceDesignReviewHash: hash("review"), partitionHash: hash("partition"), memoryHash: hash("memory") };
   const selection = { ...selectionBody, contentHash: hash(selectionBody) };
-  const body = { version: 2 as const, probabilitySemantics: "independent_next_batch_hit" as const,
+  const body = { version: 3 as const, probabilitySemantics: "next_batch_invocation_membership" as const,
+    rawScoreSemantics: "autoregressive_binary_conditional" as const, calibratedScoreSemantics: "empirical_next_batch_membership" as const,
     predictionMode: "selected_candidates" as const, fittingFamilies: ["cal"], validationFamilies: ["dev"],
     sourceDatasetHash: hash("dataset"), bins: [{ upper: 1, probability: 0.5, count: 2 }],
     provenance: { model: predictorModelIdentity(profile), memoryHash: hash("memory"), condition: "neutral",
@@ -114,6 +116,10 @@ test("reviewed family selection provenance survives canonical calibration and ru
   const runtime = new InfraLocalPredictors(modelFixture().port, { ...profile, calibration, expectedCandidateCompilerHash: hash("compiler") });
   assert.equal(runtime.contractHash, body.provenance.predictorContractHash);
   assert.equal(calibration.provenance.reviewedSelection.contentHash, hash(selectionBody));
+  const { rawScoreSemantics: _raw, calibratedScoreSemantics: _calibrated, ...legacyBody } = body;
+  const legacy = { ...legacyBody, version: 2 as const, probabilitySemantics: "independent_next_batch_hit" as const };
+  assert.throws(() => new InfraLocalPredictors(modelFixture().port, { ...profile,
+    calibration: { ...legacy, contentHash: hash(legacy) }, expectedCandidateCompilerHash: hash("compiler") }), /raw score semantics/);
 });
 test("training goal export uses the actual compiler, excludes target metadata and checks visible sources", async () => {
   const fake = modelFixture();
@@ -155,7 +161,8 @@ test("derived artifact identity binds fitting families and runtime rejects base 
   const fake = modelFixture();
   assert.throws(() => new InfraLocalPredictors(fake.port, { trainedPredictor: artifact }), /Serving model/);
   const changed = copy(artifact); changed.adapterHash = hash("another"); assert.throws(() => validateTrainedPredictor(changed), /identity/);
-  const calibrationBody = { version: 2 as const, probabilitySemantics: "independent_next_batch_hit" as const, predictionMode: "selected_candidates" as const,
+  const calibrationBody = { version: 3 as const, probabilitySemantics: "next_batch_invocation_membership" as const,
+    rawScoreSemantics: "autoregressive_binary_conditional" as const, calibratedScoreSemantics: "empirical_next_batch_membership" as const, predictionMode: "selected_candidates" as const,
     fittingFamilies: ["fit"], validationFamilies: ["dev"], sourceDatasetHash: hash("data"), bins: [{ upper: 1, probability: 0.5, count: 10 }] };
   const calibration: InfraProbabilityCalibration = { ...calibrationBody, contentHash: hash(calibrationBody) };
   const serving = new LocalChatModelPort({ baseUrl: "http://localhost:8000", model: artifact.servedModel });
@@ -172,4 +179,84 @@ test("historical goal conversion preserves public source and original annotation
   assert.equal(converted.annotationHash, hash(wrapper)); assert.deepEqual(converted.frame.sources["event:historical_public_prefix"], prefix);
   assert.equal(converted.draft.hypotheses[0]!.sources[0].sourceId, "event:historical_public_prefix");
   assert.equal(wrapper.goalDraft.hypotheses[0]!.sources[0].sourceId, "checkpoint");
+});
+
+function nativeAnnotationFixture() {
+  const input = { policy: frame.policy, tools: [], events: [], sources: [
+    { id: "policy", kind: "policy", value: frame.policy },
+    { id: "requirement:0", kind: "user", value: frame.requestedObjective },
+    { id: "observation:1", kind: "observation", value: { id: "CURRENT", items: [{ "a/b": "VALUE" }] } },
+  ] };
+  const publicInput: InfraAnnotationInput = { checkpoint_id: source.id, input_hash: hash(input), request_revision: "request-1", input };
+  const annotation = bindTeacherDraft({ unknown_probability: 0, goals: [{ action: "retrieve", object_type: "record",
+    objective: "Read CURRENT", confidence: 1, sources: [{ source_id: "requirement:0", pointer: "" }],
+    constraints: [{ text: "Use the current value", sources: [{ source_id: "observation:1", pointer: "/items/0/a~1b" }] },
+      { text: "Read only", sources: [{ source_id: "policy", pointer: "" }] }],
+  }] }, publicInput, input.sources.map(row => row.id));
+  return { publicInput, annotation, nativeSource: { ...source, publicInputHash: publicInput.input_hash },
+    nativeFrame: { ...frame, sources: Object.fromEntries(input.sources.map(row => [row.id, row.value])) } };
+}
+
+test("native teacher output produces matched ranking examples and a grounded goal target", async () => {
+  const { publicInput, annotation, nativeSource, nativeFrame } = nativeAnnotationFixture(), fake = modelFixture();
+  let labelsRead = false;
+  const examples = await compileNativeTrainingExamples({ model: fake.port, source: nativeSource, partitions, frame: nativeFrame,
+    annotation, publicInput, publicCandidates: () => { assert.equal(labelsRead, false); return candidates; }, readTarget: async () => {
+      labelsRead = true;
+      return { checkpoint_id: source.id, input_hash: publicInput.input_hash, source: "observed-authoritative-next-decision", target_kind: "READ",
+        next_invocations: [{ tool: "get_0", arguments: { id: "CURRENT" } }], eligible_reads: [{ tool: "get_0", arguments: { id: "CURRENT" } }] };
+    } });
+  assert.deepEqual(examples.map(row => [row.task, row.condition]), [["rank_binary", "neutral"], ["rank_binary", "conditional"], ["goal", null]]);
+  assert.equal(examples[0].candidateWindowHash, examples[1].candidateWindowHash);
+  assert.deepEqual(examples[0].candidateIds, examples[1].candidateIds);
+  assert.equal(examples[0].completion, examples[1].completion);
+  assert.ok(examples.every(row => row.provenance.exportProtocol === "native-multitask-v2"));
+  assert.equal(examples[1].provenance.annotationHash, hash(annotation));
+  const target = JSON.parse(examples[2].completion);
+  assert.deepEqual(target.hypotheses[0].constraints[0].sources[0], { sourceId: "observation:1", path: ["items", 0, "a/b"] });
+  assert.deepEqual(target.hypotheses[0].constraints[1].sources[0], { sourceId: "policy", path: [] });
+  assert.equal(target.revisionHash, undefined);
+  assert.ok(!JSON.stringify(examples[2].prompt).includes("Use the current value"));
+  assert.ok(fake.bodies.every(row => row.path === "/tokenize"));
+  await assert.rejects(compileGoalTrainingExample({ model: fake.port, source: nativeSource, partitions,
+    frame: { ...nativeFrame, sources: { ...nativeFrame.sources, policy: "Different policy" } },
+    readTarget: async () => { throw new Error("Must reject before reading annotation"); } }), /Policy source differs/);
+});
+
+test("native annotation conversion rejects stale, malformed and unsupported source bindings", () => {
+  const { publicInput, annotation } = nativeAnnotationFixture();
+  for (const mutate of [
+    (row: typeof annotation) => { row.request_revision = "stale"; },
+    (row: typeof annotation) => { row.input_hash = hash("different"); },
+    (row: typeof annotation) => { row.goals[0].sources[0].source_id = "private_verdict"; },
+    (row: typeof annotation) => { row.goals[0].sources[0].value_hash = hash("changed"); },
+    (row: typeof annotation) => { row.goals[0].constraints[0].sources[0].pointer = "/items/01/a~1b"; },
+    (row: typeof annotation) => { row.goals[0].constraints[0].sources[0].pointer = "/items/0/a~2b"; },
+  ]) { const changed = copy(annotation); mutate(changed); assert.throws(() => annotationGoalDraft(changed, publicInput)); }
+  assert.throws(() => annotationGoalDraft({ ...annotation, goalDraft: goal }, publicInput));
+  assert.throws(() => annotationGoalDraft(annotation, { ...publicInput, input: { ...publicInput.input, policy: "changed" } }));
+});
+
+test("missing native annotations and incomplete conditioning cannot silently export neutral examples", async () => {
+  const { publicInput, nativeSource, nativeFrame } = nativeAnnotationFixture(), fake = modelFixture();
+  const options = { model: fake.port, source: nativeSource, partitions, frame: nativeFrame, publicCandidates: () => candidates,
+    readTarget: async () => { throw new Error("Private target must not be reached"); } };
+  await assert.rejects(compileNativeTrainingExamples({ ...options, publicInput, annotation: undefined }), /annotation/);
+  await assert.rejects(compileRankTrainingExamples({ ...options, conditioningAnnotationHash: hash("annotation") }), /both goals/);
+  assert.equal(fake.bodies.length, 0);
+});
+
+test("native export separates selected fit triplets from declared neutral evaluation and excluded holdout", () => {
+  const fit = Array.from({ length: 101 }, (_, index) => ({ checkpoint_id: `fit-${index}`, family_id: "fit", split: "train" }));
+  const rows = [...fit, { checkpoint_id: "cal-1", family_id: "cal", split: "train" },
+    { checkpoint_id: "dev-1", family_id: "dev", split: "development" }, { checkpoint_id: "test-1", family_id: "test", split: "test" }];
+  const selection = { fittingCheckpointIds: fit.slice(0, 100).map(row => row.checkpoint_id), neutralOnlyPartitions: ["calibration", "development"] as ("calibration" | "development")[] };
+  const planned = planNativeTrainingExport(rows, partitions, selection);
+  assert.equal(planned.get("fit-0"), "multitask"); assert.equal(planned.get("fit-100"), "unselected_fit");
+  assert.equal(planned.get("cal-1"), "neutral"); assert.equal(planned.get("dev-1"), "neutral");
+  assert.equal(planned.get("test-1"), "heldout_excluded");
+  for (const replacement of ["dev-1", "test-1", "absent"]) {
+    assert.throws(() => planNativeTrainingExport(rows, partitions, { ...selection, fittingCheckpointIds: [replacement, ...selection.fittingCheckpointIds.slice(1)] }), /absent or outside/);
+  }
+  assert.throws(() => planNativeTrainingExport(rows, partitions, { ...selection, neutralOnlyPartitions: [] }), /explicit neutral/);
 });

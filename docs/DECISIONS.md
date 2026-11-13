@@ -1,5 +1,41 @@
 # Acephale decisions
 
+## 2026-11-13: Native goal supervision and staged training
+
+Keep the Qwen actor frozen and fit only the auxiliary predictor. Export matched
+neutral/conditioned ranking examples and goal targets from the teacher's actual
+source-bound annotation contract. Preserve policy citations only when they match
+the current policy. Record raw autoregressive bit probabilities separately from
+calibrated next-batch membership; historical v2 artifacts are not rewritten.
+
+The fresh task design holds out combinations of five primitive operations per
+domain. Its 24 fitting, six calibration, six development and eight test families
+have two generated entity variants each. Primitive intents and native product/
+flight catalogs are shared deliberately. This tests compositional generalization,
+not unseen intents or an official benchmark score. Verify each reference outcome
+and missing-mutation negative control before actor execution. Live consent and
+authentication assertions remain separate measured constraints.
+
+The user approved a rebalance within the original $500 ceiling: infrastructure
+50, preparation 45, training collection 30, development/calibration 40, held-out
+240, replay 30 and protected contingency 65. A versioned sidecar retains every
+old reservation and adds four fitting hours plus a 15-minute smoke allowance.
+A separate access amendment may replace deleted temporary provider access, while
+preserving the original financial plan. No paid lease extends beyond its deadline.
+
+Collect 60 fitting/calibration base trials with a $0.40 hosted-call cap, reserving
+$24 against the remaining training allocation. Development uses three paired arms
+with a $0.50 cap per trial. These are ceilings, not expected costs. Main training
+may have no development loss dataset; calibration and development evaluations
+remain subsequent stages, and both predeclared seeds are retained.
+
+Split the next 9.75 GPU hours into a 2.5-hour collection/smoke lease and a
+7.25-hour fitting/evaluation lease, separated by the human label review. Keep
+the two termination canaries and $4 infrastructure overhead reservation within
+the remaining infrastructure allocation. The eight fresh test families provide
+at most 96 held-out slots, further limited by development-based cost sizing.
+These are time and cost bounds, not promises that every stage will fit.
+
 ## 2026-11-10: Training windows are operational ledger records
 
 Exclude trainingWindows from the immutable versions-amendment financial binding,

@@ -141,6 +141,18 @@ def test_fixed_panel_scores_all_next_batch_hits_as_independent_marginals():
     assert "not full-action" in report["interpretation"]
 
 
+def test_binary_panel_reports_conditional_raw_scores_and_rejects_relabelling():
+    rows = panel_rows()
+    for row in rows:
+        row.update(probability_semantics="next_batch_invocation_membership", raw_score_semantics="autoregressive_binary_conditional")
+    report = score_candidate_panels(rows, bootstrap_samples=100)
+    assert report["schema_version"] == "acephale-fixed-panel-report-v3"
+    assert report["raw_score_semantics"] == "autoregressive_binary_conditional"
+    rows[0]["probability_semantics"] = "independent_next_batch_hit"
+    with pytest.raises(ValueError, match="semantics"):
+        score_candidate_panels(rows)
+
+
 @pytest.mark.parametrize("defect", ["missing_score", "different_panel", "different_labels", "missing_checkpoint", "nan", "first_call", "family_split"])
 def test_fixed_panel_comparisons_fail_closed_on_noncomparable_outputs(defect):
     rows = panel_rows()

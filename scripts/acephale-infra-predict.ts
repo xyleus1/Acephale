@@ -2,8 +2,8 @@ import { readFile, writeFile, mkdir, appendFile, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { hash, copy, canonical } from "../src/lib/acephale/canonical";
-import type { Candidate, ExecutionFrame, Json, GoalSet } from "../src/lib/acephale/contracts/generated";
-import { validateContract } from "../src/lib/acephale/contracts/validate";
+import { NEXT_BATCH_MEMBERSHIP, rawScoreSemantics } from "../src/lib/acephale/score-semantics";
+import type { Candidate, GoalSet } from "../src/lib/acephale/contracts/generated";
 import { predictorModelIdentity, resolvePredictorProfile, type PredictorProfile } from "../src/lib/acephale/predictor-artifact";
 import { LocalChatModelPort } from "../src/lib/acephale/infra-model";
 import { LEXICAL_MEMORY_RETRIEVAL_HASH, validateMemoryArtifact } from "../src/lib/acephale/experience-memory";
@@ -12,25 +12,15 @@ import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-c
 import { InfraLocalPredictors, predictorContractHash } from "../services/acephale-runtime/infra-predictors";
 import { NativeReadPolicy } from "../services/acephale-runtime/native-read-policy";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
-import { documentPublicInput, verifyDocumentBundle } from "./acephale-infra-document-data";
-import { documentFrame } from "../services/acephale-runtime/infra-document-runner";
-import { DOCUMENT_TOOLS, documentCandidates } from "../services/acephale-runtime/document-adapter";
-import type { PublicBoundary } from "../services/acephale-runtime/actor";
+import { verifyDocumentBundle } from "./acephale-infra-document-data";
+import { documentCandidates } from "../services/acephale-runtime/document-adapter";
+import { publicInfraFrame, type PublicRow } from "../services/acephale-runtime/infra-public-checkpoint";
 import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/acephale-runtime/infra-memory-services";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/acephale-runtime/infra-hosted-workers";
 import type { EpisodicRetrievalPort } from "../src/lib/acephale/episodic-retrieval";
 
-export interface PublicRow {
-  checkpoint_id: string; input_hash: string; episode_id: string; family_id: string; split: string; domain: string; through_seq: number;
-  environment_version: string; tool_schema_hash: string; runtime_tool_schema_hash?: string;
-  checkpoint_number?: number;
-  document_boundary?: PublicBoundary;
-  scope: { tenant_id: string; principal_id: string; authorization_revision: string };
-  input: { policy: string; sources: { id: string; kind: string; value: Json }[];
-    events: { kind: string; seq: number; role?: string; content?: string; tool?: string; status?: string; [key: string]: unknown }[];
-    tools: { name: string; parameters: Record<string, unknown> }[] };
-}
+export { publicInfraFrame, type PublicRow } from "../services/acephale-runtime/infra-public-checkpoint";
 /** Round-robin family partitions so a bounded replay includes development rows. */
 export function selectInfraReplayRows<T extends { split: string; family_id: string; checkpoint_id: string }>(rows: T[], limit: number, partition: "calibration" | "test" = "calibration"): T[] {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid replay bound");
@@ -66,36 +56,6 @@ export function freezeInfraReplayRetrieval(retrieve: EpisodicRetrievalPort): Epi
     signal.throwIfAborted();
     return copy(memory);
   };
-}
-export function publicInfraFrame(row: PublicRow, snapshotId: string): ExecutionFrame {
-  if (row.domain === "documents") {
-    if (hash(row.input) !== row.input_hash || !["train", "development", "test"].includes(row.split) || !row.document_boundary
-      || !Number.isSafeInteger(row.checkpoint_number) || row.checkpoint_number! < 0
-      || hash(row.document_boundary.tools) !== hash(DOCUMENT_TOOLS) || row.runtime_tool_schema_hash !== hash(DOCUMENT_TOOLS)) throw new Error("Invalid document replay provenance");
-    const frame = documentFrame(row.document_boundary, `replay:${row.episode_id}`, row.checkpoint_number!, {
-      tenantId: row.scope.tenant_id, principalId: row.scope.principal_id, authorizationVersion: row.scope.authorization_revision,
-      environmentVersion: row.environment_version, toolSchemaHash: row.runtime_tool_schema_hash }, snapshotId);
-    if (hash(documentPublicInput(row.document_boundary, frame)) !== row.input_hash) throw new Error("Document replay prefix differs from declared public input");
-    validateContract("ExecutionFrame", frame); return frame;
-  }
-  if (hash(row.input) !== row.input_hash || !["train", "development", "test"].includes(row.split)
-    || row.runtime_tool_schema_hash !== undefined && !/^[a-f0-9]{64}$/.test(row.runtime_tool_schema_hash)
-    || !["retail", "airline"].includes(row.domain) || !Array.isArray(row.input.sources) || row.input.events.some(event => event.seq > row.through_seq)) throw new Error("Invalid public checkpoint provenance");
-  const sources: Record<string, Json> = Object.fromEntries(row.input.sources.map(source => [source.id, copy(source.value)]));
-  const requirements = row.input.events.filter(event => event.kind === "message" && event.role === "user" && typeof event.content === "string");
-  for (const event of requirements) {
-    const id = `requirement:${event.seq}`;
-    if (Object.hasOwn(sources, id) && sources[id] !== event.content) throw new Error("Conflicting public requirement provenance");
-    sources[id] = event.content!;
-  }
-  sources._binding_events = copy(row.input.events.filter(event => ["tool_request", "tool_result"].includes(event.kind))) as Json;
-  sources._signatures = row.input.events.filter(event => event.kind === "tool_result").map(event => `${event.tool}:${event.status}`);
-  const frame: ExecutionFrame = { schemaVersion: 1, runId: `replay:${row.episode_id}`, boundary: row.through_seq + 1,
-    scope: { tenantId: row.scope.tenant_id, principalId: row.scope.principal_id, authorizationVersion: row.scope.authorization_revision,
-      environmentVersion: row.environment_version, toolSchemaHash: row.runtime_tool_schema_hash ?? row.tool_schema_hash }, snapshotId,
-    requestedObjective: requirements.map(event => event.content).join("\n") || "No requested objective is visible at this checkpoint.",
-    policy: row.input.policy, sources, goals: { schemaVersion: 1, hypotheses: [], unknown: 1, revisionHash: hash({}) } };
-  validateContract("ExecutionFrame", frame); return frame;
 }
 export interface InfraPredictionEpisodicConfig { embeddingsPath: string; budgetDirectory: string; ledgerCheckpointPath: string }
 /** Preserve failed requests as well as successful compilation and dispatch evidence. */
@@ -139,8 +99,8 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
       record: event => retrievalEvents.push(event) });
     episodicLineage = { embeddingsHash: embeddings.contentHash, ledgerCheckpointHash: hash(checkpoint), budgetPathHash: hash(ledgerPath) };
   }
-  const lineage = { version: 2, kind: "uncalibrated_prediction_replay", model: modelIdentity, memoryHash: memory.contentHash,
-    probabilitySemantics: "independent_next_batch_hit", predictionMode: input.fixedPanel ? "fixed_panel" : "selected_candidates",
+  const lineage = { version: 3, kind: "uncalibrated_prediction_replay", model: modelIdentity, memoryHash: memory.contentHash,
+    probabilitySemantics: NEXT_BATCH_MEMBERSHIP, rawScoreSemantics: rawScoreSemantics(profile.protocol), predictionMode: input.fixedPanel ? "fixed_panel" : "selected_candidates",
     panelSelection: input.fixedPanel ? "first_three_common_compiler_candidates_before_goal_inference_v1" : null,
     partition: input.partition ?? "calibration", compilerAuditVersion: 1,
     predictionProtocol: profile.protocol, binaryTokenIds: profile.binaryTokenIds ?? null,

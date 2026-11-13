@@ -105,6 +105,7 @@ export async function runLive(configurationPath: string, output: string) {
         const metadata = await stat(ledgerPath);
         if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
         embeddingBudget = new DurableBudget(ledgerPath);
+        embeddingBudget.validateManifestPolicy(manifest.budgets);
         validateInfraLedgerCheckpoint(await artifact(config.ledgerCheckpointPath), embeddingBudget.ledger, ledgerPath);
         const allocation = config.stage === "collection" ? "training" : config.stage;
         memoryServices = createInfraMemoryServices({ memory, embeddings, budget: embeddingBudget.ledger, allocation,

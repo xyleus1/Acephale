@@ -1,6 +1,7 @@
 import { resolvePredictorProfile } from "./predictor-artifact";
 import Ajv2020 from "ajv/dist/2020";
 import schema from "./contracts/infra-manifest-v2.schema.json";
+import budgetPolicy from "./contracts/budget-policy-v2.json";
 import { canonical, copy, hash } from "./canonical";
 import type { InfraExperimentManifestV2 } from "./contracts/infra-manifest-v2.generated";
 
@@ -17,6 +18,9 @@ export function validateInfraManifest(value: unknown): asserts value is InfraExp
   canonical(value);
   if (!validate(value)) throw new Error(`Invalid infra manifest: ${JSON.stringify(validate.errors)}`);
   const manifest = value as unknown as InfraExperimentManifestV2;
+  if (manifest.budgets.budgetPolicyHash !== undefined && manifest.budgets.budgetPolicyHash !== hash(budgetPolicy)) {
+    throw new Error("Unknown budget policy; preserve the declared study amendment");
+  }
   if (manifest.actor.repository !== INFRA_MODEL_PINS.actor.repository || manifest.actor.revision !== INFRA_MODEL_PINS.actor.revision
     || manifest.predictor.repository !== INFRA_MODEL_PINS.predictor.repository || manifest.predictor.revision !== INFRA_MODEL_PINS.predictor.revision
     || manifest.runtime.imageDigest !== INFRA_MODEL_PINS.image) throw new Error("Unexpected model or runtime pin; create an explicit new experiment profile");

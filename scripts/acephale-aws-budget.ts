@@ -2,7 +2,7 @@ import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, wr
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
-import { ALLOCATIONS, type Reservation } from "../src/lib/acephale/budget";
+import { type Reservation } from "../src/lib/acephale/budget";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 
 export interface AwsBudgetRequest {
@@ -28,6 +28,7 @@ export function awsBudget(request: AwsBudgetRequest) {
   }
   const owner = new DurableBudget(path);
   try {
+    const allocations = owner.ledger.allocations;
     const current = owner.ledger.snapshot(), byId = new Map(current.map(row => [row.id, row]));
     for (const prior of checkpoint.entries) {
       const next = byId.get(prior.id);
@@ -40,7 +41,7 @@ export function awsBudget(request: AwsBudgetRequest) {
       const roots = rows.filter(row => !row.parentId);
       const committed = roots.reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
       const nonContingency = roots.filter(row => row.allocation !== "contingency").reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
-      if (committed > 500_000_000 || nonContingency > 500_000_000 - ALLOCATIONS.contingency) throw new Error("Study total or protected contingency exceeded");
+      if (committed > 500_000_000 || nonContingency > 500_000_000 - allocations.contingency) throw new Error("Study total or protected contingency exceeded");
       return { committedMicrodollars: committed, infrastructureMicrodollars: roots.filter(row => row.allocation === "infrastructure")
         .reduce((sum, row) => sum + (row.actual ?? row.maximum), 0), entriesHash: hash(rows), reservations: rows.length };
     };
@@ -67,7 +68,7 @@ export function awsBudget(request: AwsBudgetRequest) {
     if (request.operation === "reserve") {
       const id = request.reservationId, maximum = request.maximumMicrodollars;
       if (!id || !new RegExp(`^${provider}-infra:[a-f0-9-]{36}$`).test(id) || !Number.isSafeInteger(maximum) || maximum! < 1
-        || maximum! > ALLOCATIONS.infrastructure) throw new Error("Invalid AWS infrastructure reservation");
+        || maximum! > allocations.infrastructure) throw new Error("Invalid AWS infrastructure reservation");
       const existing = byId.get(id);
       if (existing) {
         if (request.requireNewReservation === true) throw new Error("Prior AWS reservation cannot fund another launch");
@@ -75,11 +76,12 @@ export function awsBudget(request: AwsBudgetRequest) {
           throw new Error("Existing AWS reservation differs or is already settled");
         }
       } else {
-        if (totals().committedMicrodollars + maximum! > 500_000_000 - ALLOCATIONS.contingency) throw new Error("Protected study contingency unavailable");
+        if (totals().committedMicrodollars + maximum! > 500_000_000 - allocations.contingency) throw new Error("Protected study contingency unavailable");
         owner.ledger.reserve(id, "infrastructure", maximum!);
       }
     } else if (request.operation !== "inspect" && request.operation !== "bind") throw new Error("Unsupported budget operation");
     return { version: 1, ledgerPathHash: hash(path), checkpointHash: request.checkpointHash, ...totals(),
+      ...(owner.policy ? { budgetPolicyHash: owner.policy.policyHash, budgetAmendmentHash: owner.policy.contentHash } : {}),
       ...(request.operation === "reserve" ? { reservationId: request.reservationId, maximumMicrodollars: request.maximumMicrodollars } : {}) };
   } finally { owner.close(); }
 }

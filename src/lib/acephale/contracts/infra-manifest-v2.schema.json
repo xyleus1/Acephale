@@ -48,9 +48,13 @@
       "required": ["totalCeilingMicrodollars", "trancheMicrodollars", "infrastructureMicrodollars", "protectedContingencyMicrodollars", "maximumGpuHours", "ledgerCheckpointHash"],
       "properties": {
         "totalCeilingMicrodollars": { "const": 500000000 }, "trancheMicrodollars": { "type": "integer", "minimum": 0, "maximum": 150000000 },
-        "infrastructureMicrodollars": { "type": "integer", "minimum": 0, "maximum": 35000000 }, "protectedContingencyMicrodollars": { "const": 65000000 },
-        "maximumGpuHours": { "type": "number", "exclusiveMinimum": 0, "maximum": 24 }, "ledgerCheckpointHash": { "$ref": "#/$defs/Sha256" }
-      }
+        "infrastructureMicrodollars": { "type": "integer", "minimum": 0, "maximum": 50000000 }, "protectedContingencyMicrodollars": { "const": 65000000 },
+        "maximumGpuHours": { "type": "number", "exclusiveMinimum": 0, "maximum": 24 }, "ledgerCheckpointHash": { "$ref": "#/$defs/Sha256" },
+        "budgetPolicyHash": { "$ref": "#/$defs/Sha256" }, "budgetAmendmentHash": { "$ref": "#/$defs/Sha256" }
+      },
+      "dependentRequired": { "budgetPolicyHash": ["budgetAmendmentHash"], "budgetAmendmentHash": ["budgetPolicyHash"] },
+      "if": { "properties": { "budgetPolicyHash": {} }, "required": ["budgetPolicyHash"] },
+      "else": { "properties": { "infrastructureMicrodollars": { "type": "integer", "maximum": 35000000 } } }
     },
     "protocol": {
       "type": "object", "additionalProperties": false,

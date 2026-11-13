@@ -302,18 +302,23 @@ def training_preflight(hardware: str) -> dict[str, Any]:
             "actorStopped": True, "gpuProcesses": 0, "hostPreflight": value}
 
 
-def training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float) -> dict[str, Any]:
+def training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float,
+                   kind: str = "fit") -> dict[str, Any]:
     with ledger_lock(ledger_path):
-        return _training_lease(ledger_path, lease_id, preflight_path, output, hours)
+        return _training_lease(ledger_path, lease_id, preflight_path, output, hours, kind)
 
 
-def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float) -> dict[str, Any]:
+def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float,
+                    kind: str = "fit") -> dict[str, Any]:
     ledger = checked_bound_ledger(ledger_path)
+    amendment = effective_budget_policy(ledger)
+    policy = amendment["policy"] if amendment else None
     lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
     current = time.time()
     checked = read_json(preflight_path)
     duration = finite_number(hours, "training hours", 0.01)
-    if (lease["status"] != "active" or not lease["instanceId"] or duration > 2
+    max_seconds = policy["maxTrainingWindowSeconds"] if policy else 7200
+    if (kind not in {"fit", "smoke"} or lease["status"] != "active" or not lease["instanceId"] or duration * 3600 > max_seconds
             or checked.get("profile") != "acephale-training-preflight-v1" or checked.get("actorStopped") is not True
             or checked.get("gpuProcesses") != 0 or not 0 <= current - checked.get("observedAt", 0) <= 120
             or checked.get("hardwareProfileHash") != lease["quote"]["hardwareProfileHash"]):
@@ -322,7 +327,12 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
     if deadline <= current:
         raise ValueError("GPU lease expired")
     windows = ledger.setdefault("trainingWindows", [])
-    if sum(row["reservedSeconds"] for row in windows) + deadline - current > 7200:
+    if policy:
+        extra = windows[len(amendment["baselineTrainingWindows"]):]
+        limit = policy["additionalSmokeSeconds"] if kind == "smoke" else policy["additionalFittingSeconds"]
+        if sum(row["reservedSeconds"] for row in extra if row["trainingKind"] == kind) + deadline - current > limit:
+            raise ValueError("Additional training windows exceed the approved kind allowance")
+    elif sum(row["reservedSeconds"] for row in windows) + deadline - current > 7200:
         raise ValueError("Combined training windows exceed the approved two-hour ceiling")
     if output.exists():
         raise ValueError("Training lease output must be new")
@@ -331,8 +341,11 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
              "startedAt": current, "deadline": deadline, "actorStopped": True,
              "studyReservation": lease["studyReservation"], "studyBindingHash": ledger["planHash"],
              "providerLeaseHash": digest(lease), "preflightHash": sha256(preflight_path)}
+    if policy:
+        value.update(version=2, profile="acephale-training-lease-v2", trainingKind=kind, budgetPolicy=policy,
+                     budgetPolicyHash=amendment["policyHash"], budgetAmendmentHash=amendment["contentHash"])
     windows.append({"leaseId": lease_id, "reservedSeconds": deadline - current, "startedAt": current, "deadline": deadline,
-                    "receiptHash": digest(value)})
+                    "receiptHash": digest(value), **({"trainingKind": kind, "budgetAmendmentHash": amendment["contentHash"]} if policy else {})})
     atomic_json(ledger_path, ledger)
     write_new(output, value)
     return value
@@ -563,6 +576,61 @@ def _financial_binding_hash(ledger: dict) -> str:
     return digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads", "trainingWindows"}})
 
 
+def effective_budget_policy(ledger: dict) -> dict | None:
+    """Validate an explicit amendment while preserving all prior funded work."""
+    journal = ledger.get("plan", {}).get("studyLedgerPath")
+    if not journal:
+        return None
+    path = Path(str(Path(journal).resolve()) + ".policy-v2.json")
+    if not path.exists():
+        return None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError("Invalid budget amendment file")
+    value = read_json(path)
+    approved = read_json(ROOT / "src/lib/acephale/contracts/budget-policy-v2.json")
+    if (value.get("version") != 2 or value.get("profile") != "acephale-budget-amendment-v2"
+            or value.get("contentHash") != _budget_digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("policy") != approved or value.get("policyHash") != _budget_digest(approved)
+            or value.get("studyLedgerPathHash") != _budget_digest(str(Path(journal).resolve()))
+            or value.get("infrastructureBindingHash") != _budget_binding_hash(ledger)
+            or value.get("infrastructurePlanHash") != ledger["planHash"]):
+        raise ValueError("Budget amendment does not bind the original study and approved policy")
+    for baseline, field in (("baselineLeases", "leases"), ("baselineOverheads", "overheads"),
+                            ("baselineTrainingWindows", "trainingWindows")):
+        prior = value.get(baseline)
+        current = ledger.get(field, [])
+        if not isinstance(prior, list) or current[:len(prior)] != prior:
+            raise ValueError("Budget amendment operational history changed or disappeared")
+    if (sum(row["reservedSeconds"] for row in value["baselineTrainingWindows"]) > approved["priorTrainingSeconds"]
+            or any(row["status"] != "terminated" for row in value["baselineLeases"])):
+        raise ValueError("Budget amendment requires closed prior work")
+    extra = ledger.get("trainingWindows", [])[len(value["baselineTrainingWindows"]):]
+    if any(row.get("trainingKind") not in {"fit", "smoke"} or row.get("budgetAmendmentHash") != value["contentHash"] for row in extra):
+        raise ValueError("Training window does not bind the budget amendment")
+    for kind, key in (("fit", "additionalFittingSeconds"), ("smoke", "additionalSmokeSeconds")):
+        if sum(row["reservedSeconds"] for row in extra if row["trainingKind"] == kind) > approved[key]:
+            raise ValueError("Training windows exceed the approved amendment")
+    return value
+
+
+def _budget_digest(value: Any) -> str:
+    # The amendment is written by TypeScript. Use the same RFC 8785 wire hash.
+    import rfc8785
+    return hashlib.sha256(rfc8785.dumps(value)).hexdigest()
+
+
+def _budget_binding_hash(ledger: dict) -> str:
+    return _budget_digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads", "trainingWindows"}})
+
+
+def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
+    amendment = effective_budget_policy(ledger)
+    if not amendment:
+        return 35, 30, 5
+    policy = amendment["policy"]
+    return policy["allocationsMicrodollars"]["infrastructure"] / 1_000_000, policy["infrastructureComputeUsd"], policy["infrastructureAssociatedUsd"]
+
+
 def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
     current = sha256(HERE / "versions.json")
     if ledger.get("versionsSha256") == current:
@@ -595,6 +663,7 @@ def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
 def checked_bound_ledger(path: Path) -> dict[str, Any]:
     value = _checked_bound_ledger_identity(path)
     effective_versions_metadata(path, value)
+    effective_budget_policy(value)
     return value
 
 
@@ -710,11 +779,13 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *, bud
         all_rows = value["leases"] + value.get("overheads", [])
         if any(row["id"] == reservation_id for row in all_rows):
             raise ValueError("Overhead reservation already attempted")
-        if value["priorInfraUsd"] + sum(row["reservedUsd"] for row in all_rows) + maximum > 35:
+        infrastructure, _, associated = infrastructure_caps(value)
+        if value["priorInfraUsd"] + sum(row["reservedUsd"] for row in all_rows) + maximum > infrastructure:
             raise ValueError("Original infrastructure allocation exhausted")
         charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in all_rows)
-        if charges + maximum > 5:
-            raise ValueError("Associated infrastructure charges exceed five dollars")
+        if charges + maximum > associated:
+            raise ValueError("Associated infrastructure charges exceed five dollars" if associated == 5
+                             else "Associated infrastructure charges exceed the approved allowance")
         row = {"id": reservation_id, "kind": "watchdog_storage_export", "status": "reservation_pending",
                "reservedUsd": maximum, "reservedMicrodollars": math.ceil(maximum * 1_000_000)}
         value["overheads"].append(row)
@@ -745,7 +816,8 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     cost = round(rate * hours + allowance, 6)
     compute = ledger.get("priorComputeUsd", ledger["priorInfraUsd"]) + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
     charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
-    if used_hours + hours > 24 or reserved + cost > 35 or compute + rate * hours > 30 or charges + allowance > 5:
+    infrastructure_cap, compute_cap, associated_cap = infrastructure_caps(ledger)
+    if used_hours + hours > 24 or reserved + cost > infrastructure_cap or compute + rate * hours > compute_cap or charges + allowance > associated_cap:
         raise ValueError("Cumulative infrastructure allocation exceeded")
     # Do not release reservations after termination without invoice reconciliation.
     return {"id": str(uuid.uuid4()), "status": "reserved", "quote": current_quote,
@@ -768,9 +840,49 @@ def validate_firewall(client: Any, ruleset_id: str, region: str) -> None:
             raise ValueError("Firewall must allow only SSH from restricted source networks; global rules are included")
 
 
+def checked_access_amendment(ledger: dict, value: dict) -> dict:
+    if (value.get("version") != 1 or value.get("profile") != "acephale-access-amendment-v1"
+            or value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("planHash") != ledger["planHash"] or value.get("financialBindingHash") != _financial_binding_hash(ledger)
+            or value.get("region") != ledger["plan"]["region"] or value.get("financialBindingChanged") is not False
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("publicKeySha256", ""))
+            or any(not re.fullmatch(r"[A-Za-z0-9_-]+", value.get(key, "")) for key in ("sshKeyName", "sshKeyId", "firewallRulesetId"))):
+        raise ValueError("Access amendment does not bind the original financial plan")
+    return value
+
+
+def verify_access_key(client: Any, access: dict) -> None:
+    keys = [row for row in client.request("GET", "/ssh-keys") if row.get("name") == access["sshKeyName"]]
+    if (len(keys) != 1 or keys[0].get("id") != access["sshKeyId"]
+            or hashlib.sha256(keys[0].get("public_key", "").encode()).hexdigest() != access["publicKeySha256"]):
+        raise ValueError("Exact amended SSH public-key identity required")
+
+
+def record_access_amendment(client: Any, ledger_path: Path, output: Path, ssh_key_name: str,
+                            firewall_ruleset_id: str, reason: str, *, source_probe=committed_source) -> dict:
+    """Bind newly created access resources without replacing the budget plan."""
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        if any(row["status"] != "terminated" for row in ledger["leases"]) or not reason.strip() or len(reason) > 1024:
+            raise ValueError("Closed prior leases and an explicit access-change reason required")
+        validate_firewall(client, firewall_ruleset_id, ledger["plan"]["region"])
+        keys = [row for row in client.request("GET", "/ssh-keys") if row.get("name") == ssh_key_name]
+        if len(keys) != 1 or not keys[0].get("public_key"):
+            raise ValueError("One actual named SSH public key required")
+        body = {"version": 1, "profile": "acephale-access-amendment-v1", "planHash": ledger["planHash"],
+                "financialBindingHash": _financial_binding_hash(ledger), "financialBindingChanged": False,
+                "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]), "recordedAt": time.time(), "reason": reason.strip(),
+                "region": ledger["plan"]["region"], "sshKeyName": ssh_key_name, "sshKeyId": keys[0]["id"],
+                "publicKeySha256": hashlib.sha256(keys[0]["public_key"].encode()).hexdigest(), "firewallRulesetId": firewall_ruleset_id}
+        value = checked_access_amendment(ledger, {**body, "contentHash": digest(body)})
+        write_new(output, value)
+        return value
+
+
 def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_usd: float,
                   *, now: float | None = None, budget=study_budget, purpose: str = "research",
-                  recovery_controller_id: str | None = None) -> dict[str, Any]:
+                  recovery_controller_id: str | None = None, access_amendment: Path | None = None) -> dict[str, Any]:
     current = time.time() if now is None else now
     if purpose not in {"research", "cleanup_canary"} or (purpose == "cleanup_canary" and not 0 < hours <= 1 / 6):
         raise ValueError("Cleanup canary must reserve at most ten minutes")
@@ -779,13 +891,18 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
     with ledger_lock(ledger_path):
         ledger = checked_bound_ledger(ledger_path)
         plan = ledger["plan"]
+        access = checked_access_amendment(ledger, read_json(access_amendment)) if access_amendment else plan
+        if access_amendment:
+            verify_access_key(client, access)
         budget(plan, "inspect")
         current_quote = quote(client, plan["region"], current, plan["hardwareProfile"])
-        validate_firewall(client, plan["firewallRulesetId"], plan["region"])
+        validate_firewall(client, access["firewallRulesetId"], plan["region"])
         lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current)
         lease["name"] = "acephale-infra-" + lease["id"]
         lease["purpose"] = purpose
         lease["recoveryControllerId"] = recovery_controller_id
+        if access_amendment:
+            lease["accessAmendment"] = access
         lease["status"] = "reservation_pending"
         ledger["leases"].append(lease)
         atomic_json(ledger_path, ledger)
@@ -866,10 +983,13 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         if any(item["id"] != lease_id and item["status"] != "terminated" for item in ledger["leases"]):
             raise ValueError("Another unresolved lease blocks launch")
         enrollments = watchdog_enrollments(watchdog_receipt, ledger, lease, current)
+        access = checked_access_amendment(ledger, lease["accessAmendment"]) if "accessAmendment" in lease else plan
+        if "accessAmendment" in lease:
+            verify_access_key(client, access)
         current_quote = quote(client, plan["region"], current, plan["hardwareProfile"])
         if any(current_quote[key] != lease["quote"][key] for key in ("region", "instanceType", "imageId", "hardwareProfileHash")) or current_quote["hourlyUsd"] > lease["quote"]["hourlyUsd"]:
             raise ValueError("Provider quote changed after reservation; no launch attempted")
-        validate_firewall(client, plan["firewallRulesetId"], plan["region"])
+        validate_firewall(client, access["firewallRulesetId"], plan["region"])
         budget(plan, "inspect")
         lease["watchdogs"] = enrollments
         lease["status"] = "launching"
@@ -877,8 +997,8 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         try:
             result = client.request("POST", "/instance-operations/launch", {
                 "region_name": plan["region"], "instance_type_name": current_quote["instanceType"],
-                "ssh_key_names": [plan["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
-                "firewall_rulesets": [{"id": plan["firewallRulesetId"]}]})
+                "ssh_key_names": [access["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
+                "firewall_rulesets": [{"id": access["firewallRulesetId"]}]})
             ids = result.get("instance_ids", [])
             if len(ids) != 1:
                 raise RuntimeError("Ambiguous launch response")
@@ -987,6 +1107,7 @@ def main(argv: list[str] | None = None) -> int:
     trainer.add_argument("--preflight", type=Path, required=True)
     trainer.add_argument("--output", type=Path, required=True)
     trainer.add_argument("--hours", type=float, required=True)
+    trainer.add_argument("--kind", choices=["fit", "smoke"], default="fit")
     state = commands.add_parser("watchdog-state")
     state.add_argument("--ledger", type=Path, required=True)
     state.add_argument("--lease-id", required=True)
@@ -1018,12 +1139,19 @@ def main(argv: list[str] | None = None) -> int:
     metadata_amendment.add_argument("--original-versions", type=Path, required=True)
     metadata_amendment.add_argument("--oci-evidence", type=Path, required=True)
     metadata_amendment.add_argument("--reason", required=True)
+    access_amendment = commands.add_parser("record-access-amendment")
+    access_amendment.add_argument("--ledger", type=Path, required=True)
+    access_amendment.add_argument("--output", type=Path, required=True)
+    access_amendment.add_argument("--ssh-key-name", required=True)
+    access_amendment.add_argument("--firewall-ruleset-id", required=True)
+    access_amendment.add_argument("--reason", required=True)
     prepare = commands.add_parser("prepare-lease")
     prepare.add_argument("--ledger", type=Path, required=True)
     prepare.add_argument("--hours", type=float, required=True)
     prepare.add_argument("--extra-allowance-usd", type=float, required=True)
     prepare.add_argument("--purpose", choices=["research", "cleanup_canary"], default="research")
     prepare.add_argument("--recovery-controller-id")
+    prepare.add_argument("--access-amendment", type=Path)
     canary_stop = commands.add_parser("request-canary-termination")
     canary_stop.add_argument("--ledger", type=Path, required=True)
     canary_stop.add_argument("--lease-id", required=True)
@@ -1063,7 +1191,7 @@ def main(argv: list[str] | None = None) -> int:
         value = training_preflight(args.hardware_profile)
         write_new(args.output, value)
     elif args.command == "training-lease":
-        value = training_lease(args.ledger, args.lease_id, args.preflight, args.output, args.hours)
+        value = training_lease(args.ledger, args.lease_id, args.preflight, args.output, args.hours, args.kind)
     elif args.command == "watchdog-state":
         value = watchdog_state(args.ledger, args.lease_id)
         atomic_json(args.output, value)
@@ -1106,7 +1234,9 @@ def main(argv: list[str] | None = None) -> int:
             write_new(args.output, value)
         elif args.command == "prepare-lease":
             value = prepare_lease(client, args.ledger, args.hours, args.extra_allowance_usd, purpose=args.purpose,
-                                  recovery_controller_id=args.recovery_controller_id)
+                                  recovery_controller_id=args.recovery_controller_id, access_amendment=args.access_amendment)
+        elif args.command == "record-access-amendment":
+            value = record_access_amendment(client, args.ledger, args.output, args.ssh_key_name, args.firewall_ruleset_id, args.reason)
         elif args.command == "provider-receipt":
             value = provider_receipt(client, args.ledger, args.lease_id, args.ssh_observation, args.output)
         elif args.command == "observe-termination":

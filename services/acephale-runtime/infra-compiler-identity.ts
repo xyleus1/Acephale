@@ -4,7 +4,7 @@ import { hash } from "../../src/lib/acephale/canonical";
 /** Calibration identities include the exact candidate compiler and eligibility code. */
 export function infraCandidateCompilerHash(profile: "native" | "documents"): string {
   const files = ["./infra-compiler-identity.ts", "./infra-predictor-input.ts", "./infra-predictors.ts",
-    "./infra-predictor-coordinator.ts", "./infra-binary-ranking.ts", "./infra-training-export.ts",
+    "../../src/lib/acephale/score-semantics.ts", "./infra-public-checkpoint.ts", "./infra-goal-annotation.ts", "./infra-predictor-coordinator.ts", "./infra-binary-ranking.ts", "./infra-training-export.ts",
     "../../src/lib/acephale/predictor-artifact.ts", "./infra-actor-event.ts", "../../src/lib/acephale/infra-session.ts",
     "../../src/lib/acephale/episodic-retrieval.ts", "../../src/lib/acephale/episodic-postgres.ts",
     "../../src/lib/acephale/postgres-store.ts", "./infra-memory-services.ts", "./provider.ts",

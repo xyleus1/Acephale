@@ -52,6 +52,9 @@ export interface InfraNativeConfiguration {
   otlpBaseUrl?: string; splitGuardPath?: string;
   episodicEmbeddingsPath?: string;
   shadowPrediction?: boolean;
+  customTaskBundleDirectory?: string;
+  customTaskReceiptHash?: string;
+  collectionPartitions?: ("weight_fit" | "calibration")[];
 }
 export interface InfraNativeArtifacts {
   manifest: InfraExperimentManifestV2;
@@ -72,6 +75,12 @@ export function infraNativeToolsHash(runs: InfraNativeRun[]) {
 }
 export function validateInfraNativeConfiguration(configuration: InfraNativeConfiguration, artifacts: InfraNativeArtifacts): void {
   const { manifest } = freezeInfraManifest(artifacts.manifest);
+  if (configuration.customTaskBundleDirectory !== undefined || configuration.customTaskReceiptHash !== undefined) {
+    if (!configuration.customTaskBundleDirectory || !/^[a-f0-9]{64}$/.test(configuration.customTaskReceiptHash ?? "")
+      || (configuration.stage === "collection" && canonical(configuration.collectionPartitions) !== canonical(["weight_fit", "calibration"]))) {
+      throw new Error("Custom native tasks require a verified source and explicit learning partitions");
+    }
+  } else if (configuration.collectionPartitions !== undefined) throw new Error("Custom collection selection requires verified custom tasks");
   // Validate before the Python launcher or Node service persists configuration.
   // Construction is local-only and sends no request.
   new LocalChatModelPort({ baseUrl: configuration.actorBaseUrl, model: manifest.actor.servedModel });
@@ -286,6 +295,7 @@ export async function runInfraNativeService(configurationPath: string, artifactD
       const ledgerStat = await stat(ledgerPath);
       if (!ledgerStat.isFile() || ledgerStat.size === 0) throw new Error("Original nonempty budget journal is required");
       budget = new DurableBudget(ledgerPath);
+      budget.validateManifestPolicy(artifacts.manifest.budgets);
       const checkpoint = JSON.parse(await readFile(resolve(dirname(configurationPath), configuration.ledgerCheckpointPath), "utf8"));
       validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath);
       costs = new ImmutableEventLog(join(resolve(options.budgetDirectory), `events-${randomUUID()}.jsonl`));
@@ -350,7 +360,8 @@ export async function writeInfraLedgerCheckpoint(ledgerPath: string, output: str
   const budget = new DurableBudget(path);
   try {
     const entries = budget.ledger.snapshot();
-    const checkpoint = { version: 1, ledgerPathHash: hash(path), entriesHash: hash(entries), entries };
+    const checkpoint = { version: 1, ledgerPathHash: hash(path), entriesHash: hash(entries), entries,
+      ...(budget.policy ? { budgetPolicyHash: budget.policy.policyHash, budgetAmendmentHash: budget.policy.contentHash } : {}) };
     await writeFile(resolve(output), canonical(checkpoint) + "\n", { flag: "wx", mode: 0o600 });
     return { checkpointHash: hash(checkpoint), reservations: entries.length };
   } finally { budget.close(); }

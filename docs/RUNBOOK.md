@@ -68,9 +68,9 @@ or artifacts.
 
 | Allocation | Gross ceiling |
 | --- | ---: |
-| Infrastructure | $35 |
-| Generation, annotation and embeddings | $30 |
-| Training collection | $60 |
+| Infrastructure | $50 |
+| Generation, annotation and embeddings | $45 |
+| Training collection | $30 |
 | Development and calibration | $40 |
 | Heldout trials | $240 |
 | Prediction replay | $30 |
@@ -78,8 +78,14 @@ or artifacts.
 | Total | $500 |
 
 The GPU limits are $2.50/hour, 24 cumulative hours and eight hours per session,
-still bounded by the $35 infrastructure allocation. Credits do not reduce gross
+still bounded by the amended $50 infrastructure allocation. Credits do not reduce gross
 spend. Reservations cover all attempts/concurrency and maximum billable output.
+
+The table applies only after an explicit v2 policy amendment. Legacy execution
+retains its original caps. Run `node --import tsx scripts/acephale-budget-policy.ts
+AMENDMENT_REQUEST.json` with the original journal path, closed infrastructure
+slice path and authorization timestamp. This creates a sidecar without resetting
+the journal. New checkpoints and manifests bind both policy and amendment hashes.
 
 ## 3. Collect fixed-actor traces with causal shadow prediction
 
@@ -230,7 +236,7 @@ python -m acephale.infra_cli build-goal-reliability --bundle NEW_BUNDLE --predic
 Training/development checkpoints are selected by deterministic family round robin;
 test labels never fit calibration. Exact source/model/memory/retrieval/compiler
 identity is checked. A separate matched-panel evaluation requires every panel
-candidate's marginal probability:
+candidate's declared raw score:
 
 ```text
 node --import tsx scripts/acephale-infra-predict.ts NEW_BUNDLE FINAL_MEMORY.json NEW_PANEL_REPLAY LOCAL_PREDICTOR_URL 100 goals fixed_panel test EPISODIC_CONFIG.json

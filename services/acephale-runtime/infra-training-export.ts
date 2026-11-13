@@ -7,10 +7,39 @@ import { memoryQuery, retrieveContextualMemory, validateMemoryArtifact, type Fro
 import { BINARY_RANKING_INSTRUCTION } from "./infra-binary-ranking";
 import { GOAL_DRAFT_INSTRUCTION } from "./infra-predictors";
 import { assertSelectedGoalSources, compileInfraCandidateWindow, prepareInfraPredictorInput } from "./infra-predictor-input";
+import { annotationGoalDraft, type InfraAnnotationInput } from "./infra-goal-annotation";
 
 export type TrainingPartition = "weight_fit" | "calibration" | "development" | "test";
 export type GoalDraft = Omit<GoalSet, "revisionHash">;
 export interface TrainingPartitionPlan { weightFitFamilies: string[]; calibrationFamilies: string[]; developmentFamilies: string[]; testFamilies: string[] }
+export interface NativeTrainingSelection { fittingCheckpointIds: string[]; neutralOnlyPartitions: ("calibration" | "development")[] }
+export function planNativeTrainingExport(rows: { checkpoint_id: string; family_id: string; split: string }[],
+  partitions: TrainingPartitionPlan, selection: NativeTrainingSelection) {
+  if (!Array.isArray(selection.fittingCheckpointIds) || selection.fittingCheckpointIds.length !== 100
+    || selection.fittingCheckpointIds.some(id => typeof id !== "string" || !id)
+    || new Set(selection.fittingCheckpointIds).size !== 100 || !Array.isArray(selection.neutralOnlyPartitions)
+    || [...selection.neutralOnlyPartitions].sort().join(",") !== "calibration,development") {
+    throw new Error("Native multitask export requires 100 declared fitting checkpoints and explicit neutral calibration/development");
+  }
+  const selected = new Set(selection.fittingCheckpointIds), byId = new Map(rows.map(row => [row.checkpoint_id, row]));
+  if (byId.size !== rows.length || [...selected].some(id => !byId.has(id) || byId.get(id)!.split !== "train"
+    || !partitions.weightFitFamilies.includes(byId.get(id)!.family_id))) throw new Error("Selected fitting checkpoint is absent or outside weight-fitting families");
+  const families = new Map<string, TrainingPartition>();
+  for (const [partition, names] of [["weight_fit", partitions.weightFitFamilies], ["calibration", partitions.calibrationFamilies],
+    ["development", partitions.developmentFamilies], ["test", partitions.testFamilies]] as const) {
+    for (const name of names) {
+      if (families.has(name)) throw new Error("Training family partitions overlap");
+      families.set(name, partition);
+    }
+  }
+  return new Map(rows.map(row => {
+    const partition = families.get(row.family_id);
+    if (!partition || row.split !== (["weight_fit", "calibration"].includes(partition) ? "train" : partition)) throw new Error("Original split cannot be reassigned for training export");
+    const mode = selected.has(row.checkpoint_id) ? "multitask" : partition === "weight_fit" ? "unselected_fit"
+      : partition === "test" ? "heldout_excluded" : "neutral";
+    return [row.checkpoint_id, mode] as const;
+  }));
+}
 export interface TrainingSource {
   id: string; familyId: string; sourceSplit: "train" | "development" | "test";
   sourceDatasetHash: string; publicInputHash: string; compilerHash: string; tokenizerHash: string; chatTemplateHash: string;
@@ -79,6 +108,9 @@ export async function compileRankTrainingExamples(options: {
   conditioningGoals?: GoalDraft; conditioningAnnotationHash?: string; readTarget: () => Promise<ObservedNextBatch>; signal?: AbortSignal;
 }): Promise<TrainingExampleV1[]> {
   const partition = trainingPartition(options.source, options.partitions), frame = checkedFrame(options.frame);
+  if ((options.conditioningGoals === undefined) !== (options.conditioningAnnotationHash === undefined)) {
+    throw new Error("Conditional training requires both goals and annotation identity");
+  }
   if (options.memory?.runs.some(run => !options.partitions.weightFitFamilies.includes(run.familyId))) throw new Error("Training memory must contain only weight fitting families");
   const pool = options.publicCandidates(copy(frame));
   if (new Set(pool.map(candidate => candidate.id)).size !== pool.length) throw new Error("Duplicate public candidate IDs");
@@ -116,4 +148,20 @@ export async function compileRankTrainingExamples(options: {
       observedNextBatch: true, ...(condition === "conditional" ? { annotationHash: options.conditioningAnnotationHash } : {}),
       requestHash: result.inputHash, memoryHash: memory?.artifactHash ?? null,
       omittedCandidateIds: window.omittedCandidateIds, omissions: result.omittedGroups } }));
+}
+
+/** Native supervision is one complete group; a missing goal label never becomes a neutral-only row. */
+export async function compileNativeTrainingExamples(options: Omit<Parameters<typeof compileRankTrainingExamples>[0], "conditioningGoals" | "conditioningAnnotationHash"> & {
+  annotation: unknown; publicInput: InfraAnnotationInput;
+}): Promise<TrainingExampleV1[]> {
+  if (options.publicInput.checkpoint_id !== options.source.id || options.publicInput.input_hash !== options.source.publicInputHash
+    || options.publicInput.input.sources.some(source => hash(options.frame.sources[source.id]) !== hash(source.value))) {
+    throw new Error("Annotation sources differ from the compiled public frame");
+  }
+  const draft = annotationGoalDraft(options.annotation, options.publicInput), annotationHash = hash(options.annotation);
+  const goal = await compileGoalTrainingExample({ ...options,
+    readTarget: async () => ({ draft, annotationHash, annotationKind: "teacher_goal_annotation_v1" }) });
+  const ranks = await compileRankTrainingExamples({ ...options, conditioningGoals: draft, conditioningAnnotationHash: annotationHash });
+  if (ranks.length !== 2) throw new Error("Native multitask export requires a nonempty matched candidate window");
+  return [...ranks, goal].map(row => ({ ...row, provenance: { ...row.provenance, exportProtocol: "native-multitask-v2" } }));
 }

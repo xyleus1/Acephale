@@ -22,7 +22,8 @@ import type { PublicBoundary } from "../services/acephale-runtime/actor";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/acephale-runtime/infra-hosted-workers";
 import { nativeSplitGuard } from "../services/acephale-runtime/infra-split-guard";
-import { publicInfraFrame, selectInfraReplayRows } from "./acephale-infra-predict";
+import { publicInfraFrame } from "../services/acephale-runtime/infra-public-checkpoint";
+import { selectInfraReplayRows } from "./acephale-infra-predict";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
 
 export interface NativeProfileConfig {
@@ -88,7 +89,7 @@ export async function prepareNativeProfile(configurationPath: string, output: st
   if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
   const budget = new DurableBudget(ledgerPath);
   let budgetJournalPrefix: Awaited<ReturnType<typeof nativeProfileJournalPrefix>>;
-  try { validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath); budgetJournalPrefix = await nativeProfileJournalPrefix(ledgerPath); } finally { budget.close(); }
+  try { budget.validateManifestPolicy(manifest.budgets); validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath); budgetJournalPrefix = await nativeProfileJournalPrefix(ledgerPath); } finally { budget.close(); }
   const embeddings = config.episodicEmbeddingsPath ? await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory) : undefined;
   if (embeddings && !process.env.ACEPHALE_RESEARCH_DATABASE_URL) throw new Error("Episodic profiling requires the dedicated research database");
   // Never consult next-action labels to select prefixes or candidate IDs.
@@ -205,6 +206,7 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
     const metadata = await stat(ledgerPath);
     if (!metadata.isFile() || metadata.size === 0 || !plan.budgetJournalPrefix) throw new Error("Original nonempty budget journal and frozen prefix required");
     budget = new DurableBudget(ledgerPath);
+    budget.validateManifestPolicy(manifest.budgets);
     if (hash(await nativeProfileJournalPrefix(ledgerPath, plan.budgetJournalPrefix.bytes)) !== hash(plan.budgetJournalPrefix)) throw new Error("Original budget journal prefix changed since profiling was declared");
     const embeddings = await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory);
     memoryServices = createInfraMemoryServices({ memory, embeddings, databaseUrl: process.env.ACEPHALE_RESEARCH_DATABASE_URL,

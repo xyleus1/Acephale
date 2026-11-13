@@ -1,5 +1,44 @@
 # Acephale engineering log
 
+## 2026-11-13: Repair the goal training path and simplify shared code
+
+The native teacher returned `goals` and `unknown_probability`, while the exporter
+looked for `goalDraft` and omitted goal targets. A shared checked conversion now
+feeds explicit native multitask export. It checks current public sources, policy
+references and revisions; neutral and conditioned rows share their candidate
+window. Frozen fitting selections and excluded rows are recorded explicitly.
+
+Shared public-checkpoint construction and tokenizer transport replace duplicated
+CLI logic. One Python recipe controls LoRA/SFT settings. The stage runner records
+inputs, deadlines, output verifiers and failed attempts, and resumes only verified
+successful stages. Current docs now link preserved historical notes instead of
+repeating old operator states as current facts.
+
+Final local research checks: 244 Node tests passed with two local database skips;
+465 Python tests passed with seven environment/private-fixture skips. The pinned
+native snapshot gateway check was then enabled explicitly: all six profile tests
+passed, including the actual native read/refresh round trip with mocked models.
+Types and Ruff passed; ESLint reported zero errors and 35 warnings. A separate
+real CPU test passed on WSL with Torch 2.13.0+cpu, PEFT 0.21.0 and Accelerate 1.15.0,
+using Python 3.12.14. It verified exact adapter reload logits under a common BF16
+context. This supplementary environment is not the locked trainer image or an
+actual Qwen GPU qualification. Deployment checks and execution receipts are
+reported separately.
+
+Deployment checks passed: 191 tests and 68 subtests, with two Linux process tests
+skipped on Windows. All 19 operator tests also passed in Ubuntu WSL, including
+those process tests. The first Windows deployment invocation could not access
+pytest's default temporary directory; rerunning with an explicit new output
+directory passed without a source change. Docker permissions and real Postgres
+integration remain CI checks.
+
+Fresh fixture generation verified all 88 task outcomes with the pinned native DB
+evaluator and rejected all 200 missing-mutation controls before actor execution.
+Windows stages now use a suspended launch inside a kill-on-close Job Object,
+including an explicit inherited-handle allowlist. Tests exercise timeout, owner
+exit and surviving descendants. The Linux bootstrap likewise drains complete
+command groups before artifact export.
+
 ## 2026-11-10: Preserve heartbeat binding after training admission
 
 Issuing a valid training lease added trainingWindows to the ledger and incorrectly

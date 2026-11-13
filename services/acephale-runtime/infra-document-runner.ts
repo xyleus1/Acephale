@@ -22,7 +22,7 @@ export interface DocumentTrialResult {
   corpusHash: string; taskHash: string; memoryHash: string;
 }
 export function documentFrame(boundary: PublicBoundary, runId: string, checkpoint: number, scope: Scope, snapshotId: string): ExecutionFrame {
-  const sources: Record<string, Json> = {}, events: Json[] = [], signatures: string[] = [];
+  const sources: Record<string, Json> = { policy: boundary.policy }, events: Json[] = [], signatures: string[] = [];
   const calls = new Map<string, string>(), requirements: string[] = [];
   boundary.messages.forEach((message, index) => {
     if (message.role === "user") { sources[`requirement:${index}`] = message.content ?? ""; requirements.push(message.content ?? ""); }

@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "profile": "acephale-study-budget-policy-v2",
+  "totalMicrodollars": 500000000,
+  "allocationsMicrodollars": {
+    "infrastructure": 50000000,
+    "preparation": 45000000,
+    "training": 30000000,
+    "development": 40000000,
+    "heldout": 240000000,
+    "replay": 30000000,
+    "contingency": 65000000
+  },
+  "maxGpuHours": 24,
+  "maxSessionHours": 8,
+  "maxHourlyUsd": 2.5,
+  "infrastructureComputeUsd": 41,
+  "infrastructureAssociatedUsd": 9,
+  "priorTrainingSeconds": 7200,
+  "additionalFittingSeconds": 14400,
+  "additionalSmokeSeconds": 900,
+  "maxTrainingWindowSeconds": 14400
+}

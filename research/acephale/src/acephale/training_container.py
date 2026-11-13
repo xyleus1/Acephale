@@ -14,7 +14,7 @@ from pathlib import Path
 from acephale.contracts_v1 import hash_v1
 from acephale.storage import file_hash
 from acephale.training import validate_training_lease
-from acephale.training_data import hashed, verify_hashed, write_new
+from acephale.training_data import hashed, training_recipe, verify_hashed, write_new
 
 DOCKERFILE = "infra/acephale-infra-v1/trainer.Dockerfile"
 LABEL = "org.acephale.training-inputs"
@@ -103,6 +103,8 @@ def verify_image(receipt: dict, observed: dict) -> str:
 
 
 def run(args) -> dict:
+    recipe = training_recipe(micro_batch=getattr(args, "micro_batch", 1),
+                             gradient_accumulation=getattr(args, "gradient_accumulation", 16))
     if os.name != "posix" or os.getuid() == 0:
         raise ValueError("Run the trainer as the ordinary Linux host operator")
     if not re.fullmatch(r"[a-f0-9]{64}", args.actor_container):
@@ -136,6 +138,7 @@ def run(args) -> dict:
     command.extend([image_id, args.action, "--dataset", "/dataset", "--model", model_argument, "--lease", "/lease.json", "--output", "/output/artifacts"])
     if args.action == "train":
         command.extend(["--seed", str(args.seed), "--max-steps", str(args.max_steps), "--maximum-seconds", str(args.maximum_seconds)])
+        command.extend(["--micro-batch", str(recipe["microBatch"]), "--gradient-accumulation", str(recipe["gradientAccumulation"])])
     if args.action == "export":
         if not args.training_run:
             raise ValueError("Export needs the completed --training-run directory")
@@ -186,6 +189,8 @@ def main():
     launch.add_argument("--seed", type=int, choices=[17, 29], default=17)
     launch.add_argument("--max-steps", type=int, default=500)
     launch.add_argument("--maximum-seconds", type=int, default=3600)
+    launch.add_argument("--micro-batch", type=int, choices=[1, 2, 4], default=1)
+    launch.add_argument("--gradient-accumulation", type=int, choices=[4, 8, 16], default=16)
     launch.add_argument("--partition", choices=["calibration", "development", "test"], default="development")
     args = parser.parse_args()
     print(json.dumps(build(args.source, args.output) if args.command == "build" else run(args), indent=2))

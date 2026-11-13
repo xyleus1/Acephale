@@ -15,11 +15,11 @@ from acephale.contracts_v1 import hash_v1
 from acephale.infra_admission import validate_predicted_goals
 from acephale.infra_data import read_jsonl, verify_bundle
 from acephale.infra_fairness import load_reviewed_selection, validate_model_selection
+from acephale.score_semantics import CALIBRATED_MEMBERSHIP, replay_score_semantics
 from acephale.storage import file_hash
 from acephale.training_data import calibration_families
 
 BOUNDS = tuple(index / 10 for index in range(1, 11))
-PROBABILITY_SEMANTICS = "independent_next_batch_hit"
 
 
 def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path, *, partitions_path: Path | None = None,
@@ -27,7 +27,7 @@ def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path, *
     """Keep the two independently fitted maps under one experiment artifact hash."""
     neutral, neutral_report, neutral_rows = fit_calibration(bundle_directory, prediction_directory, partitions_path=partitions_path, memory_path=memory_path)
     conditional, conditional_report, conditional_rows = fit_calibration(bundle_directory, prediction_directory, condition="conditional", partitions_path=partitions_path, memory_path=memory_path)
-    for field in ("fittingFamilies", "validationFamilies", "sourceDatasetHash"):
+    for field in ("version", "probabilitySemantics", "fittingFamilies", "validationFamilies", "sourceDatasetHash"):
         if neutral[field] != conditional[field]:
             raise ValueError("Paired calibration needs the same fitting and validation families")
     for field in ("model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash", "predictionManifestHash", "predictionRowsHash"):
@@ -73,8 +73,9 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         raise ValueError("Prediction manifest hash mismatch")
     if manifest.get("kind") != "uncalibrated_prediction_replay" or manifest.get("executionAllowed") is not False or manifest.get("sourceDatasetHash") != bundle["bundle_hash"]:
         raise ValueError("Wrong prediction source dataset or experiment kind")
-    if manifest.get("version") != 2 or manifest.get("probabilitySemantics") != PROBABILITY_SEMANTICS or manifest.get("predictionMode") not in {"selected_candidates", "fixed_panel"}:
-        raise ValueError("Independent next-batch probability semantics and replay mode are required")
+    semantics = replay_score_semantics(manifest)
+    if manifest.get("predictionMode") not in {"selected_candidates", "fixed_panel"}:
+        raise ValueError("Explicit next-batch membership replay mode is required")
     model = manifest.get("model", {})
     if not isinstance(model, dict) or not isinstance(model.get("repository"), str) or not re.fullmatch(r"[0-9a-f]{40}", model.get("revision", "")):
         raise ValueError("Exact predictor model revision required")
@@ -198,7 +199,8 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         # probabilities must not be normalized as mutually exclusive classes.
         row["runtime_probability"] = row["calibrated_probability"]
     body = {
-        "version": 2, "probabilitySemantics": PROBABILITY_SEMANTICS,
+        **semantics,
+        **({"calibratedScoreSemantics": CALIBRATED_MEMBERSHIP} if semantics["version"] == 3 else {}),
         "predictionMode": manifest["predictionMode"],
         "fittingFamilies": sorted({row["family_id"] for row in fitting}),
         "validationFamilies": sorted({row["family_id"] for row in validation}),
@@ -214,7 +216,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
     calibration = {**body, "contentHash": hash_v1(body)}
     report = {
         "version": "acephale-infra-calibration-report-v2", "condition": condition,
-        "probabilitySemantics": PROBABILITY_SEMANTICS, "predictionMode": manifest["predictionMode"],
+        "probabilitySemantics": semantics["probabilitySemantics"], "rawScoreSemantics": semantics.get("rawScoreSemantics", "legacy_unspecified"), "predictionMode": manifest["predictionMode"],
         "calibrationHash": calibration["contentHash"], "declaredCheckpoints": len(predictions),
         "failedCheckpoints": failures, "notDispatchedCheckpoints": not_dispatched, "completedWithoutCandidateScores": empty,
         "unknownOnlyGoalsExcluded": unknown_goals,

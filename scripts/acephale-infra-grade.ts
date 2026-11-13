@@ -15,7 +15,7 @@ import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { assertResearchHostReady, maximumCost, researchClient, responseCost, TrialLedger } from "../services/acephale-runtime/provider";
 import { bindTeacherDraft, compileTeacherInput, type TeacherFactory } from "./acephale-infra-annotate";
 import { verifyInfraAnnotationSource, verifyInfraPublicDataset, type AnnotationPublicRow, type AnnotationSourceRow } from "./acephale-infra-annotation-source";
-import { publicInfraFrame } from "./acephale-infra-predict";
+import { publicInfraFrame } from "../services/acephale-runtime/infra-public-checkpoint";
 
 export const INFRA_GRADE_VERSION = "acephale-infra-grade-v1";
 const INPUT_LIMIT = 8192, OUTPUT_LIMIT = 1024, MAXIMUM_MICRODOLLARS = 5_000_000;

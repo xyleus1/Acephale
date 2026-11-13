@@ -27,6 +27,16 @@ def inventory_hash(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
 
+def identity_file_path(value, base: Path) -> str:
+    if not isinstance(value, str) or not value or any(character in value for character in "\r\n\x00"):
+        raise ValueError("SSH identityFilePath must name a regular local file")
+    candidate = base / value
+    if (candidate.is_symlink() or any(parent.is_symlink() for parent in candidate.parents)
+            or not candidate.is_file()):
+        raise ValueError("SSH identityFilePath must be an existing regular file without symlinks")
+    return str(candidate.resolve())
+
+
 def verify_known_hosts(path: Path, host: str, port: int, fingerprint: str) -> str:
     lines = [line.split() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")]
     expected_host = host if port == 22 else f"[{host}]:{port}"
@@ -86,6 +96,8 @@ def load_guard(path: Path):
         raise ValueError("Observed provider instance identity required")
     if type(config.get("sshPort")) is not int or not 1 <= config["sshPort"] <= 65535:
         raise ValueError("Explicit SSH port required")
+    if "identityFilePath" in config:
+        config["identityFilePath"] = identity_file_path(config["identityFilePath"], path.parent)
     if type(config.get("maximumLifetimeSeconds")) is not int or not 1 <= config["maximumLifetimeSeconds"] <= 28800:
         raise ValueError("Bounded guard lifetime required")
     ports = config.get("localPorts", {})
@@ -126,6 +138,8 @@ def ssh_base(config: dict):
             "-o", "ControlPath=none", "-o", "ControlPersist=no", "-p", str(config["sshPort"])]
     if config.get("provider") == "lambda":
         command.extend(["-o", f'UserKnownHostsFile="{config["knownHostsPath"]}"', "-o", "GlobalKnownHostsFile=none", "-o", "HostKeyAlgorithms=ssh-ed25519"])
+    if "identityFilePath" in config:
+        command.extend(["-i", identity_file_path(config["identityFilePath"], Path.cwd()), "-o", "IdentitiesOnly=yes"])
     return command
 
 

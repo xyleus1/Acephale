@@ -2,3 +2,7 @@
 /infra/acephale-infra-v1/hardware-profiles.json text eol=lf
 /infra/acephale-infra-v1/lambda_gpu_watchdog.py text eol=lf
 /infra/acephale-infra-v1/lambda_watchdog_deploy.py text eol=lf
+# Operator packages and fixture generators are compared by exact file hash.
+/infra/acephale-infra-v1/lambda-operator/* text eol=lf
+/research/acephale/src/acephale/custom_native_tasks.py text eol=lf
+/research/acephale/src/acephale/native_study.py text eol=lf

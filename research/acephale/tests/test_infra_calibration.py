@@ -56,6 +56,26 @@ def test_bins_fit_training_only_and_preserve_runtime_wire_hash(tmp_path):
     assert len(joined) == 4
 
 
+def test_binary_v3_keeps_raw_conditional_scores_separate_from_calibrated_membership(tmp_path):
+    bundle, directory, _ = fixture(tmp_path)
+    path = directory / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest.update(version=3, probabilitySemantics="next_batch_invocation_membership",
+                    predictionProtocol="rank_binary_v1", rawScoreSemantics="autoregressive_binary_conditional")
+    manifest["contentHash"] = hash_v1({key: value for key, value in manifest.items() if key != "contentHash"})
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    calibration, report, _ = fit_calibration(bundle, directory)
+    assert calibration["version"] == 3
+    assert calibration["rawScoreSemantics"] == "autoregressive_binary_conditional"
+    assert calibration["calibratedScoreSemantics"] == "empirical_next_batch_membership"
+    assert report["rawScoreSemantics"] == "autoregressive_binary_conditional"
+    manifest["rawScoreSemantics"] = "model_reported_marginal"
+    manifest["contentHash"] = hash_v1({key: value for key, value in manifest.items() if key != "contentHash"})
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="semantics"):
+        fit_calibration(bundle, directory)
+
+
 def test_reversing_development_labels_cannot_change_fitted_bins(tmp_path):
     left = tmp_path / "left"
     right = tmp_path / "right"
@@ -199,12 +219,16 @@ def test_independent_multihit_scores_are_not_normalized(tmp_path):
     assert all(row["runtime_probability"] == row["calibrated_probability"] for row in joined)
 
 
-def test_fixed_panel_replay_joins_private_labels_after_prediction_and_preserves_failures(tmp_path, capsys):
+@pytest.mark.parametrize("version", [2, 3])
+def test_fixed_panel_replay_joins_private_labels_after_prediction_and_preserves_failures(tmp_path, capsys, version):
     bundle, directory, predictions = fixture(tmp_path)
     path = directory / "manifest.json"
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest.pop("contentHash")
     manifest["predictionMode"] = "fixed_panel"
+    if version == 3:
+        manifest.update(version=3, probabilitySemantics="next_batch_invocation_membership",
+                        predictionProtocol="rank_binary_v1", rawScoreSemantics="autoregressive_binary_conditional")
     path.write_text(json.dumps({**manifest, "contentHash": hash_v1(manifest)}), encoding="utf-8")
     for row in predictions:
         row["candidatePanel"] = ["candidate"]
@@ -225,7 +249,7 @@ def test_fixed_panel_replay_joins_private_labels_after_prediction_and_preserves_
     assert "bundle_hash" in capsys.readouterr().out
     predictions[1]["neutral"]["scores"] = []
     (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
-    with pytest.raises(ValueError, match="explicit independent score"):
+    with pytest.raises(ValueError, match="explicit membership score"):
         score_fixed_panel_replay(bundle, directory)
 
 
