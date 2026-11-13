@@ -1,5 +1,14 @@
 # Working on Acephale
 
+The goal instruction now explicitly requires complete joint outcomes, matching
+the teacher's intended alternative-hypothesis semantics. This changes predictor
+and candidate compiler hashes. Prepare fresh source-qualified model inventory,
+public input compilation, calibration and replay before using it. Preserve the
+previous bootstrap and all old annotation artifacts. A separate AI audit found
+one incomplete top goal and seven uncertain cases in the original 20-case audit;
+it is not human approval. Prospective label corrections need their own lineage
+and a revised review packet with the same audit checkpoint IDs.
+
 Native opportunity profiling accepts either the original `cohortPath` or an
 explicit `cohortPaths` list for a combined import. Supply all sealed originals;
 each public prefix routes through its verified owner. Profiling replays only

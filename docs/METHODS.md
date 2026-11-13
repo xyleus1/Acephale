@@ -51,6 +51,13 @@ data and independent outcomes. Families are assigned to training, development an
 test before annotation or mining. Requested-goal annotations see only the public
 checkpoint. Native state, user simulation and reward evaluation stay in Python.
 
+Goal probabilities describe mutually exclusive interpretations of the complete
+requested outcome. Each interpretation includes all concurrent explicit user
+objectives; subgoals and execution prerequisites are not competing hypotheses.
+The predictor instruction and supervised goal prompt share this interpretation.
+The prompt correction changes the compiler contract hash, so earlier calibration,
+qualification and replay artifacts cannot be relabeled as the corrected version.
+
 Base collection may enable shadow prediction. Shadow requests use an existing
 frozen training memory or a valid empty bootstrap snapshot. They cannot admit
 tools or alter actor messages. A prediction qualifies as causal only if its

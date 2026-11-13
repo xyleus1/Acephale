@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## 2026-11-13: Align goal inference with complete-outcome teacher targets
+
+Clarified the shared predictor and supervised-goal instruction: simultaneous
+requirements belong in each complete hypothesis; alternative hypotheses express
+ambiguity. The instruction contributes to both predictor and candidate compiler
+hashes. Existing shapes, probability checks, actor prompts, candidate binding and
+the three training tasks remain unchanged. The original 372 labels, audit packet
+and source-qualified bootstrap remain immutable. Corrected labels and actual
+GPU/prediction results must be recorded separately when available.
+
 ## 2026-11-13: Reconstruct profiles from multiple sealed cohorts
 
 Native profiling now verifies all original collection receipts and routes each

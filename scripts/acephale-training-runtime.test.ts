@@ -132,6 +132,26 @@ test("training goal export uses the actual compiler, excludes target metadata an
   await assert.rejects(compileGoalTrainingExample({ model: fake.port, frame: { ...frame, sources: { ...frame.sources, private_verdict: "future" } }, source, partitions,
     readTarget: async () => ({ draft: missing, annotationHash: hash("annotation"), annotationKind: "teacher_goal_annotation_v1" }) }), /omitted/);
 });
+test("joint goal training and live inference send identical public messages", async () => {
+  const current = copy(frame);
+  current.requestedObjective = "Update my address and return the CURRENT order";
+  current.sources["requirement:0"] = "Update my address";
+  current.sources["requirement:1"] = "Return the CURRENT order";
+  const joint = copy(goal);
+  joint.hypotheses[0]!.objective = current.requestedObjective;
+  joint.hypotheses[0]!.sources = [{ sourceId: "requirement:0", path: [] }, { sourceId: "requirement:1", path: [] }];
+  const fake = modelFixture({ text: canonical(joint), logprobs: [] });
+  const exported = await compileGoalTrainingExample({ model: fake.port, frame: current, source, partitions,
+    readTarget: async () => ({ draft: joint, annotationHash: hash(joint), annotationKind: "teacher_goal_annotation_v1" }) });
+  const predictor = new InfraLocalPredictors(fake.port, { predictionProtocol: "rank_binary_v1", binaryTokenIds: { zero: 15, one: 16 } });
+  const inferred = await predictor.inferGoals(current, new AbortController().signal);
+  const requests = fake.bodies.filter(row => row.path !== "/tokenize");
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].body.messages, exported.prompt);
+  assert.deepEqual(inferred.hypotheses, joint.hypotheses);
+  assert.equal(inferred.unknown, joint.unknown);
+});
+
 test("rank export never inserts missing gold calls and freezes one window before private label join", async () => {
   const fake = modelFixture(); let labelRead = false;
   const result = await compileRankTrainingExamples({ model: fake.port, frame, source, partitions,

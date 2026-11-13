@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-13: Make joint-outcome hypothesis semantics explicit
+
+Teacher instructions already require alternative complete goal hypotheses with
+total probability one. A separate AI semantic audit found a training example
+that divided three concurrent requirements into competing partial objectives.
+The runtime used weaker wording, although conditioning consumes all hypotheses;
+blind goal grading selects the highest-probability one. Clarify the shared runtime
+and training prompt before fitting or replay. Keep the JSON shape and probability
+validation, but require the new compiler hash and fresh downstream artifacts.
+Structural multi-goal label review is a prospective consistency correction, not
+evidence that every multi-goal label is wrong or that human review is complete.
+
 ## 2026-11-13: Route aggregate profiles through their original collections
 
 An aggregate import does not replace its original execution receipts. Native
