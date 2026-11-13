@@ -26,7 +26,8 @@ const sha = (path: string) => createHash("sha256").update(readFileSync(path)).di
 const write = (path: string, value: unknown) => writeFileSync(path, canonical(value) + "\n", { flag: "wx", mode: 0o600 });
 type Annotation = ReturnType<typeof bindTeacherDraft>;
 interface Prediction { checkpoint_id: string; input_hash: string; family_id: string; split: string;
-  status: "completed" | "failed" | "not_dispatched"; goals?: GoalSet }
+  status: "completed" | "failed" | "not_dispatched"; goals?: GoalSet;
+  audit?: { events?: Record<string, unknown>[] } }
 type ReplaySource = Parameters<typeof publicInfraFrame>[0];
 const validateReplaySource = new Ajv2020({ strict: false }).compile<ReplaySource>({
   type: "object", required: ["checkpoint_id", "input_hash", "episode_id", "family_id", "split", "domain", "through_seq",
@@ -51,6 +52,45 @@ const validateReplaySource = new Ajv2020({ strict: false }).compile<ReplaySource
   },
 });
 
+/** Keep closure and raw-response checks equivalent to Python's replay_receipt. */
+function verifyReplayReceipt(directory: string, manifest: Record<string, unknown>, predictions: Prediction[]) {
+  const receiptPath = join(directory, "receipt.json"), snapshots = new Map([[receiptPath, sha(receiptPath)]]);
+  const receipt = json(receiptPath), { responsePayloads, ...body } = receipt;
+  const completed = predictions.filter(row => row.status === "completed").length;
+  if (hash(body) !== hash({ declared: predictions.length, completed, failed: predictions.length - completed,
+    liveActorExecuted: false, toolExecutionPerformed: false })) throw new Error("Goal replay receipt is incomplete");
+  if (!("responseRetentionVersion" in manifest) && !("responsePayloads" in receipt)) return snapshots;
+  if (manifest.responseRetentionVersion !== 1 || !responsePayloads || typeof responsePayloads !== "object"
+    || hash(Object.keys(responsePayloads).sort()) !== hash(["count", "file", "sha256", "version"])
+    || responsePayloads.version !== 1 || responsePayloads.file !== "model-responses.jsonl"
+    || !Number.isSafeInteger(responsePayloads.count) || responsePayloads.count < 0
+    || typeof responsePayloads.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(responsePayloads.sha256)) {
+    throw new Error("Invalid retained response declaration");
+  }
+  const path = join(directory, responsePayloads.file), digest = sha(path);
+  snapshots.set(path, digest);
+  if (digest !== responsePayloads.sha256) throw new Error("Retained response file hash differs");
+  const records = lines(path);
+  if (records.length !== responsePayloads.count) throw new Error("Retained response count differs");
+  const observed = records.map(record => {
+    const response = record.response;
+    if (!response || response.version !== 1) throw new Error("Invalid retained response version");
+    const { contentHash, ...body } = response;
+    if (contentHash !== hash(body) || response.responseHash !== hash(response.continuation)) {
+      throw new Error("Retained response content hash differs");
+    }
+    return [record.checkpoint_id, record.publicInputHash, response.requestId, response.inputHash,
+      response.requestContractHash, response.responseHash, contentHash];
+  });
+  const expected = predictions.flatMap(row => (row.audit?.events ?? [])
+    .filter(event => event.type === "model_response_retained")
+    .map(event => [row.checkpoint_id, row.input_hash, event.requestId, event.inputHash,
+      event.requestContractHash, event.responseHash, event.responsePayloadHash]));
+  if (hash(observed) !== hash(expected)) throw new Error("Retained responses differ from checkpoint dispatch evidence");
+  if ([...snapshots].some(([path, digest]) => sha(path) !== digest)) throw new Error("Replay receipt changed during validation");
+  return snapshots;
+}
+
 /** This join returns public prefixes and predictions only, never future labels. */
 export function verifyInfraGoalReplay(bundle: string, predictionDirectory: string) {
   const dataset = verifyInfraPublicDataset(bundle);
@@ -63,10 +103,7 @@ export function verifyInfraGoalReplay(bundle: string, predictionDirectory: strin
     || ["memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash"].some(key => !/^[0-9a-f]{64}$/.test(manifest[key]))
     || !predictions.length || new Set(predictions.map(row => row.checkpoint_id)).size !== predictions.length
     || hash(manifest.rowIds) !== hash(predictions.map(row => row.checkpoint_id))) throw new Error("Closed frozen goal replay required");
-  const completed = predictions.filter(row => row.status === "completed").length;
-  const receipt = json(join(predictionDirectory, "receipt.json"));
-  if (hash(receipt) !== hash({ declared: predictions.length, completed, failed: predictions.length - completed,
-    liveActorExecuted: false, toolExecutionPerformed: false })) throw new Error("Goal replay receipt is incomplete");
+  const evidenceHashes = verifyReplayReceipt(predictionDirectory, manifest, predictions);
   for (const row of predictions) {
     const source = dataset.publicById.get(row.checkpoint_id);
     if (!source || source.input_hash !== row.input_hash || source.family_id !== row.family_id || source.split !== row.split
@@ -84,7 +121,8 @@ export function verifyInfraGoalReplay(bundle: string, predictionDirectory: strin
     throw new Error("Goal replay must cover every trained predictor calibration family");
   }
   if (!training.length) throw new Error("No declared training predictions");
-  return { dataset, manifest, predictions, training, predictionsSha256: sha(join(predictionDirectory, "predictions.jsonl")) };
+  return { dataset, manifest, predictions, training, evidenceHashes,
+    predictionsSha256: sha(join(predictionDirectory, "predictions.jsonl")) };
 }
 
 export function expandInfraAnnotationCohort(options: { bundle: string; pilot: string; predictions: string; output: string }) {
@@ -239,6 +277,7 @@ export async function runInfraGoalGrading(options: { bundle: string; predictions
     const after = verifyInfraGoalReplay(options.bundle, options.predictions);
     if (after.dataset.manifest.bundle_hash !== replay.dataset.manifest.bundle_hash || hash(sourceHashes) !== hash([
       sha(join(options.predictions, "manifest.json")), sha(join(options.predictions, "predictions.jsonl")), sha(options.annotations)])) throw new Error("Grading source changed during dispatch");
+    if (hash([...after.evidenceHashes]) !== hash([...replay.evidenceHashes])) throw new Error("Replay response evidence changed during grading");
     const costs = durable.ledger.snapshot().filter(row => row.parentId === parent);
     const summary = { version: INFRA_GRADE_VERSION, declared: replay.training.length, retained: grades.length,
       completed: grades.filter(row => row.status === "completed").length, agreed: grades.filter(row => row.agreed).length,

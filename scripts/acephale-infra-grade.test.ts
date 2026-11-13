@@ -89,6 +89,77 @@ const grade = { agreed: true, missing_constraints: [], contradictions: [], reaso
 const model: TeacherFactory = (ledger, record) => new ResponsesModelPort(async params => ({ model: params.model, status: "completed",
   output: [], output_text: canonical(grade), usage: { input_tokens: 20, output_tokens: 20 } }) as unknown as Promise<Response>, ledger, () => 100, record);
 
+function retainedResponses(f: ReturnType<typeof fixture>) {
+  const directory = f.options.predictions;
+  const { contentHash: _oldHash, ...manifest } = JSON.parse(readFileSync(join(directory, "manifest.json"), "utf8"));
+  manifest.responseRetentionVersion = 1;
+  f.options.expectedPredictionManifestHash = hash(manifest);
+  writeFileSync(join(directory, "manifest.json"), canonical({ ...manifest, contentHash: hash(manifest) }));
+  const records = f.predictions.map((row, index) => {
+    const continuation = [{ role: "assistant", content: canonical(row.goals) }];
+    const body = { version: 1, requestId: `goal-${index}`, inputHash: hash(["input", index]),
+      requestContractHash: hash("goal contract"), continuation, responseHash: hash(continuation) };
+    const response = { ...body, contentHash: hash(body) };
+    Object.assign(row, { audit: { events: [{ type: "model_response_retained", requestId: body.requestId,
+      inputHash: body.inputHash, requestContractHash: body.requestContractHash,
+      responseHash: body.responseHash, responsePayloadHash: response.contentHash }] } });
+    return { checkpoint_id: row.checkpoint_id, publicInputHash: row.input_hash, response };
+  });
+  writeFileSync(join(directory, "predictions.jsonl"), f.predictions.map(row => canonical(row) + "\n").join(""));
+  const receipt = JSON.parse(readFileSync(join(directory, "receipt.json"), "utf8"));
+  receipt.responsePayloads = { version: 1, file: "model-responses.jsonl", count: records.length, sha256: "" };
+  const reseal = () => {
+    writeFileSync(join(directory, "model-responses.jsonl"), records.map(row => canonical(row) + "\n").join(""));
+    receipt.responsePayloads.sha256 = createHash("sha256").update(readFileSync(join(directory, "model-responses.jsonl"))).digest("hex");
+    writeFileSync(join(directory, "receipt.json"), canonical(receipt));
+  };
+  reseal();
+  return { records, receipt, reseal };
+}
+
+test("goal grading accepts and verifies retained response receipts", async () => {
+  const f = fixture();
+  try {
+    retainedResponses(f);
+    assert.equal(verifyInfraGoalReplay(f.options.bundle, f.options.predictions).evidenceHashes.size, 2);
+    const result = await runInfraGoalGrading(f.options, model);
+    assert.equal(result.retained, 3); assert.equal(result.agreed, 3);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+for (const defect of ["version", "file", "count", "outer_hash", "inner_hash", "checkpoint_order", "request", "audit", "missing_declaration"]) {
+  test(`goal grading rejects retained-response ${defect} tampering before dispatch`, async () => {
+    const f = fixture(); let called = false;
+    try {
+      const r = retainedResponses(f);
+      if (defect === "version") r.receipt.responsePayloads.version = 2;
+      if (defect === "file") r.receipt.responsePayloads.file = "../model-responses.jsonl";
+      if (defect === "count") r.receipt.responsePayloads.count++;
+      if (defect === "inner_hash") r.records[0].response.continuation[0].content = "changed";
+      if (defect === "checkpoint_order") r.records.reverse();
+      if (defect === "request") {
+        const response = r.records[0].response;
+        response.requestId = "another-request";
+        const { contentHash: _oldHash, ...body } = response;
+        response.contentHash = hash(body);
+      }
+      r.reseal();
+      if (defect === "outer_hash") writeFileSync(join(f.options.predictions, "model-responses.jsonl"), "{}\n");
+      if (defect === "audit") {
+        writeFileSync(join(f.options.predictions, "predictions.jsonl"), f.predictions.map(row => {
+          const { audit: _audit, ...body } = row as typeof row & { audit: unknown }; return canonical(body) + "\n";
+        }).join(""));
+      }
+      if (defect === "missing_declaration") {
+        delete r.receipt.responsePayloads;
+        writeFileSync(join(f.options.predictions, "receipt.json"), canonical(r.receipt));
+      }
+      await assert.rejects(runInfraGoalGrading(f.options, () => { called = true; return model({} as never, () => {}); }), /[Rr]etained/);
+      assert.equal(called, false);
+    } finally { rmSync(f.directory, { recursive: true, force: true }); }
+  });
+}
+
 test("expanded annotation cohort preserves original audit exactly and covers all training predictions", () => {
   const fixtureData = fixture();
   try {

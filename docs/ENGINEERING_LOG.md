@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-13: Verify retained responses during goal grading and reliability
+
+Two remaining readers compared replay receipts against the old five-field shape.
+Reliability now calls the shared Python verifier and rechecks every retained file
+after aggregation. The TypeScript grader validates the same payload declaration,
+hashes, counts and ordered dispatch association before any grading request and
+again at completion. Focused validation passed 42 Python and 19 TypeScript tests,
+including resealed wrong-request/row evidence and changes during aggregation.
+Type checking passed. Existing failure rows, model identities, training source,
+audit gates and live execution are unchanged.
+
 ## 2026-11-13: Retain original FP32 DeltaNet decay values
 
 Added a scoped Transformers strict dtype loader and exact checkpoint/loaded

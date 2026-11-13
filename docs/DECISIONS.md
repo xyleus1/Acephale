@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-13: Apply replay closure checks to semantic grading
+
+Goal reliability and blind goal grading must consume the same verified replay
+closure as scoring and calibration. Accept declared retained responses only with
+their exact bytes and ordered checkpoint/request audit links. Recheck the files
+after aggregation or grading. This is an analysis-reader correction, with no
+change to the original executions, prediction selection or audit thresholds.
+
 ## 2026-11-13: Preserve checkpoint decay precision before main training
 
 The pinned predictor checkpoint stores 18 DeltaNet `A_log` vectors in FP32.

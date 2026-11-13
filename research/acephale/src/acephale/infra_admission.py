@@ -22,6 +22,7 @@ from acephale.infra_data import (
     validate_annotation,
     verify_bundle,
 )
+from acephale.replay_receipt import verify_replay_receipt
 from acephale.storage import file_hash
 
 COMPONENTS = ("actorLeadMs", "contentionMs", "predictionMs", "schedulingMs", "toolMs", "validationMs")
@@ -216,10 +217,11 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
         raise ValueError("Frozen model, prompt, compiler and memory identities required")
     predictions = read_jsonl(paths[1])
     _closed_rows(manifest, predictions)
-    receipt = _json(paths[2])
-    completed = sum(row.get("status") == "completed" for row in predictions)
-    if receipt != {"declared": len(predictions), "completed": completed, "failed": len(predictions) - completed, "liveActorExecuted": False, "toolExecutionPerformed": False}:
-        raise ValueError("Goal replay receipt does not close the declared cohort")
+    replay_hashes = verify_replay_receipt(prediction_directory, manifest, predictions)
+    for path, digest in replay_hashes.items():
+        if str(path) in hashes and hashes[str(path)] != digest:
+            raise ValueError("Goal replay changed during validation")
+        hashes[str(path)] = digest
     for row in predictions:
         _prefix(row, public)
         if row.get("status") not in {"completed", "failed", "not_dispatched"}:
@@ -313,7 +315,7 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
         from acephale.annotation_review import review_metadata
 
         body["provenance"].update(review_metadata(audit))
-    if any(file_hash(path) != hashes[str(path)] for path in paths):
+    if any(file_hash(Path(path)) != digest for path, digest in hashes.items()):
         raise ValueError("Goal evidence changed during aggregation")
     artifact = {**body, "contentHash": hash_v1(body)}
     report = {"goalReliabilityHash": artifact["contentHash"], "audit": audit, "gradedCount": len(eligible), "agreedCount": agreed,

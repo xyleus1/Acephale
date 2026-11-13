@@ -1,5 +1,13 @@
 # Working on Acephale
 
+Goal grading and reliability now validate retained-response replay receipts too.
+The Python reliability builder reuses the shared reader; the TypeScript grader
+checks the same version, file bytes, record count, inner hashes and ordered
+checkpoint/request audit associations. Both retain the original prediction
+denominator and recheck evidence at completion. Use this source as an explicit
+offline analysis update; existing trainer images and replay executions keep their
+own source identities. No new predictions or labels are required for this fix.
+
 Prospective predictor training preserves the checkpoint's 18 FP32 `A_log`
 tensors through Transformers 5.10.1's strict dtype plan on a scoped subclass.
 Every loaded decay tensor must match the original safetensors bytes; all other
