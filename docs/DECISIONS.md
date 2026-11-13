@@ -1,5 +1,18 @@
 # Acephale decisions
 
+## 2026-11-13: Use the official FLA integration before sizing full fitting
+
+Pin `flash-linear-attention[cuda]` and `fla-core` at 0.6.0 without changing the
+existing Torch, Transformers, PEFT or TRL versions. Validate the actual chunk,
+recurrent and fused-normalization implementation on each Qwen DeltaNet layer.
+Keep PyTorch convolution, SDPA full attention and unpacked examples. Record the
+observed kernel profile in both training and throughput artifacts.
+
+The old PyTorch fallback step took 125.55 seconds. It is not a reason to reduce
+the declared three-epoch, two-seed recipe. A fresh numerical qualification and
+measured profile must determine the full run's allocation. No speedup is claimed
+until that measurement exists. See the [kernel declaration](experiments/training-kernels-2026-11-13.md).
+
 ## 2026-11-13: Expand fitting coverage without selecting positive outcomes
 
 The original 100-case public pilot had 17 exact positive-read windows, below the

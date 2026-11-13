@@ -1,5 +1,22 @@
 # Acephale engineering log
 
+## 2026-11-13: Closed collection and declared FLA trainer
+
+Published the actual 60-slot fixed-base collection: 57 native completions, 46
+known constraint-clean completions, 326 physical calls and 32.755-second mean
+live latency including drain. The staged-study record preserves denominators,
+failed slots, family intervals, usage uncertainty and immutable report hashes.
+These are descriptive fitting/calibration results, not a paired improvement.
+
+The trainer now pins official FLA/core 0.6.0 and rejects silent DeltaNet fallback.
+The lock adds only those packages and einops 0.8.2. Focused checks passed 98 tests
+with three platform skips; the full research suite passed 549 tests with ten
+platform/integration skips. An earlier worktree run failed because its Node
+dependency junction and pinned subprocess PATH were absent; those environment
+settings were corrected before the successful complete rerun. Actual GPU kernel
+qualification and throughput remain unmeasured. The expanded public-selection
+change is integrated without editing the active source-frozen GPU checkout.
+
 ## 2026-11-13: Explicit expansion of public fitting coverage
 
 Added a versioned all-public-eligible selection receipt and offline declaration

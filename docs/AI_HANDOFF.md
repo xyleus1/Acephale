@@ -4,9 +4,11 @@ Read [methods](METHODS.md), [state](STATE.md) and [runbook](RUNBOOK.md) first.
 This repository studies goal-conditioned speculative reads with a fixed actor.
 
 Compiler v3 removes duplicate policy text while preserving its mandatory source.
-The active phase-one collection remains on `fe0748b`; this compiler revision is
-for the next phase. Preserve collection provenance and recompile new training,
-calibration and evaluation inputs. Never relabel the earlier artifacts.
+The phase-one collection closed under `fe0748b`: 57/60 native completions and
+46/60 known constraint-clean completions. Public-only recompilation under
+`bbd95b0` recovered postprocessing without repeating native trials. Preserve both
+attempts and all earlier artifacts. The independent 12-row development-validation
+cohort remains separate from the later paired comparison.
 
 The native exporter now accepts the actual teacher contract. Use explicit v2
 `native_multitask` export for neutral ranking, conditioned ranking and goal targets.
@@ -33,9 +35,9 @@ Profile fitting data before choosing one, then freeze it for both seeds. The
 actor and base predictor remain exact repository pins. A trained checkpoint needs
 new calibration, goal-reliability and opportunity measurements before live use.
 
-The active collection uses the v2 budget. The user's subsequent spending
-authorization supports v3, a $1,000 working envelope with a creation-only sidecar
-on the original journal. Activate it after the active phase closes. Its parent
+The user's subsequent spending authorization supports v3, a $1,000 working
+envelope activated through a creation-only sidecar on the original journal after
+the previous lease closed. Its parent
 amendment binds v2; original reservations, GPU hours and training windows remain
 counted. Policy and amendment hashes must match future execution manifests.
 Never restart an old heartbeat, reuse an expired lease or create a replacement
@@ -43,9 +45,9 @@ budget. Resolve secure paths through operator configuration.
 
 The fresh 88-task native fixture bundle and 200 omitted-mutation checks passed
 before actor execution. Preserve its generator bytes and receipt. Phase one
-collects 60 fitting/calibration trials with shadow prediction disabled and a
-$0.40 hosted-call cap; development and test tasks remain withheld. The current
-restart has a two-hour provider lease. Preserve its original task IDs and failed
+collected 60 fitting/calibration trials with shadow prediction disabled and a
+$0.40 hosted-call cap; development and test tasks were withheld. Preserve its
+original task IDs and failed
 slots. Unknown provider tax has a 30% reservation allowance, not an asserted tax
 rate. Keep the prior internal infrastructure split as historical evidence; after
 v3 activation the infrastructure/compute/associated limits are $200/$150/$50.
@@ -63,6 +65,14 @@ Use `training_cli profile` before fitting. It tries microbatch/accumulation 4/4,
 fallback. One disposable optimizer step must produce finite nonzero gradients,
 changed adapter weights and unchanged base weights; it produces no fitted model.
 Freeze the selected setting for both main seeds and start them independently.
+
+The next trainer pins FLA/core 0.6.0 and verifies actual Qwen DeltaNet function
+identities; convolution remains PyTorch, attention SDPA and packing disabled.
+This changes the image and requires a fresh GPU smoke, strict reload, numerical
+server qualification and measured profile. The 549-pass local research suite
+does not establish throughput or serving compatibility. Expanded fitting means
+1,116 multitask rows and 210 optimizer steps per seed at effective batch 16.
+Do not shorten either seed to fit an obsolete runtime estimate.
 
 Multi-cohort import preserves original receipts and disjoint task/domain/seed
 identities. Collect 12 separate base development-validation trials before model

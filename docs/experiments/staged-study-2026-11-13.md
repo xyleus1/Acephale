@@ -58,11 +58,68 @@ with CUDA-OOM-only batch fallback. Development-validation data is collected as a
 separate declared base cohort, not reused as the paired comparison's base arm.
 Multi-cohort import preserves original receipts and annotation-review ancestry.
 
+## Closed fixed-base collection
+
+All 60 declared fitting/calibration slots closed and were exported. This is a
+single-base data collection, not the held-out or three-arm comparison.
+
+| Measurement | Observed result |
+| --- | ---: |
+| Native completion | 57/60 (95.0%) |
+| Known constraint-clean completion | 46/60 (76.7%) |
+| Logical / physical tool calls | 326 / 326 |
+| Speculative / validation calls | 0 / 0 |
+| Mean live latency, including drain | 32.755 seconds |
+| Observed live p95, n=60 | 53.926 seconds |
+| Mean evaluator-inclusive latency | 38.755 seconds |
+| Observed evaluator-inclusive p95, n=60 | 61.145 seconds |
+| Known hosted user/judge subtotal | $0.673481 |
+
+The family-bootstrap 95% intervals are [88.3%, 100.0%] for native completion
+and [66.7%, 86.7%] for known constraint-clean completion, with 2,000 samples,
+seed 42, and 30 family clusters. These describe the custom collection. Retail
+completed 27/30 and airline 30/30; their known constraint-clean counts were
+26/30 and 20/30. There were 59 complete constraint audits, 11 known violations
+and one unevaluated trial. The three failed slots include two native outcome
+failures and one execution error. No slot was budget-terminated or replaced.
+
+One hosted charge remains unknown and reserved. GPU charges and final invoices
+are separate from the usage-derived hosted subtotal. Two entity variants per
+family are not two independent trials of the same task; two-trial consistency
+and goal/tool prediction accuracy were not measured by this collection.
+
+The immutable report content hash is
+`34708d1561442c3deda85748d8c1ff48f16bb385963e2c41ffa46c2f0ab234ae`.
+Its native archive SHA-256 is
+`d2dad443830ed822e77fbd88810c910a5045cb9e5e194730b47d1e9188e46681`.
+The original collection's postprocessing timed out; the successful public-only
+recompilation used source `bbd95b0` without repeating native trials or rewriting
+the failed attempt.
+
+## Annotation and fitting coverage
+
+Public recompilation retained 372 nonempty fitting windows. The original
+100-case pilot had only 17 exact positive windows, below the required 48.
+An explicit expanded selection uses all 372 preexisting public-eligible rows,
+which contain 79 exact positive windows. It does not select only positive rows.
+Original pilot identities and its 20 preselected audit cases remain unchanged.
+
+Of 155 next-batch allowlisted-read checkpoints, 68 failed the actual current
+authorization policy. Among the remaining 87 admissible targets, 79 were covered
+by the frozen window (90.8%). Six admissible misses involved date binding and
+two were present in the full pool but outside the window. Authorization failures
+are not evidence that the policy should be relaxed.
+
+The initial 100 teacher requests produced 37 valid annotations. An explicit
+repair produced another 62, leaving one probability-mass failure. Failed drafts
+remain retained. Schema validity alone is not semantic acceptance: the actual
+20-case human audit and expanded annotation provenance are still required.
+
 ## Reporting still required
 
-Publish the actual collection denominator, native reward, constraints, logical
-and physical calls, live latency and usage cost after closure. Then report
-annotation acceptance, data coverage, both training seeds, goal/tool/argument
-prediction quality, calibration, and the three paired live arms. Retain failed,
-censored and undispatched slots. No accuracy or latency improvement is established
-by the recovery code or its unit tests.
+Report semantic annotation acceptance, both full training seeds, goal/tool/argument
+prediction, calibration, and the three paired live arms after their actual runs.
+Retain failed, censored and undispatched slots. The next trainer declares an
+[FLA kernel profile](training-kernels-2026-11-13.md), whose actual GPU throughput
+and numerical qualification have not yet been measured. No accuracy or latency
+improvement is established by these implementation changes.
