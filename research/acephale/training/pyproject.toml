@@ -13,6 +13,8 @@ dependencies = [
     "datasets==5.2.0",
     "tensorboard==2.20.0",
     "safetensors==0.6.2",
+    "flash-linear-attention[cuda]==0.6.0",
+    "fla-core==0.6.0",
 ]
 
 [tool.uv]

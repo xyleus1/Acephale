@@ -8,6 +8,13 @@ responses are unknown, never negative labels.
 
 The lock pins Python 3.12, PyTorch 2.13.0, Transformers 5.10.1, PEFT 0.21.0,
 TRL 1.16.0, Accelerate 1.15.0 and Datasets 5.2.0. Serving has its own environment.
+The next trainer profile also pins `flash-linear-attention[cuda]` and `fla-core`
+0.6.0. It uses the upstream Gated DeltaNet and gated normalization kernels while
+retaining PyTorch convolution and SDPA for full attention. Every loaded DeltaNet
+layer is checked; the actual kernel identities appear in fitting and profiling
+specifications. This changes the trainer environment and requires a fresh image,
+smoke, numerical serving qualification and throughput profile before main fitting.
+The earlier reference-kernel measurements remain historical observations.
 The canonical image definition is
 [`trainer.Dockerfile`](../../../infra/acephale-infra-v1/trainer.Dockerfile).
 Its C compiler and development-header dependency closure is pinned in
@@ -16,6 +23,12 @@ and included in the image-input hash. The image retains its complete installed
 package inventory at `/usr/local/share/acephale-trainer-packages.tsv`. TRL's fused
 loss uses Triton's C driver build even when `torch_compile` is disabled. Missing
 locked system packages fail the build; no newer package is substituted.
+
+The upstream [pinned Transformers implementation](https://github.com/huggingface/transformers/blob/v5.10.1/src/transformers/models/qwen3_5/modeling_qwen3_5.py)
+selects these optional kernels at import time. The FLA [installation guide](https://github.com/fla-org/flash-linear-attention/blob/main/INSTALL.md)
+describes CUDA extras and keeping the existing PyTorch installation. The lock
+preserves the established PyTorch, Transformers, TRL and model versions. No
+speedup or accuracy improvement is established by dependency installation alone.
 
 ## Prepare actual compiled examples
 

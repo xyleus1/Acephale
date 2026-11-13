@@ -67,6 +67,7 @@ def _attempt(dataset: Path, model_path: Path, output: Path, lease_path: Path, mi
     set_seed(17)
     started = time.monotonic()
     model, tokenizer = _load_model(model_path)
+    kernel_profile = model.acephale_kernel_profile
     model = get_peft_model(model, LoraConfig(**lora_options(recipe, resolve_targets(model))))
     trainable = [name for name, parameter in model.named_parameters() if parameter.requires_grad]
     if not trainable or any("lora_A" not in name and "lora_B" not in name for name in trainable):
@@ -79,7 +80,7 @@ def _attempt(dataset: Path, model_path: Path, output: Path, lease_path: Path, mi
     output.mkdir(parents=True, exist_ok=False)
     specification = hashed({"kind": "acephale-batch-profile-attempt", "datasetManifestHash": manifest["contentHash"],
         "leaseHash": hash_v1(lease), "baseReceiptHash": hash_v1(base), "implementation": implementation,
-        "versions": versions, "recipe": recipe, "binaryTokenIds": binary_token_ids(tokenizer),
+        "versions": versions, "kernelProfile": kernel_profile, "recipe": recipe, "binaryTokenIds": binary_token_ids(tokenizer),
         "fittingIds": [rows[index]["id"] for index in indices], "seed": 17,
         "purpose": "Disposable batch capacity measurement; no trained weights are exported"})
     write_new(output / "specification.json", specification)

@@ -29,7 +29,7 @@ from acephale.training_data import (
 )
 
 TRAINING_VERSIONS = {"torch": "2.13.0", "transformers": "5.10.1", "peft": "0.21.0", "trl": "1.16.0",
-                     "accelerate": "1.15.0", "datasets": "5.2.0"}
+                     "accelerate": "1.15.0", "datasets": "5.2.0", "flash-linear-attention": "0.6.0", "fla-core": "0.6.0"}
 TARGET_SUFFIXES = {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj",
                    "in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a", "out_proj"}
 TOKENIZER_FILES = {"tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "added_tokens.json",
@@ -204,6 +204,8 @@ def _load_model(model_path: Path):
     import torch
     from transformers import AutoTokenizer, Qwen3_5ForConditionalGeneration
 
+    from acephale.training_kernels import training_kernel_profile
+
     if not torch.cuda.is_available():
         raise RuntimeError("The approved real-model trainer requires a qualified CUDA GPU")
     tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
@@ -212,6 +214,7 @@ def _load_model(model_path: Path):
     model = Qwen3_5ForConditionalGeneration.from_pretrained(model_path, local_files_only=True,
             torch_dtype=torch.bfloat16, attn_implementation="sdpa").to("cuda")
     model.config.use_cache = False
+    model.acephale_kernel_profile = training_kernel_profile(model)
     return model, tokenizer
 
 
@@ -293,6 +296,7 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     started = time.monotonic()
     deadline = min(started + maximum_seconds, started + lease["deadline"] - time.time())
     model, tokenizer = _load_model(model_path)
+    kernel_profile = model.acephale_kernel_profile
     targets = resolve_targets(model)
     model = get_peft_model(model, LoraConfig(**lora_options(recipe, targets)))
     trainable = {name: parameter.numel() for name, parameter in model.named_parameters() if parameter.requires_grad}
@@ -307,7 +311,8 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     frozen_before, adapter_before = _parameter_hash(model, adapter=False), _parameter_hash(model, adapter=True)
     output.mkdir(parents=True, exist_ok=False)
     specification = hashed({"schemaVersion": 1, "base": BASE, "datasetManifestHash": manifest["contentHash"],
-        "seed": seed, "mode": "smoke" if smoke else "fit", "recipe": recipe, "versions": versions, "implementation": implementation, "targets": targets,
+        "seed": seed, "mode": "smoke" if smoke else "fit", "recipe": recipe, "versions": versions,
+        "kernelProfile": kernel_profile, "implementation": implementation, "targets": targets,
         "probeContext": dict(PROBE_CONTEXT),
         "trainableParameters": trainable, "trainableCount": sum(trainable.values()), "binaryTokenIds": binary_ids,
         "leaseHash": hash_v1(lease), "baseReceiptHash": hash_v1(base_receipt), "frozenBeforeHash": frozen_before,
