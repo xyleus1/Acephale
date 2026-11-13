@@ -43,13 +43,20 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
     if type(plan.get("shadowPrediction", False)) is not bool or plan.get("stage", "collection") != "collection":
         raise ValueError("Shadow collection requires an explicit boolean and collection stage")
     shadow = plan.get("shadowPrediction", False)
+    purpose = plan.get("collectionPurpose")
+    auxiliary = purpose == "auxiliary-development-validation"
+    if purpose is not None and (not auxiliary or shadow or custom_source is None):
+        raise ValueError("Auxiliary development collection requires verified custom tasks and no shadow prediction")
     if "customTaskReceiptHash" in plan and (custom_source is None
             or plan["customTaskReceiptHash"] != custom_source["receiptHash"]):
         raise ValueError("Custom task receipt differs from the predeclared plan")
     collection_partitions = plan.get("collectionPartitions")
+    expected_partitions = ["development"] if auxiliary else ["weight_fit", "calibration"]
     if collection_partitions is not None and (custom_source is None
-            or collection_partitions != ["weight_fit", "calibration"]):
+            or collection_partitions != expected_partitions):
         raise ValueError("Custom learning collection requires the declared fitting and calibration partitions")
+    if auxiliary and collection_partitions != expected_partitions:
+        raise ValueError("Auxiliary development collection requires its explicit development selection")
     evaluation_type = native_evaluation_type(plan.get("evaluationType", "ALL"))
     if shadow and not plan.get("predictorBaseUrl"):
         raise ValueError("Shadow prediction requires the pinned predictor endpoint")
@@ -107,10 +114,12 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
               "ledgerCheckpointPath": "ledger-checkpoint.json", "actorBaseUrl": plan["actorBaseUrl"],
               "snapshotId": "collection-" + hash_v1([source_commit, bundle]), "stream": False,
               "maximumLifetimeSeconds": plan.get("maximumLifetimeSeconds", 3600), "runs": runs,
-              "taskBundleHash": hash_v1(bundle), "hosted": {"allocation": "training",
+              "taskBundleHash": hash_v1(bundle), "hosted": {"allocation": "development" if auxiliary else "training",
                   "maxCostMicrodollarsPerRun": plan.get("maxCostMicrodollarsPerRun", 1_250_000),
                   "maxSteps": plan.get("maxSteps", 40), "maxErrors": plan.get("maxErrors", 5),
                   "timeoutSeconds": plan.get("timeoutSeconds", 600), "evaluationType": evaluation_type}}
+    if auxiliary:
+        config["collectionPurpose"] = purpose
     if plan.get("predictorBaseUrl"):
         config["predictorBaseUrl"] = plan["predictorBaseUrl"]
     if custom_source:
@@ -150,8 +159,9 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
                     "globalConcurrency": 4, "startsPerRun": 12, "deadlineMs": 5000,
                     "cachePolicy": "base-collection-shadow-prediction-no-speculation" if shadow else "base-collection-no-speculation", "scheduleHash": hash_v1(runs)}}
     if budget_binding:
-        policy = read(ROOT / "src/lib/acephale/contracts/budget-policy-v2.json")
-        if (budget_binding.get("budgetPolicyHash") != hash_v1(policy)
+        policies = [read(ROOT / f"src/lib/acephale/contracts/budget-policy-v{version}.json") for version in (2, 3)]
+        policy = next((value for value in policies if budget_binding.get("budgetPolicyHash") == hash_v1(value)), None)
+        if (policy is None
                 or set(budget_binding) != {"budgetPolicyHash", "budgetAmendmentHash"}
                 or not isinstance(budget_binding["budgetAmendmentHash"], str)
                 or len(budget_binding["budgetAmendmentHash"]) != 64
@@ -159,6 +169,9 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
             raise ValueError("Invalid budget policy binding")
         manifest["budgets"].update(budget_binding)
         manifest["budgets"]["infrastructureMicrodollars"] = policy["allocationsMicrodollars"]["infrastructure"]
+        if policy["version"] == 3:
+            manifest["budgets"].update(totalCeilingMicrodollars=policy["totalMicrodollars"],
+                trancheMicrodollars=policy["totalMicrodollars"], maximumGpuHours=policy["maxGpuHours"])
     validate_task_bundle(config, manifest, bundle)
     return config, manifest, bundle
 

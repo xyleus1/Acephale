@@ -84,6 +84,13 @@ def _model_identity(model: dict[str, Any], token_ids: dict[str, int], selection:
         return BASE["repository"]
     _hashed(artifact)
     validate_model_selection(model, selection)
+    if artifact.get("schemaVersion") == 2:
+        from acephale.training_lora import validate_lora_artifact
+
+        validate_lora_artifact(artifact)
+        if artifact["binaryTokenIds"] != token_ids:
+            raise ValueError("Trained predictor comparison tokenizer differs")
+        return artifact["servedModel"]
     artifact_keys = {"schemaVersion", "kind", "base", "adapterHash", "mergedWeightsHash", "tokenizerHash", "chatTemplateHash", "trainingManifestHash",
                      "weightFitFamilies", "calibrationFamilies", "protocol", "binaryTokenIds", "servedModel", "contentHash"}
     if (artifact.get("schemaVersion") != 1 or artifact.get("protocol") != "rank_binary_v1" or artifact.get("binaryTokenIds") != token_ids

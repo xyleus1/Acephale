@@ -130,6 +130,24 @@ def test_goal_training_requires_actual_review_and_exact_annotation_hashes(tmp_pa
         verify_review(pilot, reviews, annotations)
 
 
+def test_original_human_review_remains_bound_when_unchanged_labels_are_recompiled(tmp_path):
+    pilot, reviews, annotations = review_fixture()
+    pilot["source_dataset_hash"] = hash_v1("original closed collection")
+    before = copy.deepcopy((pilot, reviews, annotations))
+    review = verify_review(pilot, reviews, annotations)
+    row = example()
+    row.update(task="goal", condition=None, candidateIds=[], candidateWindowHash=None,
+               completion='{"schemaVersion":1,"hypotheses":[],"unknown":1}')
+    row["provenance"].update(annotationHash=hash_v1(annotations[0]),
+                             sourceDatasetHash=hash_v1("verified aggregate including auxiliary development"))
+    manifest = prepare_dataset([row], tmp_path / "recompiled", review=review)
+    assert manifest["review"]["pilotHash"] == hash_v1(pilot)
+    assert (pilot, reviews, annotations) == before
+    row["provenance"]["annotationHash"] = hash_v1("changed annotation")
+    with pytest.raises(ValueError, match="human annotation review"):
+        prepare_dataset([row], tmp_path / "changed", review=review)
+
+
 class CharacterTokenizer:
     def apply_chat_template(self, messages, *, add_generation_prompt, **_):
         return "".join(f"{row['role']}:" + row["content"] + "\n" for row in messages) + ("assistant:" if add_generation_prompt else "")

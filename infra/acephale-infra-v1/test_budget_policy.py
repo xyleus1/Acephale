@@ -195,3 +195,76 @@ def test_tax_allowance_keeps_an_explicit_kind_and_existing_overhead_default(amen
     with pytest.raises(ValueError, match="associated-charge kind"):
         control.reserve_overhead(path, "33333333-3333-4333-8333-333333333333", 1, kind="arbitrary", budget=budget)
     assert path.read_bytes() == before
+
+
+def expand_v3(ledger, parent):
+    policy = control.read_json(control.ROOT / "src/lib/acephale/contracts/budget-policy-v3.json")
+    body = {**{key: value for key, value in parent.items() if key != "contentHash"},
+        "version": 3, "profile": "acephale-budget-amendment-v3", "policy": policy,
+        "policyHash": control._budget_digest(policy), "parentAmendmentHash": parent["contentHash"],
+        "baselineLeases": json.loads(json.dumps(ledger["leases"])),
+        "baselineOverheads": json.loads(json.dumps(ledger["overheads"])),
+        "baselineTrainingWindows": json.loads(json.dumps(ledger["trainingWindows"]))}
+    value = {**body, "contentHash": control._budget_digest(body)}
+    control.write_new(Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json"), value)
+    return value
+
+
+def test_v3_retains_v2_windows_and_suballocation_but_applies_new_future_caps(amended):
+    path, ledger, parent = amended
+    suballocate(path)
+    parent_bytes = Path(ledger["plan"]["studyLedgerPath"] + ".policy-v2.json").read_bytes()
+    ledger["trainingWindows"].extend([
+        {"reservedSeconds": 14400, "trainingKind": "fit", "budgetAmendmentHash": parent["contentHash"]},
+        {"reservedSeconds": 900, "trainingKind": "smoke", "budgetAmendmentHash": parent["contentHash"]}])
+    current = expand_v3(ledger, parent)
+    ledger["leases"].append({"id": "v3-work", "status": "terminated", "reservedHours": 20,
+                              "reservedUsd": 40, "reservedComputeUsd": 40})
+    ledger["trainingWindows"].append({"reservedSeconds": 14400, "trainingKind": "fit", "budgetAmendmentHash": current["contentHash"]})
+    assert control.effective_budget_policy(ledger) == current
+    assert control.infrastructure_caps(ledger) == (200, 150, 50)
+    assert Path(ledger["plan"]["studyLedgerPath"] + ".policy-v2.json").read_bytes() == parent_bytes
+    selected = control.hardware_profile("a100-40gb-v1")
+    quote = {"hourlyUsd": 1.99, "quotedAt": 10000, "hardwareProfile": selected["id"],
+             "hardwareProfileHash": control.digest(selected), "instanceType": selected["instanceType"], "imageFamily": "gpu-base-24-04"}
+    assert control.reserve_lease(ledger, quote, 8, 0, 10000)["reservedComputeUsd"] == 15.92
+    ledger["trainingWindows"][-1]["budgetAmendmentHash"] = parent["contentHash"]
+    with pytest.raises(ValueError, match="does not bind"):
+        control.effective_budget_policy(ledger)
+
+
+def test_v3_rejects_changed_parent_or_historical_v2_overrun(amended):
+    _, ledger, parent = amended
+    ledger["trainingWindows"].append({"reservedSeconds": 901, "trainingKind": "smoke", "budgetAmendmentHash": parent["contentHash"]})
+    expand_v3(ledger, parent)
+    with pytest.raises(ValueError, match="windows exceed"):
+        control.effective_budget_policy(ledger)
+
+
+def test_v3_training_lease_has_separate_added_allowance(amended, tmp_path):
+    path, ledger, parent = amended
+    current = expand_v3(ledger, parent)
+    selected = control.hardware_profile("a100-40gb-v1")
+    ledger["leases"].append({"id": "new", "status": "active", "instanceId": "instance", "deadline": 50000,
+        "quote": {"hardwareProfileHash": control.digest(selected)}, "studyReservation": {"reservationId": "funded"}})
+    control.atomic_json(path, ledger)
+    preflight = tmp_path / "preflight.json"
+    control.write_new(preflight, {"profile": "acephale-training-preflight-v1", "actorStopped": True,
+        "gpuProcesses": 0, "observedAt": 10000, "hardwareProfile": selected["id"], "hardwareProfileHash": control.digest(selected)})
+    with patch.object(control.time, "time", return_value=10000):
+        first = control.training_lease(path, "new", preflight, tmp_path / "first.json", 4, "fit")
+        control.training_lease(path, "new", preflight, tmp_path / "second.json", 4, "fit")
+        assert first["version"] == 3 and first["budgetAmendmentHash"] == current["contentHash"]
+        with pytest.raises(ValueError, match="kind allowance"):
+            control.training_lease(path, "new", preflight, tmp_path / "third.json", .01, "fit")
+
+
+@pytest.mark.parametrize("timestamp", [None, "not-a-date", "2026-11-12T23:59:59Z"])
+def test_v3_requires_finite_authorization_no_earlier_than_its_parent(amended, timestamp):
+    _, ledger, parent = amended
+    current = expand_v3(ledger, parent)
+    current["authorizedAt"] = timestamp
+    current["contentHash"] = control._budget_digest({key: value for key, value in current.items() if key != "contentHash"})
+    control.atomic_json(Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json"), current)
+    with pytest.raises(ValueError, match="timestamp|parent chain"):
+        control.effective_budget_policy(ledger)

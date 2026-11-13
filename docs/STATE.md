@@ -10,10 +10,13 @@ calls, without speculation. Mean live latency including drain was 53.897 seconds
 These are custom tau-compatible pilot observations, not a held-out comparison.
 
 The training data had 34 fitting examples and nine positive candidate bits.
-Development candidate coverage was 9/19. One smoke optimizer step changed the
-adapter while preserving base weights, then failed adapter reload verification.
-Neither main training seed started. No trained-model accuracy or latency gain has
-been established. See the [immutable pilot report](experiments/predictor-lora-pilot-2026-11-10.md).
+Development candidate coverage was 9/19. The November 10 smoke changed the adapter
+while preserving base weights, then failed adapter reload verification. A fresh
+November 13 smoke passed adapter reload after the precision-context repair, but
+failed the subsequent merged-weight comparison. Neither main training seed has
+started. No trained-model accuracy or latency gain has been established. See the
+[original pilot](experiments/predictor-lora-pilot-2026-11-10.md) and
+[staged-study record](experiments/staged-study-2026-11-13.md).
 
 ## Current implementation
 
@@ -28,11 +31,11 @@ from calibrated next-batch membership. Historical v2 artifacts remain readable;
 new binary-predictor calibration uses v3. Source changes require new compiler
 identities and downstream artifacts, not relabeling old results.
 
-The approved budget amendment preserves the original journal and all unresolved
-charges. It changes future allocations within the same $500 ceiling, retains the
-$65 contingency, and adds four fitting hours plus a 15-minute smoke allowance.
-Actual activation and infrastructure state are recorded in private operator
-receipts, not inferred from this file.
+The user authorized additional spending on November 13. The future v3 policy
+provides a $1,000 working envelope while retaining the original journal, previous
+amendments, reservations and $65 contingency. It is activated only after the
+current v2 collection phase closes. Authorization is not a record of spending;
+actual activation and resource state are recorded in private operator receipts.
 
 The fresh compositional task bundle passed native fixture verification: 88 tasks
 across 44 preassigned families, with 200 omitted-mutation checks all rejected.
@@ -43,15 +46,18 @@ journal; its original bytes and unresolved reservations were preserved.
 
 ## Remaining experiment gates
 
-1. Source `f3ccec8` passed CI, including actual PostgreSQL and Docker permissions.
-   A tiny CPU adapter round trip also passed. Neither establishes Qwen GPU behavior.
-2. Freeze the follow-up infrastructure suballocation before the research lease.
-   Both actual cleanup canaries passed and their GPUs are verified terminated.
-3. Pass an actual Qwen smoke reload, merge and serving check under the new source.
-4. Collect fresh native traces, annotate 100 examples and obtain 20 human reviews.
-5. Profile throughput, freeze fitting examples, then train both seeds, 17 and 29.
-6. Recalibrate each derived model and run paired three-arm development and held-out trials.
-7. Export complete results, reconcile costs and verify cleanup.
+1. Source `fe0748b` passed CI, including actual PostgreSQL and Docker permissions.
+   The fixed-base 60-trial collection restart uses that unchanged source. Both
+   independent cleanup controllers are active for the new lease.
+2. Export the closed collection, annotate 100 fitting prefixes and obtain 20
+   attributed human reviews. Keep the GPU stopped during review.
+3. Qualify the explicit unmerged-LoRA serving path on the actual GPU. The failed
+   merged export remains failed; its tolerances and artifacts are unchanged.
+4. Profile fitting throughput, freeze the common batch setting, then train seeds
+   17 and 29. Collect the separately declared base development-validation cohort.
+5. Recalibrate each derived predictor and run paired three-arm development and
+   held-out trials, retaining every failed and censored slot.
+6. Export complete results, reconcile costs and verify cleanup.
 
 Detailed historical operator notes are preserved in the
 [2026-11-11 Git checkpoint](https://github.com/xyleus1/Acephale/blob/ab9d26fedcc698898f2935ac1127835d7fbda4c9/docs/AI_HANDOFF.md).

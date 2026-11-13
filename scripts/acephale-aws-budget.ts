@@ -29,6 +29,7 @@ export function awsBudget(request: AwsBudgetRequest) {
   const owner = new DurableBudget(path);
   try {
     const allocations = owner.ledger.allocations;
+    const totalCeiling = owner.ledger.totalCeilingMicrodollars;
     const current = owner.ledger.snapshot(), byId = new Map(current.map(row => [row.id, row]));
     for (const prior of checkpoint.entries) {
       const next = byId.get(prior.id);
@@ -41,7 +42,7 @@ export function awsBudget(request: AwsBudgetRequest) {
       const roots = rows.filter(row => !row.parentId);
       const committed = roots.reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
       const nonContingency = roots.filter(row => row.allocation !== "contingency").reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
-      if (committed > 500_000_000 || nonContingency > 500_000_000 - allocations.contingency) throw new Error("Study total or protected contingency exceeded");
+      if (committed > totalCeiling || nonContingency > totalCeiling - allocations.contingency) throw new Error("Study total or protected contingency exceeded");
       return { committedMicrodollars: committed, infrastructureMicrodollars: roots.filter(row => row.allocation === "infrastructure")
         .reduce((sum, row) => sum + (row.actual ?? row.maximum), 0), entriesHash: hash(rows), reservations: rows.length };
     };
@@ -76,7 +77,7 @@ export function awsBudget(request: AwsBudgetRequest) {
           throw new Error("Existing AWS reservation differs or is already settled");
         }
       } else {
-        if (totals().committedMicrodollars + maximum! > 500_000_000 - allocations.contingency) throw new Error("Protected study contingency unavailable");
+        if (totals().committedMicrodollars + maximum! > totalCeiling - allocations.contingency) throw new Error("Protected study contingency unavailable");
         owner.ledger.reserve(id, "infrastructure", maximum!);
       }
     } else if (request.operation !== "inspect" && request.operation !== "bind") throw new Error("Unsupported budget operation");

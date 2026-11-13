@@ -11,6 +11,78 @@ import { extractCausalMemoryMisses } from "../src/lib/acephale/causal-memory";
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 
+/** A new aggregate retains the exact closed execution receipts and their run ownership. */
+function verifyMultiCohortLineage(directory: string, lineage: any, split: any) {
+  const aggregate = json(join(directory, "cohort-receipt.json"));
+  const { contentHash, ...body } = aggregate;
+  if (aggregate.version !== 2 || aggregate.kind !== "acephale-fresh-native-multicohort" || contentHash !== hash(body)
+    || aggregate.closed !== true || aggregate.allDeclaredSlotsRetained !== true || aggregate.pairedComparisonSlotsReused !== false
+    || !Array.isArray(aggregate.cohorts) || aggregate.cohorts.length < 2 || lineage.cohort_count !== aggregate.cohorts.length || lineage.cohort_files !== null
+    || sha(join(directory, "cohort-receipt.json")) !== lineage.cohort_receipt_sha256) throw new Error("Invalid multi-cohort aggregate receipt");
+  const cohortIds = new Set<string>(), trialIds = new Set<string>(), owners: Record<string, string> = {};
+  let actorHash: string | undefined, taskHash: string | undefined;
+  for (const [index, parent] of aggregate.cohorts.entries()) {
+    const receipt = parent.receipt, config = parent.configuration, manifest = parent.manifest;
+    if (typeof parent.receiptText !== "string" || createHash("sha256").update(parent.receiptText).digest("hex") !== parent.receiptSha256
+      || hash(JSON.parse(parent.receiptText)) !== hash(receipt) || parent.cohortId !== hash(receipt) || cohortIds.has(parent.cohortId)
+      || receipt.version !== 1 || receipt.stage !== "collection" || receipt.closed !== true || receipt.completed !== true
+      || receipt.allDeclaredSlotsRetained !== true || receipt.serviceExitCode !== 0
+      || receipt.configurationHash !== hash(config) || receipt.manifestHash !== hash(manifest)
+      || config.stage !== "collection" || !Array.isArray(config.runs) || !config.runs.length
+      || hash(config.runs.map((run: any) => run.runId)) !== hash(parent.runIds)
+      || manifest.protocol.scheduleHash !== hash(config.runs)
+      || (actorHash !== undefined && actorHash !== hash(manifest.actor))
+      || (taskHash !== undefined && taskHash !== config.taskBundleHash)) throw new Error("Multi-cohort parent receipt differs from original execution");
+    actorHash = hash(manifest.actor); taskHash = config.taskBundleHash; cohortIds.add(parent.cohortId);
+    for (const key of ["repository", "revision"] as const) if (manifest.actor[key] !== INFRA_MODEL_PINS.actor[key]) throw new Error("Multi-cohort actor pin differs");
+    const familyPolicy: Record<string, string> = {};
+    for (const [key, partition] of [["trainingFamilies", "train"], ["developmentFamilies", "development"], ["heldoutFamilies", "test"]]) {
+      for (const family of manifest.data[key]) {
+        if (Object.hasOwn(familyPolicy, family)) throw new Error("Multi-cohort family contamination");
+        familyPolicy[family] = partition;
+      }
+    }
+    if (hash(familyPolicy) !== hash(split.declared_family_policy)) throw new Error("Multi-cohort family policy changed");
+    if (parent.purpose !== (config.collectionPurpose ?? "original-base-collection") || index > 0
+      && (config.collectionPurpose !== "auxiliary-development-validation" || config.hosted?.allocation !== "development")) {
+      throw new Error("Additional cohorts require auxiliary development provenance");
+    }
+    const inventory = new Map<string, string>();
+    for (const file of receipt.files) {
+      if (typeof file.path !== "string" || file.path.includes("\\") || file.path.split("/").includes("..")
+        || file.path.startsWith("/") || /^[A-Za-z]:/.test(file.path) || inventory.has(file.path) || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("Unsafe multi-cohort parent inventory");
+      inventory.set(file.path, file.sha256);
+    }
+    for (const run of config.runs) {
+      const trial = hash([run.domain, run.taskId, run.seed]);
+      const source = lineage.fresh_sources?.[run.runId];
+      if (run.arm !== "base" || !["train", "development"].includes(familyPolicy[run.familyId])
+        || index > 0 && familyPolicy[run.familyId] !== "development"
+        || Object.hasOwn(owners, run.runId) || trialIds.has(trial)
+        || !source || source.cohort_id !== parent.cohortId || source.raw_sha256 !== inventory.get(`${run.runId}.json`)) {
+        throw new Error("Multi-cohort run ownership, source or partition differs");
+      }
+      owners[run.runId] = parent.cohortId; trialIds.add(trial);
+    }
+  }
+  if (hash(owners) !== hash(aggregate.episodeCohorts) || hash(Object.keys(owners).sort()) !== hash(Object.keys(lineage.fresh_sources).sort())
+    || Object.keys(owners).length !== lineage.episodes) throw new Error("Multi-cohort declared slots were omitted or repeated");
+  if (!Array.isArray(aggregate.parentDatasets)) throw new Error("Explicit parent dataset lineage required");
+  const publicRows = readFileSync(join(directory, "public.jsonl"), "utf8").split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+  const parents = new Set<string>();
+  for (const parent of aggregate.parentDatasets) {
+    if (parents.has(parent.bundleHash) || !cohortIds.has(parent.cohortId) || parent.bundleHash !== parent.manifest?.bundle_hash
+      || parent.bundleHash !== hash(parent.manifest.files)) throw new Error("Invalid original parent dataset identity");
+    parents.add(parent.bundleHash);
+    const rows = publicRows.filter(row => owners[row.episode_id] === parent.cohortId);
+    if (hash(rows.map(row => row.checkpoint_id)) !== hash(parent.publicCheckpointIds)
+      || createHash("sha256").update(rows.map(row => canonical(row) + "\n").join("")).digest("hex") !== parent.manifest.files["public.jsonl"]?.sha256
+      || createHash("sha256").update(canonical(parent.split) + "\n").digest("hex") !== parent.manifest.files["split.json"]?.sha256) {
+      throw new Error("Original parent public prefixes or split changed");
+    }
+  }
+}
+
 export function verifyInfraPilotBundle(directory: string) {
   const manifest = json(join(directory, "manifest.json"));
   if (manifest.schema_version !== "acephale-infra-data-v1" || manifest.bundle_hash !== hash(manifest.files)) throw new Error("Invalid pilot manifest");
@@ -26,11 +98,12 @@ export function verifyInfraPilotBundle(directory: string) {
     || split.fresh_heldout !== false || lineage.fresh_heldout !== false) throw new Error("Pilot identity mismatch");
   const expected = Object.entries(split.families).filter(([, partition]) => partition === "train").map(([family]) => family).sort();
   if (lineage.fresh_qwen_traces === true) {
-    if (lineage.version !== "acephale-infra-fresh-native-v1" || canonical(lineage.actor) !== canonical(INFRA_MODEL_PINS.actor)
+    if (!["acephale-infra-fresh-native-v1", "acephale-infra-fresh-native-v2"].includes(lineage.version) || canonical(lineage.actor) !== canonical(INFRA_MODEL_PINS.actor)
       || lineage.all_declared_slots_retained !== true || !/^[a-f0-9]{64}$/.test(lineage.cohort_receipt_sha256)
       || ["runtime-runs.jsonl", "cohort-receipt.json", "trajectories.jsonl", "public.jsonl", "labels.jsonl", "verdicts.jsonl"].some(name => !manifest.files[name])
       || memory.training_families.some((family: string) => !expected.includes(family))) throw new Error("Fresh pilot lineage mismatch");
     if (hash(json(join(directory, "cohort-receipt.json"))) !== lineage.cohort_receipt_hash) throw new Error("Fresh cohort receipt changed");
+    if (lineage.version === "acephale-infra-fresh-native-v2") verifyMultiCohortLineage(directory, lineage, split);
   } else if (lineage.fresh_qwen_traces !== false || canonical(expected) !== canonical([...memory.training_families].sort())) throw new Error("Pilot fitting families mismatch");
   const metadata = readFileSync(join(directory, "metadata.jsonl"), "utf8").trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   if (lineage.fresh_qwen_traces === true) {

@@ -44,6 +44,7 @@ export async function runLive(configurationPath: string, output: string) {
     || !Number.isSafeInteger(config.maximumLifetimeSeconds) || config.maximumLifetimeSeconds < 1 || config.maximumLifetimeSeconds > 28800
     || !Number.isSafeInteger(config.maxSteps) || config.maxSteps < 1 || config.maxSteps > 100) throw new Error("Invalid bounded run configuration");
   const manifest = await artifact(config.manifestPath); validateInfraManifest(manifest);
+  if (manifest.predictor.trainedPredictor?.schemaVersion === 2) throw new Error("Native LoRA live serving currently requires the qualified native split-guard runner");
   if (!config.ledgerCheckpointPath || hash(await artifact(config.ledgerCheckpointPath)) !== manifest.budgets.ledgerCheckpointHash) throw new Error("Budget checkpoint mismatch");
   const corpus = verifyDocumentCorpus(await artifact<DocumentCorpus>(config.corpusPath));
   const tasks = await artifact<DocumentTask[]>(config.tasksPath);

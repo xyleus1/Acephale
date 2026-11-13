@@ -54,7 +54,8 @@ export interface InfraNativeConfiguration {
   shadowPrediction?: boolean;
   customTaskBundleDirectory?: string;
   customTaskReceiptHash?: string;
-  collectionPartitions?: ("weight_fit" | "calibration")[];
+  collectionPartitions?: ("weight_fit" | "calibration" | "development")[];
+  collectionPurpose?: "auxiliary-development-validation";
 }
 export interface InfraNativeArtifacts {
   manifest: InfraExperimentManifestV2;
@@ -75,9 +76,14 @@ export function infraNativeToolsHash(runs: InfraNativeRun[]) {
 }
 export function validateInfraNativeConfiguration(configuration: InfraNativeConfiguration, artifacts: InfraNativeArtifacts): void {
   const { manifest } = freezeInfraManifest(artifacts.manifest);
+  const auxiliary = configuration.collectionPurpose === "auxiliary-development-validation";
+  if (configuration.collectionPurpose !== undefined && (!auxiliary || configuration.stage !== "collection"
+    || configuration.shadowPrediction || !configuration.customTaskBundleDirectory || !configuration.customTaskReceiptHash)) {
+    throw new Error("Invalid auxiliary development collection declaration");
+  }
   if (configuration.customTaskBundleDirectory !== undefined || configuration.customTaskReceiptHash !== undefined) {
     if (!configuration.customTaskBundleDirectory || !/^[a-f0-9]{64}$/.test(configuration.customTaskReceiptHash ?? "")
-      || (configuration.stage === "collection" && canonical(configuration.collectionPartitions) !== canonical(["weight_fit", "calibration"]))) {
+      || (configuration.stage === "collection" && canonical(configuration.collectionPartitions) !== canonical(auxiliary ? ["development"] : ["weight_fit", "calibration"]))) {
       throw new Error("Custom native tasks require a verified source and explicit learning partitions");
     }
   } else if (configuration.collectionPartitions !== undefined) throw new Error("Custom collection selection requires verified custom tasks");
@@ -97,10 +103,10 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
     || typeof configuration.stream !== "boolean" || !Number.isSafeInteger(configuration.maximumLifetimeSeconds)
     || configuration.maximumLifetimeSeconds < 1 || configuration.maximumLifetimeSeconds > 8 * 3600) throw new Error("Invalid native service configuration");
   if (configuration.hosted) {
-    validateInfraHosted(configuration.hosted, configuration.stage);
+    validateInfraHosted(configuration.hosted, auxiliary ? "development" : configuration.stage);
     if (!/^[a-f0-9]{64}$/.test(configuration.taskBundleHash ?? "")) throw new Error("Hosted native runs require a frozen task bundle");
   }
-  const families = configuration.stage === "collection" ? [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies]
+  const families = auxiliary ? manifest.data.developmentFamilies : configuration.stage === "collection" ? [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies]
     : configuration.stage === "development" ? manifest.data.developmentFamilies : manifest.data.heldoutFamilies;
   const runIds = new Set<string>();
   for (const run of configuration.runs) {

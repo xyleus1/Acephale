@@ -39,6 +39,10 @@ checks parsed arguments and records usage, refusal/incomplete status, streaming
 timing and input hashes. The served tokenizer controls compilation. Policy,
 requirements, tool contracts and current argument-binding evidence precede optional
 history/examples; omissions are recorded rather than silently truncating fields.
+Compiler v3 keeps source-addressable policy text once in the mandatory sources;
+`policySource` points to it. Its bytes must equal the server-owned policy. Legacy
+frames without a policy source retain top-level policy text without gaining a
+synthetic citation target.
 
 ## Data and causal labels
 
@@ -210,17 +214,28 @@ AdamW at 1e-4, weight decay 0.01, gradient clipping 1, warmup 0.03,
 effective batch size 16, checkpointing and at most 8,192 total tokens. Fit-only
 profiling selects microbatch/accumulation 4/4, 2/8 or 1/16 before either main seed.
 Seeds 17 and 29 each have at most three epochs or 500 optimizer steps; both
-share four additional fitting hours under the explicit v2 budget amendment, with
-a separate 15-minute smoke allowance. Earlier reserved windows remain counted.
-The original v1 lease retains its two-hour limit.
+share the declared fitting allocation. V2 adds four fitting hours; the subsequently
+authorized v3 adds eight more, with a separate 15-minute smoke allowance. Each
+window, including profiling, must fit the actual funded provider lease. Earlier
+reserved windows remain counted. The original v1 lease retains its two-hour limit.
 
 The trainer verifies the funded lease, actual CUDA environment, pinned source
 and model/tokenizer receipts. It records gradients, finite losses, changed LoRA
-weights and unchanged base hashes. Export preserves the adapter, merges a new
-immutable checkpoint and checks reloaded/merged logits. Serving artifacts bind
-the derived weights, source, partitions and protocol; old calibration or timing
-profiles cannot validate a new checkpoint. Run execution and measured outcomes
-are recorded separately in [STATE](STATE.md).
+weights and unchanged base hashes. Merged v1 export retains its original strict
+reload/merge checks. Explicit unmerged v2 export preserves the FP32 adapter bytes,
+the pinned BF16 base and every trained target; it separately declares BF16 vLLM
+LoRA arithmetic. Its identity binds base and adapter inventories, tokenizer,
+training specification, partitions, protocol and a numerical probe. No file is
+silently cast or relabeled to bypass the failed merged export.
+
+The v2 server must return the exact top token and a conditional binary probability
+within 0.01 of PyTorch for the same recorded input token IDs. This predeclared
+one-token gate tests loading and approximate numerical compatibility, not full
+logit equivalence or model quality. The receipt binds the real response and
+container identity; a subsequent inventory must observe the same source,
+containers, commands, images and provider before admission. Old calibration or
+timing profiles cannot validate a new checkpoint. Run execution and measured
+outcomes are recorded separately in [STATE](STATE.md).
 
 ## Relationship to prior methods
 

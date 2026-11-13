@@ -29,7 +29,7 @@ SOURCE = BASE / 'source'
 ARTIFACTS = BASE / 'artifacts'
 PACKAGE = Path(__file__).resolve().parent
 COMPOSE_PROJECT = 'acephale-infra-v1'
-OPERATOR_FILES = {'bootstrap.py', 'bootstrap.sh', 'serving-qualification.mjs', 'images.pinned.json'}
+OPERATOR_FILES = {'bootstrap.py', 'bootstrap.sh', 'serving-qualification.mjs', 'serving-parity.mjs', 'images.pinned.json'}
 SHA = re.compile(r'[a-f0-9]{40}\Z')
 LEASE = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\Z')
 
@@ -244,9 +244,10 @@ class Bootstrap:
         for key, destination in [('providerReceipt', 'provider-receipt.json'), ('orchestratorInventory', 'orchestrator-inventory.json')]:
             shutil.copyfile(self.configuration[key], BASE / destination)
         if any(sha(PACKAGE / name) != self.configuration['operatorFiles'][name]
-               for name in ('serving-qualification.mjs', 'images.pinned.json')):
+               for name in ('serving-qualification.mjs', 'serving-parity.mjs', 'images.pinned.json')):
             raise ValueError('Reviewed qualification or image-lock input changed')
         shutil.copyfile(PACKAGE / 'serving-qualification.mjs', ARTIFACTS / 'serving-qualification.mjs')
+        shutil.copyfile(PACKAGE / 'serving-parity.mjs', ARTIFACTS / 'serving-parity.mjs')
         shutil.copyfile(PACKAGE / 'images.pinned.json', ARTIFACTS / 'images.pinned.json')
         provider = json.loads((BASE / 'provider-receipt.json').read_text())
         if provider.get('leaseId') != self.configuration['leaseId']:

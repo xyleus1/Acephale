@@ -6,9 +6,10 @@ import importlib.util
 import json
 import subprocess
 import tempfile
-from types import SimpleNamespace
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("collect_inventory", Path(__file__).with_name("collect_inventory.py"))
 inventory = importlib.util.module_from_spec(SPEC)
@@ -141,10 +142,31 @@ class InventoryTests(unittest.TestCase):
             return json.dumps({"node": self.node_version, "packages": [{"name": "tsx", "version": "fixture"}]})
         self.fail(f"Unexpected probe: {argv[0:4]}")
 
-    def collect(self):
+    def collect(self, predictor_export=None):
         return inventory.collect(self.models, self.image_lock, self.provider, source=self.source,
                                  host_root=self.host, python="fixture-python", node="fixture-node",
-                                 orchestrator_receipt=self.orchestrator_receipt, runner=self.run_fixture)
+                                 orchestrator_receipt=self.orchestrator_receipt, runner=self.run_fixture,
+                                 predictor_export=predictor_export)
+
+    def test_native_lora_inventory_retains_base_and_adapter_evidence_without_claiming_qualification(self):
+        identity, _ = inventory.model_identity(self.models, "predictor", self.pins["models"]["predictor"], (8192, 7168, 1024))
+        artifact = {"schemaVersion": 2, "base": {key: identity[key] for key in ("repository", "revision")},
+                    "servedModel": "acephale-predictor-fixture", "servingWeightsHash": "1" * 64,
+                    "baseWeightsHash": identity["weightsHash"], "tokenizerHash": "2" * 64, "chatTemplateHash": "3" * 64,
+                    "adapterStorageDtype": "float32", "runtimeLoraDtype": "bfloat16"}
+        verified = {"artifact": artifact, "adapterFiles": [{"path": "adapter_model.safetensors", "sha256": "4" * 64}],
+                    "servingProbe": {"fixture": True}, "verifiedManifestFiles": []}
+        with patch.object(inventory, "apply_predictor_export", return_value=verified):
+            deployment, evidence = self.collect(self.models / "export")
+            self.assertEqual(deployment["predictor"]["weightsHash"], artifact["servingWeightsHash"])
+            observed = evidence["modelFiles"]["predictor"]
+            self.assertEqual(observed["adapterFiles"], verified["adapterFiles"])
+            self.assertIn("baseModelFiles", observed)
+            self.assertTrue(observed["vllmQualificationRequired"])
+            self.assertFalse(observed["vllmQualificationPassed"])
+            artifact["baseWeightsHash"] = "f" * 64
+            with self.assertRaisesRegex(ValueError, "base weights differ"):
+                self.collect(self.models / "export")
 
     def prepare_orchestrator(self):
         value = inventory.orchestrator_inventory(source=self.source, python="fixture-python", node="fixture-node",

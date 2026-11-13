@@ -80,19 +80,30 @@ data and lease read-only, disables container networking and runs as the ordinary
 Linux host operator. The Docker image is not published automatically.
 
 `smoke` performs one real optimizer step on the prepared examples, verifies
-nonzero LoRA gradients and frozen base weights, reloads the adapter and merges
-it. This proves the machinery, not prediction quality or native task success.
-After a successful smoke, run the prespecified seeds separately:
+nonzero LoRA gradients and frozen base weights, and reloads the adapter. The
+default `merged` mode retains the original merge check. To test the explicit
+native-LoRA path, add `--artifact-mode unmerged_lora`; it preserves the exact
+adapter and requires separate real vLLM qualification. Neither smoke proves
+prediction quality or native task success.
+
+After the smoke and actual serving check, stop serving and acquire the fitting
+lease. Run `--action profile --maximum-seconds 600` through the same container
+launcher with a new output directory. It tests 4/4, 2/8 and 1/16 on the 16 longest
+distinct fitting rows, falling back only after CUDA OOM. The disposable step
+exports no weights. Freeze `selection.json` and its selected batch/accumulation
+for both seeds before fitting; include those options in each training command.
+Run the prespecified seeds separately:
 
 ```text
 python -m acephale.training_container run --receipt IMAGE_RECEIPT --action train --seed 17 --max-steps 500 --maximum-seconds 3600 --dataset DATASET --model BASE --lease LEASE --actor-container ACTOR_ID --output NEW_SEED17
-python -m acephale.training_container run --receipt IMAGE_RECEIPT --action export --training-run NEW_SEED17/artifacts --dataset DATASET --model BASE --lease LEASE --actor-container ACTOR_ID --output NEW_EXPORT17
+python -m acephale.training_container run --receipt IMAGE_RECEIPT --action export --artifact-mode unmerged_lora --training-run NEW_SEED17/artifacts --dataset DATASET --model BASE --lease LEASE --actor-container ACTOR_ID --output NEW_EXPORT17
 ```
 
 Repeat with seed 29 and new output paths. Retain both seeds; do not select a winner
 from held-out results. The default is at most three epochs, 500 steps and one hour
 per command. A v2 lease can explicitly allocate the approved four fitting hours;
-v1 leases retain their two-hour ceiling. Every stage remains inside its provider
+v3 adds eight fitting hours to the cumulative allowance. Original reserved
+windows remain counted, and v1 leases retain their two-hour ceiling. Every stage remains inside its provider
 and experiment deadline. LoRA uses rank 16, alpha
 32, dropout 0.05, AdamW at 1e-4, weight decay 0.01, norm clip 1.0, warmup 0.03,
 effective batch size 16. Use `--micro-batch 4 --gradient-accumulation 4`, or the
@@ -108,13 +119,24 @@ Training writes `training-specification.json`, TensorBoard events, checkpoints,
 optimizer steps, nonzero-gradient checks, before/after adapter and frozen-base
 hashes, loss diagnostics, elapsed time and GPU memory. Failures retain evidence.
 
-Export writes `model/`, `predictor.json`, `training-manifest.json`,
+Merged export writes `model/`, `predictor.json`, `training-manifest.json`,
 `dataset-manifest.json`, `training-receipt.json` and `verification.json`. The
 predictor identity binds adapter and merged file inventories, exact preserved
 tokenizer bytes, actual run specification, fit/calibration families and verified
 binary token IDs. Its served name identifies the derived weights. Reload and
 merge comparisons use complete last-token logits plus matching top-token
 decisions. Real vLLM serving parity must still pass before deployment.
+
+Explicit unmerged export instead writes `adapter/`, `base-receipt.json` and
+`serving-probe.json` alongside the manifest/verification chain. The v2 predictor
+identity binds FP32 adapter storage, BF16 native-LoRA arithmetic and the exact
+base snapshot. Use `--predictor-export EXPORT_DIRECTORY --model EXACT_BASE` for
+container evaluation; the export and base are mounted separately and read-only.
+The operator serves the base plus one exact adapter alias and records a real
+probe response. Admission requires that proof and a subsequent observation of
+the same container, command, image and source. The fixed probe requires identical
+top token and a conditional binary probability difference at most 0.01; it is a
+loading sanity check, not complete numerical equivalence or task accuracy.
 
 Probe creation, adapter reload and merged inference share explicit bfloat16
 autocast, inference mode and eval mode. The exact versioned context is recorded

@@ -43,6 +43,7 @@ export async function runOpportunityProfile(configurationPath: string, output: s
   const dataset = verifyDocumentBundle(path(config.datasetPath)), memory = validateMemoryArtifact(await json(path(config.memoryPath)));
   const corpus = verifyDocumentCorpus(await json(path(config.corpusPath))), manifest = await json(path(config.manifestPath));
   validateInfraManifest(manifest);
+  if (manifest.predictor.trainedPredictor?.schemaVersion === 2) throw new Error("Native LoRA profiling currently requires the qualified native split-guard profiler");
   if (hash(await json(path(config.ledgerCheckpointPath))) !== manifest.budgets.ledgerCheckpointHash
     || memory.repositorySnapshotId !== `infra-documents:${dataset.manifest.bundle_hash}` || memory.contentHash !== manifest.data.memoryHash || corpus.contentHash !== dataset.lineage.corpusHash
     || manifest.data.datasetHash !== dataset.lineage.taskHash || manifest.data.environmentRevision !== corpus.contentHash

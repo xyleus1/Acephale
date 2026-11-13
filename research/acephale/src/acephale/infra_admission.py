@@ -231,8 +231,11 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
             raise ValueError("Reliability annotations must come from training families")
         validate_annotation(GoalAnnotation.model_validate(row), prefix)
     pilot = _json(pilot_path)
+    audit_source = None
     if pilot.get("source_dataset_hash") != dataset_hash:
-        raise ValueError("Human audit pilot dataset differs")
+        from acephale.infra_import_fresh import verify_parent_audit_source
+
+        audit_source = verify_parent_audit_source(bundle_directory, pilot)
     checkpoints = pilot.get("checkpoints", [])
     if not checkpoints or len({row["checkpoint_id"] for row in checkpoints}) != len(checkpoints):
         raise ValueError("Unique pilot checkpoints required")
@@ -290,6 +293,8 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
                            "candidateCompilerHash": manifest["candidateCompilerHash"], "retrievalHash": manifest["retrievalHash"], "predictionManifestHash": manifest["contentHash"],
                            "predictionRowsHash": hashes[str(paths[1])], "pilotHash": file_hash(pilot_path), "reviewsHash": file_hash(reviews_path),
                            "gradesHash": file_hash(grades_path), "method": "reserved_calibration_full_cohort_wilson_lower_95" if reserved_calibration is not None else "training_replay_full_cohort_wilson_lower_95"}}
+    if audit_source is not None:
+        body["provenance"]["originalAuditSource"] = audit_source
     if any(file_hash(path) != hashes[str(path)] for path in paths):
         raise ValueError("Goal evidence changed during aggregation")
     artifact = {**body, "contentHash": hash_v1(body)}

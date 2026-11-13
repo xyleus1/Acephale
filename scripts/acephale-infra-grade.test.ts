@@ -25,19 +25,19 @@ function bundle(directory: string, values: Record<string, unknown>) {
   writeFileSync(join(directory, "manifest.json"), canonical({ schema_version: "acephale-infra-data-v1", files, bundle_hash: bundleHash }));
   return bundleHash;
 }
-function fixture(count = 3) {
+function fixture(count = 3, trainingFamilies?: string[]) {
   const directory = mkdtempSync(join(tmpdir(), "infra-grades-"));
   const publicRows = Array.from({ length: count + 1 }, (_, index) => {
     const request = `Find order ${index}`;
     const input = { policy: "Read only", tools: [], sources: [{ id: "policy", kind: "policy", value: "Read only" },
       { id: "event:0", kind: "user", value: request }], events: [{ seq: 0, kind: "message", role: "user", content: request }] };
     return { schema_version: "acephale-infra-data-v1", checkpoint_id: hash(index), input_hash: hash(input), request_revision: "r1",
-      input, episode_id: `ep-${index}`, family_id: index === count ? "dev" : "train", split: index === count ? "development" : "train",
+      input, episode_id: `ep-${index}`, family_id: index === count ? "dev" : trainingFamilies?.[index] ?? "train", split: index === count ? "development" : "train",
       domain: "retail", through_seq: 0, environment_version: "fixture", tool_schema_hash: hash([]),
       scope: { tenant_id: "tenant", principal_id: "principal", authorization_revision: "r1" } };
   });
   const metadata = publicRows.map(row => ({ episode_id: row.episode_id, family_id: row.family_id, verification_tier: "source_reported" }));
-  const split = { schema_version: "acephale-infra-data-v1", families: { train: "train", dev: "development" },
+  const split = { schema_version: "acephale-infra-data-v1", families: Object.fromEntries(publicRows.map(row => [row.family_id, row.split])),
     episodes: Object.fromEntries(metadata.map(row => [row.episode_id, row.family_id])),
     metadata_hash: hash([...metadata].sort((a, b) => a.episode_id.localeCompare(b.episode_id))) };
   const dataset = join(directory, "dataset"), pilot = join(directory, "pilot"), predictionsDirectory = join(directory, "predictions");
@@ -70,6 +70,19 @@ function fixture(count = 3) {
   const options = { bundle: dataset, predictions: predictionsDirectory, annotations: annotationPath, ledgerPath,
     output: join(directory, "grades"), expectedPredictionManifestHash: hash(predictionManifest), expectedAnnotationsHash: hash(annotations) };
   return { directory, options, pilot, publicRows, predictions, annotations };
+}
+
+function trainedReplay(f: ReturnType<typeof fixture>, calibrationFamilies: string[]) {
+  const weights = hash("derived weights"), body = { schemaVersion: 1, kind: "acephale-trained-predictor",
+    base: INFRA_MODEL_PINS.predictor, adapterHash: hash("adapter"), mergedWeightsHash: weights,
+    tokenizerHash: hash("tokenizer"), chatTemplateHash: hash("template"), trainingManifestHash: hash("training"),
+    weightFitFamilies: ["fit"], calibrationFamilies, protocol: "rank_binary_v1", binaryTokenIds: { zero: 15, one: 16 },
+    servedModel: `acephale-predictor-${weights.slice(0, 12)}` };
+  const path = join(f.options.predictions, "manifest.json");
+  const { contentHash: _previousHash, ...manifest } = JSON.parse(readFileSync(path, "utf8"));
+  manifest.model = { ...INFRA_MODEL_PINS.predictor, trainedPredictor: { ...body, contentHash: hash(body) } };
+  f.options.expectedPredictionManifestHash = hash(manifest);
+  writeFileSync(path, canonical({ ...manifest, contentHash: hash(manifest) }));
 }
 
 const grade = { agreed: true, missing_constraints: [], contradictions: [], reason: "Full requested intent matches" };
@@ -165,5 +178,49 @@ test("annotation expansion enforces unchanged cap without silently dropping rows
   try {
     assert.throws(() => expandInfraAnnotationCohort({ bundle: f.options.bundle, predictions: f.options.predictions, pilot: f.pilot,
       output: join(f.directory, "expanded") }), /five-dollar cap/);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("trained goal replay and annotation expansion select calibration families only", async () => {
+  const f = fixture(4, ["fit", "cal-a", "cal-b", "fit"]);
+  try {
+    const base = verifyInfraGoalReplay(f.options.bundle, f.options.predictions);
+    assert.equal(base.training.length, 4);
+    trainedReplay(f, ["cal-a", "cal-b"]);
+    const replay = verifyInfraGoalReplay(f.options.bundle, f.options.predictions);
+    assert.deepEqual(replay.training.map(row => row.checkpoint_id), f.predictions.slice(1, 3).map(row => row.checkpoint_id));
+    const output = join(f.directory, "expanded");
+    const expanded = expandInfraAnnotationCohort({ bundle: f.options.bundle, predictions: f.options.predictions, pilot: f.pilot, output });
+    assert.equal(expanded.addedCount, 2);
+    assert.deepEqual(verifyInfraAnnotationSource(output, f.options.bundle).rows.map(row => row.checkpoint_id),
+      f.publicRows.slice(0, 3).map(row => row.checkpoint_id));
+    const grades = await runInfraGoalGrading(f.options, model);
+    assert.equal(grades.retained, 2);
+    assert.equal(grades.completed, 2);
+    assert.equal(grades.knownMicrodollars, 200);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("trained goal replay requires every calibration family and retains failed calibration rows", async () => {
+  const f = fixture(3, ["fit", "cal-a", "cal-b"]);
+  try {
+    trainedReplay(f, ["cal-a", "missing-calibration"]);
+    assert.throws(() => verifyInfraGoalReplay(f.options.bundle, f.options.predictions), /every.*calibration family/);
+    trainedReplay(f, ["cal-a", "cal-b"]);
+    const rows = f.predictions.map((row, index) => {
+      if (index !== 2) return row;
+      const { goals: _goals, ...prefix } = row;
+      return { ...prefix, status: "not_dispatched" };
+    });
+    writeFileSync(join(f.options.predictions, "predictions.jsonl"), rows.map(row => canonical(row) + "\n").join(""));
+    writeFileSync(join(f.options.predictions, "receipt.json"), canonical({ declared: rows.length,
+      completed: rows.length - 1, failed: 1, liveActorExecuted: false, toolExecutionPerformed: false }));
+    const replay = verifyInfraGoalReplay(f.options.bundle, f.options.predictions);
+    assert.equal(replay.training.length, 2);
+    assert.equal(replay.training[1].status, "not_dispatched");
+    const grades = await runInfraGoalGrading(f.options, model);
+    assert.equal(grades.retained, 2);
+    assert.equal(grades.completed, 1);
+    assert.equal(grades.agreed, 1);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });

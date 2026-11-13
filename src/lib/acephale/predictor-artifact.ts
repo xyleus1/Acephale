@@ -1,14 +1,10 @@
 import { canonical, copy, hash } from "./canonical";
+import type { TrainedPredictorArtifact } from "./contracts/infra-manifest-v2.generated";
+export type { TrainedPredictorArtifact } from "./contracts/infra-manifest-v2.generated";
 
 export const PREDICTOR_BASE = { repository: "Qwen/Qwen3.5-0.8B", revision: "2fc06364715b967f1860aea9cf38778875588b17" } as const;
 export type PredictorProtocol = "rank_marginals_v2" | "rank_binary_v1";
 export interface BinaryTokenIds { zero: number; one: number }
-export interface TrainedPredictorArtifact {
-  schemaVersion: 1; kind: "acephale-trained-predictor"; base: { repository: string; revision: string };
-  adapterHash: string; mergedWeightsHash: string; tokenizerHash: string; chatTemplateHash: string;
-  trainingManifestHash: string; weightFitFamilies: string[]; calibrationFamilies: string[];
-  protocol: "rank_binary_v1"; binaryTokenIds: BinaryTokenIds; servedModel: string; contentHash: string;
-}
 export interface PredictorProfile {
   trainedPredictor?: TrainedPredictorArtifact;
   predictionProtocol?: PredictorProtocol;
@@ -20,14 +16,23 @@ export function validateBinaryTokenIds(ids: BinaryTokenIds | undefined): asserts
 }
 export function validateTrainedPredictor(value: TrainedPredictorArtifact): TrainedPredictorArtifact {
   canonical(value);
-  const keys = ["schemaVersion", "kind", "base", "adapterHash", "mergedWeightsHash", "tokenizerHash", "chatTemplateHash", "trainingManifestHash",
+  const keys = ["schemaVersion", "kind", "base", "adapterHash", "tokenizerHash", "chatTemplateHash", "trainingManifestHash",
     "weightFitFamilies", "calibrationFamilies", "protocol", "binaryTokenIds", "servedModel", "contentHash"];
+  keys.push(...(value?.schemaVersion === 2 ? ["storageMode", "baseReceiptHash", "baseWeightsHash", "adapterStorageDtype",
+    "runtimeLoraDtype", "servingWeightsHash", "servingProbeHash"] : ["mergedWeightsHash"]));
   if (!value || hash(Object.keys(value).sort()) !== hash(keys.sort())) throw new Error("Unexpected trained predictor artifact fields");
-  if (!value || value.schemaVersion !== 1 || value.kind !== "acephale-trained-predictor" || hash(value.base) !== hash(PREDICTOR_BASE)
+  if (!value || ![1, 2].includes(value.schemaVersion) || value.kind !== "acephale-trained-predictor" || hash(value.base) !== hash(PREDICTOR_BASE)
     || value.protocol !== "rank_binary_v1") throw new Error("Invalid trained predictor base or protocol");
   const { contentHash, ...body } = value;
-  if (hash(body) !== contentHash || [value.adapterHash, value.mergedWeightsHash, value.tokenizerHash, value.chatTemplateHash,
+  const weights = predictorServingWeightsHash(value);
+  const extraHashes = value.schemaVersion === 2 ? [value.baseReceiptHash, value.baseWeightsHash, value.servingProbeHash] : [];
+  if (hash(body) !== contentHash || [value.adapterHash, weights, ...extraHashes, value.tokenizerHash, value.chatTemplateHash,
     value.trainingManifestHash, contentHash].some(item => !/^[a-f0-9]{64}$/.test(item))) throw new Error("Invalid trained predictor artifact identity");
+  if (value.schemaVersion === 2 && (value.storageMode !== "unmerged_lora" || value.adapterStorageDtype !== "float32"
+    || value.runtimeLoraDtype !== "bfloat16" || weights !== hash({ base: value.base, baseWeightsHash: value.baseWeightsHash,
+      adapterHash: value.adapterHash, adapterStorageDtype: value.adapterStorageDtype, runtimeLoraDtype: value.runtimeLoraDtype }))) {
+    throw new Error("Unmerged predictor must bind exact base, adapter and declared precision");
+  }
   validateBinaryTokenIds(value.binaryTokenIds);
   const seen = new Set<string>();
   for (const list of [value.weightFitFamilies, value.calibrationFamilies]) {
@@ -37,8 +42,11 @@ export function validateTrainedPredictor(value: TrainedPredictorArtifact): Train
       seen.add(family);
     }
   }
-  if (value.servedModel !== `acephale-predictor-${value.mergedWeightsHash.slice(0, 12)}`) throw new Error("Trained predictor served name must identify derived weights");
+  if (value.servedModel !== `acephale-predictor-${weights.slice(0, 12)}`) throw new Error("Trained predictor served name must identify derived weights");
   return copy(value);
+}
+export function predictorServingWeightsHash(value: TrainedPredictorArtifact): string {
+  return value.schemaVersion === 2 ? value.servingWeightsHash : value.mergedWeightsHash;
 }
 export function resolvePredictorProfile(value: PredictorProfile = {}) {
   const artifact = value.trainedPredictor ? validateTrainedPredictor(value.trainedPredictor) : undefined;

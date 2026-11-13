@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { copy, hash } from "../src/lib/acephale/canonical";
+import { canonical, copy, hash } from "../src/lib/acephale/canonical";
 import type { Candidate, ExecutionFrame } from "../src/lib/acephale/contracts/generated";
 import { LocalChatModelPort, type InfraTokenLogprob } from "../src/lib/acephale/infra-model";
 import { PREDICTOR_BASE, predictorModelIdentity, validateTrainedPredictor, type TrainedPredictorArtifact } from "../src/lib/acephale/predictor-artifact";
@@ -235,6 +235,23 @@ test("native annotation conversion rejects stale, malformed and unsupported sour
   ]) { const changed = copy(annotation); mutate(changed); assert.throws(() => annotationGoalDraft(changed, publicInput)); }
   assert.throws(() => annotationGoalDraft({ ...annotation, goalDraft: goal }, publicInput));
   assert.throws(() => annotationGoalDraft(annotation, { ...publicInput, input: { ...publicInput.input, policy: "changed" } }));
+});
+
+test("native recompilation preserves original teacher labels across a verified dataset extension", async () => {
+  const { publicInput, annotation, nativeSource, nativeFrame } = nativeAnnotationFixture();
+  const original = canonical(annotation), fake = modelFixture();
+  const mergedDatasetHash = hash("new aggregate with auxiliary development, unchanged original public prefixes");
+  const examples = await compileNativeTrainingExamples({ model: fake.port,
+    source: { ...nativeSource, sourceDatasetHash: mergedDatasetHash }, partitions, frame: nativeFrame,
+    annotation, publicInput, publicCandidates: () => candidates,
+    readTarget: async () => ({ checkpoint_id: source.id, input_hash: publicInput.input_hash,
+      source: "observed-authoritative-next-decision", target_kind: "READ",
+      next_invocations: [{ tool: "get_0", arguments: { id: "CURRENT" } }], eligible_reads: [{ tool: "get_0", arguments: { id: "CURRENT" } }] }) });
+  assert.equal(examples.length, 3);
+  assert.ok(examples.every(row => row.provenance.sourceDatasetHash === mergedDatasetHash && row.provenance.publicInputHash === publicInput.input_hash));
+  assert.equal(examples[1].provenance.annotationHash, hash(annotation));
+  assert.equal(examples[2].provenance.annotationHash, hash(annotation));
+  assert.equal(canonical(annotation), original);
 });
 
 test("missing native annotations and incomplete conditioning cannot silently export neutral examples", async () => {

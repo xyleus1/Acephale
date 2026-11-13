@@ -77,7 +77,12 @@ export function verifyInfraGoalReplay(bundle: string, predictionDirectory: strin
       validateGoals(row.goals, publicInfraFrame(source, "grading").sources);
     }
   }
-  const training = predictions.filter(row => row.split === "train");
+  const calibrationFamilies: string[] | undefined = manifest.model.trainedPredictor?.calibrationFamilies;
+  const training = predictions.filter(row => row.split === "train"
+    && (!calibrationFamilies || calibrationFamilies.includes(row.family_id)));
+  if (calibrationFamilies && hash([...new Set(training.map(row => row.family_id))].sort()) !== hash([...calibrationFamilies].sort())) {
+    throw new Error("Goal replay must cover every trained predictor calibration family");
+  }
   if (!training.length) throw new Error("No declared training predictions");
   return { dataset, manifest, predictions, training, predictionsSha256: sha(join(predictionDirectory, "predictions.jsonl")) };
 }

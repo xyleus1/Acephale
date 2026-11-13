@@ -1,5 +1,18 @@
 # Acephale decisions
 
+## 2026-11-13: Keep one source-addressable policy in predictor context
+
+Predictor compiler v3 includes the full policy once in the mandatory source
+records and uses `policySource` to identify it. The equality check against the
+server-owned policy and source-reference validation remain required. Frames
+without a policy source retain their top-level policy text and gain no invented
+citable source. Neither input limits nor evidence priority change.
+
+This changes compiler and prompt identities. Apply it to a new training/export
+phase after the active collection closes; retain that collection's original
+source and every earlier artifact. Recompile training and recalibrate before
+deployment. A token-count diagnostic is not evidence of live task improvement.
+
 ## 2026-11-13: Native goal supervision and staged training
 
 Keep the Qwen actor frozen and fit only the auxiliary predictor. Export matched
@@ -288,3 +301,31 @@ context to immutable artifacts. Reject legacy probes instead of resealing them.
 Keep existing reload/merge tolerances and full-vocabulary/top-token checks. This
 method inconsistency is established; attributing every observed Qwen logit error
 to it still requires a new authorized actual-model experiment.
+
+## 2026-11-13: Separate fixed-base collection from trained-serving recovery
+
+The fresh actual smoke passed adapter reload but failed the unchanged merged
+comparison. Fixed-base native collection has no dependency on that export and
+continues on its original source and task slots. Preserve both failed GPU
+attempts and every unresolved charge. Do not let future-source code changes
+silently change a running collection's model, compiler or data identity.
+
+Declare a separate unmerged-LoRA artifact rather than widening merge tolerances.
+Preserve exact FP32 adapter bytes and all trained targets, bind the pinned BF16
+base, and explicitly declare vLLM's BF16 LoRA arithmetic. Require strict PyTorch
+reload, a predeclared real HTTP numerical sanity probe and a fresh subsequent
+process inventory. This gate is not a model-quality or full-equivalence claim.
+
+Profile one disposable fitting-only optimizer step before either main seed.
+Choose the largest fitting microbatch from 4/4, 2/8 and 1/16; fallback only on CUDA
+OOM. No profiling weights enter main fitting, evaluation or served artifacts.
+
+The user's additional spending authorization removes the former $500 ceiling.
+Use a $1,000 working policy with an append-only amendment chained to v2, while
+retaining every historical reservation and the $65 contingency. Apply only after
+the active v2 phase closes. No billing observation alone clears unresolved costs.
+
+Use separate base development-validation trials to supply the declared validation
+families. Preserve all parent receipts in aggregate imports and keep those trials
+distinct from paired live controls. Annotation reviews may transfer only when
+their exact source, checkpoint and label ancestry is verified.

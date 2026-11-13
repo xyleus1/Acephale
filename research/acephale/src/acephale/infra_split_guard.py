@@ -21,9 +21,12 @@ from pathlib import Path
 
 from acephale.contracts_v1 import hash_v1
 from acephale.native_common import read, write
+from acephale.predictor_serving import validate_native_lora_serving
 
 
 def inventory_hash(value):
+    if value.get("hashAlgorithm") == "sha256-rfc8785-v1":
+        return hash_v1(value)
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
 
@@ -115,9 +118,13 @@ def load_guard(path: Path):
             or any(deployment.get(key) != manifest.get(key) for key in ("actor", "predictor", "runtime", "hardware")):
         raise ValueError("Split guard deployment/instance inventory does not match the frozen experiment")
     provider_binding = lambda_binding(config, inventory, path.parent) if provider == "lambda" else {}
+    qualification_hash = validate_native_lora_serving(manifest["predictor"], inventory, manifest.get("sourceCommit"))
     containers = {role: {key: inventory["containers"][role][key] for key in ("id", "imageId", "startedAt")} for role in ("actor", "predictor")}
     if any(not re.fullmatch(r"[0-9a-f]{64}", row["id"]) for row in containers.values()):
         raise ValueError("Observed serving container identities required")
+    if qualification_hash:
+        for role in containers:
+            containers[role]["commandHash"] = inventory["containers"][role]["commandHash"]
     if (source_path.parent / source.get("splitGuardPath", "")).resolve() != path:
         raise ValueError("Native configuration must bind this split guard")
     endpoints = {role: f"http://127.0.0.1:{ports[role]}" for role in ports}
@@ -129,6 +136,9 @@ def load_guard(path: Path):
                   "endpoints": endpoints, "remotePorts": {"actor": 8000, "predictor": 8001, "otlp": 4318},
                   "deploymentEvidenceHash": evidence_hash, "servingContainers": containers,
                   "servedModels": {role: manifest[role]["servedModel"] for role in ("actor", "predictor")}, **provider_binding}
+    if qualification_hash:
+        provenance["nativeLoraQualificationHash"] = qualification_hash
+        provenance["predictorBaseServedModel"] = manifest["predictor"]["trainedPredictor"]["base"]["repository"]
     return config, provenance
 
 
@@ -161,8 +171,10 @@ else:
     result["instanceId"]=Path("/sys/devices/virtual/dmi/id/board_asset_tag").read_text().strip()
 result["containers"]={}
 for role,identifier in CONTAINER_IDS.items():
-    format='{"id":{{json .Id}},"imageId":{{json .Image}},"startedAt":{{json .State.StartedAt}},"running":{{json .State.Running}}}'
+    format='{"id":{{json .Id}},"imageId":{{json .Image}},"startedAt":{{json .State.StartedAt}},"running":{{json .State.Running}},"command":{{json .Config.Cmd}}}'
     result["containers"][role]=json.loads(subprocess.check_output(["docker","--host","unix:///var/run/docker.sock","inspect","--format",format,identifier],text=True,timeout=1))
+    command=result["containers"][role].pop("command")
+    result["containers"][role]["commandHash"]=hashlib.sha256(json.dumps(command,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
 for role,port in (("actor",8000),("predictor",8001)):
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/health",timeout=1) as response:
         if response.status!=200: raise ValueError("Unhealthy model server")
@@ -412,7 +424,10 @@ def verify_observation(provenance: dict, remote: dict, local_models: dict):
             raise ValueError("Observed serving container changed since deployment inventory")
         remote_ids = [row["id"] for row in remote.get(role, {}).get("data", [])]
         local_ids = [row["id"] for row in local_models.get(role, {}).get("data", [])]
-        if remote_ids != [provenance["servedModels"][role]] or local_ids != remote_ids:
+        expected_ids = [provenance["servedModels"][role]]
+        if role == "predictor" and provenance.get("nativeLoraQualificationHash"):
+            expected_ids.append(provenance["predictorBaseServedModel"])
+        if sorted(remote_ids) != sorted(expected_ids) or sorted(local_ids) != sorted(remote_ids):
             raise ValueError("Forwarded model endpoint identity mismatch")
 
 

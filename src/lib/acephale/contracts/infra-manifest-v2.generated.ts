@@ -7,6 +7,11 @@
 export type GitRevision = string;
 /**
  * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
+ * via the `definition` "TrainedPredictorArtifact".
+ */
+export type TrainedPredictorArtifact = MergedPredictorArtifact | UnmergedLoraPredictorArtifact;
+/**
+ * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
  * via the `definition` "Sha256".
  */
 export type Sha256 = string;
@@ -76,13 +81,15 @@ export interface InfraExperimentManifestV2 {
    */
   seeds: number[];
   budgets: {
-    totalCeilingMicrodollars: 500000000;
+    totalCeilingMicrodollars: 500000000 | 1000000000;
     trancheMicrodollars: number;
     infrastructureMicrodollars: number;
     protectedContingencyMicrodollars: 65000000;
     maximumGpuHours: number;
     ledgerCheckpointHash: Sha256;
-    budgetPolicyHash?: Sha256;
+    budgetPolicyHash?:
+      | "2d57f84fe03041b077f965add5ac58c7f51f6a90f06e38a579731a3c740d41de"
+      | "c58230aaa05f76984f6b26a5acb509bfea89b67fef9f15db918594039d1e6354";
     budgetAmendmentHash?: Sha256;
   };
   protocol: {
@@ -125,15 +132,12 @@ export interface ModelIdentity {
 }
 /**
  * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
- * via the `definition` "TrainedPredictorArtifact".
+ * via the `definition` "MergedPredictorArtifact".
  */
-export interface TrainedPredictorArtifact {
+export interface MergedPredictorArtifact {
   schemaVersion: 1;
   kind: "acephale-trained-predictor";
-  base: {
-    repository: "Qwen/Qwen3.5-0.8B";
-    revision: "2fc06364715b967f1860aea9cf38778875588b17";
-  };
+  base: Base;
   adapterHash: Sha256;
   mergedWeightsHash: Sha256;
   tokenizerHash: Sha256;
@@ -146,6 +150,10 @@ export interface TrainedPredictorArtifact {
   servedModel: string;
   contentHash: Sha256;
 }
+export interface Base {
+  repository: "Qwen/Qwen3.5-0.8B";
+  revision: "2fc06364715b967f1860aea9cf38778875588b17";
+}
 /**
  * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
  * via the `definition` "BinaryTokenIds".
@@ -153,4 +161,30 @@ export interface TrainedPredictorArtifact {
 export interface BinaryTokenIds {
   zero: number;
   one: number;
+}
+/**
+ * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
+ * via the `definition` "UnmergedLoraPredictorArtifact".
+ */
+export interface UnmergedLoraPredictorArtifact {
+  schemaVersion: 2;
+  kind: "acephale-trained-predictor";
+  storageMode: "unmerged_lora";
+  base: Base;
+  baseReceiptHash: Sha256;
+  baseWeightsHash: Sha256;
+  adapterHash: Sha256;
+  adapterStorageDtype: "float32";
+  runtimeLoraDtype: "bfloat16";
+  servingWeightsHash: Sha256;
+  servingProbeHash: Sha256;
+  tokenizerHash: Sha256;
+  chatTemplateHash: Sha256;
+  trainingManifestHash: Sha256;
+  weightFitFamilies: Families;
+  calibrationFamilies: Families;
+  protocol: "rank_binary_v1";
+  binaryTokenIds: BinaryTokenIds;
+  servedModel: string;
+  contentHash: Sha256;
 }

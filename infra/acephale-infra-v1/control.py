@@ -13,7 +13,6 @@ import ipaddress
 import json
 import math
 import os
-from pathlib import Path
 import platform
 import re
 import shutil
@@ -24,6 +23,8 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -255,8 +256,15 @@ def checked_predictor_export(path: Path) -> dict:
     try:
         from acephale.training import verify_export as verify_trained_export
         artifact = verify_trained_export(path)
+        names = ["predictor.json", "training-manifest.json", "dataset-manifest.json", "training-receipt.json", "verification.json"]
+        if artifact["schemaVersion"] == 2:
+            names.extend(["base-receipt.json", "serving-probe.json"])
         manifests = [{"path": name, "sha256": sha256(path / name), "bytes": (path / name).stat().st_size}
-                     for name in ("predictor.json", "training-manifest.json", "dataset-manifest.json", "training-receipt.json", "verification.json")]
+                     for name in names]
+        if artifact["schemaVersion"] == 2:
+            return {"artifact": artifact, "verifiedManifestFiles": manifests,
+                    "adapterFiles": read_json(path / "verification.json")["adapterFiles"],
+                    "servingProbe": read_json(path / "serving-probe.json")}
         return {"artifact": artifact, "verifiedManifestFiles": manifests,
                 "mergedFiles": read_json(path / "verification.json")["mergedFiles"]}
     finally:
@@ -270,6 +278,27 @@ def apply_predictor_export(value: dict, models_root: Path, predictor_export: Pat
     verified = checked_predictor_export(exported)
     artifact = verified["artifact"]
     command = value["services"]["predictor"]["command"]
+    if artifact["schemaVersion"] == 2:
+        from acephale.training import tokenizer_identity, verify_base
+        from acephale.training_lora import base_weights_hash
+
+        base_path = root / read_json(HERE / "versions.json")["models"]["predictor"]["directory"]
+        base_receipt = verify_base(base_path)
+        if (digest(base_receipt) != artifact["baseReceiptHash"] or base_weights_hash(base_receipt) != artifact["baseWeightsHash"]
+                or tokenizer_identity(base_path) != (artifact["tokenizerHash"], artifact["chatTemplateHash"])):
+            raise ValueError("Native LoRA serving base or tokenizer differs from the verified export")
+        adapter_path = "/models/" + (exported / "adapter").relative_to(root).as_posix()
+        if (any(flag in command for flag in ("--enable-lora", "--max-lora-rank", "--lora-dtype", "--lora-modules"))
+                or command[command.index("--model") + 1] != "/models/" + base_path.relative_to(root).as_posix()
+                or command[command.index("--served-model-name") + 1] != artifact["base"]["repository"]
+                or any(character in adapter_path for character in ("=", "\r", "\n", "\x00"))):
+            raise ValueError("Native LoRA requires an unchanged pinned base command and unambiguous adapter path")
+        command.extend(["--enable-lora", "--max-lora-rank", "16", "--lora-dtype", "bfloat16",
+                        "--lora-modules", artifact["servedModel"] + "=" + adapter_path])
+        value["x-acephale-trained-predictor"] = {"artifactHash": artifact["contentHash"], "servedModel": artifact["servedModel"],
+            "storageMode": "unmerged_lora", "baseReceiptHash": artifact["baseReceiptHash"],
+            "adapterStorageDtype": artifact["adapterStorageDtype"], "runtimeLoraDtype": artifact["runtimeLoraDtype"]}
+        return verified
     command[command.index("--model") + 1] = "/models/" + (exported / "model").relative_to(root).as_posix()
     command[command.index("--served-model-name") + 1] = artifact["servedModel"]
     value["x-acephale-trained-predictor"] = {"artifactHash": artifact["contentHash"], "servedModel": artifact["servedModel"]}
@@ -342,7 +371,7 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
              "studyReservation": lease["studyReservation"], "studyBindingHash": ledger["planHash"],
              "providerLeaseHash": digest(lease), "preflightHash": sha256(preflight_path)}
     if policy:
-        value.update(version=2, profile="acephale-training-lease-v2", trainingKind=kind, budgetPolicy=policy,
+        value.update(version=amendment["version"], profile=f"acephale-training-lease-v{amendment['version']}", trainingKind=kind, budgetPolicy=policy,
                      budgetPolicyHash=amendment["policyHash"], budgetAmendmentHash=amendment["contentHash"])
     windows.append({"leaseId": lease_id, "reservedSeconds": deadline - current, "startedAt": current, "deadline": deadline,
                     "receiptHash": digest(value), **({"trainingKind": kind, "budgetAmendmentHash": amendment["contentHash"]} if policy else {})})
@@ -578,17 +607,48 @@ def _financial_binding_hash(ledger: dict) -> str:
 
 def effective_budget_policy(ledger: dict) -> dict | None:
     """Validate an explicit amendment while preserving all prior funded work."""
+    current = _read_budget_amendment(ledger, 3)
+    historical = _amendment_baseline(ledger, current) if current else ledger
+    parent = _read_budget_amendment(historical, 2)
+    if current and (parent is None or current.get("parentAmendmentHash") != parent["contentHash"]
+                    or _budget_authorized_at(current) < _budget_authorized_at(parent)):
+        raise ValueError("Budget amendment parent chain differs")
+    return current or parent
+
+
+def _budget_authorized_at(amendment: dict) -> float:
+    value = amendment.get("authorizedAt")
+    if not isinstance(value, str):
+        raise ValueError("Budget amendment requires an authorization timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # Date-only ISO timestamps have the same UTC interpretation as Date.parse.
+        result = parsed.replace(tzinfo=timezone.utc).timestamp() if parsed.tzinfo is None else parsed.timestamp()
+    except (ValueError, OverflowError) as error:
+        raise ValueError("Budget amendment authorization timestamp is invalid") from error
+    if not math.isfinite(result):
+        raise ValueError("Budget amendment authorization timestamp is invalid")
+    return result
+
+
+def _amendment_baseline(ledger: dict, amendment: dict) -> dict:
+    return {**ledger, "leases": amendment["baselineLeases"], "overheads": amendment["baselineOverheads"],
+            "trainingWindows": amendment["baselineTrainingWindows"]}
+
+
+def _read_budget_amendment(ledger: dict, version: int) -> dict | None:
     journal = ledger.get("plan", {}).get("studyLedgerPath")
     if not journal:
         return None
-    path = Path(str(Path(journal).resolve()) + ".policy-v2.json")
+    path = Path(str(Path(journal).resolve()) + f".policy-v{version}.json")
     if not path.exists():
         return None
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
         raise ValueError("Invalid budget amendment file")
     value = read_json(path)
-    approved = read_json(ROOT / "src/lib/acephale/contracts/budget-policy-v2.json")
-    if (value.get("version") != 2 or value.get("profile") != "acephale-budget-amendment-v2"
+    _budget_authorized_at(value)
+    approved = read_json(ROOT / f"src/lib/acephale/contracts/budget-policy-v{version}.json")
+    if (value.get("version") != version or value.get("profile") != f"acephale-budget-amendment-v{version}"
             or value.get("contentHash") != _budget_digest({key: item for key, item in value.items() if key != "contentHash"})
             or value.get("policy") != approved or value.get("policyHash") != _budget_digest(approved)
             or value.get("studyLedgerPathHash") != _budget_digest(str(Path(journal).resolve()))
@@ -601,6 +661,9 @@ def effective_budget_policy(ledger: dict) -> dict | None:
         current = ledger.get(field, [])
         if not isinstance(prior, list) or current[:len(prior)] != prior:
             raise ValueError("Budget amendment operational history changed or disappeared")
+    if any(type(row.get("reservedSeconds")) not in {int, float} or not math.isfinite(row["reservedSeconds"])
+           or row["reservedSeconds"] < 0 for row in ledger.get("trainingWindows", [])):
+        raise ValueError("Budget amendment training window durations must remain finite and nonnegative")
     if (sum(row["reservedSeconds"] for row in value["baselineTrainingWindows"]) > approved["priorTrainingSeconds"]
             or any(row["status"] != "terminated" for row in value["baselineLeases"])):
         raise ValueError("Budget amendment requires closed prior work")
@@ -630,8 +693,11 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
     if path is not None and path.exists():
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
             raise ValueError("Invalid infrastructure suballocation amendment")
-        _validate_infrastructure_suballocation(ledger, amendment, read_json(path))
-        return 50, 36.25, 13.75
+        historical = _amendment_baseline(ledger, amendment) if amendment and amendment["version"] == 3 else ledger
+        parent = _read_budget_amendment(historical, 2) if amendment and amendment["version"] == 3 else amendment
+        _validate_infrastructure_suballocation(historical, parent, read_json(path))
+        if amendment is None or amendment["version"] == 2:
+            return 50, 36.25, 13.75
     if not amendment:
         return 35, 30, 5
     policy = amendment["policy"]
@@ -701,7 +767,7 @@ def record_infrastructure_suballocation(ledger_path: Path, reason: str, *, sourc
         if output.exists():
             raise ValueError("Infrastructure suballocation already exists and cannot be overwritten")
         amendment = effective_budget_policy(ledger)
-        if amendment is None or not reason.strip() or len(reason) > 1024:
+        if amendment is None or amendment["version"] != 2 or not reason.strip() or len(reason) > 1024:
             raise ValueError("An existing v2 budget amendment and explicit bounded reason are required")
         policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v2.json")
         before, policy_before = sha256(ledger_path), sha256(policy_path)
@@ -899,7 +965,10 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     rate = finite_number(current_quote["hourlyUsd"], "hourly quote", 0.01)
     quoted_at = finite_number(current_quote["quotedAt"], "quote timestamp")
     selected = hardware_profile(current_quote.get("hardwareProfile", ""))
-    if not 0 <= now - quoted_at <= 300 or rate > limits()["hourlyUsd"] or hours > limits()["sessionHours"]:
+    amendment = effective_budget_policy(ledger)
+    policy = amendment["policy"] if amendment else None
+    if (not 0 <= now - quoted_at <= 300 or rate > (policy["maxHourlyUsd"] if policy else limits()["hourlyUsd"])
+            or hours > (policy["maxSessionHours"] if policy else limits()["sessionHours"])):
         raise ValueError("Expired quote, excessive rate, or session longer than eight hours")
     if (current_quote["instanceType"] != selected["instanceType"] or current_quote["imageFamily"] != "gpu-base-24-04"
             or current_quote.get("hardwareProfileHash") != digest(selected)):
@@ -913,7 +982,8 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     compute = ledger.get("priorComputeUsd", ledger["priorInfraUsd"]) + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
     charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
     infrastructure_cap, compute_cap, associated_cap = infrastructure_caps(ledger)
-    if used_hours + hours > 24 or reserved + cost > infrastructure_cap or compute + rate * hours > compute_cap or charges + allowance > associated_cap:
+    if (used_hours + hours > (policy["maxGpuHours"] if policy else 24) or reserved + cost > infrastructure_cap
+            or compute + rate * hours > compute_cap or charges + allowance > associated_cap):
         raise ValueError("Cumulative infrastructure allocation exceeded")
     # Do not release reservations after termination without invoice reconciliation.
     return {"id": str(uuid.uuid4()), "status": "reserved", "quote": current_quote,

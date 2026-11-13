@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { LocalChatModelPort, type InfraChatMessage, type InfraModelEvent, type InfraFunctionTool } from "../src/lib/acephale/infra-model";
 import { freezeInfraManifest, INFRA_MODEL_PINS, validateInfraManifest, type InfraExperimentManifestV2 } from "../src/lib/acephale/infra-manifest";
+import budgetPolicyV2 from "../src/lib/acephale/contracts/budget-policy-v2.json";
+import budgetPolicyV3 from "../src/lib/acephale/contracts/budget-policy-v3.json";
 import { localActorDecision, localActorMessages } from "../services/acephale-runtime/local-actor";
 import { hash } from "../src/lib/acephale/canonical";
 
@@ -329,4 +331,22 @@ test("v2 manifest rejects substitutions, contamination, invalid budgets and beha
     (m: InfraExperimentManifestV2) => { (m.protocol as unknown as Record<string, unknown>).exposeEvidence = true; },
     (m: InfraExperimentManifestV2) => { m.arms = ["demand-only", "demand-only", "goal-conditioned"]; },
   ]) { const value = manifest(); mutate(value); assert.throws(() => validateInfraManifest(value)); }
+});
+
+test("expanded budget requires the exact v3 policy and leaves previous limits unchanged", () => {
+  const approved = "c58230aaa05f76984f6b26a5acb509bfea89b67fef9f15db918594039d1e6354";
+  assert.equal(hash(budgetPolicyV3), approved);
+  const current = manifest();
+  current.budgets = { ...current.budgets, totalCeilingMicrodollars: 1000000000, trancheMicrodollars: 1000000000,
+    infrastructureMicrodollars: 200000000, maximumGpuHours: 64,
+    budgetPolicyHash: approved, budgetAmendmentHash: hash("explicit new authorization") };
+  assert.doesNotThrow(() => validateInfraManifest(current));
+  for (const policy of [undefined, hash(budgetPolicyV2), hash("unknown")]) {
+    const previous = structuredClone(current);
+    if (policy) (previous.budgets as unknown as Record<string, unknown>).budgetPolicyHash = policy;
+    else { delete previous.budgets.budgetPolicyHash; delete previous.budgets.budgetAmendmentHash; }
+    assert.throws(() => validateInfraManifest(previous));
+  }
+  current.budgets.totalCeilingMicrodollars = 500000000;
+  assert.throws(() => validateInfraManifest(current));
 });

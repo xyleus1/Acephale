@@ -2,6 +2,9 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { hash } from "../../src/lib/acephale/canonical";
+import { validateNativeLoraServing } from "../../src/lib/acephale/predictor-serving-qualification";
+import { resolvePredictorProfile, type PredictorProfile } from "../../src/lib/acephale/predictor-artifact";
+import { validateInfraManifest } from "../../src/lib/acephale/infra-manifest";
 
 const sha256 = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const hexHash = (value: unknown) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
@@ -52,8 +55,11 @@ function lambdaBinding(guard: Record<string, any>, inventory: Record<string, any
 
 /** Bind the locally clocked heartbeat to this manifest and the exact private forwards. */
 export function nativeSplitGuard(configuration: { splitGuardPath?: string; actorBaseUrl: string; predictorBaseUrl?: string; otlpBaseUrl?: string },
-  manifest: { actor: { servedModel: string }; predictor: { servedModel: string } }, configurationPath: string) {
-  if (!configuration.splitGuardPath) return undefined;
+  manifest: { sourceCommit?: string; actor: { servedModel: string }; predictor: { servedModel: string; trainedPredictor?: { schemaVersion: number; base: { repository: string } } } }, configurationPath: string) {
+  if (!configuration.splitGuardPath) {
+    if (manifest.predictor.trainedPredictor?.schemaVersion === 2) throw new Error("Native LoRA requires current qualified split-guard serving evidence");
+    return undefined;
+  }
   const guardPath = resolve(dirname(configurationPath), configuration.splitGuardPath);
   const guard = JSON.parse(readFileSync(guardPath, "utf8"));
   const provider = guard.provider ?? "aws", instancePattern = provider === "aws" ? /^i-[0-9a-f]{8,17}$/ : /^[a-zA-Z0-9_-]{1,100}$/;
@@ -68,8 +74,10 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
     || deployment.sourceCommit !== (manifest as { sourceCommit?: string }).sourceCommit
     || ["actor", "predictor", "runtime", "hardware"].some(key => hash(deployment[key] ?? null) !== hash((manifest as Record<string, unknown>)[key] ?? null))) throw new Error("Split guard inventory differs from frozen experiment");
   const providerBinding = provider === "lambda" ? lambdaBinding(guard, inventory, dirname(guardPath)) : undefined;
+  const qualificationHash = validateNativeLoraServing(manifest.predictor, inventory, manifest.sourceCommit ?? "");
   const servingContainers = Object.fromEntries(["actor", "predictor"].map(role => [role, Object.fromEntries(["id", "imageId", "startedAt"].map(key => [key, inventory.containers[role][key]]))]));
   if (Object.values(servingContainers).some(container => !hexHash(container.id))) throw new Error("Observed serving container identities required");
+  if (qualificationHash) for (const role of ["actor", "predictor"]) servingContainers[role].commandHash = inventory.containers[role].commandHash;
   const endpoints = Object.fromEntries(Object.entries(guard.localPorts).map(([role, port]) => [role, `http://127.0.0.1:${port}`]));
   for (const [role, value] of [["actor", configuration.actorBaseUrl], ["predictor", configuration.predictorBaseUrl], ["otlp", configuration.otlpBaseUrl]]) {
     if (!value || value.replace(/\/$/, "").replace(/\/v1$/, "") !== endpoints[role!]) throw new Error("Native model/telemetry endpoints differ from guard-owned tunnels");
@@ -78,7 +86,9 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
     sshPort: guard.sshPort, expectedInstanceId: guard.expectedInstanceId, endpoints,
     remotePorts: { actor: 8000, predictor: 8001, otlp: 4318 },
     deploymentEvidenceHash: deployment.evidenceHash, servingContainers,
-    servedModels: { actor: manifest.actor.servedModel, predictor: manifest.predictor.servedModel }, ...providerBinding };
+    servedModels: { actor: manifest.actor.servedModel, predictor: manifest.predictor.servedModel }, ...providerBinding,
+    ...(qualificationHash ? { nativeLoraQualificationHash: qualificationHash,
+      predictorBaseServedModel: manifest.predictor.trainedPredictor!.base.repository } : {}) };
   const expected = hash(provenance);
   return () => {
     if (providerBinding) {
@@ -106,4 +116,21 @@ export function nativeSplitGuard(configuration: { splitGuardPath?: string; actor
       || status.remoteInstanceId !== guard.expectedInstanceId) throw new NativeSplitGuardError("identity", "Split heartbeat belongs to another host, manifest or endpoint set", age, maximumAge);
     return { endpointProvenanceHash: expected, manifestHash: hash(manifest), remoteInstanceId: guard.expectedInstanceId };
   };
+}
+
+/** Calibration uses the same active owner and heartbeat as native execution. */
+export function predictionSplitGuard(profile: PredictorProfile, baseUrl: string, configurationPath?: string) {
+  const resolved = resolvePredictorProfile(profile);
+  if (resolved.trainedPredictor?.schemaVersion !== 2) return undefined;
+  if (!configurationPath) throw new Error("Native LoRA prediction requires its qualified native serving configuration");
+  const path = resolve(configurationPath), configuration = JSON.parse(readFileSync(path, "utf8"));
+  const manifest = JSON.parse(readFileSync(resolve(dirname(path), configuration.manifestPath), "utf8"));
+  validateInfraManifest(manifest);
+  if (hash(resolvePredictorProfile(manifest.predictor)) !== hash(resolved)
+    || configuration.predictorBaseUrl?.replace(/\/$/, "").replace(/\/v1$/, "") !== baseUrl.replace(/\/$/, "").replace(/\/v1$/, "")) {
+    throw new Error("Prediction model or endpoint differs from its qualified serving configuration");
+  }
+  const guard = nativeSplitGuard(configuration, manifest, path)!;
+  guard();
+  return guard;
 }

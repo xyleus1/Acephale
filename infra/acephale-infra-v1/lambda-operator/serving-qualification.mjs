@@ -1,20 +1,30 @@
 import assert from 'node:assert/strict';
-import {writeFile} from 'node:fs/promises';
+import {readFile, writeFile} from 'node:fs/promises';
 import {LocalChatModelPort} from '/app/src/lib/acephale/infra-model.ts';
 import {InfraTelemetry} from '/app/services/acephale-runtime/infra-telemetry.ts';
 import {binaryRankingSchema, decodeBinaryRanking} from '/app/services/acephale-runtime/infra-binary-ranking.ts';
 import {hash} from '/app/src/lib/acephale/canonical.ts';
+import {validateTrainedPredictor} from '/app/src/lib/acephale/predictor-artifact.ts';
+import {parityRequest, validateParityBinding, verifyParityResponse} from './serving-parity.mjs';
 
-const [output, deadlineText, sourceCommit] = process.argv.slice(2);
+const [output, deadlineText, sourceCommit, bindingPath] = process.argv.slice(2);
 const deadline = Number(deadlineText) * 1000;
 assert(output?.startsWith('/artifacts/qualification-') && Number.isFinite(deadline) && deadline > Date.now());
 assert(/^[a-f0-9]{40}$/.test(sourceCommit));
+let binding, parityIdentity;
+if (bindingPath) {
+  assert(bindingPath.startsWith('/artifacts/') && !bindingPath.split('/').includes('..'));
+  binding = JSON.parse(await readFile(bindingPath, 'utf8'));
+  validateTrainedPredictor(binding.artifact);
+  parityIdentity = validateParityBinding(binding, sourceCommit, hash);
+}
+const predictorModel = binding?.artifact.servedModel ?? 'Qwen/Qwen3.5-0.8B';
 const signal = AbortSignal.timeout(Math.max(1, Math.floor(deadline - Date.now() - 5000)));
 const runId = output.split('/').at(-1);
 const telemetry = await InfraTelemetry.create(output, 'http://alloy:4318');
 const observations = {kind:'infrastructure-protocol-qualification', nativeBenchmarkScore:false, sourceCommit, runId};
 const actor = new LocalChatModelPort({baseUrl:'http://actor:8000/v1',model:'Qwen/Qwen3.5-9B',record:telemetry.record});
-const predictor = new LocalChatModelPort({baseUrl:'http://predictor:8000/v1',model:'Qwen/Qwen3.5-0.8B',contextWindow:8192,inputBudget:7168,maxOutputTokens:1024,record:telemetry.record});
+const predictor = new LocalChatModelPort({baseUrl:'http://predictor:8000/v1',model:predictorModel,contextWindow:8192,inputBudget:7168,maxOutputTokens:1024,record:telemetry.record});
 async function json(url, body) {
   const response = await fetch(url, {signal, ...(body ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)} : {})});
   if (!response.ok) throw new Error(`Qualification HTTP ${response.status}: ${new URL(url).pathname}`);
@@ -28,9 +38,19 @@ try {
     assert.equal(first.calls.length,1); assert.equal(first.calls[0].name,'read_fixture'); assert.deepEqual(first.calls[0].arguments,{key:'health'});
     assert(first.calls[0].id && first.usage);
     observations.actorTool = first;
-    const tokens = await Promise.all(['0','1'].map(prompt => json('http://predictor:8000/tokenize',{model:'Qwen/Qwen3.5-0.8B',prompt,add_special_tokens:false})));
+    const tokens = await Promise.all(['0','1'].map(prompt => json('http://predictor:8000/tokenize',{model:predictorModel,prompt,add_special_tokens:false})));
     assert(tokens.every(row => row.count===1 && row.tokens.length===1)); assert.notEqual(tokens[0].tokens[0],tokens[1].tokens[0]);
     observations.binaryTokenIds = {zero:tokens[0].tokens[0],one:tokens[1].tokens[0]};
+    if (binding) {
+      assert.deepEqual(observations.binaryTokenIds,binding.artifact.binaryTokenIds);
+      const probeStartedAtUnixMs = Date.now();
+      const response = await json('http://predictor:8000/v1/completions',parityRequest(binding.artifact,binding.probe));
+      const probeCompletedAtUnixMs = Date.now();
+      await writeFile(output+'/native-lora-probe-response.json',JSON.stringify(response,null,2)+'\n',{flag:'wx',mode:0o600});
+      observations.nativeLoraQualification = verifyParityResponse(response,binding.artifact,binding.probe,parityIdentity,hash,
+        {probeStartedAtUnixMs,probeCompletedAtUnixMs});
+      observations.nativeLoraProof = {version:1,binding,response,receipt:observations.nativeLoraQualification};
+    }
     const started = Date.now();
     const [continued, binary] = await Promise.all([
       actor.complete({id:runId+':actor-continuation',messages:[...messages,first.continuation,{role:'tool',tool_call_id:first.calls[0].id,content:'{"healthy":true}'}],tools,maxOutputTokens:4096,signal,seed:17}),
@@ -68,5 +88,9 @@ for (let attempt=0; attempt<12 && Date.now()<deadline-5000; attempt++) {
 assert(backendEvidence);
 observations.backendEvidence = backendEvidence;
 observations.passed = true;
+if (observations.nativeLoraQualification) {
+  await writeFile(output+'/native-lora-qualification.json',JSON.stringify(observations.nativeLoraQualification,null,2)+'\n',{flag:'wx',mode:0o600});
+  await writeFile(output+'/native-lora-proof.json',JSON.stringify(observations.nativeLoraProof,null,2)+'\n',{flag:'wx',mode:0o600});
+}
 await writeFile(output+'/qualification.json',JSON.stringify(observations,null,2)+'\n',{flag:'wx',mode:0o600});
 console.log(JSON.stringify({passed:true,output,traceId,actorToolCallId:observations.actorTool.calls[0].id,telemetry:observations.telemetry,nativeBenchmarkScore:false}));

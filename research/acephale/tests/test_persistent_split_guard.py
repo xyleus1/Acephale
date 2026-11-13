@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from test_infra_split_guard import fixture, lambda_fixture, responses
 
+from acephale.contracts_v1 import hash_v1
 from acephale.infra_split_guard import (
     PersistentProbeSession,
     observe_persistent,
@@ -322,6 +323,8 @@ def test_remote_loop_collects_again_after_each_valid_nonce(monkeypatch):
 
 def test_generated_remote_program_runs_in_actual_child_and_recollects_every_request(tmp_path):
     config, provenance = fixture(tmp_path)
+    for role, container in provenance["servingContainers"].items():
+        container["commandHash"] = hash_v1(["serve", role])
     remote, local = responses(provenance)
     # Replace only external host services inside the test child. The production
     # remote program, imports, framing, nonce loop and collect function run whole.
@@ -336,8 +339,8 @@ Path.read_text=read
 def inspect(command,**kwargs):
     global count
     count+=1
-    row=next(value for value in remote["containers"].values() if value["id"]==command[-1])
-    return json.dumps({**row,"testFreshInspectNumber":count})
+    role,row=next((role,value) for role,value in remote["containers"].items() if value["id"]==command[-1])
+    return json.dumps({**row,"command":["serve",role],"testFreshInspectNumber":count})
 subprocess.check_output=inspect
 class Response(io.BytesIO):
     status=200

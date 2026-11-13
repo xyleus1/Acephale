@@ -52,17 +52,18 @@ def test_optimizer_steps_are_bounded_and_require_actual_examples():
             optimizer_steps(count, steps, recipe)
 
 
-def amended_lease():
-    policy = json.loads((Path(__file__).resolve().parents[3] / "src/lib/acephale/contracts/budget-policy-v2.json").read_text())
-    return {"version": 2, "profile": "acephale-training-lease-v2", "phase": "predictor_training", "status": "active",
+def amended_lease(version=2):
+    policy = json.loads((Path(__file__).resolve().parents[3] / f"src/lib/acephale/contracts/budget-policy-v{version}.json").read_text())
+    return {"version": version, "profile": f"acephale-training-lease-v{version}", "phase": "predictor_training", "status": "active",
             "actorStopped": True, "startedAt": 100, "deadline": 14500, "hardwareProfile": "a100-40gb-v1",
             "instanceId": "instance", "leaseId": "lease", "studyBindingHash": hash_v1("study"),
             "providerLeaseHash": hash_v1("provider"), "studyReservation": {"reservationId": "lambda-infra:lease", "maximumMicrodollars": 40_000_000},
             "budgetPolicy": policy, "budgetPolicyHash": hash_v1(policy), "budgetAmendmentHash": hash_v1("amendment"), "trainingKind": "fit"}
 
 
-def test_amended_lease_requires_exact_versioned_policy_and_keeps_legacy_caps(tmp_path):
-    lease = amended_lease()
+@pytest.mark.parametrize("version", [2, 3])
+def test_amended_lease_requires_exact_versioned_policy_and_keeps_legacy_caps(tmp_path, version):
+    lease = amended_lease(version)
     path = tmp_path / "lease.json"
 
     def validate():
@@ -76,7 +77,7 @@ def test_amended_lease_requires_exact_versioned_policy_and_keeps_legacy_caps(tmp
     lease["deadline"] = 200
     with pytest.raises(ValueError, match="reservation"):
         validate()
-    lease = amended_lease()
+    lease = amended_lease(version)
     lease["trainingKind"] = "smoke"
     with pytest.raises(ValueError, match="window"):
         validate()
@@ -86,3 +87,15 @@ def test_amended_lease_requires_exact_versioned_policy_and_keeps_legacy_caps(tmp
     lease["budgetPolicyHash"] = hash_v1(lease["budgetPolicy"])
     with pytest.raises(ValueError, match="exact approved"):
         validate()
+
+
+def test_v3_larger_reservation_cannot_be_relabelled_as_an_older_lease(tmp_path):
+    lease = amended_lease(3)
+    lease["studyReservation"]["maximumMicrodollars"] = 180_000_000
+    path = tmp_path / "lease.json"
+    path.write_text(json.dumps(lease))
+    assert validate_training_lease(path, now=150) == lease
+    lease["version"], lease["profile"] = 2, "acephale-training-lease-v2"
+    path.write_text(json.dumps(lease))
+    with pytest.raises(ValueError, match="exact approved"):
+        validate_training_lease(path, now=150)

@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -52,16 +53,16 @@ def validate_training_lease(path: Path, *, now: float | None = None) -> dict[str
 
     version = lease.get("version")
     maximum_seconds, maximum_reservation = 7200, 35_000_000
-    if version == 2:
-        policy_path = Path(__file__).resolve().parents[4] / "src/lib/acephale/contracts/budget-policy-v2.json"
+    if version in {2, 3}:
+        policy_path = Path(__file__).resolve().parents[4] / f"src/lib/acephale/contracts/budget-policy-v{version}.json"
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
         kind = lease.get("trainingKind")
         if (lease.get("budgetPolicy") != policy or lease.get("budgetPolicyHash") != hash_v1(policy)
                 or not DIGEST.fullmatch(str(lease.get("budgetAmendmentHash", ""))) or kind not in {"smoke", "fit"}):
-            raise ValueError("Version 2 training lease requires the exact approved budget amendment")
+            raise ValueError("Amended training lease requires the exact approved budget amendment")
         maximum_seconds = policy["additionalSmokeSeconds"] if kind == "smoke" else policy["maxTrainingWindowSeconds"]
         maximum_reservation = policy["allocationsMicrodollars"]["infrastructure"]
-    if (type(version) is not int or version not in {1, 2} or lease.get("profile") != f"acephale-training-lease-v{version}"
+    if (type(version) is not int or version not in {1, 2, 3} or lease.get("profile") != f"acephale-training-lease-v{version}"
             or lease.get("phase") != "predictor_training" or lease.get("status") != "active" or lease.get("actorStopped") is not True):
         raise ValueError("Active predictor-training lease with stopped actor required")
     started, deadline = lease.get("startedAt"), lease.get("deadline")
@@ -270,7 +271,7 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     recipe = training_recipe(micro_batch=micro_batch, gradient_accumulation=gradient_accumulation)
     manifest = verify_dataset(dataset)
     lease = validate_training_lease(lease_path)
-    if lease["version"] == 2 and lease["trainingKind"] != ("smoke" if smoke else "fit"):
+    if lease["version"] in {2, 3} and lease["trainingKind"] != ("smoke" if smoke else "fit"):
         raise ValueError("Training mode differs from the approved lease kind")
     base_receipt = verify_base(model_path)
     identities = tokenizer_identity(model_path)
@@ -450,6 +451,10 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
 def verify_export(directory: Path) -> dict[str, Any]:
     """Validate the full local serving artifact chain without importing PyTorch."""
     artifact = verify_hashed(json.loads((directory / "predictor.json").read_text(encoding="utf-8")))
+    if artifact.get("schemaVersion") == 2:
+        from acephale.training_lora import verify_unmerged_export
+
+        return verify_unmerged_export(directory)
     specification = verify_hashed(json.loads((directory / "training-manifest.json").read_text(encoding="utf-8")))
     dataset = verify_hashed(json.loads((directory / "dataset-manifest.json").read_text(encoding="utf-8")))
     receipt = verify_hashed(json.loads((directory / "training-receipt.json").read_text(encoding="utf-8")))
@@ -488,7 +493,34 @@ def verify_export(directory: Path) -> dict[str, Any]:
     return artifact
 
 
-def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, partition: str = "development") -> dict[str, Any]:
+def _load_evaluation_model(model_path: Path, predictor_export: Path | None = None):
+    """Bind a native adapter to its exact original snapshot before loading it."""
+    if predictor_export is not None:
+        from acephale.training_lora import base_weights_hash, verify_unmerged_export
+
+        identity = verify_unmerged_export(predictor_export)
+        base_receipt = verify_base(model_path)
+        if (identity["baseReceiptHash"] != hash_v1(base_receipt)
+                or identity["baseWeightsHash"] != base_weights_hash(base_receipt)
+                or tokenizer_identity(model_path) != (identity["tokenizerHash"], identity["chatTemplateHash"])):
+            raise ValueError("Unmerged evaluation requires the exact exported base snapshot and tokenizer")
+        from peft import PeftModel
+
+        base, tokenizer = _load_model(model_path)
+        model = PeftModel.from_pretrained(base, predictor_export / "adapter", is_trainable=False, local_files_only=True)
+        return model.eval(), tokenizer, identity
+    if (model_path / "acephale-model.receipt.json").is_file():
+        identity = {"baseReceiptHash": hash_v1(verify_base(model_path)), "base": BASE}
+    else:
+        identity = verify_export(model_path.parent)
+        if identity.get("schemaVersion") == 2:
+            raise ValueError("Unmerged evaluation needs --model for the base and --predictor-export for its adapter")
+    model, tokenizer = _load_model(model_path)
+    return model.eval(), tokenizer, identity
+
+
+def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, partition: str = "development",
+             predictor_export: Path | None = None) -> dict[str, Any]:
     """Offline teacher-forced loss diagnostic, never a native task-success score."""
     manifest = verify_dataset(dataset)
     lease = validate_training_lease(lease_path)
@@ -497,17 +529,14 @@ def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *,
     training_versions()
     if tokenizer_identity(model_path) != (manifest["tokenizerHash"], manifest["chatTemplateHash"]):
         raise ValueError("Evaluation tokenizer differs from the compiled dataset")
-    if (model_path / "acephale-model.receipt.json").is_file():
-        model_identity = {"baseReceiptHash": hash_v1(verify_base(model_path)), "base": BASE}
-    else:
-        model_identity = verify_export(model_path.parent)
     import torch
 
-    model, tokenizer = _load_model(model_path)
-    model.eval()
+    model, tokenizer, model_identity = _load_evaluation_model(model_path, predictor_export)
     rows = load_partition(dataset, partition)
     measured = []
-    with torch.inference_mode():
+    unmerged = model_identity.get("storageMode") == "unmerged_lora"
+    precision = torch.autocast(device_type="cuda", dtype=torch.bfloat16) if unmerged else nullcontext()
+    with torch.inference_mode(), precision:
         for row in rows:
             if validate_training_lease(lease_path) != lease:
                 raise ValueError("Evaluation lease changed during execution")
@@ -520,6 +549,8 @@ def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *,
             measured.append({"id": row["id"], "familyId": row["familyId"], "task": row["task"],
                              "completionLoss": result.loss.item(), "completionTokens": mask.sum().item(),
                              "correctTokens": ((predictions == targets) & mask).sum().item()})
+    if validate_training_lease(lease_path) != lease:
+        raise ValueError("Evaluation lease changed before publication")
     output.mkdir(parents=True, exist_ok=False)
     write_new(output / "evaluation.json", hashed({"kind": "acephale-teacher-forced-training-diagnostic",
         "trainingManifestHash": manifest["contentHash"], "modelIdentity": model_identity, "leaseHash": hash_v1(lease), "partition": partition, "rows": measured,

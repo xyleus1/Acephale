@@ -30,15 +30,22 @@ def main(argv: list[str] | None = None) -> None:
     train.add_argument("--maximum-seconds", type=int, default=3600)
     train.add_argument("--micro-batch", type=int, choices=[1, 2, 4], default=1)
     train.add_argument("--gradient-accumulation", type=int, choices=[4, 8, 16], default=16)
-    smoke = commands.add_parser("smoke", help="One actual optimizer step plus reload/merge verification on prepared real examples")
+    smoke = commands.add_parser("smoke", help="One actual optimizer step plus explicit export verification on prepared real examples")
     for name in ("dataset", "model", "output", "lease"):
         smoke.add_argument(f"--{name}", type=Path, required=True)
+    smoke.add_argument("--artifact-mode", choices=["merged", "unmerged_lora"], default="merged")
+    profile = commands.add_parser("profile", help="Measure fit-only batch capacity before either main seed")
+    for name in ("dataset", "model", "output", "lease"):
+        profile.add_argument(f"--{name}", type=Path, required=True)
+    profile.add_argument("--maximum-seconds", type=int, default=600)
     export = commands.add_parser("export")
     for name in ("dataset", "model", "run", "output", "lease"):
         export.add_argument(f"--{name}", type=Path, required=True)
+    export.add_argument("--artifact-mode", choices=["merged", "unmerged_lora"], default="merged")
     evaluate = commands.add_parser("evaluate")
     for name in ("dataset", "model", "output", "lease"):
         evaluate.add_argument(f"--{name}", type=Path, required=True)
+    evaluate.add_argument("--predictor-export", type=Path, help="Verified unmerged adapter export; --model remains its exact base snapshot")
     evaluate.add_argument("--partition", choices=["calibration", "development", "test"], default="development")
     args = parser.parse_args(argv)
     if args.command == "prepare":
@@ -61,10 +68,19 @@ def main(argv: list[str] | None = None) -> None:
             "micro_batch": args.micro_batch, "gradient_accumulation": args.gradient_accumulation}
         result = train(args.dataset, args.model, args.output, args.lease, seed=args.seed,
                        max_steps=args.max_steps, maximum_seconds=args.maximum_seconds, **batch_options)
+    elif args.command == "profile":
+        from acephale.training_profile import profile
+
+        result = profile(args.dataset, args.model, args.output, args.lease, maximum_seconds=args.maximum_seconds)
     elif args.command == "export":
         from acephale.training import export_model
 
-        result = export_model(args.dataset, args.model, args.run, args.output, args.lease)
+        if args.artifact_mode == "unmerged_lora":
+            from acephale.training_lora import export_unmerged
+
+            result = export_unmerged(args.dataset, args.model, args.run, args.output, args.lease)
+        else:
+            result = export_model(args.dataset, args.model, args.run, args.output, args.lease)
     elif args.command == "smoke":
         import gc
 
@@ -78,15 +94,23 @@ def main(argv: list[str] | None = None) -> None:
         import torch
 
         torch.cuda.empty_cache()
-        artifact = export_model(args.dataset, args.model, args.output / "training", args.output / "export", args.lease)
+        exporter = export_model
+        if args.artifact_mode == "unmerged_lora":
+            from acephale.training_lora import export_unmerged
+
+            exporter = export_unmerged
+        artifact = exporter(args.dataset, args.model, args.output / "training", args.output / "export", args.lease)
         result = {"kind": "acephale-real-model-training-smoke", "receiptHash": receipt["contentHash"],
                   "predictorHash": artifact["contentHash"], "nativeTaskAccuracyMeasured": False,
                   "limitation": "One optimizer step proves machinery, not predictive performance"}
+        if args.artifact_mode == "unmerged_lora":
+            result.update(artifactMode="unmerged_lora", vllmQualificationRequired=True, vllmQualificationPassed=False)
         write_new(args.output / "smoke.json", result)
     else:
         from acephale.training import evaluate
 
-        result = evaluate(args.dataset, args.model, args.output, args.lease, partition=args.partition)
+        options = {"predictor_export": args.predictor_export} if args.predictor_export else {}
+        result = evaluate(args.dataset, args.model, args.output, args.lease, partition=args.partition, **options)
     print(json.dumps(result, indent=2))
 
 

@@ -17,6 +17,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+
 from control import apply_hardware, apply_predictor_export, hardware_profile
 
 HERE = Path(__file__).resolve().parent
@@ -394,7 +395,9 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
             orchestrator_receipt: Path | None = None,
             hardware_profile_name: str | None = None,
             predictor_export: Path | None = None,
+            predictor_qualification: Path | None = None,
             runner: Callable[[list[str], Path], str] = run_readonly) -> tuple[dict, dict]:
+    observation_started = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     models, source = models.resolve(), source.resolve()
     versions, compose = read(HERE / "versions.json"), read(HERE / "compose.json")
     selected = hardware_profile(hardware_profile_name) if hardware_profile_name else None
@@ -431,11 +434,19 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
     for role, context in (("actor", (32768, 28672, 4096)), ("predictor", (8192, 7168, 1024))):
         if role == "predictor" and trained:
             artifact = trained["artifact"]
-            identities[role] = {**artifact["base"], "servedModel": artifact["servedModel"], "weightsHash": artifact["mergedWeightsHash"],
+            weights_hash = artifact["servingWeightsHash"] if artifact["schemaVersion"] == 2 else artifact["mergedWeightsHash"]
+            identities[role] = {**artifact["base"], "servedModel": artifact["servedModel"], "weightsHash": weights_hash,
                 "tokenizerHash": artifact["tokenizerHash"], "chatTemplateHash": artifact["chatTemplateHash"], "trainedPredictor": artifact,
                 "precision": versions["models"][role]["dtype"], "contextWindow": context[0], "inputBudget": context[1], "outputCap": context[2],
                 "temperature": 0, "topP": 1, "thinking": False, "weightsFrozen": True}
             model_evidence[role] = trained
+            if artifact["schemaVersion"] == 2:
+                base_identity, base_evidence = model_identity(models, role, versions["models"][role], context)
+                if base_identity["weightsHash"] != artifact["baseWeightsHash"]:
+                    raise ValueError("Resident native LoRA base weights differ from the exported identity")
+                model_evidence[role] = {**trained, "baseModelFiles": base_evidence,
+                    "adapterStorageDtype": artifact["adapterStorageDtype"], "runtimeLoraDtype": artifact["runtimeLoraDtype"],
+                    "vllmQualificationRequired": True, "vllmQualificationPassed": False}
         else:
             identities[role], model_evidence[role] = model_identity(models, role, versions["models"][role], context)
         ids = runner(DOCKER + ["ps", "--no-trunc", "--filter", f"label=com.docker.compose.project={project}",
@@ -495,6 +506,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
                "python": host_python["python"], "dependencyLockHash": digest(locks),
                "packageInventoryHash": digest(package_inventory), "toolParser": "qwen3_xml"}
     evidence = {"version": 1, "profile": versions["profile"], "sourceCommit": commit,
+                "observationStartedAt": observation_started,
                 "observedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "hashAlgorithm": "sha256-compact-sorted-key-utf8-json-v1", "modelFiles": model_evidence,
                 "provider": provider_evidence, "nvidia": gpu_evidence, "containers": containers,
@@ -507,8 +519,20 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
                 "sourceComposeSha256": file_hash(HERE / "compose.json"),
                 "networkCalls": 0, "modelCalls": 0, "smokeReadinessVerified": False,
                 "requestSettings": "Pinned experiment policy, not an observed inference request"}
+    evidence_digest = digest
+    if trained and trained["artifact"]["schemaVersion"] == 2:
+        from acephale.contracts_v1 import hash_v1
+        from acephale.predictor_serving import validate_native_lora_serving
+        evidence_digest = hash_v1
+        evidence["hashAlgorithm"] = "sha256-rfc8785-v1"
+        if predictor_qualification is not None:
+            evidence["nativeLoraQualification"] = read(predictor_qualification)
+            qualification_hash = validate_native_lora_serving(identities["predictor"], evidence, commit)
+            model_evidence["predictor"].update(vllmQualificationPassed=True, qualificationReceiptHash=qualification_hash)
+    elif predictor_qualification is not None:
+        raise ValueError("Native LoRA qualification requires a v2 predictor export")
     deployment = {"version": 1, "observed": True, **identities, "runtime": runtime,
-                  "hardware": {**provider, **hardware}, "evidenceHash": digest(evidence),
+                  "hardware": {**provider, **hardware}, "evidenceHash": evidence_digest(evidence),
                   "sourceCommit": commit, "smokeReadinessVerified": False}
     return deployment, evidence
 
@@ -550,6 +574,8 @@ def main(argv=None) -> int:
     parser.add_argument("--compose-project", default="acephale-infra-v1")
     parser.add_argument("--hardware-profile")
     parser.add_argument("--predictor-export", type=Path)
+    parser.add_argument("--predictor-qualification", type=Path,
+                        help="Passed native-lora-proof.json; collect a new post-probe process inventory before admission")
     parser.add_argument("--orchestrator-inventory", type=Path,
                         help="Observed receipt from the actual local benchmark host; avoids probing benchmark tools on this GPU host")
     args = parser.parse_args(argv)
@@ -560,7 +586,8 @@ def main(argv=None) -> int:
     deployment, evidence = collect(args.models_root, args.images_lock, args.provider_receipt,
                                    python=args.python_executable, node=args.node_executable,
                                    project=args.compose_project, orchestrator_receipt=args.orchestrator_inventory,
-                                   hardware_profile_name=args.hardware_profile, predictor_export=args.predictor_export)
+                                   hardware_profile_name=args.hardware_profile, predictor_export=args.predictor_export,
+                                   predictor_qualification=args.predictor_qualification)
     print(json.dumps(write_inventory(args.output, deployment, evidence), indent=2))
     return 0
 

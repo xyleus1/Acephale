@@ -48,8 +48,9 @@ def test_cache_creation_failure_remains_visible(tmp_path):
         container.writable_environment(tmp_path)
 
 
-@pytest.mark.parametrize("action", ["smoke", "train", "export", "evaluate"])
-def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, monkeypatch, action):
+@pytest.mark.parametrize("action,unmerged", [("smoke", False), ("smoke", True), ("profile", False), ("train", False),
+    ("export", False), ("evaluate", False), ("export", True), ("evaluate", True)])
+def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, monkeypatch, action, unmerged):
     inputs = [{"path": "training/uv.lock", "bytes": 1, "sha256": "a" * 64}]
     image = {"Id": "sha256:" + "c" * 64, "Config": {"Labels": {container.LABEL: hash_v1(inputs)}}}
     receipt = hashed({"kind": "acephale-training-image", "imageId": image["Id"], "inputs": inputs,
@@ -83,9 +84,18 @@ def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, 
     output = tmp_path / "run"
     args = SimpleNamespace(actor_container=actor_id, lease=lease_path, receipt=receipt_path, output=output,
         action=action, model=model, dataset=dataset, training_run=prior if action == "export" else None,
-        seed=17, max_steps=500, maximum_seconds=3600, partition="development")
+        artifact_mode="unmerged_lora" if unmerged and action in {"export", "smoke"} else "merged",
+        predictor_export=prior if unmerged and action == "evaluate" else None,
+        seed=17, max_steps=500, maximum_seconds=None, partition="development")
     assert container.run(args)["status"] == "completed"
     command = calls[0]
+    if action in {"profile", "train"}:
+        assert command[command.index("--maximum-seconds") + 1] == ("600" if action == "profile" else "3600")
+    if action in {"export", "smoke"}:
+        assert command[command.index("--artifact-mode") + 1] == ("unmerged_lora" if unmerged else "merged")
+    if unmerged and action == "evaluate":
+        assert command[command.index("--predictor-export") + 1] == "/predictor-export"
+        assert command[command.index("--model") + 1] == "/model"
     assert command[command.index("--network") + 1] == "none"
     assert command[command.index("--user") + 1] == "1000:1000"
     assert "--privileged" not in command
@@ -93,6 +103,8 @@ def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, 
     for target in ("/model", "/dataset", "/lease.json"):
         assert any(value.endswith("dst=" + target + ",readonly") for value in mounts)
     assert any(value.endswith("dst=/output") for value in mounts)
+    if unmerged and action == "evaluate":
+        assert any(value.endswith("dst=/predictor-export,readonly") for value in mounts)
     environment = dict(command[i + 1].split("=", 1) for i, value in enumerate(command) if value == "--env")
     assert environment == {**container.CACHE_ENVIRONMENT, "ACEPHALE_TRAINER_IMAGE_DIGEST": image["Id"]}
     launch_receipt = json.loads((output / "launch.json").read_text())
@@ -101,3 +113,16 @@ def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, 
     assert launch_receipt["imageReceiptHash"] == receipt["contentHash"]
     for target in container.CACHE_ENVIRONMENT.values():
         assert (output / target.removeprefix("/output/")).is_dir()
+
+
+@pytest.mark.parametrize("maximum", [0, 1201, True])
+def test_profile_rejects_unbounded_launch_before_docker(maximum):
+    with pytest.raises(ValueError, match="bounded"):
+        container.run(SimpleNamespace(action="profile", maximum_seconds=maximum))
+
+
+def test_unmerged_options_cannot_silently_change_training():
+    with pytest.raises(ValueError, match="only to export"):
+        container.run(SimpleNamespace(action="train", artifact_mode="unmerged_lora"))
+    with pytest.raises(ValueError, match="evaluation-only"):
+        container.run(SimpleNamespace(action="train", predictor_export=Path("unmerged")))

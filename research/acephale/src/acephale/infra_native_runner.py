@@ -64,10 +64,18 @@ def validate_task_bundle(configuration: dict, manifest: dict, bundle: dict) -> d
             raise ValueError("Native task payload identity mismatch")
         indexed[key] = item
     run_ids = set()
-    expected_allocation = "training" if configuration["stage"] == "collection" else configuration["stage"]
+    purpose = configuration.get("collectionPurpose")
+    auxiliary = purpose == "auxiliary-development-validation"
+    if purpose is not None and (not auxiliary or configuration["stage"] != "collection"
+            or configuration.get("shadowPrediction", False) or not configuration.get("customTaskBundleDirectory")
+            or not configuration.get("customTaskReceiptHash") or configuration.get("collectionPartitions") != ["development"]):
+        raise ValueError("Invalid auxiliary development collection declaration")
+    expected_allocation = "development" if auxiliary else "training" if configuration["stage"] == "collection" else configuration["stage"]
     if configuration["hosted"].get("allocation") != expected_allocation:
         raise ValueError("Native stage budget allocation mismatch")
     for run in configuration["runs"]:
+        if auxiliary and (run["familyId"] not in manifest["data"]["developmentFamilies"] or run["arm"] != "base"):
+            raise ValueError("Auxiliary development collection can only execute declared development base slots")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", run["runId"]) or run["runId"] in run_ids:
             raise ValueError("Unsafe or duplicate native run identity")
         run_ids.add(run["runId"])
@@ -122,7 +130,11 @@ def validate_native_task_source(configuration: dict, task_rows: dict, upstream_r
             raise ValueError("Custom native receipt differs from the frozen configuration")
         custom = {(row["domain"], row["taskId"]): row for row in custom_bundle["tasks"]}
         allowed = {"collection": {"weight_fit", "calibration"}, "development": {"development"}, "heldout": {"test"}}
-        if configuration["stage"] == "collection" and configuration.get("collectionPartitions") != ["weight_fit", "calibration"]:
+        auxiliary = configuration.get("collectionPurpose") == "auxiliary-development-validation"
+        if auxiliary:
+            allowed["collection"] = {"development"}
+        expected = ["development"] if auxiliary else ["weight_fit", "calibration"]
+        if configuration["stage"] == "collection" and configuration.get("collectionPartitions") != expected:
             raise ValueError("Custom collection requires its explicit fitting/calibration selection")
         for key, item in task_rows.items():
             if custom.get(key) != item:

@@ -1,7 +1,8 @@
-import { resolvePredictorProfile } from "./predictor-artifact";
+import { predictorServingWeightsHash, resolvePredictorProfile } from "./predictor-artifact";
 import Ajv2020 from "ajv/dist/2020";
 import schema from "./contracts/infra-manifest-v2.schema.json";
 import budgetPolicy from "./contracts/budget-policy-v2.json";
+import budgetPolicyV3 from "./contracts/budget-policy-v3.json";
 import { canonical, copy, hash } from "./canonical";
 import type { InfraExperimentManifestV2 } from "./contracts/infra-manifest-v2.generated";
 
@@ -18,7 +19,7 @@ export function validateInfraManifest(value: unknown): asserts value is InfraExp
   canonical(value);
   if (!validate(value)) throw new Error(`Invalid infra manifest: ${JSON.stringify(validate.errors)}`);
   const manifest = value as unknown as InfraExperimentManifestV2;
-  if (manifest.budgets.budgetPolicyHash !== undefined && manifest.budgets.budgetPolicyHash !== hash(budgetPolicy)) {
+  if (manifest.budgets.budgetPolicyHash !== undefined && ![hash(budgetPolicy), hash(budgetPolicyV3)].includes(manifest.budgets.budgetPolicyHash)) {
     throw new Error("Unknown budget policy; preserve the declared study amendment");
   }
   if (manifest.actor.repository !== INFRA_MODEL_PINS.actor.repository || manifest.actor.revision !== INFRA_MODEL_PINS.actor.revision
@@ -33,7 +34,7 @@ export function validateInfraManifest(value: unknown): asserts value is InfraExp
   const profile = resolvePredictorProfile(manifest.predictor);
   if (profile.trainedPredictor) {
     const artifact = profile.trainedPredictor;
-    if (manifest.predictor.servedModel !== artifact.servedModel || manifest.predictor.weightsHash !== artifact.mergedWeightsHash
+    if (manifest.predictor.servedModel !== artifact.servedModel || manifest.predictor.weightsHash !== predictorServingWeightsHash(artifact)
       || manifest.predictor.tokenizerHash !== artifact.tokenizerHash || manifest.predictor.chatTemplateHash !== artifact.chatTemplateHash) throw new Error("Manifest serving identity differs from trained predictor artifact");
     if ([...artifact.weightFitFamilies, ...artifact.calibrationFamilies].some(family => !manifest.data.trainingFamilies.includes(family)
       || manifest.data.developmentFamilies.includes(family) || manifest.data.heldoutFamilies.includes(family))) throw new Error("Trained predictor family provenance crosses experiment partitions");

@@ -1,5 +1,55 @@
 # Acephale engineering log
 
+## 2026-11-13: Observed merge failure and recovery implementation
+
+The fresh source-frozen Qwen smoke passed strict adapter reload after one actual
+optimizer step, then failed merged last-token logits at unchanged tolerances.
+The failed archive and GPU termination were verified. See the staged-study
+report for exact counts and hashes; no main seed or trained-model improvement
+is established.
+
+Future source adds explicit unmerged-LoRA export, evaluation and smoke selection,
+fit-only batch profiling, source-bound HTTP qualification and guarded v2 serving.
+TypeScript and Python share artifact fixtures and canonical float hashes.
+Fixed-base collection continues independently under `fe0748b`. A heartbeat
+partial-record race was repaired in its private operator helper before restart;
+the first failed launch remains in the original financial history.
+
+Multi-cohort import retains original source receipts and review ancestry; a
+separate auxiliary-development mode supplies validation families without reusing
+paired-control trials. The v3 budget code implements the user's increased spending
+authorization through a creation-only amendment on the existing journal. Current
+v2 execution remains unchanged until it closes.
+
+Integrated local checks passed 257 Node tests (two database skips), 543 research
+tests (ten platform/integration skips), and 212 deployment tests plus 72 subtests
+(two Linux-only skips). Enabling the installed pinned native environment passed
+all seven gateway/additive-evaluator tests, including the two opt-in cases from
+the research skips. Generated contracts, TypeScript and research Ruff passed;
+ESLint had zero errors and 40 warnings. Actual Linux process ownership and the
+tiny Torch adapter fixture were checked separately under WSL. These are software
+checks, not native actor task results. The first local passes exposed a missing
+worktree interpreter junction and a stale Docker-command fixture; both were
+corrected before the successful complete reruns.
+
+## 2026-11-13: Remove duplicate policy text from predictor inputs
+
+The policy citation repair made both live and replay frames supply `policy` as
+a source. Compiler v2 then repeated its full text at the top level and in the
+mandatory source list. An exact served-tokenizer diagnostic on 150 preserved
+public prefixes found 32 empty-candidate inputs over the 5,120-token common
+window. Removing one policy copy in a diagnostic ablation reduced this to one.
+The repeated text cost 1,627 retail or 1,865 airline tokens. These measurements
+used no generation, labels or changed historical artifacts; the ablation is not
+a measured live latency or accuracy result.
+
+The v3 implementation preserves the full mandatory policy source and references
+it from the top level. Legacy frames without that source retain policy text.
+Twenty-nine focused predictor and training-runtime tests passed, including
+policy-source retention after optional context omission, mismatch rejection and
+rejection of invented policy citations. This revision was developed separately
+from the active source-frozen GPU collection and is for the following phase.
+
 ## 2026-11-13: Reserve tax without changing the study ceiling
 
 Both real provider cleanup canaries passed. The follow-up funding check found

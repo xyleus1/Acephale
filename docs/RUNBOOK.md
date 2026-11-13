@@ -94,6 +94,17 @@ $13.75 associated split. It rejects caps below retained reservations and never
 rewrites the journal or previous sidecars. Reserve unknown taxes explicitly and
 reduce future lease duration if the remaining allocation cannot cover them.
 
+The November 13 spending authorization permits the subsequent v3 policy. Select
+`version: 3` in the same amendment request only after the active v2 phase and its
+leases close. The new creation-only sidecar binds its v2 parent and the original
+journal; it does not release unknown charges. Its working envelope is $1,000:
+infrastructure $200, preparation $100, training $100, development $120, heldout
+$350, replay $65 and contingency $65. Infrastructure splits $150 compute/$50
+associated charges. The hourly/session limits remain $2.50/eight hours; cumulative
+GPU hours increase to 64. Verify the new exact policy/amendment hashes before
+creating future leases or manifests. Existing source-frozen runs keep their
+original policy; never amend them in place.
+
 ## 3. Collect fixed-actor traces with causal shadow prediction
 
 For the scoped predictor-weight experiment, also follow the

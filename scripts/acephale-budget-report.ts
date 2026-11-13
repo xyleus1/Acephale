@@ -22,7 +22,7 @@ try {
   const result = { schemaVersion: 1, currency: "USD", priceSource: PRICE_SOURCE,
     ...(budget.policy ? { budgetPolicyHash: budget.policy.policyHash, budgetAmendmentHash: budget.policy.contentHash } : {}),
     basis: "Recorded settled costs and unresolved reservations in the original study journal; not independently reconciled to invoices",
-    totalCeilingUsd: 500, allocations,
+    totalCeilingUsd: budget.ledger.totalCeilingMicrodollars / 1_000_000, allocations,
     infrastructureKnownCostUsd: allocations.find(row => row.allocation === "infrastructure")!.knownUsageCostUsd,
     infrastructureSpentOrReservedUsd: allocations.find(row => row.allocation === "infrastructure")!.spentOrReservedUsd,
     totalKnownUsageCostUsd: allocations.reduce((sum, row) => sum + row.knownUsageCostUsd, 0),

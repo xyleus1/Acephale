@@ -103,6 +103,17 @@ def verify_image(receipt: dict, observed: dict) -> str:
 
 
 def run(args) -> dict:
+    artifact_mode = getattr(args, "artifact_mode", "merged")
+    predictor_export = getattr(args, "predictor_export", None)
+    if artifact_mode not in {"merged", "unmerged_lora"} or artifact_mode != "merged" and args.action not in {"export", "smoke"}:
+        raise ValueError("An explicit artifact mode applies only to export or smoke")
+    if predictor_export is not None and args.action != "evaluate":
+        raise ValueError("A predictor export is an evaluation-only input")
+    maximum_seconds = args.maximum_seconds
+    if maximum_seconds is None:
+        maximum_seconds = 600 if args.action == "profile" else 3600
+    if args.action == "profile" and (type(maximum_seconds) is not int or not 1 <= maximum_seconds <= 1200):
+        raise ValueError("Batch profiling must be bounded to at most 1,200 seconds")
     recipe = training_recipe(micro_batch=getattr(args, "micro_batch", 1),
                              gradient_accumulation=getattr(args, "gradient_accumulation", 16))
     if os.name != "posix" or os.getuid() == 0:
@@ -124,12 +135,14 @@ def run(args) -> dict:
                "--env", "ACEPHALE_TRAINER_IMAGE_DIGEST=" + image_id]
     for key, value in environment.items():
         command.extend(["--env", key + "=" + value])
-    trained_evaluation = args.action == "evaluate" and (args.model.parent / "predictor.json").is_file()
+    trained_evaluation = args.action == "evaluate" and predictor_export is None and (args.model.parent / "predictor.json").is_file()
     model_mount, model_target = (args.model.parent, "/trained-export") if trained_evaluation else (args.model, "/model")
     model_argument = "/trained-export/" + args.model.name if trained_evaluation else "/model"
     mounts = [(args.dataset, "/dataset", True), (model_mount, model_target, True), (args.lease, "/lease.json", True), (output, "/output", False)]
     if args.training_run:
         mounts.append((args.training_run, "/training-run", True))
+    if predictor_export is not None:
+        mounts.append((predictor_export, "/predictor-export", True))
     for path, target, readonly in mounts:
         resolved = path.resolve()
         if not resolved.exists() or "," in str(resolved):
@@ -137,14 +150,20 @@ def run(args) -> dict:
         command.extend(["--mount", f"type=bind,src={resolved},dst={target}" + (",readonly" if readonly else "")])
     command.extend([image_id, args.action, "--dataset", "/dataset", "--model", model_argument, "--lease", "/lease.json", "--output", "/output/artifacts"])
     if args.action == "train":
-        command.extend(["--seed", str(args.seed), "--max-steps", str(args.max_steps), "--maximum-seconds", str(args.maximum_seconds)])
+        command.extend(["--seed", str(args.seed), "--max-steps", str(args.max_steps), "--maximum-seconds", str(maximum_seconds)])
         command.extend(["--micro-batch", str(recipe["microBatch"]), "--gradient-accumulation", str(recipe["gradientAccumulation"])])
+    if args.action == "profile":
+        command.extend(["--maximum-seconds", str(maximum_seconds)])
+    if args.action == "smoke":
+        command.extend(["--artifact-mode", artifact_mode])
     if args.action == "export":
         if not args.training_run:
             raise ValueError("Export needs the completed --training-run directory")
-        command.extend(["--run", "/training-run"])
+        command.extend(["--run", "/training-run", "--artifact-mode", artifact_mode])
     if args.action == "evaluate":
         command.extend(["--partition", args.partition])
+        if predictor_export is not None:
+            command.extend(["--predictor-export", "/predictor-export"])
     write_new(output / "launch.json", hashed({"imageReceiptHash": receipt["contentHash"], "imageId": image_id,
               "leaseHash": hash_v1(lease), "actorContainer": args.actor_container, "action": args.action, "containerName": name,
               "environment": environment, "launcherSourceHash": file_hash(Path(__file__))}))
@@ -184,11 +203,13 @@ def main():
     for name in ("receipt", "dataset", "model", "lease", "output"):
         launch.add_argument(f"--{name}", type=Path, required=True)
     launch.add_argument("--actor-container", required=True)
-    launch.add_argument("--action", choices=["smoke", "train", "export", "evaluate"], required=True)
+    launch.add_argument("--action", choices=["smoke", "profile", "train", "export", "evaluate"], required=True)
     launch.add_argument("--training-run", type=Path)
+    launch.add_argument("--artifact-mode", choices=["merged", "unmerged_lora"], default="merged")
+    launch.add_argument("--predictor-export", type=Path)
     launch.add_argument("--seed", type=int, choices=[17, 29], default=17)
     launch.add_argument("--max-steps", type=int, default=500)
-    launch.add_argument("--maximum-seconds", type=int, default=3600)
+    launch.add_argument("--maximum-seconds", type=int)
     launch.add_argument("--micro-batch", type=int, choices=[1, 2, 4], default=1)
     launch.add_argument("--gradient-accumulation", type=int, choices=[4, 8, 16], default=16)
     launch.add_argument("--partition", choices=["calibration", "development", "test"], default="development")

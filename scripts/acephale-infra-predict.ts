@@ -6,6 +6,7 @@ import { NEXT_BATCH_MEMBERSHIP, rawScoreSemantics } from "../src/lib/acephale/sc
 import type { Candidate, GoalSet } from "../src/lib/acephale/contracts/generated";
 import { predictorModelIdentity, resolvePredictorProfile, type PredictorProfile } from "../src/lib/acephale/predictor-artifact";
 import { LocalChatModelPort } from "../src/lib/acephale/infra-model";
+import { predictionSplitGuard, nativeSplitGuardDiagnostic } from "../services/acephale-runtime/infra-split-guard";
 import { LEXICAL_MEMORY_RETRIEVAL_HASH, validateMemoryArtifact } from "../src/lib/acephale/experience-memory";
 import { createInfraNativeCandidates } from "../services/acephale-runtime/infra-candidates";
 import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-compiler-identity";
@@ -64,7 +65,9 @@ export function sealInfraReplayAudit(events: Record<string, unknown>[], rowWallM
   const body = { version: 1, events: copy(events), rowWallMs };
   return { ...body, contentHash: hash(body) };
 }
-export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean; fixedPanel?: boolean; partition?: "calibration" | "test"; episodic?: InfraPredictionEpisodicConfig; predictor?: PredictorProfile }) {
+export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean; fixedPanel?: boolean; partition?: "calibration" | "test"; episodic?: InfraPredictionEpisodicConfig; predictor?: PredictorProfile; servingConfigurationPath?: string }) {
+  const servingGuard = predictionSplitGuard(input.predictor ?? {}, input.baseUrl, input.servingConfigurationPath);
+  const servingIdentity = servingGuard?.(), servingStop = new AbortController();
   const inventory = JSON.parse(await readFile(join(input.bundle, "manifest.json"), "utf8"));
   const documents = !!inventory.files?.["document-lineage.json"];
   const pilot = documents ? verifyDocumentBundle(input.bundle) : verifyInfraPilotBundle(input.bundle);
@@ -81,10 +84,21 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   const modelIdentity = predictorModelIdentity(input.predictor);
   let rowEvents: Record<string, unknown>[] = [];
   const record = (event: Record<string, unknown>) => rowEvents.push(copy(event));
-  const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: profile.trainedPredictor?.servedModel ?? modelIdentity.repository, contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record });
+  const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: profile.trainedPredictor?.servedModel ?? modelIdentity.repository,
+    contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record,
+    ...(servingGuard ? { fetch: (url: Parameters<typeof fetch>[0], options?: Parameters<typeof fetch>[1]) => {
+      servingGuard(); servingStop.signal.throwIfAborted();
+      return fetch(url, { ...options, signal: AbortSignal.any([servingStop.signal, ...(options?.signal ? [options.signal] : [])]) });
+    } } : {}) });
   let budget: DurableBudget | undefined, memoryServices: ReturnType<typeof createInfraMemoryServices> | undefined;
   let episodicLineage: Record<string, string> | null = null;
   const retrievalEvents: Record<string, unknown>[] = [];
+  const servingTimer = servingGuard ? setInterval(() => {
+    try { servingGuard(); } catch (error) {
+      if (!servingStop.signal.aborted) record({ type: "infra_split_guard_interruption", ...nativeSplitGuardDiagnostic(error) });
+      servingStop.abort();
+    }
+  }, 500) : undefined;
   try {
   if (input.episodic) {
     if (!process.env.ACEPHALE_RESEARCH_DATABASE_URL) throw new Error("Episodic replay requires the dedicated research database");
@@ -104,13 +118,14 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
     panelSelection: input.fixedPanel ? "first_three_common_compiler_candidates_before_goal_inference_v1" : null,
     partition: input.partition ?? "calibration", compilerAuditVersion: 1,
     predictionProtocol: profile.protocol, binaryTokenIds: profile.binaryTokenIds ?? null,
+    ...(servingIdentity ? { splitGuard: servingIdentity } : {}),
     serving: { contextWindow: 8192, inputBudget: 7168, outputCap: 1024, temperature: 0, topP: 1, seed: 0, stream: true, enableThinking: false },
     predictorContractHash: predictorContractHash(input.predictor), candidateCompilerHash,
     retrievalHash: memoryServices?.profileHash ?? LEXICAL_MEMORY_RETRIEVAL_HASH, episodic: episodicLineage,
     sourceDatasetHash: pilot.manifest.bundle_hash, limit: input.limit, selection: "family-partition-round-robin-v1", inferGoals: input.inferGoals, rowIds: rows.map(row => row.checkpoint_id), executionAllowed: false };
   await writeFile(join(output, "manifest.json"), canonical({ ...lineage, contentHash: hash(lineage) }) + "\n", { flag: "wx" });
   let completed = 0;
-  const lifetime = AbortSignal.timeout(2 * 3600 * 1000);
+  const lifetime = AbortSignal.any([AbortSignal.timeout(2 * 3600 * 1000), servingStop.signal]);
   for (const row of rows) {
     rowEvents = [];
     const rowStarted = performance.now();
@@ -146,12 +161,13 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   const receipt = { declared: rows.length, completed, failed: rows.length - completed, liveActorExecuted: false, toolExecutionPerformed: false };
   await writeFile(join(output, "receipt.json"), canonical(receipt) + "\n", { flag: "wx" }); return receipt;
   } finally {
+    if (servingTimer) clearInterval(servingTimer);
     try { await memoryServices?.close(); } finally { budget?.close(); }
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const [bundle, memory, output, baseUrl, limit = "100", condition = "neutral", mode = "selected_candidates", partition = "calibration", episodicConfig, predictorConfig] = process.argv.slice(2);
-  if (!bundle || !memory || !output || !baseUrl || !["neutral", "goals"].includes(condition) || !["selected_candidates", "fixed_panel"].includes(mode) || !["calibration", "test"].includes(partition)) throw new Error("Usage: acephale-infra-predict.ts BUNDLE MEMORY OUTPUT LOCAL_MODEL_URL [LIMIT] [neutral|goals] [selected_candidates|fixed_panel] [calibration|test] [EPISODIC_CONFIG_JSON_OR_-] [PREDICTOR_PROFILE_JSON]");
+  const [bundle, memory, output, baseUrl, limit = "100", condition = "neutral", mode = "selected_candidates", partition = "calibration", episodicConfig, predictorConfig, servingConfigurationPath] = process.argv.slice(2);
+  if (!bundle || !memory || !output || !baseUrl || !["neutral", "goals"].includes(condition) || !["selected_candidates", "fixed_panel"].includes(mode) || !["calibration", "test"].includes(partition)) throw new Error("Usage: acephale-infra-predict.ts BUNDLE MEMORY OUTPUT LOCAL_MODEL_URL [LIMIT] [neutral|goals] [selected_candidates|fixed_panel] [calibration|test] [EPISODIC_CONFIG_JSON_OR_-] [PREDICTOR_PROFILE_JSON] [QUALIFIED_NATIVE_CONFIGURATION_JSON]");
   const run = async () => {
     let episodic: InfraPredictionEpisodicConfig | undefined;
     if (episodicConfig && episodicConfig !== "-") {
@@ -162,7 +178,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       episodic = { embeddingsPath: resolve(base, configuration.embeddingsPath), budgetDirectory: resolve(base, configuration.budgetDirectory), ledgerCheckpointPath: resolve(base, configuration.ledgerCheckpointPath) };
     }
     return runInfraPrediction({ bundle, memory, output, baseUrl, limit: Number(limit), inferGoals: condition === "goals", fixedPanel: mode === "fixed_panel", partition: partition as "calibration" | "test", episodic,
-      predictor: predictorConfig ? JSON.parse(await readFile(predictorConfig, "utf8")) : undefined });
+      predictor: predictorConfig ? JSON.parse(await readFile(predictorConfig, "utf8")) : undefined, servingConfigurationPath });
   };
   run().then(result => console.log(JSON.stringify(result)))
     .catch(error => { console.error(error instanceof Error ? error.message : "Prediction replay failed"); process.exitCode = 1; });
