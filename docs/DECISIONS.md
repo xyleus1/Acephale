@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-13: Validate additive replay evidence when reading it
+
+Accept the declared version of retained provider-response metadata rather than
+stripping it to satisfy the old scorer. Verify complete cohort accounting, the
+sidecar bytes and their ordered association with recorded dispatches. Missing,
+corrupt or mismatched evidence fails validation. Preserve the source identity of
+the original execution separately from the corrected offline analysis reader.
+
 ## 2026-11-13: Keep full input hashing outside the child polling loop
 
 Repeatedly hashing the entire input inventory every 250 ms consumed substantial

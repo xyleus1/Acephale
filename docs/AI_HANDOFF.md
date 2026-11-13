@@ -1,5 +1,12 @@
 # Working on Acephale
 
+Replay scoring and calibration now accept the declared response-retention receipt
+and verify its file hash, record count, response hashes and ordered checkpoint
+dispatch evidence. The previous scorer rejected the added metadata by comparing
+the whole receipt against its older five-field shape. Existing replay bytes stay
+unchanged. This is an analysis-reader correction; deployed training and serving
+sources retain their original identities.
+
 The experiment runner verifies every input hash at admission and before/after
 each successful stage. While a child runs, its 250 ms guard checks file identity,
 mode, size and nanosecond modification/change times instead of rereading all

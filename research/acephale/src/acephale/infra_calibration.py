@@ -15,6 +15,7 @@ from acephale.contracts_v1 import hash_v1
 from acephale.infra_admission import validate_predicted_goals
 from acephale.infra_data import read_jsonl, verify_bundle
 from acephale.infra_fairness import load_reviewed_selection, validate_model_selection
+from acephale.replay_receipt import verify_replay_receipt
 from acephale.score_semantics import CALIBRATED_MEMBERSHIP, replay_score_semantics
 from acephale.storage import file_hash
 from acephale.training_data import calibration_families
@@ -100,10 +101,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
     predictions = read_jsonl(prediction_path)
     if [row["checkpoint_id"] for row in predictions] != manifest.get("rowIds") or len({row["checkpoint_id"] for row in predictions}) != len(predictions):
         raise ValueError("Every declared prediction row must be retained exactly once in order")
-    receipt = json.loads((prediction_directory / "receipt.json").read_text(encoding="utf-8"))
-    completed = sum(row.get("status") == "completed" for row in predictions)
-    if receipt.get("declared") != len(predictions) or receipt.get("completed") != completed or receipt.get("failed") != len(predictions) - completed or receipt.get("liveActorExecuted") is not False or receipt.get("toolExecutionPerformed") is not False:
-        raise ValueError("Prediction cohort is not closed or receipt differs")
+    receipt_files = verify_replay_receipt(prediction_directory, manifest, predictions)
     family_partitions: dict[str, set[str]] = defaultdict(set)
     joined = []
     failures, not_dispatched, empty, unknown_goals, unobserved_actions = [], [], [], [], []
@@ -227,6 +225,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         **({"reviewedSelectionHash": selection["contentHash"]} if selection else {}),
         "limitations": ["Calibration covers the declared scored candidates, not absent candidates or task success", "Each label means membership anywhere in the immediate next authoritative batch", "Binary log loss is not full-action cross-entropy or true conditional entropy", "No fallback values are fabricated for failed predictions", "Fitted values are specific to the recorded model, prompts, memory, selection mode and condition"],
     }
-    if file_hash(prediction_path) != predictions_hash or json.loads(manifest_path.read_text(encoding="utf-8")) != manifest:
+    if (file_hash(prediction_path) != predictions_hash or json.loads(manifest_path.read_text(encoding="utf-8")) != manifest
+            or any(file_hash(path) != digest for path, digest in receipt_files.items())):
         raise ValueError("Prediction artifacts changed during calibration")
     return calibration, report, joined

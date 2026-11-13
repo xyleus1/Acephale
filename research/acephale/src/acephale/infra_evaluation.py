@@ -15,6 +15,7 @@ from pydantic import Field, model_validator
 from acephale.annotation_review import review_metadata
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_data import read_jsonl, verify_bundle
+from acephale.replay_receipt import verify_replay_receipt
 from acephale.schemas import Record
 from acephale.score_semantics import (
     LEGACY_NEXT_BATCH_HIT,
@@ -329,10 +330,7 @@ def score_fixed_panel_replay(bundle_directory: Path, prediction_directory: Path)
     ids = [row["checkpoint_id"] for row in predictions]
     if not ids or ids != manifest.get("rowIds") or len(set(ids)) != len(ids):
         raise ValueError("Every declared prediction must be retained exactly once in order")
-    receipt = json.loads(paths[2].read_text(encoding="utf-8"))
-    completed = sum(row.get("status") == "completed" for row in predictions)
-    if receipt != {"declared": len(ids), "completed": completed, "failed": len(ids) - completed, "liveActorExecuted": False, "toolExecutionPerformed": False}:
-        raise ValueError("Prediction receipt does not close the declared cohort")
+    hashes.update(verify_replay_receipt(prediction_directory, manifest, predictions))
     conditions = ("neutral", "conditional") if manifest.get("inferGoals") is True else ("neutral",)
     joined = []
     for row in predictions:

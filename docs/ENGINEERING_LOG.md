@@ -1,5 +1,18 @@
 # Acephale engineering log
 
+## 2026-11-13: Read retained-response replay receipts
+
+The full 746-case replay closed, but Python scoring rejected its additional
+`responsePayloads` field. A shared receipt reader now verifies closure and the
+declared response file, including hashes, counts and exact dispatch association.
+Calibration uses the same reader and rechecks those files before returning.
+Legacy receipts remain readable under their original undeclared-retention format.
+Focused tests passed 76 cases, with one operator-held artifact test skipped;
+Ruff passed. Actual validation checked all 746 prediction rows and 600 retained
+responses without rewriting them. Initial local pytest setup failed because the
+default temporary directory was inaccessible; a new task-owned directory resolved
+that environment issue. This does not change model predictions or report a gain.
+
 ## 2026-11-13: Stop rehashing frozen inputs during every poll
 
 The managed experiment loop now compares file identity, mode, size and nanosecond

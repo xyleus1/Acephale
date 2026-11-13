@@ -253,6 +253,32 @@ def test_fixed_panel_replay_joins_private_labels_after_prediction_and_preserves_
         score_fixed_panel_replay(bundle, directory)
 
 
+@pytest.mark.parametrize("mode", ["score", "calibrate"])
+def test_response_retention_receipt_is_accepted_and_verified(tmp_path, mode):
+    from acephale.storage import file_hash
+
+    bundle, directory, predictions = fixture(tmp_path)
+    path = directory / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest.update(responseRetentionVersion=1, predictionMode="fixed_panel" if mode == "score" else "selected_candidates")
+    manifest["contentHash"] = hash_v1({key: value for key, value in manifest.items() if key != "contentHash"})
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    for row in predictions:
+        row.update(candidatePanel=["candidate"], panelHash=hash_v1(["candidate"]), audit={"events": []})
+    (directory / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in predictions), encoding="utf-8")
+    responses = directory / "model-responses.jsonl"
+    responses.write_text("", encoding="utf-8")
+    receipt_path = directory / "receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["responsePayloads"] = {"version": 1, "file": responses.name, "count": 0, "sha256": file_hash(responses)}
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    operation = score_fixed_panel_replay if mode == "score" else fit_calibration
+    operation(bundle, directory)
+    responses.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Retained response file hash"):
+        operation(bundle, directory)
+
+
 def test_legacy_categorical_calibration_cannot_be_relabelled_as_v2(tmp_path):
     bundle, directory, _ = fixture(tmp_path)
     path = directory / "manifest.json"
