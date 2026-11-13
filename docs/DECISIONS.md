@@ -29,12 +29,16 @@ with a $0.50 cap per trial. These are ceilings, not expected costs. Main trainin
 may have no development loss dataset; calibration and development evaluations
 remain subsequent stages, and both predeclared seeds are retained.
 
-Split the next 9.75 GPU hours into a 2.5-hour collection/smoke lease and a
-7.25-hour fitting/evaluation lease, separated by the human label review. Keep
-the two termination canaries and $4 infrastructure overhead reservation within
-the remaining infrastructure allocation. The eight fresh test families provide
-at most 96 held-out slots, further limited by development-based cost sizing.
-These are time and cost bounds, not promises that every stage will fit.
+The initial 2.5-hour collection/smoke and 7.25-hour fitting/evaluation estimate
+excluded unknown provider tax. Reserve a conservative 30% tax allowance instead
+of assuming zero. An append-only infrastructure suballocation changes the
+compute/associated split from $41/$9 to $36.25/$13.75, keeping the same $50 total,
+original journal and $65 contingency. The $4 AWS allowance and two termination
+canaries remain counted. This leaves a later GPU target of at most five hours,
+subject to actual remaining funds and measured fitting speed. The phases are
+separated by human label review with no idle GPU. The eight fresh test families
+provide at most 96 held-out slots, further limited by development-based cost
+sizing. These bounds do not promise that every stage will fit.
 
 ## 2026-11-10: Training windows are operational ledger records
 

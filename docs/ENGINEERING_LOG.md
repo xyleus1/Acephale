@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## 2026-11-13: Reserve tax without changing the study ceiling
+
+Both real provider cleanup canaries passed. The follow-up funding check found
+that the original internal associated-cost cap was fully reserved by AWS, leaving
+no explicit GPU tax allowance. A creation-only suballocation now binds the
+existing v2 policy, financial plan and retained reservations, changing only the
+$41/$9 internal split to $36.25/$13.75. The $50 infrastructure and $500 study
+ceilings, original journal and protected $65 contingency stay unchanged. The
+later lease is reduced before reservation rather than assuming zero tax.
+
+The preceding source `f3ccec8` passed GitHub CI: 244 Node tests, 467 Python tests,
+both real Docker permission cases, and 193 deployment tests plus 70 subtests.
+Platform/private-environment skips are retained in the CI log; real PostgreSQL
+retrieval and read-only transaction checks passed.
+
 ## 2026-11-13: Repair the goal training path and simplify shared code
 
 The native teacher returned `goals` and `unknown_probability`, while the exporter

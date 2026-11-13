@@ -29,9 +29,13 @@ budget. Resolve secure paths through operator configuration.
 The fresh 88-task native fixture bundle and 200 omitted-mutation checks passed
 before actor execution. Preserve its generator bytes and receipt. Phase one
 collects 60 fitting/calibration trials with a $0.40 hosted-call cap; development
-and test tasks remain withheld. The 2.5-hour collection lease and later 7.25-hour
-fitting/evaluation lease share the same reserved infrastructure budget, with
-human review between them and no idle paid GPU during review.
+and test tasks remain withheld. The 2.5-hour collection lease and later fitting/
+evaluation lease share the same infrastructure budget, with human review between
+them and no idle paid GPU during review. Unknown provider tax now has a 30%
+allowance; the later lease target is at most five hours, sized again before
+reservation. The append-only internal split amendment preserves the $50 ceiling
+and original policy/history while allowing $36.25 compute and $13.75 associated
+charges. It does not spend the protected contingency.
 
 The previous smoke failed reload verification after one real optimizer step.
 The explicit precision-context repair still needs an actual Qwen GPU test.

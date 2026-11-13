@@ -87,6 +87,13 @@ AMENDMENT_REQUEST.json` with the original journal path, closed infrastructure
 slice path and authorization timestamp. This creates a sidecar without resetting
 the journal. New checkpoints and manifests bind both policy and amendment hashes.
 
+The later internal split amendment preserves that policy and total. Use
+`python infra/acephale-infra-v1/control.py record-infrastructure-suballocation
+--ledger ORIGINAL_SLICE --reason REASON` to append the fixed $36.25 compute/
+$13.75 associated split. It rejects caps below retained reservations and never
+rewrites the journal or previous sidecars. Reserve unknown taxes explicitly and
+reduce future lease duration if the remaining allocation cannot cover them.
+
 ## 3. Collect fixed-actor traces with causal shadow prediction
 
 For the scoped predictor-weight experiment, also follow the

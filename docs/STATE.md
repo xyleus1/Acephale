@@ -43,9 +43,10 @@ journal; its original bytes and unresolved reservations were preserved.
 
 ## Remaining experiment gates
 
-1. Complete final regression checks and real Docker permissions in CI. A tiny
-   CPU adapter round trip passed, without establishing actual Qwen GPU behavior.
-2. Freeze the verified task bundle and committed source before actor runs.
+1. Source `f3ccec8` passed CI, including actual PostgreSQL and Docker permissions.
+   A tiny CPU adapter round trip also passed. Neither establishes Qwen GPU behavior.
+2. Freeze the follow-up infrastructure suballocation before the research lease.
+   Both actual cleanup canaries passed and their GPUs are verified terminated.
 3. Pass an actual Qwen smoke reload, merge and serving check under the new source.
 4. Collect fresh native traces, annotate 100 examples and obtain 20 human reviews.
 5. Profile throughput, freeze fitting examples, then train both seeds, 17 and 29.

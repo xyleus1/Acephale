@@ -625,10 +625,103 @@ def _budget_binding_hash(ledger: dict) -> str:
 
 def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
     amendment = effective_budget_policy(ledger)
+    original_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
+    path = infrastructure_suballocation_path(Path(original_path)) if original_path else None
+    if path is not None and path.exists():
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
+            raise ValueError("Invalid infrastructure suballocation amendment")
+        _validate_infrastructure_suballocation(ledger, amendment, read_json(path))
+        return 50, 36.25, 13.75
     if not amendment:
         return 35, 30, 5
     policy = amendment["policy"]
     return policy["allocationsMicrodollars"]["infrastructure"] / 1_000_000, policy["infrastructureComputeUsd"], policy["infrastructureAssociatedUsd"]
+
+
+def infrastructure_suballocation_path(ledger_path: Path) -> Path:
+    return ledger_path.with_name(ledger_path.name + ".infrastructure-suballocation-v1.json")
+
+
+def _infrastructure_reservations(ledger: dict) -> dict:
+    # Operational status and provider observations may change; funded amounts may not.
+    result = {}
+    for field in ("leases", "overheads"):
+        result[field] = [{key: row[key] for key in
+                         ("id", "reservedUsd", "reservedComputeUsd", "reservedMicrodollars", "reservedHours") if key in row}
+                        for row in ledger.get(field, [])]
+    return result
+
+
+def _infrastructure_reserved_totals(ledger: dict) -> dict:
+    prior = finite_number(ledger["priorInfraUsd"], "prior infrastructure reservation")
+    compute = finite_number(ledger.get("priorComputeUsd", prior), "prior compute reservation")
+    total = prior
+    for field in ("leases", "overheads"):
+        for row in ledger.get(field, []):
+            amount = finite_number(row["reservedUsd"], "retained infrastructure reservation")
+            part = finite_number(row.get("reservedComputeUsd", amount if field == "leases" else 0), "retained compute reservation")
+            if part > amount:
+                raise ValueError("Retained compute exceeds its infrastructure reservation")
+            total += amount
+            compute += part
+    if compute > total:
+        raise ValueError("Prior compute exceeds its infrastructure reservation")
+    return {"infrastructureUsd": round(total, 6), "computeUsd": round(compute, 6), "associatedUsd": round(total - compute, 6)}
+
+
+def _validate_infrastructure_suballocation(ledger: dict, amendment: dict | None, value: dict) -> None:
+    policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v2.json")
+    if (amendment is None or value.get("version") != 1 or value.get("profile") != "acephale-infrastructure-suballocation-v1"
+            or value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("budgetAmendmentHash") != amendment["contentHash"]
+            or value.get("budgetAmendmentSha256") != sha256(policy_path)
+            or value.get("budgetPolicyHash") != amendment["policyHash"]
+            or value.get("planHash") != ledger["planHash"] or value.get("financialBindingHash") != _financial_binding_hash(ledger)
+            or value.get("previousCaps") != {"infrastructureUsd": 50, "computeUsd": 41, "associatedUsd": 9}
+            or value.get("effectiveCaps") != {"infrastructureUsd": 50, "computeUsd": 36.25, "associatedUsd": 13.75}
+            or value.get("otherAllocationsChanged") is not False or value.get("existingReservationsChanged") is not False
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))):
+        raise ValueError("Infrastructure suballocation must bind the existing policy and unchanged financial plan")
+    current = _infrastructure_reservations(ledger)
+    baseline = value.get("retainedReservations", {})
+    if set(baseline) != set(current) or any(not isinstance(baseline[field], list)
+            or current[field][:len(baseline[field])] != baseline[field] for field in current):
+        raise ValueError("Infrastructure suballocation retained reservations changed or disappeared")
+    totals = _infrastructure_reserved_totals(ledger)
+    if any(totals[key] > value["effectiveCaps"][key] for key in totals):
+        raise ValueError("Infrastructure suballocation is below already reserved amounts")
+
+
+def record_infrastructure_suballocation(ledger_path: Path, reason: str, *, source_probe=None, budget=study_budget) -> dict:
+    """Append the approved 36.25/13.75 split; preserve the policy, slice and original journal."""
+    source_probe = source_probe or committed_source
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        output = infrastructure_suballocation_path(ledger_path)
+        if output.exists():
+            raise ValueError("Infrastructure suballocation already exists and cannot be overwritten")
+        amendment = effective_budget_policy(ledger)
+        if amendment is None or not reason.strip() or len(reason) > 1024:
+            raise ValueError("An existing v2 budget amendment and explicit bounded reason are required")
+        policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v2.json")
+        before, policy_before = sha256(ledger_path), sha256(policy_path)
+        journal = budget(ledger["plan"], "inspect")
+        value = {"version": 1, "profile": "acephale-infrastructure-suballocation-v1", "planHash": ledger["planHash"],
+                 "financialBindingHash": _financial_binding_hash(ledger), "budgetAmendmentHash": amendment["contentHash"],
+                 "budgetAmendmentSha256": policy_before, "budgetPolicyHash": amendment["policyHash"],
+                 "previousCaps": {"infrastructureUsd": 50, "computeUsd": 41, "associatedUsd": 9},
+                 "effectiveCaps": {"infrastructureUsd": 50, "computeUsd": 36.25, "associatedUsd": 13.75},
+                 "retainedReservations": _infrastructure_reservations(ledger),
+                 "reservedAtAmendment": _infrastructure_reserved_totals(ledger), "originalSliceSha256": before,
+                 "originalJournalEvidence": journal, "recordedAt": time.time(), "reason": reason.strip(),
+                 "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+                 "otherAllocationsChanged": False, "existingReservationsChanged": False}
+        value["contentHash"] = digest(value)
+        if sha256(ledger_path) != before or sha256(policy_path) != policy_before:
+            raise ValueError("Original infrastructure or budget policy changed during suballocation amendment")
+        _validate_infrastructure_suballocation(ledger, amendment, value)
+        write_new(output, value)
+        return value
 
 
 def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
@@ -663,7 +756,7 @@ def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
 def checked_bound_ledger(path: Path) -> dict[str, Any]:
     value = _checked_bound_ledger_identity(path)
     effective_versions_metadata(path, value)
-    effective_budget_policy(value)
+    infrastructure_caps(value)
     return value
 
 
@@ -1129,6 +1222,9 @@ def main(argv: list[str] | None = None) -> int:
     overhead.add_argument("--ledger", type=Path, required=True)
     overhead.add_argument("--reservation-id", required=True)
     overhead.add_argument("--maximum-usd", type=float, required=True)
+    suballocation = commands.add_parser("record-infrastructure-suballocation")
+    suballocation.add_argument("--ledger", type=Path, required=True)
+    suballocation.add_argument("--reason", required=True)
     source_amendment = commands.add_parser("record-source-amendment")
     source_amendment.add_argument("--ledger", type=Path, required=True)
     source_amendment.add_argument("--output", type=Path, required=True)
@@ -1201,6 +1297,8 @@ def main(argv: list[str] | None = None) -> int:
         value = init_bound_ledger(args.ledger, load_plan(args.plan), args.prior_gpu_hours)
     elif args.command == "reserve-overhead":
         value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd)
+    elif args.command == "record-infrastructure-suballocation":
+        value = record_infrastructure_suballocation(args.ledger, args.reason)
     elif args.command == "record-source-amendment":
         value = record_source_amendment(args.ledger, args.output, args.reason, args.readiness_evidence)
     elif args.command == "record-versions-metadata-amendment":
