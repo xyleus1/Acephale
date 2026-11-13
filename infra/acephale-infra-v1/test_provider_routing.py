@@ -135,6 +135,39 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(lease["launchFailure"], {"errorType": "ProviderRequestError", "httpStatus": 400,
             "providerCode": "insufficient-capacity", "responseBodyRetained": False, "reservationReleased": False})
 
+    def test_regional_canary_and_old_launch_fence_compose_without_rebinding(self):
+        import copy
+
+        from test_unresolved_launch import FenceTests
+
+        self.route()
+        self.prepare()
+        enrollment = control.read_json(self.watchdog)
+        for index, row in enumerate(enrollment["controllers"], 1):
+            name = "acephale-old-fence-" + str(index)
+            row.update(controllerId=name, hostId=row["hostId"].rsplit(":", 1)[0] + ":" + name)
+        control.atomic_json(self.watchdog, enrollment)
+        self.client.fail_launch = True
+        with self.assertRaises(RuntimeError):
+            control.launch(self.client, self.ledger, self.prepared["id"], self.watchdog,
+                           now=self.now, budget=self.budget)
+        self.client.fail_launch = False
+        self.prior = copy.deepcopy(control.read_json(self.ledger)["leases"][0])
+        self.now += 200
+        proof = self.root / "predecessor-fence.json"
+        control.write_new(proof, FenceTests.make_proof(self))
+        self.prepared = control.prepare_lease(self.client, self.ledger, .1, 0, now=self.now, budget=self.budget,
+            routing_amendment=self.route_path, unresolved_fence=proof, purpose="cleanup_canary",
+            recovery_controller_id="acephale-watchdog-a")
+        self.prepare()
+        launched = control.launch(self.client, self.ledger, self.prepared["id"], self.watchdog,
+                                  now=self.now, budget=self.budget, unresolved_fence=proof)
+        self.assertEqual(launched["status"], "active")
+        self.assertEqual(control.read_json(self.ledger)["leases"][0], self.prior)
+        payload = [value for _, path, value in self.client.calls if path == "/instance-operations/launch"][-1]
+        self.assertEqual(payload["region_name"], "us-west-2")
+        self.assertEqual(payload["firewall_rulesets"], [{"id": "west-firewall"}])
+
 
 if __name__ == "__main__":
     unittest.main()
