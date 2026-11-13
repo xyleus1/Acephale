@@ -1,5 +1,15 @@
 # Working on Acephale
 
+The full November 13 training run is active under source `5a36a8b` and the
+original funded lease. At 17:24 UTC seed 17 had completed 157/204 optimizer
+updates; seed 29 follows automatically. Do not restart or shorten either recipe.
+Read the current private execution handoff before issuing any provider or budget
+command; one operator owns the journal and dispatch. Both real adapter exports
+must pass unchanged vLLM qualification before replay or native comparison.
+Offline grading/reliability uses the separately recorded `c8a662c` reader fix.
+The 1,074-row fitting set, machine-audit lineage and pending stages are summarized
+in [current state](STATE.md). Historical counts below describe their own versions.
+
 New infrastructure reservations can explicitly set `--setup-seconds` from 120
 to 3600; the default remains 1800. This is chosen before reservation and cannot
 extend an existing lease. The funded hard deadline and price reservation stay

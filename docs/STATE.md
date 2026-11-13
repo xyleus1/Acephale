@@ -1,6 +1,28 @@
 # Current state
 
-Updated 2026-11-13. This page distinguishes implemented software from measured results.
+Updated November 13, 2026, 17:24 UTC. This page distinguishes implemented software
+from measured results. Full training is now running on the A100.
+
+## Active training
+
+Seed 17 has reached 157 of 204 optimizer updates. Seed 29 follows automatically
+with its own full 204-update recipe. Both use the same frozen data, effective
+batch of 16, three epochs and rank-16 LoRA. The predictor has 10,822,656 trainable
+adapter parameters; the 9B actor stays fixed. Training loss is a diagnostic,
+not tool-call accuracy or native reward.
+
+The prepared dataset contains 1,074 fitting examples, 117 calibration examples
+and 112 development examples. The fitting set contains 358 complete
+goal/neutral-ranking/conditioned-ranking triplets from 24 fitting families.
+Deterministic context compilation rejected 14 of the original 372 checkpoints:
+13 omitted a required source and one exceeded the mandatory input budget.
+Rejection records remain retained; no test example enters training.
+
+Runtime/training source is `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
+The pinned checkpoint's 18 FP32 decay vectors were verified on the actual GPU.
+A separately declared warm profile established feasibility after the slow cold
+profile. Disposable profiling weights are not reused. Earlier smoke and serving
+failures remain failed.
 
 ## Results on record
 
@@ -17,9 +39,20 @@ the required 48. The explicit expansion retains all 372 preexisting public-eligi
 fitting windows, with 79 positives, preserving the original pilot and audit cases.
 Teacher annotation and actual semantic review remain separate requirements.
 
-The November 13 smoke passed strict adapter reload but failed the subsequent
-merged-weight comparison. Neither main training seed has started. No trained-model
-accuracy or latency gain has been established. See the
+The complete untrained-predictor replay retains all 746 prefixes: 705 completed,
+41 failed and none undispatched. On the reserved development subset, exact next
+read Top-1 was 9/52 (17.3%) over declared eligible checkpoints. This is prediction
+accuracy, not native task success. Fixed-panel Top-3 is three-item panel coverage,
+not a ranking gain. The matched trained-predictor replays are pending.
+
+The exploratory machine review accepted 19/20 preselected cases, with one incorrect
+annotation and zero unsupported bindings. It has zero human reviews. Teacher and
+reviewer use the same pinned model in separate requests; reviewer-model independence
+is not claimed.
+
+The historical November 13 smoke passed strict adapter reload but failed its
+merged-weight comparison. No trained-model accuracy or latency gain has been
+established. See the
 [original pilot](experiments/predictor-lora-pilot-2026-11-10.md) and
 [staged-study record](experiments/staged-study-2026-11-13.md).
 
@@ -57,19 +90,15 @@ the same 20 selected cases and unchanged acceptance thresholds. Its actual
 audit must pass before training; the original human-reviewed study remains
 pending. This protocol amendment is not a measured accuracy improvement.
 
-1. Preserve the exported `fe0748b` 60-trial collection and its public-only
-   recompilation under `bbd95b0`. Collect the separate 12 base development-validation
-   trials; these do not replace paired comparison trials.
-2. Complete the 372-row annotation expansion and obtain the original 20 attributed
-   human reviews. Do not keep a GPU idle solely while awaiting review.
-3. Qualify the explicit unmerged-LoRA serving path and declared FLA trainer on the
-   actual GPU. The failed
-   merged export remains failed; its tolerances and artifacts are unchanged.
-4. Profile fitting throughput, freeze the common batch setting, then train seeds
-   17 and 29. Preserve all 1,116 multitask rows and full three-epoch recipes.
-5. Recalibrate each derived predictor and run paired three-arm development and
-   held-out trials, retaining every failed and censored slot.
-6. Export complete results, reconcile costs and verify cleanup.
+1. Complete and export both full training seeds, strict reloads and diagnostics.
+2. Qualify each actual adapter in vLLM with unchanged complete-prompt numerical
+   checks; run all three frozen replay conditions and fresh calibration.
+3. Measure native read/prefetch opportunities and run the original 36 paired
+   development slots across all three arms.
+4. Select whole held-out families using development costs alone, reserve every
+   selected slot and run the predeclared paired schedule, up to 96 slots.
+5. Export native outcomes, runtime events and persisted telemetry; report paired
+   family intervals, known and unknown costs, and verify infrastructure cleanup.
 
 Detailed historical operator notes are preserved in the
 [2026-11-11 Git checkpoint](https://github.com/xyleus1/Acephale/blob/ab9d26fedcc698898f2935ac1127835d7fbda4c9/docs/AI_HANDOFF.md).

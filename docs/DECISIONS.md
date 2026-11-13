@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-13: Report both seed and task variation explicitly
+
+Keep the predeclared paired schedule. Development assigns variant v0 to predictor
+seed 17 and variant v1 to seed 29, with actor seed 17 in both. Held-out trial 0
+uses actor/predictor seeds 17/17, and trial 1 uses 29/29. Within-block arm contrasts
+share the same task and seeds; between-weight differences also contain variant
+or actor-seed effects. Report per-seed results and label held-out two-trial
+consistency as joint actor/predictor-seed consistency, not repeated trials of one
+fixed trained checkpoint. Do not rerun or reassign slots after observing results.
+
 ## 2026-11-13: Bound prospective setup windows
 
 Allow an explicit setup interval up to 3600 seconds when reserving a new GPU

@@ -1,5 +1,14 @@
 # Acephale engineering log
 
+## 2026-11-13: Record actual main training and closed baseline
+
+Replaced the stale current-state claim that neither main seed had started.
+The actual A100 observation at 17:24 UTC records 157/204 updates for seed 17;
+the managed run queues the complete second seed. Current-state counts now match
+the 358 accepted fitting triplets and complete 746-prefix baseline replay.
+These are progress and baseline observations, with no trained-model gain claim.
+The executing source and immutable artifacts remain unchanged.
+
 ## 2026-11-13: Add an explicit setup allowance
 
 Added `setup_seconds` to reservation and preparation and `--setup-seconds` to

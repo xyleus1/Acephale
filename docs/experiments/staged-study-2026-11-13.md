@@ -115,11 +115,35 @@ repair produced another 62, leaving one probability-mass failure. Failed drafts
 remain retained. Schema validity alone is not semantic acceptance: the actual
 20-case human audit and expanded annotation provenance are still required.
 
+## Main training started
+
+The subsequent actual run uses source `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`
+and trainer image
+`sha256:717c7a2b841602e2b5416f4c938b3c5077d6adaaf3f19f6e31062dea67ce84a2`.
+At 17:24 UTC seed 17 had completed 157/204 updates. The same managed run then
+trains seed 29 for its complete 204 updates. Earlier failures above remain
+historical observations, not claims about the status of this new run.
+
+The prepared fitting dataset hash is
+`b0f1480a9b64a32c0570af15f50e70aa4b39a55e0b52a979a12d2d574fa39d81`.
+It contains 358 accepted checkpoint triplets, or 1,074 fitting examples. All 372
+original eligible checkpoints were attempted; deterministic context compilation
+rejected 14, retaining their reasons. The separate machine review accepted 19/20
+preselected cases with zero unsupported bindings and zero human reviews. It is
+the explicitly declared exploratory protocol, not the original human review.
+
+Actual GPU profiling verified the FP32 decay inventory and selected microbatch
+4 with accumulation 4. A warm measurement was recorded after the cold profile
+showed substantial initialization overhead. No profiling weights enter training;
+the recipe, source and setting remain common to both independent main seeds.
+Actual trained serving qualification, paired comparisons and final artifacts
+are still pending.
+
 ## Reporting still required
 
 Report semantic annotation acceptance, both full training seeds, goal/tool/argument
 prediction, calibration, and the three paired live arms after their actual runs.
-Retain failed, censored and undispatched slots. The next trainer declares an
-[FLA kernel profile](training-kernels-2026-11-13.md), whose actual GPU throughput
-and numerical qualification have not yet been measured. No accuracy or latency
-improvement is established by these implementation changes.
+Retain failed, censored and undispatched slots. The actual main run uses the
+declared [FLA kernel profile](training-kernels-2026-11-13.md); trained serving
+qualification is still required. No accuracy or latency improvement is established
+by implementation checks or training diagnostics.
