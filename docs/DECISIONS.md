@@ -11,6 +11,17 @@ Metadata monitoring is not continuous content verification. A successful receipt
 still requires every original hash, and any detected mutation drains owned work.
 This is runner overhead reduction, not evidence of model or task latency gains.
 
+## 2026-11-13: Preserve whole-cohort funding across weight segments
+
+The original paired schedule stays frozen before execution. A prospective serving
+schedule may regroup complete blocks by their preassigned predictor weight, while
+retaining every original run, actor seed, family and randomized within-block arm
+order. All selected trials are reserved before any segment executes. Segment
+claims persist in the original journal, so a process failure cannot silently
+replace a trial. Each later segment still needs a fresh budget checkpoint and its
+own qualified predictor, calibration, goal reliability and opportunity artifacts.
+Group time and predictor seed remain confounded and must be reported explicitly.
+
 ## 2026-11-13: Qualify serving with a complete fitting prompt
 
 The retained 256-token serving probe ends inside a candidate identifier in an

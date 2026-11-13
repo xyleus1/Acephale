@@ -29,6 +29,7 @@ import { ImmutableEventLog } from "../services/acephale-runtime/artifacts";
 import { attachInfraHostedWorkers, validateInfraHosted, validateInfraLedgerCheckpoint,
   type InfraHostedConfiguration } from "../services/acephale-runtime/infra-hosted-workers";
 import type { PublicBoundary } from "../services/acephale-runtime/actor";
+import { nativeCohortScope, validateNativeCohortSegment, type NativeCohortReservation } from "../services/acephale-runtime/infra-cohort-reservations";
 import { validateInfraOpportunityArtifact, validateInfraGoalReliabilityArtifact,
   type InfraOpportunityArtifact, type InfraGoalReliabilityArtifact } from "../services/acephale-runtime/infra-artifacts";
 export { checkedArtifact, wilsonLower } from "../services/acephale-runtime/infra-artifacts";
@@ -56,6 +57,7 @@ export interface InfraNativeConfiguration {
   customTaskReceiptHash?: string;
   collectionPartitions?: ("weight_fit" | "calibration" | "development")[];
   collectionPurpose?: "auxiliary-development-validation";
+  cohortReservationPath?: string;
 }
 export interface InfraNativeArtifacts {
   manifest: InfraExperimentManifestV2;
@@ -64,6 +66,7 @@ export interface InfraNativeArtifacts {
   opportunity?: InfraOpportunityArtifact;
   goalReliability?: InfraGoalReliabilityArtifact;
   embeddings?: FrozenEpisodeEmbeddings;
+  cohortReservation?: NativeCohortReservation;
 }
 export function infraNativeToolsHash(runs: InfraNativeRun[]) {
   const domains = new Map<string, PublicBoundary["tools"]>();
@@ -105,6 +108,13 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
   if (configuration.hosted) {
     validateInfraHosted(configuration.hosted, auxiliary ? "development" : configuration.stage);
     if (!/^[a-f0-9]{64}$/.test(configuration.taskBundleHash ?? "")) throw new Error("Hosted native runs require a frozen task bundle");
+  }
+  if (configuration.cohortReservationPath || artifacts.cohortReservation) {
+    if (configuration.stage === "collection" || !configuration.hosted || !configuration.cohortReservationPath || !artifacts.cohortReservation) {
+      throw new Error("Reserved cohorts require an explicit paired native configuration");
+    }
+    validateNativeCohortSegment(artifacts.cohortReservation, { stage: configuration.stage,
+      scopeHash: nativeCohortScope(manifest, configuration.taskBundleHash!), runs: configuration.runs, hosted: configuration.hosted });
   }
   const families = auxiliary ? manifest.data.developmentFamilies : configuration.stage === "collection" ? [...manifest.data.trainingFamilies, ...manifest.data.developmentFamilies]
     : configuration.stage === "development" ? manifest.data.developmentFamilies : manifest.data.heldoutFamilies;
@@ -188,6 +198,7 @@ export async function loadInfraNativeConfiguration(path: string) {
     ...(configuration.calibrationPath ? { calibration: await json(configuration.calibrationPath) } : {}),
     ...(configuration.opportunityPath ? { opportunity: await json(configuration.opportunityPath) } : {}),
     ...(configuration.goalReliabilityPath ? { goalReliability: await json(configuration.goalReliabilityPath) } : {}),
+    ...(configuration.cohortReservationPath ? { cohortReservation: await json(configuration.cohortReservationPath) } : {}),
   };
   if (configuration.episodicEmbeddingsPath) {
     if (!artifacts.memory) throw new Error("Episodic retrieval requires frozen memory");
@@ -319,7 +330,8 @@ export async function runInfraNativeService(configurationPath: string, artifactD
     }
     controller.signal.throwIfAborted();
     const runs = buildInfraNativeWorkers(configuration, artifacts, gateway, telemetry.record, undefined, memoryServices);
-    const workers = configuration.hosted ? attachInfraHostedWorkers(runs, configuration.hosted, budget!.ledger, event => costs!.append(event)) : runs;
+    const workers = configuration.hosted ? attachInfraHostedWorkers(runs, configuration.hosted, budget!.ledger, event => costs!.append(event), undefined,
+      artifacts.cohortReservation ? { receipt: artifacts.cohortReservation, ledgerPath: resolve(options.budgetDirectory!, "budget.jsonl") } : undefined) : runs;
     const actorIds = new Set(runs.map(run => run.runId));
     for (const { runId, worker } of workers) service.register(runId, !actorIds.has(runId) ? worker : {
       close: () => worker.close(),

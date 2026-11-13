@@ -12,6 +12,16 @@ guard calls do not reread file contents, and a same-size mutation with hidden
 metadata changes still fails the final cryptographic check. No active experiment
 source, dataset, model or numerical acceptance gate changed.
 
+## 2026-11-13: Reserve paired cohorts across serving switches
+
+Added an explicit cohort reservation CLI and optional native configuration binding.
+It reserves all trial roots atomically before the first predictor-weight segment;
+the existing one-level trial/API reservation hierarchy is unchanged. A second
+atomic write claims an entire declared segment using unique zero-cost markers.
+Ordinary collection behavior remains the default. Focused tests cover retained
+unknown charges, duplicate claims, persistence failures, changed schedules and
+native configuration scope. These are accounting tests, not benchmark results.
+
 ## 2026-11-13: Separate complete serving prompts from reload probes
 
 New unmerged exports first run the unchanged strict 256-token reload comparison,

@@ -8,6 +8,14 @@ changed bytes even if metadata appears unchanged. Existing process/container
 drain, source, artifact, stop and deadline checks remain in force. New runs bind
 the new runner hash; do not resume an old attempt under it.
 
+Paired serving segments may consume an explicit whole-cohort reservation. Reserve
+every original trial root once with `scripts/acephale-infra-cohort.ts`, under the
+sole original-journal owner. Each segment supplies that immutable receipt and a
+fresh ledger checkpoint. Atomic zero-cost claim markers prevent retrying a failed
+or interrupted segment; future trial holds and unknown charges remain reserved.
+The original and grouped schedules must contain identical slots, contiguous
+three-arm blocks and unchanged randomized arm order within each block.
+
 Prospective unmerged exports use serving-probe schema2: the shortest complete
 neutral `weight_fit` prompt, ordered by `(promptTokens, id)`, with the pinned
 assistant generation suffix. Dataset, row, prompt and exact token hashes are

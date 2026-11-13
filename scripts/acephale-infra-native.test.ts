@@ -16,6 +16,8 @@ import { NativeGateway } from "../services/acephale-runtime/gateway-client";
 import { INFRA_PREDICTOR_CONTRACT_HASH } from "../services/acephale-runtime/infra-predictors";
 import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-compiler-identity";
 import { infraOpportunityProfile } from "../services/acephale-runtime/infra-opportunity-profile";
+import { BudgetLedger } from "../src/lib/acephale/budget";
+import { nativeCohortScope, reserveNativeCohort } from "../services/acephale-runtime/infra-cohort-reservations";
 import { buildInfraNativeWorkers, infraNativeToolsHash, loadInfraNativeConfiguration, runInfraNativeService,
   validateInfraNativeConfiguration, type InfraNativeArtifacts, type InfraNativeConfiguration } from "./acephale-infra-native";
 
@@ -74,6 +76,24 @@ test("base collection validates without inventing predictor calibration or memor
   });
   assert.deepEqual(roles, ["actor"]);
   await Promise.all(runs.map(run => run.worker.close()));
+});
+
+test("paired native configuration binds the original reserved cohort and current artifacts", () => {
+  const { configuration, artifacts } = speculative();
+  configuration.taskBundleHash = hash("tasks");
+  configuration.hosted = { allocation: "development", maxCostMicrodollarsPerRun: 1_250_000,
+    maxSteps: 2, maxErrors: 1, timeoutSeconds: 600 };
+  configuration.cohortReservationPath = "cohort/reservation.json";
+  artifacts.cohortReservation = reserveNativeCohort({ version: 1, stage: "development",
+    scopeHash: nativeCohortScope(artifacts.manifest, configuration.taskBundleHash),
+    originalScheduleHash: hash(configuration.runs), originalRuns: configuration.runs, runs: configuration.runs,
+    segments: [configuration.runs.map(run => run.runId)], hosted: configuration.hosted }, new BudgetLedger(), "original");
+  assert.doesNotThrow(() => validateInfraNativeConfiguration(configuration, artifacts));
+  const changed = copy(configuration);
+  changed.hosted!.maxCostMicrodollarsPerRun++;
+  assert.throws(() => validateInfraNativeConfiguration(changed, artifacts), /fully reserved cohort/);
+  const missing = copy(artifacts); delete missing.cohortReservation;
+  assert.throws(() => validateInfraNativeConfiguration(configuration, missing), /explicit paired/);
 });
 
 test("shadow prediction builds only training collection workers with frozen lexical memory", async () => {

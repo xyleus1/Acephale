@@ -430,7 +430,7 @@ def run_native(configuration: Path, tasks: Path, output: Path, budget_directory:
     budget_directory, upstream_root = budget_directory.resolve(), upstream_root.resolve()
     config = read(configuration)
     # Freeze absolute artifact paths into the exact service readiness identity.
-    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath", "customTaskBundleDirectory"):
+    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath", "customTaskBundleDirectory", "cohortReservationPath"):
         if config.get(field):
             config[field] = str((configuration.parent / config[field]).resolve())
     manifest, bundle = read(Path(config["manifestPath"])), read(tasks)

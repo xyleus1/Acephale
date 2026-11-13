@@ -4,6 +4,7 @@ import { RESEARCH_MODELS, type ModelPort } from "../../src/lib/acephale/model";
 import { countTokens } from "../../src/lib/acephale/tokens";
 import { maximumCost, researchProvider, TrialLedger } from "./provider";
 import type { BoundaryWorker } from "./service";
+import { claimNativeCohortSegment, type NativeCohortReservation } from "./infra-cohort-reservations";
 
 /** Hosted calls are exclusively the unchanged native user simulator and judge.
  * The actor and speculative predictor stay on the pinned local Qwen ports. */
@@ -42,10 +43,14 @@ export function attachInfraHostedWorkers(
   record: (event: unknown) => void,
   providerFactory: (ledger: BudgetLedger, allocation: Allocation, record: (event: unknown) => void)
     => { model: ModelPort; embed: (text: string) => Promise<number[]> } = researchProvider,
+  reservedCohort?: { receipt: NativeCohortReservation; ledgerPath: string },
 ): { runId: string; worker: BoundaryWorker }[] {
   const ids = actors.flatMap(actor => [actor.runId, `${actor.runId}:user`, `${actor.runId}:evaluator`]);
   if (new Set(ids).size !== ids.length) throw new Error("Native hosted worker identity collision");
-  ledger.reserveMany(actors.map(({ runId }) => ({ id: `infra:${runId}`, allocation: configuration.allocation,
+  if (reservedCohort) {
+    if (hash(configuration) !== hash(reservedCohort.receipt.plan.hosted)) throw new Error("Reserved cohort hosted limits changed");
+    claimNativeCohortSegment(reservedCohort.receipt, actors.map(actor => actor.runId), ledger, reservedCohort.ledgerPath);
+  } else ledger.reserveMany(actors.map(({ runId }) => ({ id: `infra:${runId}`, allocation: configuration.allocation,
     maximum: configuration.maxCostMicrodollarsPerRun })));
   return actors.flatMap(({ runId, worker: actor }) => {
     const parent = `infra:${runId}`;
