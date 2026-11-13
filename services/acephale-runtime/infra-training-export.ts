@@ -8,18 +8,25 @@ import { BINARY_RANKING_INSTRUCTION } from "./infra-binary-ranking";
 import { GOAL_DRAFT_INSTRUCTION } from "./infra-predictors";
 import { assertSelectedGoalSources, compileInfraCandidateWindow, prepareInfraPredictorInput } from "./infra-predictor-input";
 import { annotationGoalDraft, type InfraAnnotationInput } from "./infra-goal-annotation";
+import { validateNativeSelectionExpansion, type NativeSelectionExpansion, type SelectionPublicRow } from "./infra-training-selection";
 
 export type TrainingPartition = "weight_fit" | "calibration" | "development" | "test";
 export type GoalDraft = Omit<GoalSet, "revisionHash">;
 export interface TrainingPartitionPlan { weightFitFamilies: string[]; calibrationFamilies: string[]; developmentFamilies: string[]; testFamilies: string[] }
-export interface NativeTrainingSelection { fittingCheckpointIds: string[]; neutralOnlyPartitions: ("calibration" | "development")[] }
-export function planNativeTrainingExport(rows: { checkpoint_id: string; family_id: string; split: string }[],
+export interface NativeTrainingSelection {
+  fittingCheckpointIds: string[]; neutralOnlyPartitions: ("calibration" | "development")[];
+  expansion?: NativeSelectionExpansion;
+}
+export function planNativeTrainingExport(rows: SelectionPublicRow[],
   partitions: TrainingPartitionPlan, selection: NativeTrainingSelection) {
-  if (!Array.isArray(selection.fittingCheckpointIds) || selection.fittingCheckpointIds.length !== 100
+  const expansion = selection.expansion ? validateNativeSelectionExpansion(rows, partitions, selection.expansion) : null;
+  const count = expansion?.selectedCheckpointCount ?? 100;
+  if (!Array.isArray(selection.fittingCheckpointIds) || selection.fittingCheckpointIds.length !== count
     || selection.fittingCheckpointIds.some(id => typeof id !== "string" || !id)
-    || new Set(selection.fittingCheckpointIds).size !== 100 || !Array.isArray(selection.neutralOnlyPartitions)
+    || new Set(selection.fittingCheckpointIds).size !== count || !Array.isArray(selection.neutralOnlyPartitions)
+    || expansion && hash(selection.fittingCheckpointIds) !== hash(expansion.checkpointIds)
     || [...selection.neutralOnlyPartitions].sort().join(",") !== "calibration,development") {
-    throw new Error("Native multitask export requires 100 declared fitting checkpoints and explicit neutral calibration/development");
+    throw new Error("Native multitask export requires 100 declared fitting checkpoints or a verified public expansion, and explicit neutral calibration/development");
   }
   const selected = new Set(selection.fittingCheckpointIds), byId = new Map(rows.map(row => [row.checkpoint_id, row]));
   if (byId.size !== rows.length || [...selected].some(id => !byId.has(id) || byId.get(id)!.split !== "train"

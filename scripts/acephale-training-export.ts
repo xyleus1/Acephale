@@ -18,6 +18,7 @@ import { compileGoalTrainingExample, compileRankTrainingExamples, compileNativeT
   type TrainingPartitionPlan, type TrainingSource, type ObservedNextBatch } from "../services/acephale-runtime/infra-training-export";
 import { publicInfraFrame, type PublicRow } from "../services/acephale-runtime/infra-public-checkpoint";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
+import { type NativeSelectionExpansion, validateNativeSelectionExpansion } from "../services/acephale-runtime/infra-training-selection";
 import { verifyDocumentBundle } from "./acephale-infra-document-data";
 
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -58,6 +59,7 @@ export interface TrainingExportConfiguration {
   schemaVersion: 1 | 2; mode: "historical_goals" | "native_ranks" | "native_multitask" | "native_pilot_eligibility"; baseUrl: string; tokenizerDirectory: string; output: string;
   partitions: string; reviewArtifact?: string; queue?: string; annotations?: string; bundle?: string; memory?: string;
   fittingCheckpointIds?: string[]; neutralOnlyPartitions?: ("calibration" | "development")[];
+  expandedSelectionReceipt?: string; originalPublicEligibility?: string; originalPilot?: string;
 }
 export async function exportTraining(configurationPath: string) {
   const config = json(configurationPath) as TrainingExportConfiguration, base = dirname(resolve(configurationPath));
@@ -67,6 +69,10 @@ export async function exportTraining(configurationPath: string) {
   if (!eligibilityOnly && !config.reviewArtifact) throw new Error("Training export requires its review artifact");
   if (config.mode === "native_multitask" && (config.schemaVersion !== 2 || !config.annotations)) throw new Error("Native multitask export requires v2 configuration and teacher annotations");
   if (config.mode === "native_ranks" && config.annotations) throw new Error("Use v2 native_multitask to export teacher-conditioned examples");
+  const expansionInputs = [config.expandedSelectionReceipt, config.originalPublicEligibility, config.originalPilot];
+  if (expansionInputs.some(Boolean) && (config.mode !== "native_multitask" || config.schemaVersion !== 2 || !expansionInputs.every(Boolean))) {
+    throw new Error("Expanded native selection requires its receipt, original eligibility and original pilot together");
+  }
   const path = (value: string) => resolve(base, value), output = path(config.output);
   if (existsSync(output)) throw new Error("Training export output must be new");
   const rawPartitions = json(path(config.partitions));
@@ -83,6 +89,7 @@ export async function exportTraining(configurationPath: string) {
   const excluded: { id: string; reason: string }[] = [];
   const eligibility: { checkpointId: string; inputHash: string; familyId: string; candidateIds: string[]; candidateWindowHash: string; candidatePoolHash: string }[] = [];
   let nativeDatasetHash: string | undefined;
+  let expandedSelectionHash: string | undefined;
   const profile = config.mode !== "historical_goals" && json(join(path(config.bundle!), "manifest.json")).files?.["document-lineage.json"] ? "documents" : "native";
   if ((config.mode === "native_multitask" || eligibilityOnly) && profile !== "native") throw new Error("Native training preparation requires a native public bundle");
   const common = { compilerHash: infraCandidateCompilerHash(profile), tokenizerHash: tokenizer.tokenizerHash,
@@ -111,8 +118,21 @@ export async function exportTraining(configurationPath: string) {
     if (profile === "native") validateFreshInfraMemoryBinding(memory, bundle as ReturnType<typeof verifyInfraPilotBundle>);
     else if (memory.repositorySnapshotId !== `infra-documents:${bundle.manifest.bundle_hash}`) throw new Error("Document memory is from another bundle");
     const publicRows = rows(join(directory, "public.jsonl")) as unknown as PublicRow[];
+    const expansion: NativeSelectionExpansion | undefined = config.expandedSelectionReceipt ? {
+      receipt: json(path(config.expandedSelectionReceipt)), eligibility: json(path(config.originalPublicEligibility!)),
+      originalPilot: json(path(config.originalPilot!)),
+    } : undefined;
+    if (expansion) {
+      const receipt = validateNativeSelectionExpansion(publicRows, partitions, expansion);
+      const parent = receipt.sourceDatasetHash === bundle.manifest.bundle_hash ? { split: bundle.split }
+        : json(join(directory, "cohort-receipt.json")).parentDatasets?.find((item: { bundleHash: string }) => item.bundleHash === receipt.sourceDatasetHash);
+      if (!parent || receipt.sourceSplitHash !== hash(parent.split) || receipt.partitionSourceHash !== hash(rawPartitions)) {
+        throw new Error("Expanded selection must bind the current bundle or its verified unchanged parent");
+      }
+      expandedSelectionHash = receipt.contentHash;
+    }
     const selection = config.mode === "native_multitask" ? planNativeTrainingExport(publicRows, partitions,
-      { fittingCheckpointIds: config.fittingCheckpointIds!, neutralOnlyPartitions: config.neutralOnlyPartitions! }) : null;
+      { fittingCheckpointIds: config.fittingCheckpointIds!, neutralOnlyPartitions: config.neutralOnlyPartitions!, expansion }) : null;
     // Private labels are only joined after each candidate window and prompt have been compiled.
     const labels = new Map(eligibilityOnly ? [] : rows(join(directory, "labels.jsonl")).map(row => [row.checkpoint_id, row]));
     const annotationRows = config.annotations ? rows(path(config.annotations)) : [];
@@ -159,6 +179,7 @@ export async function exportTraining(configurationPath: string) {
       rows: eligibility, rejected, checkpointIds: eligibility.filter(row => row.candidateIds.length).map(row => row.checkpointId) };
     const artifact = { ...body, contentHash: hash(body) }; write(join(output, "eligibility.json"), artifact); return artifact;
   }
+  if (expandedSelectionHash) for (const row of examples) row.provenance.selectionReceiptHash = expandedSelectionHash;
   writeFileSync(join(output, "compiled.jsonl"), examples.map(row => canonical(row) + "\n").join(""), { flag: "wx", mode: 0o600 });
   write(join(output, "rejected.json"), rejected);
   if (config.mode === "native_multitask") write(join(output, "excluded.json"), excluded);
@@ -166,7 +187,8 @@ export async function exportTraining(configurationPath: string) {
     compilerHash: common.compilerHash, tokenizer, rows: examples.length, rejected: rejected.length, compiledSha256: digest(join(output, "compiled.jsonl")),
     generationCalls: 0, trainingPerformed: false, reviewHash: hash(review), sourceMode: config.mode,
     ...(config.mode === "native_multitask" ? { selectionHash: hash({ fittingCheckpointIds: config.fittingCheckpointIds,
-      neutralOnlyPartitions: config.neutralOnlyPartitions }), excluded: excluded.length } : {}) };
+      neutralOnlyPartitions: config.neutralOnlyPartitions }), excluded: excluded.length } : {}),
+    ...(expandedSelectionHash ? { expandedSelectionHash, selectionPolicy: "all_preexisting_nonempty_fitting_windows" } : {}) };
   write(join(output, "receipt.json"), { ...receipt, contentHash: hash(receipt) }); return receipt;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

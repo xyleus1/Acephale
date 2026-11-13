@@ -1,5 +1,24 @@
 # Acephale engineering log
 
+## 2026-11-13: Explicit expansion of public fitting coverage
+
+Added a versioned all-public-eligible selection receipt and offline declaration
+command. The native exporter accepts it only with the original eligibility and
+pilot, verifies complete selection and public prefix hashes, and retains the
+original 100-case default. Verified parent lineage permits later auxiliary
+development imports without changing fitting prefixes. The 24-family, four-row
+minimum and 48-positive training requirements are unchanged.
+
+The actual public-only declaration retained all 372 existing nonempty fitting
+windows and the original 100-case audit pilot. Receipt hash:
+`3f2c90ec877eb9c66bee2b03a3d25fe754e8f600007ff393bf997eb920448188`.
+No model requests, fitting, new native trials or heldout-label inspection were
+performed by this declaration. Focused selection and training runtime checks
+passed 23 tests. The complete Node suite passed 265 tests with two PostgreSQL
+tests skipped in the local environment. Generated contracts and TypeScript
+compilation passed; changed-file ESLint had zero errors and five existing
+warnings in the training exporter.
+
 ## 2026-11-13: Observed merge failure and recovery implementation
 
 The fresh source-frozen Qwen smoke passed strict adapter reload after one actual

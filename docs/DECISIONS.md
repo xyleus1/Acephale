@@ -1,5 +1,25 @@
 # Acephale decisions
 
+## 2026-11-13: Expand fitting coverage without selecting positive outcomes
+
+The original 100-case public pilot had 17 exact positive-read windows, below the
+unchanged requirement of 48. An offline audit reconstructed every pool and window
+from its frozen public eligibility artifact before joining fitting labels. All
+372 preexisting nonempty windows contain 79 positives. The new optional receipt
+therefore selects that complete existing set, retaining failures and NO_READ
+examples, rather than choosing positive checkpoints or lowering the gate.
+
+This is an explicit training-design change after a failed data gate. Preserve
+the original pilot, its 20 audit cases, annotation attempts and earlier report.
+Additional goal annotations require separate provenance. Calibration and heldout
+families remain excluded from weight fitting. Most allowlisted-read misses are
+runtime authorization rejections, so those policy checks are unchanged.
+
+The new receipt binds source, split, partitions, original eligibility/compiler,
+original pilot, exact ordered checkpoint IDs and complete public-row hashes.
+Export records its identity in each compiled row. Current and historical
+100-case exports retain their previous default selection behavior.
+
 ## 2026-11-13: Keep one source-addressable policy in predictor context
 
 Predictor compiler v3 includes the full policy once in the mandatory source

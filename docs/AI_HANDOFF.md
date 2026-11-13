@@ -13,6 +13,14 @@ The native exporter now accepts the actual teacher contract. Use explicit v2
 Goal-labelled dataset preparation still requires 20 attributed human reviews.
 The old APIGen packet cannot certify a fresh native dataset.
 
+Optional expanded fitting selection uses `scripts/acephale-native-selection.ts`
+to retain every preexisting public-eligible checkpoint. Pass its receipt,
+`originalPublicEligibility` and the unchanged `originalPilot` JSON together in
+the v2 export configuration. Without these fields, the exact 100-case default
+is unchanged. The receipt may transfer into an auxiliary-development aggregate
+only through verified parent-dataset lineage. Keep the original human audit,
+additional annotation lineage and all fitting coverage requirements intact.
+
 Run stages with `python -m acephale.experiment_runner`. The manifest binds source,
 inputs, commands, deadlines and required successful output fields. Resume only
 verified completed stages. Retain any failed or interrupted attempt and declare a

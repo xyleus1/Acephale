@@ -64,6 +64,23 @@ outcomes remain in reports but are excluded from known-outcome memory. Every
 memory publication is immutable, including additions of causal misses/confusions.
 Changing the snapshot requires new compatible downstream artifacts.
 
+Native multitask export defaults to the original 100 fitting checkpoints. An
+explicit versioned expansion receipt may instead select every nonempty window
+from the preexisting public eligibility artifact. It binds the original dataset,
+split, compiler, partitions, complete public rows and unchanged 100-case pilot.
+It cannot select a subset by observed read labels. The original 20 human audit
+cases remain unchanged; additional annotations need their own retained lineage.
+The requirements of 24 fitting families, at least four checkpoints per family
+and 48 positive-read checkpoints still apply. A new aggregate dataset can reuse
+the selection only through verified original-parent provenance and exact public
+prefixes. Expansion changes the training population; it does not relabel the
+original pilot or certify a trained model.
+
+Imported `eligible_reads` labels identify allowlisted native read tools. They do
+not assert that the runtime's stricter identity and ownership checks admit the
+invocation at that prefix. Candidate coverage diagnostics separate those policy
+rejections from missing admissible argument combinations and window truncation.
+
 ## Workflow and episodic memory
 
 Bounded pattern mining records observed ordering, argument dependencies and
