@@ -1,5 +1,16 @@
 # Acephale decisions
 
+## 2026-11-13: Keep full input hashing outside the child polling loop
+
+Repeatedly hashing the entire input inventory every 250 ms consumed substantial
+local CPU during a bounded tokenizer export. Retain full cryptographic validation
+at admission and both successful-stage boundaries; use regular-file metadata
+snapshots for early changes while the child runs. Capture metadata before and
+after hashing so a racing write cannot establish a new accepted baseline.
+Metadata monitoring is not continuous content verification. A successful receipt
+still requires every original hash, and any detected mutation drains owned work.
+This is runner overhead reduction, not evidence of model or task latency gains.
+
 ## 2026-11-13: Qualify serving with a complete fitting prompt
 
 The retained 256-token serving probe ends inside a candidate identifier in an

@@ -11,6 +11,7 @@ import json
 import os
 import re
 import signal
+import stat
 import subprocess
 import time
 from contextlib import contextmanager
@@ -112,10 +113,29 @@ def verify_source(source: Path, commit: str) -> None:
         raise ValueError("Experiment requires a clean committed source tree")
 
 
-def verify_inputs(inputs: dict[str, Path], manifest: Experiment) -> None:
+def input_metadata(inputs: dict[str, Path]) -> dict[str, tuple[int, ...]]:
+    """Cheap change detection, not a substitute for boundary hash verification."""
+    result = {}
     for name, path in inputs.items():
-        if path.is_symlink() or not path.is_file() or file_hash(path) != manifest.inputs[name].sha256:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            raise ValueError(f"Frozen input changed: {name}") from error
+        if not stat.S_ISREG(metadata.st_mode):
             raise ValueError(f"Frozen input changed: {name}")
+        result[name] = (metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_size,
+                        metadata.st_mtime_ns, metadata.st_ctime_ns)
+    return result
+
+
+def verify_inputs(inputs: dict[str, Path], manifest: Experiment) -> dict[str, tuple[int, ...]]:
+    before = input_metadata(inputs)
+    for name, path in inputs.items():
+        if file_hash(path) != manifest.inputs[name].sha256:
+            raise ValueError(f"Frozen input changed: {name}")
+    if input_metadata(inputs) != before:
+        raise ValueError("Frozen input changed during hash verification")
+    return before
 
 
 def verify_artifacts(root: Path, checks: list[ArtifactCheck]) -> list[dict[str, Any]]:
@@ -262,7 +282,7 @@ def run(manifest_path: Path, output: Path, *, resume: bool = False) -> dict[str,
     output = output.resolve()
     process_owner_hash = file_hash(Path(__file__).with_name("windows_process.py")) if os.name == "nt" else None
     verify_source(source, manifest.sourceCommit)
-    verify_inputs(inputs, manifest)
+    frozen_metadata = verify_inputs(inputs, manifest)
     if resume:
         run_receipt = verify_hashed(read_json(output / "run.json"))
         if run_receipt.get("manifestHash") != manifest_hash:
@@ -284,7 +304,8 @@ def run(manifest_path: Path, output: Path, *, resume: bool = False) -> dict[str,
     def guard():
         if time.time() >= deadline:
             raise TimeoutError("Original experiment deadline reached")
-        verify_inputs(inputs, manifest)
+        if input_metadata(inputs) != frozen_metadata:
+            raise ValueError("Frozen input changed during execution")
 
     def verify_completed_artifacts(phase: str):
         for earlier in manifest.stages:
@@ -309,6 +330,7 @@ def run(manifest_path: Path, output: Path, *, resume: bool = False) -> dict[str,
                     raise ValueError("Only verified successful stages can be resumed; retain failures in a new recovery attempt")
             else:
                 guard()
+                verify_inputs(inputs, manifest)
                 verify_source(source, manifest.sourceCommit)
                 verify_completed_artifacts("before dispatch")
                 if stopped:
@@ -319,6 +341,7 @@ def run(manifest_path: Path, output: Path, *, resume: bool = False) -> dict[str,
                 try:
                     command = expand_command(stage, source, inputs, completed, artifacts)
                     execute(command, directory, stage, source, guard, min(deadline, started + stage.timeoutSeconds), stopped)
+                    verify_inputs(inputs, manifest)
                     verified = verify_artifacts(artifacts, stage.artifacts)
                     verify_source(source, manifest.sourceCommit)
                     verify_completed_artifacts("during execution")

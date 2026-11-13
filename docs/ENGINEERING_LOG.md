@@ -1,5 +1,17 @@
 # Acephale engineering log
 
+## 2026-11-13: Stop rehashing frozen inputs during every poll
+
+The managed experiment loop now compares file identity, mode, size and nanosecond
+timestamps while waiting. Full input hashes remain at admission and before/after
+successful stages, alongside existing source and completed-artifact checks.
+Focused Windows validation passed 17 tests with two Linux-only skips, including
+an actual child drained after input mutation. Four actual Linux execution/source
+tests also passed in WSL. A polling regression confirms 200
+guard calls do not reread file contents, and a same-size mutation with hidden
+metadata changes still fails the final cryptographic check. No active experiment
+source, dataset, model or numerical acceptance gate changed.
+
 ## 2026-11-13: Separate complete serving prompts from reload probes
 
 New unmerged exports first run the unchanged strict 256-token reload comparison,

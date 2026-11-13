@@ -1,5 +1,13 @@
 # Working on Acephale
 
+The experiment runner verifies every input hash at admission and before/after
+each successful stage. While a child runs, its 250 ms guard checks file identity,
+mode, size and nanosecond modification/change times instead of rereading all
+contents. Metadata is only early change detection; final hash checks still reject
+changed bytes even if metadata appears unchanged. Existing process/container
+drain, source, artifact, stop and deadline checks remain in force. New runs bind
+the new runner hash; do not resume an old attempt under it.
+
 Prospective unmerged exports use serving-probe schema2: the shortest complete
 neutral `weight_fit` prompt, ordered by `(promptTokens, id)`, with the pinned
 assistant generation suffix. Dataset, row, prompt and exact token hashes are

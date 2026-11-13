@@ -119,6 +119,128 @@ def test_input_change_fails_before_dispatch_and_during_execution(tmp_path, monke
     assert runner.read_json(output / "collect" / "receipt.json")["status"] == "failed"
 
 
+def test_polling_checks_metadata_without_rehashing_contents(tmp_path, monkeypatch):
+    manifest, output, _ = fixture(tmp_path, monkeypatch)
+    frozen = tmp_path / "input.json"
+    hashes = []
+    actual_hash = runner.file_hash
+
+    def counted_hash(path):
+        if path == frozen:
+            hashes.append(path)
+        return actual_hash(path)
+
+    def polling(*args):
+        count = len(hashes)
+        for _ in range(100):
+            args[4]()
+        assert len(hashes) == count
+        completed_stage(*args)
+
+    monkeypatch.setattr(runner, "file_hash", counted_hash)
+    monkeypatch.setattr(runner, "execute", polling)
+    assert runner.run(manifest, output)["status"] == "completed"
+    # Initial admission and both cryptographic boundaries of each stage.
+    assert len(hashes) == 5
+
+
+def test_post_stage_hash_rejects_changed_bytes_even_when_metadata_is_unchanged(tmp_path, monkeypatch):
+    manifest, output, _ = fixture(tmp_path, monkeypatch)
+    frozen = tmp_path / "input.json"
+    metadata = runner.input_metadata({"data": frozen})
+    # Model a filesystem whose visible metadata has not reflected the write.
+    # The final full hash must still reject same-length changes.
+    monkeypatch.setattr(runner, "input_metadata", lambda _: metadata)
+
+    def mutate(*args):
+        completed_stage(*args)
+        before = frozen.stat()
+        original = frozen.read_text()
+        frozen.write_text(original.replace("true", "null"))
+        os.utime(frozen, ns=(before.st_atime_ns, before.st_mtime_ns))
+        args[4]()
+
+    monkeypatch.setattr(runner, "execute", mutate)
+    with pytest.raises(ValueError, match="Frozen input changed: data"):
+        runner.run(manifest, output)
+    assert runner.read_json(output / "collect/receipt.json")["status"] == "failed"
+    assert not (output / "score").exists()
+
+
+def test_replaced_input_identity_is_detected_without_content_hashing(tmp_path):
+    frozen = tmp_path / "input.json"
+    frozen.write_text("original")
+    before = frozen.stat()
+    snapshot = runner.input_metadata({"data": frozen})
+    replacement = tmp_path / "replacement.json"
+    replacement.write_text("modified")
+    os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+    replacement.replace(frozen)
+    assert runner.input_metadata({"data": frozen}) != snapshot
+    frozen.unlink()
+    with pytest.raises(ValueError, match="Frozen input changed: data"):
+        runner.input_metadata({"data": frozen})
+
+
+def test_input_mutation_during_initial_hash_cannot_establish_a_new_baseline(tmp_path, monkeypatch):
+    manifest_path, output, _ = fixture(tmp_path, monkeypatch)
+    frozen = tmp_path / "input.json"
+    actual_hash = runner.file_hash
+
+    def mutate_after_read(path):
+        digest = actual_hash(path)
+        if path == frozen:
+            frozen.write_text("changed after read")
+        return digest
+
+    monkeypatch.setattr(runner, "file_hash", mutate_after_read)
+    with pytest.raises(ValueError, match="during hash verification"):
+        runner.run(manifest_path, output)
+    assert not output.exists()
+
+
+@pytest.mark.skipif(os.name not in {"posix", "nt"}, reason="Managed Linux/Windows process ownership")
+def test_actual_input_change_drains_child_before_failure_receipt(tmp_path, monkeypatch):
+    if os.name == "nt":
+        import _winapi
+
+    manifest, output, value = fixture(tmp_path, monkeypatch)
+    value["stages"] = value["stages"][:1]
+    value["stages"][0]["command"] = [sys.executable, "-c",
+        "import os,pathlib,time; pathlib.Path('pid').write_text(str(os.getpid())); time.sleep(60)"]
+    manifest.write_text(json.dumps(value))
+    frozen = tmp_path / "input.json"
+    pid_path = tmp_path / "source/pid"
+    actual_metadata = runner.input_metadata
+    pid = None
+    handle = None
+
+    def detect_then_mutate(inputs):
+        nonlocal pid, handle
+        if pid is None and pid_path.exists() and pid_path.read_text():
+            pid = int(pid_path.read_text())
+            if os.name == "nt":
+                handle = _winapi.OpenProcess(0x100000, False, pid)
+            frozen.write_text("changed while child runs")
+        return actual_metadata(inputs)
+
+    monkeypatch.setattr(runner, "input_metadata", detect_then_mutate)
+    try:
+        with pytest.raises(ValueError, match="Frozen input changed during execution"):
+            runner.run(manifest, output)
+        assert pid is not None
+        if os.name == "nt":
+            assert _winapi.WaitForSingleObject(handle, 5000) == 0
+        else:
+            with pytest.raises(ProcessLookupError):
+                os.kill(pid, 0)
+        assert runner.read_json(output / "collect/receipt.json")["status"] == "failed"
+        assert not (output / "completion.json").exists()
+    finally:
+        if handle is not None:
+            _winapi.CloseHandle(handle)
+
+
 def test_future_stage_binding_cannot_dispatch(tmp_path, monkeypatch):
     manifest, output, value = fixture(tmp_path, monkeypatch)
     value["stages"][0]["command"] = ["consumer", "{stage:score}"]
