@@ -1,5 +1,15 @@
 # Working on Acephale
 
+Prospective predictor training preserves the checkpoint's 18 FP32 `A_log`
+tensors through Transformers 5.10.1's strict dtype plan on a scoped subclass.
+Every loaded decay tensor must match the original safetensors bytes; all other
+floating base parameters remain BF16. Implementation and kernel/specification
+receipts record this policy and tensor inventory. Re-export/evaluation rejects
+adapters trained under the previous precision policy instead of relabeling them.
+This requires a new trainer source and image before either main optimizer seed;
+the dataset, LoRA recipe and numerical serving gates are unchanged. The original
+cross-engine failures remain failed. No FP32 language-head change is included.
+
 Replay scoring and calibration now accept the declared response-retention receipt
 and verify its file hash, record count, response hashes and ordered checkpoint
 dispatch evidence. The previous scorer rejected the added metadata by comparing

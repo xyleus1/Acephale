@@ -27,7 +27,7 @@ from acephale.training_lora import (
 )
 
 
-def export_fixture(directory, *, probe_version=1):
+def export_fixture(directory, *, probe_version=1, parameter_precision=None):
     adapter = directory / "adapter"
     adapter.mkdir(parents=True)
     targets = sorted("model.language_model.layers.0." + name for name in TARGET_SUFFIXES)
@@ -52,8 +52,11 @@ def export_fixture(directory, *, probe_version=1):
         {"path": "model.safetensors", "sha256": "b" * 64, "bytes": 10}]}
     dataset = hashed({"base": BASE, "weightFitFamilies": ["fit"], "calibrationFamilies": ["cal"], "counts": {"weight_fit": 2},
                       "tokenizerHash": tokenizer, "chatTemplateHash": template})
-    specification = hashed({"base": BASE, "baseReceiptHash": hash_v1(base), "datasetManifestHash": dataset["contentHash"],
-                            "targets": targets, "trainableCount": offset // 4, "probeContext": PROBE_CONTEXT})
+    specification = {"base": BASE, "baseReceiptHash": hash_v1(base), "datasetManifestHash": dataset["contentHash"],
+                     "targets": targets, "trainableCount": offset // 4, "probeContext": PROBE_CONTEXT}
+    if parameter_precision is not None:
+        specification["kernelProfile"] = {"parameterPrecision": parameter_precision}
+    specification = hashed(specification)
     files = file_inventory(adapter)
     receipt = hashed({"status": "completed", "trainingManifestHash": dataset["contentHash"],
                       "specificationHash": specification["contentHash"], "frozenBeforeHash": "b" * 64,
@@ -293,11 +296,13 @@ def test_export_cli_requires_explicit_native_lora_mode_and_preserves_merged_defa
     assert calls[0][1] == calls[1][1]
 
 
-def test_evaluation_loads_verified_base_and_exact_adapter_without_merging(tmp_path, monkeypatch):
+@pytest.mark.parametrize("legacy", [False, True])
+def test_evaluation_loads_verified_base_and_exact_adapter_without_merging(tmp_path, monkeypatch, legacy):
     from acephale import training
 
     directory = tmp_path / "export"
-    documents = export_fixture(directory)
+    precision = {"profile": "qwen3_5-checkpoint-alog-fp32-v1", "exactCheckpointBytes": True}
+    documents = export_fixture(directory, parameter_precision=None if legacy else precision)
     base_path = tmp_path / "base"
     identity = documents["predictor.json"]
     calls = []
@@ -311,9 +316,15 @@ def test_evaluation_loads_verified_base_and_exact_adapter_without_merging(tmp_pa
     original_tokenizer = training.tokenizer_identity
     monkeypatch.setattr(training, "tokenizer_identity", lambda path: (identity["tokenizerHash"], identity["chatTemplateHash"])
                         if path == base_path else original_tokenizer(path))
-    monkeypatch.setattr(training, "_load_model", lambda path: ("exact-base", "base-tokenizer"))
+    exact_base = SimpleNamespace(acephale_parameter_precision=precision)
+    monkeypatch.setattr(training, "_load_model", lambda path: (exact_base, "base-tokenizer"))
+    if legacy:
+        with pytest.raises(ValueError, match="original source"):
+            training._load_evaluation_model(base_path, directory)
+        assert calls == []
+        return
     assert training._load_evaluation_model(base_path, directory) == ("evaluated-unmerged-model", "base-tokenizer", identity)
-    assert calls == [("exact-base", directory / "adapter", {"is_trainable": False, "local_files_only": True})]
+    assert calls == [(exact_base, directory / "adapter", {"is_trainable": False, "local_files_only": True})]
     changed = copy.deepcopy(documents["base-receipt.json"])
     changed["files"][0]["sha256"] = "c" * 64
     monkeypatch.setattr(training, "verify_base", lambda path: changed)

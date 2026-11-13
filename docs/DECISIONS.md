@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-13: Preserve checkpoint decay precision before main training
+
+The pinned predictor checkpoint stores 18 DeltaNet `A_log` vectors in FP32.
+The previous BF16 Transformers load rounded them, while pinned vLLM constructs
+these parameters in FP32. Use the official Transformers strict dtype mechanism
+on a local subclass, without changing its global class or forward code. Verify
+all 288 values byte-for-byte against the pinned checkpoint and retain BF16 for
+other floating base parameters. Bind the policy to new training specifications
+and reject historical adapter reloads under a mismatched policy. This corrects
+an observed implementation mismatch; it does not waive the serving threshold or
+establish that the remaining numerical disagreement is resolved.
+
 ## 2026-11-13: Validate additive replay evidence when reading it
 
 Accept the declared version of retained provider-response metadata rather than

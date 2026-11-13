@@ -207,6 +207,9 @@ def export_unmerged(dataset: Path, model_path: Path, run: Path, output: Path, le
     probe = torch.load(run / "reload-probe.pt", map_location="cpu", weights_only=True)
     _verify_probe_context(probe, specification)
     base, tokenizer = _load_model(model_path)
+    from acephale.training_precision import require_training_precision
+
+    require_training_precision(base, specification)
     model = PeftModel.from_pretrained(base, run / "adapter", is_trainable=False, local_files_only=True).eval()
     reloaded = _probe_logits(model, probe["input_ids"].to("cuda"))
     torch.testing.assert_close(reloaded, probe["logits"], rtol=0.02, atol=0.03)

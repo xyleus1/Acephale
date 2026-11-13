@@ -26,5 +26,9 @@ def training_kernel_profile(model) -> dict[str, Any]:
     from fla.ops.gated_delta_rule import chunk_gated_delta_rule, fused_recurrent_gated_delta_rule
     from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
 
-    return _kernel_profile(model, Qwen3_5GatedDeltaNet, chunk_gated_delta_rule,
-                           fused_recurrent_gated_delta_rule, FusedRMSNormGated)
+    precision = getattr(model, "acephale_parameter_precision", None)
+    if not isinstance(precision, dict) or precision.get("exactCheckpointBytes") is not True:
+        raise RuntimeError("Declared training kernels require verified checkpoint parameter precision")
+    return {**_kernel_profile(model, Qwen3_5GatedDeltaNet, chunk_gated_delta_rule,
+                             fused_recurrent_gated_delta_rule, FusedRMSNormGated),
+            "version": 2, "profile": "qwen3_5-fla-delta-alog-fp32-v2", "parameterPrecision": precision}

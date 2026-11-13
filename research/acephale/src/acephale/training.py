@@ -103,6 +103,8 @@ def preserve_tokenizer(source: Path, destination: Path) -> None:
 
 
 def training_implementation() -> dict[str, Any]:
+    from acephale.training_precision import PRECISION_POLICY
+
     image = os.environ.get("ACEPHALE_TRAINER_IMAGE_DIGEST", "")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image):
         raise ValueError("Observed immutable trainer image digest required")
@@ -112,7 +114,7 @@ def training_implementation() -> dict[str, Any]:
         raise ValueError("Actual training environment lock required")
     sources = [row for row in file_inventory(package / "src") if row["path"].endswith(".py")]
     return {"imageDigest": image, "lockHash": file_hash(lock), "pythonSourceFiles": sources,
-            "pythonSourceHash": hash_v1(sources)}
+            "pythonSourceHash": hash_v1(sources), "parameterPrecisionPolicy": dict(PRECISION_POLICY)}
 
 
 def verify_base(directory: Path) -> dict[str, Any]:
@@ -205,15 +207,23 @@ def _load_model(model_path: Path):
     from transformers import AutoTokenizer, Qwen3_5ForConditionalGeneration
 
     from acephale.training_kernels import training_kernel_profile
+    from acephale.training_precision import (
+        checkpoint_decay_tensors,
+        checkpoint_precision_class,
+        verify_parameter_precision,
+    )
 
     if not torch.cuda.is_available():
         raise RuntimeError("The approved real-model trainer requires a qualified CUDA GPU")
     tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = Qwen3_5ForConditionalGeneration.from_pretrained(model_path, local_files_only=True,
+    decay = checkpoint_decay_tensors(model_path)
+    model_class = checkpoint_precision_class(Qwen3_5ForConditionalGeneration)
+    model = model_class.from_pretrained(model_path, local_files_only=True,
             torch_dtype=torch.bfloat16, attn_implementation="sdpa").to("cuda")
     model.config.use_cache = False
+    model.acephale_parameter_precision = verify_parameter_precision(model, decay)
     model.acephale_kernel_profile = training_kernel_profile(model)
     return model, tokenizer
 
@@ -420,6 +430,9 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
     probe = torch.load(run / "reload-probe.pt", map_location="cpu", weights_only=True)
     _verify_probe_context(probe, specification)
     base, tokenizer = _load_model(model_path)
+    from acephale.training_precision import require_training_precision
+
+    require_training_precision(base, specification)
     model = PeftModel.from_pretrained(base, run / "adapter", is_trainable=False, local_files_only=True).eval()
     reloaded = _probe_logits(model, probe["input_ids"].to("cuda"))
     torch.testing.assert_close(reloaded, probe["logits"], rtol=0.02, atol=0.03)
@@ -516,6 +529,9 @@ def _load_evaluation_model(model_path: Path, predictor_export: Path | None = Non
         from peft import PeftModel
 
         base, tokenizer = _load_model(model_path)
+        from acephale.training_precision import require_training_precision
+
+        require_training_precision(base, json.loads((predictor_export / "training-manifest.json").read_text(encoding="utf-8")))
         model = PeftModel.from_pretrained(base, predictor_export / "adapter", is_trainable=False, local_files_only=True)
         return model.eval(), tokenizer, identity
     if (model_path / "acephale-model.receipt.json").is_file():

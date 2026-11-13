@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-13: Retain original FP32 DeltaNet decay values
+
+Added a scoped Transformers strict dtype loader and exact checkpoint/loaded
+parameter inventory. Training, profiling, export and evaluation carry or check
+the precision policy through existing implementation and kernel receipts. The
+focused Windows suite passed 73 tests, with 12 Torch-dependent and two Linux
+process tests skipped. All 14 precision tests passed in Linux with actual CPU
+Torch 2.13.0 and Transformers 5.10.1, including original FP32 loading, rejection
+of rounded-then-upcast values, invalid tensor inventories and unchanged global
+class metadata. These tests do not measure GPU serving parity or task quality.
+
 ## 2026-11-13: Read retained-response replay receipts
 
 The full 746-case replay closed, but Python scoring rejected its additional

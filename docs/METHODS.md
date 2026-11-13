@@ -33,6 +33,17 @@ is disabled for this profile. Actor context is 32,768 tokens: 28,672 input plus
 configuration remains an explicit baseline. The separately declared predictor
 LoRA experiment below changes only the auxiliary predictor's weights.
 
+Prospective HF predictor training retains the pinned checkpoint's 18 `A_log`
+vectors, 288 parameters, in FP32; all other floating base parameters use BF16.
+It uses Transformers 5.10.1's `_keep_in_fp32_modules_strict` on a scoped model
+subclass and verifies original tensor bytes after loading. The precision policy
+and tensor inventory enter implementation and training/kernel receipts. A
+historical adapter requires its original precision policy when reloaded. This
+aligns decay storage with the pinned vLLM implementation without changing the
+LoRA recipe, model revision, language-head dtype or serving acceptance threshold.
+See the official [Transformers dtype loader](https://github.com/huggingface/transformers/blob/v5.10.1/src/transformers/modeling_utils.py)
+and [vLLM Qwen DeltaNet parameters](https://github.com/vllm-project/vllm/blob/v0.32.0/vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py).
+
 The official OpenAI SDK targets local compatible endpoints through
 `LocalChatModelPort`. It preserves real tool-call IDs and assistant continuation,
 checks parsed arguments and records usage, refusal/incomplete status, streaming
