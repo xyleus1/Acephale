@@ -32,6 +32,7 @@ from acephale.native_common import (
     await_service_ready,
     close_failed_workers,
     drain_trial,
+    native_evaluation_type,
     native_ports,
     observe_host_health,
     read,
@@ -53,6 +54,7 @@ def validate_task_bundle(configuration: dict, manifest: dict, bundle: dict) -> d
         raise ValueError("Native upstream revision mismatch")
     if not configuration.get("hosted"):
         raise ValueError("Native launcher requires budgeted hosted user and evaluator ports")
+    native_evaluation_type(configuration["hosted"].get("evaluationType", "ALL"))
     indexed = {}
     for item in bundle.get("tasks", []):
         key = (item["domain"], item["taskId"])
@@ -62,10 +64,18 @@ def validate_task_bundle(configuration: dict, manifest: dict, bundle: dict) -> d
             raise ValueError("Native task payload identity mismatch")
         indexed[key] = item
     run_ids = set()
-    expected_allocation = "training" if configuration["stage"] == "collection" else configuration["stage"]
+    purpose = configuration.get("collectionPurpose")
+    auxiliary = purpose == "auxiliary-development-validation"
+    if purpose is not None and (not auxiliary or configuration["stage"] != "collection"
+            or configuration.get("shadowPrediction", False) or not configuration.get("customTaskBundleDirectory")
+            or not configuration.get("customTaskReceiptHash") or configuration.get("collectionPartitions") != ["development"]):
+        raise ValueError("Invalid auxiliary development collection declaration")
+    expected_allocation = "development" if auxiliary else "training" if configuration["stage"] == "collection" else configuration["stage"]
     if configuration["hosted"].get("allocation") != expected_allocation:
         raise ValueError("Native stage budget allocation mismatch")
     for run in configuration["runs"]:
+        if auxiliary and (run["familyId"] not in manifest["data"]["developmentFamilies"] or run["arm"] != "base"):
+            raise ValueError("Auxiliary development collection can only execute declared development base slots")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", run["runId"]) or run["runId"] in run_ids:
             raise ValueError("Unsafe or duplicate native run identity")
         run_ids.add(run["runId"])
@@ -107,6 +117,38 @@ def verify_runtime_identity(manifest: dict):
         raise ValueError("Actual benchmark Node/Python differs from observed runtime inventory")
 
 
+def validate_native_task_source(configuration: dict, task_rows: dict, upstream_root: Path) -> None:
+    """Official bytes or a complete independently verified custom bundle, never an implicit replacement."""
+    custom = None
+    if configuration.get("customTaskBundleDirectory") or configuration.get("customTaskReceiptHash"):
+        from acephale.custom_native_tasks import verify_custom_bundle
+
+        if not configuration.get("customTaskBundleDirectory") or not configuration.get("customTaskReceiptHash"):
+            raise ValueError("Custom native tasks require their verified source directory and receipt")
+        receipt, custom_bundle, partition = verify_custom_bundle(Path(configuration["customTaskBundleDirectory"]), upstream_root)
+        if receipt["contentHash"] != configuration["customTaskReceiptHash"]:
+            raise ValueError("Custom native receipt differs from the frozen configuration")
+        custom = {(row["domain"], row["taskId"]): row for row in custom_bundle["tasks"]}
+        allowed = {"collection": {"weight_fit", "calibration"}, "development": {"development"}, "heldout": {"test"}}
+        auxiliary = configuration.get("collectionPurpose") == "auxiliary-development-validation"
+        if auxiliary:
+            allowed["collection"] = {"development"}
+        expected = ["development"] if auxiliary else ["weight_fit", "calibration"]
+        if configuration["stage"] == "collection" and configuration.get("collectionPartitions") != expected:
+            raise ValueError("Custom collection requires its explicit fitting/calibration selection")
+        for key, item in task_rows.items():
+            if custom.get(key) != item:
+                raise ValueError("Custom task differs from its independently verified source")
+        for run in configuration["runs"]:
+            if partition["families"].get(run["familyId"]) not in allowed[configuration["stage"]]:
+                raise ValueError("Custom task family crosses the frozen experiment partition")
+    for domain in {row["domain"] for row in configuration["runs"]}:
+        official = {str(task["id"]): task for task in read(upstream_root / f"data/tau2/domains/{domain}/tasks.json")}
+        for (item_domain, task_id), item in task_rows.items():
+            if custom is None and item_domain == domain and item["task"] != official.get(task_id):
+                raise ValueError("Native task differs from its pinned upstream source")
+
+
 class NativeTauExecutor:
     """Only this boundary imports tau2; offline validation needs no hosted SDK."""
 
@@ -125,11 +167,7 @@ class NativeTauExecutor:
         self.configuration, self.task_rows, self.registry = configuration, task_rows, registry
         self.instruction = api_actor_instruction(AGENT_INSTRUCTION)
         self.contexts = {}
-        for domain in {row["domain"] for row in configuration["runs"]}:
-            official = {str(task["id"]): task for task in read(upstream_root / f"data/tau2/domains/{domain}/tasks.json")}
-            for (item_domain, task_id), item in task_rows.items():
-                if item_domain == domain and item["task"] != official.get(task_id):
-                    raise ValueError("Native task differs from its pinned upstream source")
+        validate_native_task_source(configuration, task_rows, upstream_root)
         for run in configuration["runs"]:
             environment = registry.get_env_constructor(run["domain"])(solo_mode=False)
             tools = [tool.openai_schema for tool in environment.get_tools()]
@@ -180,6 +218,7 @@ class NativeTauExecutor:
                         "isRead": True, "durationMs": 1000 * (time.perf_counter() - started)})
 
         run_id, hosted = run["runId"], self.configuration["hosted"]
+        evaluation_type = native_evaluation_type(hosted.get("evaluationType", "ALL"))
         row = _empty_row(run)
         artifact = {"record": row, "simulation": {"messages": []}, "verdict": None}
         samples = []
@@ -214,10 +253,10 @@ class NativeTauExecutor:
                 "authoritativeCalls": environment.authoritative_calls, "speculativeCalls": environment.speculative_calls,
                 "freshnessChecks": environment.refresh_calls, "revalidationCalls": 0})
             evaluation_started = time.perf_counter()
-            reward = evaluate(simulation=simulation, task=task, evaluation_type=EvaluationType.ALL,
+            reward = evaluate(simulation=simulation, task=task, evaluation_type=EvaluationType[evaluation_type],
                 solo_mode=False, domain=run["domain"], strict_replay=True) if simulation else None
-            verdict = {**assess_official_reward(task, reward),
-                "evaluatorVersion": f"tau2:{REVISION}:ALL",
+            verdict = {**assess_official_reward(task, reward, evaluation_type=evaluation_type),
+                "evaluatorVersion": f"tau2:{REVISION}:{evaluation_type}",
                 "judgeModel": MODELS["teacher"]}
             artifact.update({"verdict": verdict, "officialRewardInfo": reward.model_dump(mode="json") if reward else None})
             # A judge failure cannot release cost uncertainty or report full drain.
@@ -276,6 +315,8 @@ def _write_receipt(output: Path, configuration: dict, manifest: dict, summary: d
     receipt = {"version": 1, "stage": configuration["stage"], "configurationHash": hash_v1(configuration),
         "manifestHash": hash_v1(manifest), "files": files, "allDeclaredSlotsRetained": True,
         "serviceExitCode": summary["serviceExitCode"], "closed": True, "completed": not summary["stageAborted"]}
+    if summary.get("annotationReview") is not None:
+        receipt["annotationReview"] = summary["annotationReview"]
     write(output / "cohort-receipt.json", receipt)
     return receipt
 
@@ -367,6 +408,9 @@ def _run_cohort(configuration: dict, manifest: dict, bundle: dict, output: Path,
         "startupFailure": startup_failure, "finalServiceDrainSeconds": final_drain,
         "stageWallSeconds": time.perf_counter() - started, "accountingScope": "hosted_user_and_judge",
         "gpuCostStatus": "separate_infrastructure_ledger", **summarize_costs(rows)}
+    if manifest.get("protocol", {}).get("annotationReview") is not None:
+        from acephale.annotation_review import review_metadata
+        summary["annotationReview"] = review_metadata(manifest["protocol"]["annotationReview"])
     write(output / "summary.json", summary)
     _write_receipt(output, configuration, manifest, summary)
     return summary
@@ -386,7 +430,7 @@ def run_native(configuration: Path, tasks: Path, output: Path, budget_directory:
     budget_directory, upstream_root = budget_directory.resolve(), upstream_root.resolve()
     config = read(configuration)
     # Freeze absolute artifact paths into the exact service readiness identity.
-    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath"):
+    for field in ("manifestPath", "ledgerCheckpointPath", "memoryPath", "calibrationPath", "opportunityPath", "goalReliabilityPath", "splitGuardPath", "customTaskBundleDirectory", "cohortReservationPath"):
         if config.get(field):
             config[field] = str((configuration.parent / config[field]).resolve())
     manifest, bundle = read(Path(config["manifestPath"])), read(tasks)

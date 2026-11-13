@@ -36,6 +36,21 @@ The pinned native source is `sierra-research/tau2-bench`, commit
 according to `research/acephale/benchmarks.lock.json`. Preserve official task bytes,
 policies and evaluator behavior. Do not silently replace a missing checkout.
 
+Native collection preparation accepts an explicit plan `evaluationType` of
+`ALL` (default) or `ALL_WITH_NL_ASSERTIONS`. The latter invokes the pinned upstream
+additive NL audit through the existing budgeted teacher port. It preserves each
+task's original reward basis and native reward; it does not use an ignore-basis
+mode. Declare this change before dispatch, within the same per-trial cost cap.
+The frozen configuration records `hosted.evaluationType` and each raw verdict
+records the exact evaluator mode and a separate `constraintAudit` status.
+
+A known constraint count requires nonempty returned assertions with exact
+multiset coverage of the private task assertions. Missing or partial audits and
+tasks with no assertions remain unknown. Additive audit failure cannot invent a
+zero count or alter the official reward; teacher exceptions retain the existing
+failure and cost-accounting path. Private assertion text stays in evaluator
+artifacts, outside actor messages, public prefixes and training examples.
+
 ## 2. Keep the existing budget
 
 Configure the private original journal location outside source control and pass
@@ -53,9 +68,9 @@ or artifacts.
 
 | Allocation | Gross ceiling |
 | --- | ---: |
-| Infrastructure | $35 |
-| Generation, annotation and embeddings | $30 |
-| Training collection | $60 |
+| Infrastructure | $50 |
+| Generation, annotation and embeddings | $45 |
+| Training collection | $30 |
 | Development and calibration | $40 |
 | Heldout trials | $240 |
 | Prediction replay | $30 |
@@ -63,10 +78,91 @@ or artifacts.
 | Total | $500 |
 
 The GPU limits are $2.50/hour, 24 cumulative hours and eight hours per session,
-still bounded by the $35 infrastructure allocation. Credits do not reduce gross
+still bounded by the amended $50 infrastructure allocation. Credits do not reduce gross
 spend. Reservations cover all attempts/concurrency and maximum billable output.
 
+The table applies only after an explicit v2 policy amendment. Legacy execution
+retains its original caps. Run `node --import tsx scripts/acephale-budget-policy.ts
+AMENDMENT_REQUEST.json` with the original journal path, closed infrastructure
+slice path and authorization timestamp. This creates a sidecar without resetting
+the journal. New checkpoints and manifests bind both policy and amendment hashes.
+
+The later internal split amendment preserves that policy and total. Use
+`python infra/acephale-infra-v1/control.py record-infrastructure-suballocation
+--ledger ORIGINAL_SLICE --reason REASON` to append the fixed $36.25 compute/
+$13.75 associated split. It rejects caps below retained reservations and never
+rewrites the journal or previous sidecars. Reserve unknown taxes explicitly and
+reduce future lease duration if the remaining allocation cannot cover them.
+
+The November 13 spending authorization permits the subsequent v3 policy. Select
+`version: 3` in the same amendment request only after the active v2 phase and its
+leases close. The new creation-only sidecar binds its v2 parent and the original
+journal; it does not release unknown charges. Its working envelope is $1,000:
+infrastructure $200, preparation $100, training $100, development $120, heldout
+$350, replay $65 and contingency $65. Infrastructure splits $150 compute/$50
+associated charges. The hourly/session limits remain $2.50/eight hours; cumulative
+GPU hours increase to 64. Verify the new exact policy/amendment hashes before
+creating future leases or manifests. Existing source-frozen runs keep their
+original policy; never amend them in place.
+
 ## 3. Collect fixed-actor traces with causal shadow prediction
+
+For the scoped predictor-weight experiment, also follow the
+[training environment guide](../research/acephale/training/README.md). Compile
+examples through `npm run acephale:training-export -- CONFIG.json`, using the
+actual pinned tokenizer endpoint and immutable family plan. A review packet
+can be compiled while review is pending; preparing goal-labelled training data
+requires the completed attributed review. Candidate-only preparation still
+requires observed authoritative traces and the same partition checks.
+
+For the explicitly declared machine-audited exploratory protocol, supply
+`--machine-audit ACTUAL_MACHINE_AUDIT_RECEIPT.json` to `training_cli prepare`
+alongside the pilot, exact revised annotations and actual machine review rows.
+The receipt must retain the separate reviewer request/response evidence. It
+records zero human reviews and cannot satisfy default human-review admission.
+Pass the same receipt to `infra_cli build-goal-reliability --machine-audit` and
+copy its exact review metadata into the live manifest's
+`protocol.annotationReview`. Do not enable this mode implicitly or reuse a
+receipt after changing labels. See the
+[exploratory protocol amendment](experiments/machine-audited-pilot-2026-11-13.md).
+
+Do not reuse the fixed-predictor calibration, goal-reliability or opportunity
+artifacts after training. Publish the derived predictor artifact, fit new maps
+on reserved calibration families and measure its actual serving configuration.
+Memory for that path may contain only weight-fitting families. Preserve the
+untrained predictor as an explicit comparison and keep the actor fixed.
+
+For the weight comparison, explicitly set the base profile to
+`{"predictionProtocol":"rank_binary_v1","binaryTokenIds":{"zero":ACTUAL_ZERO_ID,"one":ACTUAL_ONE_ID}}`.
+Each trained profile contains `{"trainedPredictor":FULL_PREDICTOR_ARTIFACT}`.
+Use actual tokenizer IDs, identical frozen bundle/memory and the same limit for
+all profiles. Run selected-candidate replay for admission calibration, and a
+separate fixed-panel replay for matched raw prediction scoring:
+
+```text
+node --import tsx scripts/acephale-infra-predict.ts BUNDLE FIT_MEMORY SELECTED_REPLAY URL LIMIT neutral selected_candidates calibration - PROFILE_JSON
+python -m acephale.infra_cli fit-calibration --bundle BUNDLE --predictions SELECTED_REPLAY --partitions PARTITION_APPROVED_JSON --memory FIT_MEMORY --output CALIBRATION
+node --import tsx scripts/acephale-infra-predict.ts BUNDLE FIT_MEMORY PANEL_REPLAY URL LIMIT neutral fixed_panel calibration - PROFILE_JSON
+python -m acephale.infra_cli compare-predictor-replays --bundle BUNDLE --partitions PARTITION_APPROVED_JSON --memory FIT_MEMORY --prediction base_binary=BASE_PANEL_REPLAY --prediction lora_17=SEED17_PANEL_REPLAY --prediction lora_29=SEED29_PANEL_REPLAY --output COMPARISON
+```
+
+The comparison validates the review chain, exact weight identities, shared ordered
+panels and dispatched inputs, then excludes fit/calibration rows from scoring.
+It retains every declared development checkpoint, including failures. Replay
+timings are not live latency. Earlier replays without dispatch audits cannot be
+resealed into this comparison; rerun them. Because the audit implementation is
+part of the compiler hash, apply it before compiling training inputs and freeze
+one source revision for export, all weight replays and calibration. Original
+closed collection artifacts retain their own source identity across that phase.
+Fixed-panel top-3 hit rate is panel coverage; compare top-1 and binary losses to
+assess ranking there, and use selected-candidate replay for operational top-3.
+
+After importing a candidate-only cohort, build its runtime memory with
+`node --import tsx scripts/acephale-infra-memory.ts --fresh-fit BUNDLE
+PARTITION_APPROVED_JSON NEW_OUTPUT_DIR`. The reviewed partition must have its
+original `partition.json` proposal and `source-design-review.json` beside it.
+This filters before mining; the legacy `--fresh` command includes all source
+training families and is unsuitable when calibration shares that source split.
 
 Create a collection plan with explicit official task IDs, family partitions,
 seeds, caps and reachable endpoints. This is a shape example, not executable data:
@@ -169,7 +265,7 @@ python -m acephale.infra_cli build-goal-reliability --bundle NEW_BUNDLE --predic
 Training/development checkpoints are selected by deterministic family round robin;
 test labels never fit calibration. Exact source/model/memory/retrieval/compiler
 identity is checked. A separate matched-panel evaluation requires every panel
-candidate's marginal probability:
+candidate's declared raw score:
 
 ```text
 node --import tsx scripts/acephale-infra-predict.ts NEW_BUNDLE FINAL_MEMORY.json NEW_PANEL_REPLAY LOCAL_PREDICTOR_URL 100 goals fixed_panel test EPISODIC_CONFIG.json
@@ -182,11 +278,18 @@ calibration. Test partition membership alone is not a fresh heldout claim.
 
 ## 7. Profile the actual serving configuration
 
-Native profile config requires `version: 1`, `datasetPath`, `cohortPath`,
+Native profile config requires `version: 1`, `datasetPath`,
 `memoryPath`, `manifestPath`, `ledgerCheckpointPath`, `budgetDirectory`, actor and
 predictor URLs, `limit`, a manifest `seed` and `maximumLifetimeSeconds`. `stream`
 defaults to true and must match execution. Optional `episodicEmbeddingsPath`,
 `splitGuardPath` and `otlpBaseUrl` bind their actual services.
+
+Specify exactly one of `cohortPath` for an original single-cohort import or
+`cohortPaths` for an aggregate. The latter must contain every original closed
+collection directory exactly once. Python verifies the original receipts, public
+prefixes, trial identities and shared native contracts before routing a checkpoint
+to its source environment. Node checks the source cohort and trace hashes before
+measurement. Failed slots remain retained and heldout prefixes remain excluded.
 
 Document profile config replaces `cohortPath` with `corpusPath`; optional episodic
 retrieval also requires the original budget directory. Paths resolve beside config.

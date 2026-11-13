@@ -23,11 +23,26 @@ The complete source pins live in
 | Predictor | `Qwen/Qwen3.5-0.8B` | `2fc06364715b967f1860aea9cf38778875588b17` |
 | Optional capacity ablation | `Qwen/Qwen3.5-2B` | `15852e8c16360a2fea060d615a32b45270f8a8fc` |
 
-The default models use bfloat16 with vLLM 0.32.0, pinned image digest, PyTorch
-2.13.0/CUDA 13.0.3, `qwen3_xml` tool parsing and `qwen3` reasoning parsing. Thinking
+The default models use bfloat16 with vLLM 0.32.0, a pinned image digest and PyTorch
+2.13.0. The immutable image declares CUDA base release 13.0.2; PyTorch separately
+reports compile CUDA 13.0. Installed toolkit/component observations are retained
+without inferring an entire toolkit patch from either value. Serving uses
+`qwen3_xml` tool parsing and `qwen3` reasoning parsing. Thinking
 is disabled for this profile. Actor context is 32,768 tokens: 28,672 input plus
-4,096 output. Predictor context is 8,192: 7,168 plus 1,024. No weight training,
-adapter merging or model substitution is part of the primary study.
+4,096 output. Predictor context is 8,192: 7,168 plus 1,024. The fixed-predictor
+configuration remains an explicit baseline. The separately declared predictor
+LoRA experiment below changes only the auxiliary predictor's weights.
+
+Prospective HF predictor training retains the pinned checkpoint's 18 `A_log`
+vectors, 288 parameters, in FP32; all other floating base parameters use BF16.
+It uses Transformers 5.10.1's `_keep_in_fp32_modules_strict` on a scoped model
+subclass and verifies original tensor bytes after loading. The precision policy
+and tensor inventory enter implementation and training/kernel receipts. A
+historical adapter requires its original precision policy when reloaded. This
+aligns decay storage with the pinned vLLM implementation without changing the
+LoRA recipe, model revision, language-head dtype or serving acceptance threshold.
+See the official [Transformers dtype loader](https://github.com/huggingface/transformers/blob/v5.10.1/src/transformers/modeling_utils.py)
+and [vLLM Qwen DeltaNet parameters](https://github.com/vllm-project/vllm/blob/v0.32.0/vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py).
 
 The official OpenAI SDK targets local compatible endpoints through
 `LocalChatModelPort`. It preserves real tool-call IDs and assistant continuation,
@@ -35,6 +50,10 @@ checks parsed arguments and records usage, refusal/incomplete status, streaming
 timing and input hashes. The served tokenizer controls compilation. Policy,
 requirements, tool contracts and current argument-binding evidence precede optional
 history/examples; omissions are recorded rather than silently truncating fields.
+Compiler v3 keeps source-addressable policy text once in the mandatory sources;
+`policySource` points to it. Its bytes must equal the server-owned policy. Legacy
+frames without a policy source retain top-level policy text without gaining a
+synthetic citation target.
 
 ## Data and causal labels
 
@@ -42,6 +61,17 @@ Each trajectory separates public messages/tools from future actions, hidden task
 data and independent outcomes. Families are assigned to training, development and
 test before annotation or mining. Requested-goal annotations see only the public
 checkpoint. Native state, user simulation and reward evaluation stay in Python.
+
+Goal probabilities describe mutually exclusive interpretations of the complete
+requested outcome. Each interpretation includes all concurrent explicit user
+objectives; subgoals and execution prerequisites are not competing hypotheses.
+The predictor instruction and supervised goal prompt share this interpretation.
+Requested outcomes persist until the user changes or withdraws them. Progress
+and execution permission are separate: completed parts of a joint request remain
+part of that request, and an unconfirmed operation can be desired while still
+unauthorized. The executor checks current state and permission independently.
+The prompt correction changes the compiler contract hash, so earlier calibration,
+qualification and replay artifacts cannot be relabeled as the corrected version.
 
 Base collection may enable shadow prediction. Shadow requests use an existing
 frozen training memory or a valid empty bootstrap snapshot. They cannot admit
@@ -55,6 +85,23 @@ failed endpoints can supply contrastive episodes. Unknown/censored/provider-fail
 outcomes remain in reports but are excluded from known-outcome memory. Every
 memory publication is immutable, including additions of causal misses/confusions.
 Changing the snapshot requires new compatible downstream artifacts.
+
+Native multitask export defaults to the original 100 fitting checkpoints. An
+explicit versioned expansion receipt may instead select every nonempty window
+from the preexisting public eligibility artifact. It binds the original dataset,
+split, compiler, partitions, complete public rows and unchanged 100-case pilot.
+It cannot select a subset by observed read labels. The original 20 human audit
+cases remain unchanged; additional annotations need their own retained lineage.
+The requirements of 24 fitting families, at least four checkpoints per family
+and 48 positive-read checkpoints still apply. A new aggregate dataset can reuse
+the selection only through verified original-parent provenance and exact public
+prefixes. Expansion changes the training population; it does not relabel the
+original pilot or certify a trained model.
+
+Imported `eligible_reads` labels identify allowlisted native read tools. They do
+not assert that the runtime's stricter identity and ownership checks admit the
+invocation at that prefix. Candidate coverage diagnostics separate those policy
+rejections from missing admissible argument combinations and window truncation.
 
 ## Workflow and episodic memory
 
@@ -91,10 +138,12 @@ an enable gate, not a high-confidence task-accuracy guarantee. Goal refresh is
 asynchronous and lower priority; there are no sequential neutral and conditional
 ranking calls on the primary runtime path.
 
-Candidate scores are independent probabilities of exact invocation occurrence
-anywhere in the immediately next authoritative batch. Several may be positive;
-they need not sum to one. `READ`, `NO_READ` and `READ_UNCOVERED` describe prediction
-states without changing which tools the actor is allowed to request.
+Candidate labels indicate exact invocation occurrence anywhere in the immediately
+next authoritative batch. Several may be positive, so scores need not sum to one.
+The binary decoder emits tokens autoregressively; each probability conditions on
+earlier emitted tokens, rather than estimating an independent marginal.
+`READ`, `NO_READ` and `READ_UNCOVERED` describe prediction states without changing
+which tools the actor is allowed to request.
 
 Eligibility defaults to denied. Admitted tools must be audited reads with current
 authorization and source-bound arguments. Defaults are at most two concurrent
@@ -112,7 +161,8 @@ counts as physical work even when the actor's logical call count stays unchanged
 
 ## Calibration and deployment profiles
 
-Calibration v2 binds `independent_next_batch_hit`, `selected_candidates`, exact
+Calibration v3 binds next-batch invocation membership, the raw score semantics,
+`empirical_next_batch_membership`, `selected_candidates`, and exact
 model/revision, memory, retrieval, prompt and compiler. Training labels fit separate
 neutral and conditional maps using fixed deciles, forward merging of empty bins
 and Laplace(1,1) smoothing. Development results are diagnostics; test labels never
@@ -123,6 +173,14 @@ review: the declared design is 100 annotations with at least 20 human-reviewed
 examples, at least 90% semantic acceptance and zero unsupported bindings.
 Independently graded training predictions provide agreement evidence. Agreement
 with a teacher is not the native success metric.
+
+The separate [machine-audited exploratory protocol](experiments/machine-audited-pilot-2026-11-13.md)
+retains those 20 selected IDs and acceptance thresholds with zero human reviews.
+Its critic uses a separate prompt/request to the annotation teacher's same pinned
+model, so reviewer-model independence is not claimed. Dataset, training,
+reliability and live manifests bind the exact machine-audit receipt. The default
+human-reviewed protocol rejects these artifacts; automated review never supplies
+a human-review count. Reports distinguish this exploratory evidence throughout.
 
 Opportunity v2 binds eight hashes: hardware, serving/stream/concurrency, model,
 memory, compiler, retrieval, prompt and protocol. At least ten complete measured
@@ -163,6 +221,75 @@ Native task subsets disclose their denominator and pinned environment. Generated
 tasks are a custom tau-compatible pilot. Neither is an official full-suite score
 unless that complete benchmark was actually run under its stated protocol.
 
+## Predictor LoRA experiment
+
+The 2026-11-10 extension fits only the pinned Qwen3.5-0.8B predictor. The actor,
+its available tools and authoritative execution remain unchanged. Separate goal
+and ranking prompts use the same predictor checkpoint. A predicted goal or score
+does not authorize execution. The deterministic scheduler retains all read-only,
+current-source, freshness, cancellation and exact-match rules.
+
+The production TypeScript compiler exports the exact bounded prompts used for
+training. Goal targets omit server-owned revision hashes. Next-batch labels join
+only after the public candidate window is frozen; future calls and evaluation
+state never enter prompts or retrieval. Ranking targets contain an action class
+and one binary hit per candidate in that frozen order. Inference requests both
+0 and 1 token log probabilities, normalizes each raw pair and calibrates the
+result on reserved families before selecting at most three candidates. New binary
+artifacts declare `autoregressive_binary_conditional`; legacy v2 records retain
+their original metadata and cannot validate a new binary predictor. Each
+bit describes a separate candidate-hit event, so scores are not normalized
+across candidates. The decoder is autoregressive: a bit probability conditions
+on the previously generated action and bits. These are not independent joint
+predictions or unconditional marginals, and require free-running calibration.
+The legacy numeric ranking protocol remains versioned separately.
+
+Weight fitting, calibration/reliability, development and test use disjoint
+families. Frozen memory for the trained predictor contains only weight-fitting
+families. Historical requested-goal annotations may bootstrap goal supervision
+after provenance and human-review checks. Source-reported APIGen trajectories
+do not become verified native workflows. The known overlapping baggage families
+are quarantined from that seed import. Native tool labels require actual closed
+authoritative traces; illustrative test fixtures are not training results.
+
+Training uses the separate Linux dependency lock: PyTorch 2.13.0, Transformers
+5.10.1, PEFT 0.21.0, TRL 1.16.0, Accelerate 1.15.0 and Datasets 5.2.0. BF16 LoRA
+has rank 16, alpha 32 and dropout 0.05, with explicit Qwen text attention,
+feed-forward and gated-delta projection targets. Vision, embeddings, language
+head and base parameters stay frozen. Completion-only cross entropy uses
+AdamW at 1e-4, weight decay 0.01, gradient clipping 1, warmup 0.03,
+effective batch size 16, checkpointing and at most 8,192 total tokens. Fit-only
+profiling selects microbatch/accumulation 4/4, 2/8 or 1/16 before either main seed.
+Seeds 17 and 29 each have at most three epochs or 500 optimizer steps; both
+share the declared fitting allocation. V2 adds four fitting hours; the subsequently
+authorized v3 adds eight more, with a separate 15-minute smoke allowance. Each
+window, including profiling, must fit the actual funded provider lease. Earlier
+reserved windows remain counted. The original v1 lease retains its two-hour limit.
+
+The trainer verifies the funded lease, actual CUDA environment, pinned source
+and model/tokenizer receipts. It records gradients, finite losses, changed LoRA
+weights and unchanged base hashes. Merged v1 export retains its original strict
+reload/merge checks. Explicit unmerged v2 export preserves the FP32 adapter bytes,
+the pinned BF16 base and every trained target; it separately declares BF16 vLLM
+LoRA arithmetic. Its identity binds base and adapter inventories, tokenizer,
+training specification, partitions, protocol and a numerical probe. New serving
+probes use schema2 and the shortest complete neutral fitting prompt ordered by
+`(promptTokens, id)`. The pinned chat template supplies the full assistant prefix;
+no completion, calibration or test row enters selection. Dataset/specification,
+row/family, prompt and input-token hashes accompany the probe. The internal
+256-token strict reload check remains separate. Historical schema1 serving
+probes retain their original meaning and receipts. No file is
+silently cast or relabeled to bypass the failed merged export.
+
+The v2 server must return the exact top token and a conditional binary probability
+within 0.01 of PyTorch for the same recorded input token IDs. This predeclared
+one-token gate tests loading and approximate numerical compatibility, not full
+logit equivalence or model quality. The receipt binds the real response and
+container identity; a subsequent inventory must observe the same source,
+containers, commands, images and provider before admission. Old calibration or
+timing profiles cannot validate a new checkpoint. Run execution and measured
+outcomes are recorded separately in [STATE](STATE.md).
+
 ## Relationship to prior methods
 
 [PASTE](https://arxiv.org/abs/2603.18897v3) motivates overlapping tool execution
@@ -177,3 +304,29 @@ supply storage/retrieval, and OpenTelemetry with Grafana/Prometheus/Tempo/Loki/A
 supplies observability. The experimental binding, admission, provenance and
 evaluation contracts remain Acephale code. No vLLM engine-level co-scheduler,
 observation-conditioned actor prelaunch or general tool decoder is claimed.
+
+## Fresh compositional task library
+
+The staged study generates 44 operation-set families across retail and airline,
+with two independent synthetic customers/entity variants per family. Partition
+assignment precedes task construction: 24 families fit weights, six calibrate,
+six develop the runtime and eight are held out subject to the remaining budget.
+The operation sets differ across partitions; their primitive actions deliberately
+overlap. Report that overlap and call this compositional generalization, not
+unseen-intent evaluation. Native tool implementations, policies and product/flight
+catalogs remain pinned. Official task files are not edited or relabeled.
+
+Each blueprint specifies database outcome checks before a reference execution.
+The verifier compares the complete native final database with those checks and
+requires omission of every requested mutation to fail. Native DB reward remains
+the success basis; action-list matching is not required. Live policy assertions
+cover consent and retail authentication separately. These static checks do not
+claim that an actor has completed the task or followed the conversation policy.
+
+The annotation pilot selects 100 fitting prefixes across all 24 families, with
+at least four per family and 50 per domain. It reads only public prefixes and
+optional source-bound candidate-window eligibility. Twenty human reviews are
+selected before annotation. Training requires complete neutral/conditioned/goal
+triplets and at least 48 covered positive-read prefixes. Insufficient data fails
+the preparation stage; repeating rows or importing evaluation families cannot
+satisfy that floor.

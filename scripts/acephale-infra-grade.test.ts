@@ -25,19 +25,19 @@ function bundle(directory: string, values: Record<string, unknown>) {
   writeFileSync(join(directory, "manifest.json"), canonical({ schema_version: "acephale-infra-data-v1", files, bundle_hash: bundleHash }));
   return bundleHash;
 }
-function fixture(count = 3) {
+function fixture(count = 3, trainingFamilies?: string[]) {
   const directory = mkdtempSync(join(tmpdir(), "infra-grades-"));
   const publicRows = Array.from({ length: count + 1 }, (_, index) => {
     const request = `Find order ${index}`;
     const input = { policy: "Read only", tools: [], sources: [{ id: "policy", kind: "policy", value: "Read only" },
       { id: "event:0", kind: "user", value: request }], events: [{ seq: 0, kind: "message", role: "user", content: request }] };
     return { schema_version: "acephale-infra-data-v1", checkpoint_id: hash(index), input_hash: hash(input), request_revision: "r1",
-      input, episode_id: `ep-${index}`, family_id: index === count ? "dev" : "train", split: index === count ? "development" : "train",
+      input, episode_id: `ep-${index}`, family_id: index === count ? "dev" : trainingFamilies?.[index] ?? "train", split: index === count ? "development" : "train",
       domain: "retail", through_seq: 0, environment_version: "fixture", tool_schema_hash: hash([]),
       scope: { tenant_id: "tenant", principal_id: "principal", authorization_revision: "r1" } };
   });
   const metadata = publicRows.map(row => ({ episode_id: row.episode_id, family_id: row.family_id, verification_tier: "source_reported" }));
-  const split = { schema_version: "acephale-infra-data-v1", families: { train: "train", dev: "development" },
+  const split = { schema_version: "acephale-infra-data-v1", families: Object.fromEntries(publicRows.map(row => [row.family_id, row.split])),
     episodes: Object.fromEntries(metadata.map(row => [row.episode_id, row.family_id])),
     metadata_hash: hash([...metadata].sort((a, b) => a.episode_id.localeCompare(b.episode_id))) };
   const dataset = join(directory, "dataset"), pilot = join(directory, "pilot"), predictionsDirectory = join(directory, "predictions");
@@ -72,9 +72,93 @@ function fixture(count = 3) {
   return { directory, options, pilot, publicRows, predictions, annotations };
 }
 
+function trainedReplay(f: ReturnType<typeof fixture>, calibrationFamilies: string[]) {
+  const weights = hash("derived weights"), body = { schemaVersion: 1, kind: "acephale-trained-predictor",
+    base: INFRA_MODEL_PINS.predictor, adapterHash: hash("adapter"), mergedWeightsHash: weights,
+    tokenizerHash: hash("tokenizer"), chatTemplateHash: hash("template"), trainingManifestHash: hash("training"),
+    weightFitFamilies: ["fit"], calibrationFamilies, protocol: "rank_binary_v1", binaryTokenIds: { zero: 15, one: 16 },
+    servedModel: `acephale-predictor-${weights.slice(0, 12)}` };
+  const path = join(f.options.predictions, "manifest.json");
+  const { contentHash: _previousHash, ...manifest } = JSON.parse(readFileSync(path, "utf8"));
+  manifest.model = { ...INFRA_MODEL_PINS.predictor, trainedPredictor: { ...body, contentHash: hash(body) } };
+  f.options.expectedPredictionManifestHash = hash(manifest);
+  writeFileSync(path, canonical({ ...manifest, contentHash: hash(manifest) }));
+}
+
 const grade = { agreed: true, missing_constraints: [], contradictions: [], reason: "Full requested intent matches" };
 const model: TeacherFactory = (ledger, record) => new ResponsesModelPort(async params => ({ model: params.model, status: "completed",
   output: [], output_text: canonical(grade), usage: { input_tokens: 20, output_tokens: 20 } }) as unknown as Promise<Response>, ledger, () => 100, record);
+
+function retainedResponses(f: ReturnType<typeof fixture>) {
+  const directory = f.options.predictions;
+  const { contentHash: _oldHash, ...manifest } = JSON.parse(readFileSync(join(directory, "manifest.json"), "utf8"));
+  manifest.responseRetentionVersion = 1;
+  f.options.expectedPredictionManifestHash = hash(manifest);
+  writeFileSync(join(directory, "manifest.json"), canonical({ ...manifest, contentHash: hash(manifest) }));
+  const records = f.predictions.map((row, index) => {
+    const continuation = [{ role: "assistant", content: canonical(row.goals) }];
+    const body = { version: 1, requestId: `goal-${index}`, inputHash: hash(["input", index]),
+      requestContractHash: hash("goal contract"), continuation, responseHash: hash(continuation) };
+    const response = { ...body, contentHash: hash(body) };
+    Object.assign(row, { audit: { events: [{ type: "model_response_retained", requestId: body.requestId,
+      inputHash: body.inputHash, requestContractHash: body.requestContractHash,
+      responseHash: body.responseHash, responsePayloadHash: response.contentHash }] } });
+    return { checkpoint_id: row.checkpoint_id, publicInputHash: row.input_hash, response };
+  });
+  writeFileSync(join(directory, "predictions.jsonl"), f.predictions.map(row => canonical(row) + "\n").join(""));
+  const receipt = JSON.parse(readFileSync(join(directory, "receipt.json"), "utf8"));
+  receipt.responsePayloads = { version: 1, file: "model-responses.jsonl", count: records.length, sha256: "" };
+  const reseal = () => {
+    writeFileSync(join(directory, "model-responses.jsonl"), records.map(row => canonical(row) + "\n").join(""));
+    receipt.responsePayloads.sha256 = createHash("sha256").update(readFileSync(join(directory, "model-responses.jsonl"))).digest("hex");
+    writeFileSync(join(directory, "receipt.json"), canonical(receipt));
+  };
+  reseal();
+  return { records, receipt, reseal };
+}
+
+test("goal grading accepts and verifies retained response receipts", async () => {
+  const f = fixture();
+  try {
+    retainedResponses(f);
+    assert.equal(verifyInfraGoalReplay(f.options.bundle, f.options.predictions).evidenceHashes.size, 2);
+    const result = await runInfraGoalGrading(f.options, model);
+    assert.equal(result.retained, 3); assert.equal(result.agreed, 3);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+for (const defect of ["version", "file", "count", "outer_hash", "inner_hash", "checkpoint_order", "request", "audit", "missing_declaration"]) {
+  test(`goal grading rejects retained-response ${defect} tampering before dispatch`, async () => {
+    const f = fixture(); let called = false;
+    try {
+      const r = retainedResponses(f);
+      if (defect === "version") r.receipt.responsePayloads.version = 2;
+      if (defect === "file") r.receipt.responsePayloads.file = "../model-responses.jsonl";
+      if (defect === "count") r.receipt.responsePayloads.count++;
+      if (defect === "inner_hash") r.records[0].response.continuation[0].content = "changed";
+      if (defect === "checkpoint_order") r.records.reverse();
+      if (defect === "request") {
+        const response = r.records[0].response;
+        response.requestId = "another-request";
+        const { contentHash: _oldHash, ...body } = response;
+        response.contentHash = hash(body);
+      }
+      r.reseal();
+      if (defect === "outer_hash") writeFileSync(join(f.options.predictions, "model-responses.jsonl"), "{}\n");
+      if (defect === "audit") {
+        writeFileSync(join(f.options.predictions, "predictions.jsonl"), f.predictions.map(row => {
+          const { audit: _audit, ...body } = row as typeof row & { audit: unknown }; return canonical(body) + "\n";
+        }).join(""));
+      }
+      if (defect === "missing_declaration") {
+        delete r.receipt.responsePayloads;
+        writeFileSync(join(f.options.predictions, "receipt.json"), canonical(r.receipt));
+      }
+      await assert.rejects(runInfraGoalGrading(f.options, () => { called = true; return model({} as never, () => {}); }), /[Rr]etained/);
+      assert.equal(called, false);
+    } finally { rmSync(f.directory, { recursive: true, force: true }); }
+  });
+}
 
 test("expanded annotation cohort preserves original audit exactly and covers all training predictions", () => {
   const fixtureData = fixture();
@@ -165,5 +249,49 @@ test("annotation expansion enforces unchanged cap without silently dropping rows
   try {
     assert.throws(() => expandInfraAnnotationCohort({ bundle: f.options.bundle, predictions: f.options.predictions, pilot: f.pilot,
       output: join(f.directory, "expanded") }), /five-dollar cap/);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("trained goal replay and annotation expansion select calibration families only", async () => {
+  const f = fixture(4, ["fit", "cal-a", "cal-b", "fit"]);
+  try {
+    const base = verifyInfraGoalReplay(f.options.bundle, f.options.predictions);
+    assert.equal(base.training.length, 4);
+    trainedReplay(f, ["cal-a", "cal-b"]);
+    const replay = verifyInfraGoalReplay(f.options.bundle, f.options.predictions);
+    assert.deepEqual(replay.training.map(row => row.checkpoint_id), f.predictions.slice(1, 3).map(row => row.checkpoint_id));
+    const output = join(f.directory, "expanded");
+    const expanded = expandInfraAnnotationCohort({ bundle: f.options.bundle, predictions: f.options.predictions, pilot: f.pilot, output });
+    assert.equal(expanded.addedCount, 2);
+    assert.deepEqual(verifyInfraAnnotationSource(output, f.options.bundle).rows.map(row => row.checkpoint_id),
+      f.publicRows.slice(0, 3).map(row => row.checkpoint_id));
+    const grades = await runInfraGoalGrading(f.options, model);
+    assert.equal(grades.retained, 2);
+    assert.equal(grades.completed, 2);
+    assert.equal(grades.knownMicrodollars, 200);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("trained goal replay requires every calibration family and retains failed calibration rows", async () => {
+  const f = fixture(3, ["fit", "cal-a", "cal-b"]);
+  try {
+    trainedReplay(f, ["cal-a", "missing-calibration"]);
+    assert.throws(() => verifyInfraGoalReplay(f.options.bundle, f.options.predictions), /every.*calibration family/);
+    trainedReplay(f, ["cal-a", "cal-b"]);
+    const rows = f.predictions.map((row, index) => {
+      if (index !== 2) return row;
+      const { goals: _goals, ...prefix } = row;
+      return { ...prefix, status: "not_dispatched" };
+    });
+    writeFileSync(join(f.options.predictions, "predictions.jsonl"), rows.map(row => canonical(row) + "\n").join(""));
+    writeFileSync(join(f.options.predictions, "receipt.json"), canonical({ declared: rows.length,
+      completed: rows.length - 1, failed: 1, liveActorExecuted: false, toolExecutionPerformed: false }));
+    const replay = verifyInfraGoalReplay(f.options.bundle, f.options.predictions);
+    assert.equal(replay.training.length, 2);
+    assert.equal(replay.training[1].status, "not_dispatched");
+    const grades = await runInfraGoalGrading(f.options, model);
+    assert.equal(grades.retained, 2);
+    assert.equal(grades.completed, 1);
+    assert.equal(grades.agreed, 1);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });

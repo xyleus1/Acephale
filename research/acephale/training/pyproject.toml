@@ -1,0 +1,25 @@
+[project]
+name = "acephale-predictor-training"
+version = "0.1.0"
+description = "Isolated, pinned LoRA training environment for the Acephale predictor"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "acephale",
+    "torch==2.13.0",
+    "transformers==5.10.1",
+    "peft==0.21.0",
+    "trl==1.16.0",
+    "accelerate==1.15.0",
+    "datasets==5.2.0",
+    "tensorboard==2.20.0",
+    "safetensors==0.6.2",
+    "flash-linear-attention[cuda]==0.6.0",
+    "fla-core==0.6.0",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+acephale = {path = "..", editable = true}

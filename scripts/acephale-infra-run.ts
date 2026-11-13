@@ -1,3 +1,4 @@
+import { predictorModelIdentity } from "../src/lib/acephale/predictor-artifact";
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
@@ -12,7 +13,7 @@ import { aggregateInfraMetrics } from "../services/acephale-runtime/infra-metric
 import { DocumentReadExecutor, DOCUMENT_TOOLS, documentCandidates, validateDocumentBinding, verifyDocumentCorpus, type DocumentCorpus } from "../services/acephale-runtime/document-adapter";
 import { documentFrame, runDocumentTrial, type DocumentTask, type DocumentTrialResult } from "../services/acephale-runtime/infra-document-runner";
 import { localActorDecision } from "../services/acephale-runtime/local-actor";
-import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH, validateInfraCalibration } from "../services/acephale-runtime/infra-predictors";
+import { InfraLocalPredictors, predictorContractHash, validateInfraCalibration } from "../services/acephale-runtime/infra-predictors";
 import { validateMemoryArtifact, LEXICAL_MEMORY_RETRIEVAL_HASH } from "../src/lib/acephale/experience-memory";
 import { validateInfraGoalReliabilityArtifact, validateInfraOpportunityArtifact } from "../services/acephale-runtime/infra-artifacts";
 import { infraOpportunityProfile } from "../services/acephale-runtime/infra-opportunity-profile";
@@ -43,6 +44,7 @@ export async function runLive(configurationPath: string, output: string) {
     || !Number.isSafeInteger(config.maximumLifetimeSeconds) || config.maximumLifetimeSeconds < 1 || config.maximumLifetimeSeconds > 28800
     || !Number.isSafeInteger(config.maxSteps) || config.maxSteps < 1 || config.maxSteps > 100) throw new Error("Invalid bounded run configuration");
   const manifest = await artifact(config.manifestPath); validateInfraManifest(manifest);
+  if (manifest.predictor.trainedPredictor?.schemaVersion === 2) throw new Error("Native LoRA live serving currently requires the qualified native split-guard runner");
   if (!config.ledgerCheckpointPath || hash(await artifact(config.ledgerCheckpointPath)) !== manifest.budgets.ledgerCheckpointHash) throw new Error("Budget checkpoint mismatch");
   const corpus = verifyDocumentCorpus(await artifact<DocumentCorpus>(config.corpusPath));
   const tasks = await artifact<DocumentTask[]>(config.tasksPath);
@@ -104,6 +106,7 @@ export async function runLive(configurationPath: string, output: string) {
         const metadata = await stat(ledgerPath);
         if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
         embeddingBudget = new DurableBudget(ledgerPath);
+        embeddingBudget.validateManifestPolicy(manifest.budgets);
         validateInfraLedgerCheckpoint(await artifact(config.ledgerCheckpointPath), embeddingBudget.ledger, ledgerPath);
         const allocation = config.stage === "collection" ? "training" : config.stage;
         memoryServices = createInfraMemoryServices({ memory, embeddings, budget: embeddingBudget.ledger, allocation,
@@ -119,13 +122,14 @@ export async function runLive(configurationPath: string, output: string) {
       if (opportunity.sampleCount < 10) throw new Error("Insufficient measured opportunity samples");
       estimate = opportunity.estimate; expectedInfraSaving(1, estimate);
       const audit = validateInfraGoalReliabilityArtifact(await artifact(config.goalReliabilityPath), { ...provenance, allowedFamilies: manifest.data.trainingFamilies,
-        predictor: { model: { repository: manifest.predictor.repository, revision: manifest.predictor.revision }, memoryHash: memory.contentHash,
+        annotationReview: manifest.protocol.annotationReview,
+        predictor: { model: predictorModelIdentity(manifest.predictor), memoryHash: memory.contentHash,
           retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : LEXICAL_MEMORY_RETRIEVAL_HASH,
-          predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash: infraCandidateCompilerHash("documents") } });
+          predictorContractHash: predictorContractHash(manifest.predictor), candidateCompilerHash: infraCandidateCompilerHash("documents") } });
       reliability = audit.reliability;
       const predictorModel = new LocalChatModelPort({ baseUrl: config.predictorBaseUrl, model: manifest.predictor.servedModel,
         contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record: event => telemetry.record(event) });
-      const predictorOptions = {
+      const predictorOptions = { ...manifest.predictor,
         calibration, memory, expectedCandidateCompilerHash: infraCandidateCompilerHash("documents"),
         allowedFamilies: manifest.data.trainingFamilies, excludeFamilies: [...manifest.data.developmentFamilies, ...manifest.data.heldoutFamilies], record: telemetry.record,
       };

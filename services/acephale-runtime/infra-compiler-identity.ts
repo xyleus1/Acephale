@@ -4,12 +4,13 @@ import { hash } from "../../src/lib/acephale/canonical";
 /** Calibration identities include the exact candidate compiler and eligibility code. */
 export function infraCandidateCompilerHash(profile: "native" | "documents"): string {
   const files = ["./infra-compiler-identity.ts", "./infra-predictor-input.ts", "./infra-predictors.ts",
-    "./infra-predictor-coordinator.ts", "./infra-actor-event.ts", "../../src/lib/acephale/infra-session.ts",
+    "../../src/lib/acephale/score-semantics.ts", "./infra-public-checkpoint.ts", "./infra-goal-annotation.ts", "./infra-predictor-coordinator.ts", "./infra-binary-ranking.ts", "./infra-training-export.ts", "./infra-training-selection.ts",
+    "../../src/lib/acephale/predictor-artifact.ts", "./infra-actor-event.ts", "../../src/lib/acephale/infra-session.ts",
     "../../src/lib/acephale/episodic-retrieval.ts", "../../src/lib/acephale/episodic-postgres.ts",
     "../../src/lib/acephale/postgres-store.ts", "./infra-memory-services.ts", "./provider.ts",
     "./schema.sql", "./migrations/002-episodic-memory.sql",
     "../../src/lib/acephale/experience-memory.ts", "../../src/lib/acephale/infra-model.ts",
-    "../../scripts/acephale-infra-predict.ts", "../../scripts/acephale-infra-memory.ts", ...(profile === "native" ? [
+    "../../scripts/acephale-infra-predict.ts", "../../scripts/acephale-infra-memory.ts", "../../scripts/acephale-training-export.ts", ...(profile === "native" ? [
     "./infra-native-worker.ts",
     "./infra-candidates.ts", "./native-candidate-graph.ts", "./native-read-policy.ts",
     "../../src/lib/acephale/infra-workflows.ts", "../../src/lib/acephale/patterns.ts",

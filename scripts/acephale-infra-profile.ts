@@ -10,13 +10,14 @@ import { SpeculationScheduler, type ReadExecutor } from "../src/lib/acephale/sch
 import { validateMemoryArtifact } from "../src/lib/acephale/experience-memory";
 import { DocumentReadExecutor, documentCandidates, verifyDocumentCorpus } from "../services/acephale-runtime/document-adapter";
 import { localActorDecision } from "../services/acephale-runtime/local-actor";
-import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/acephale-runtime/infra-predictors";
+import { InfraLocalPredictors, predictorContractHash } from "../services/acephale-runtime/infra-predictors";
 import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-compiler-identity";
 import { infraOpportunityProfile, DOCUMENT_PROFILE_PROTOCOL } from "../services/acephale-runtime/infra-opportunity-profile";
 import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/acephale-runtime/infra-memory-services";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/acephale-runtime/infra-hosted-workers";
-import { publicInfraFrame, selectInfraReplayRows } from "./acephale-infra-predict";
+import { publicInfraFrame } from "../services/acephale-runtime/infra-public-checkpoint";
+import { selectInfraReplayRows } from "./acephale-infra-predict";
 import { verifyDocumentBundle } from "./acephale-infra-document-data";
 
 interface ProfileConfig {
@@ -42,6 +43,7 @@ export async function runOpportunityProfile(configurationPath: string, output: s
   const dataset = verifyDocumentBundle(path(config.datasetPath)), memory = validateMemoryArtifact(await json(path(config.memoryPath)));
   const corpus = verifyDocumentCorpus(await json(path(config.corpusPath))), manifest = await json(path(config.manifestPath));
   validateInfraManifest(manifest);
+  if (manifest.predictor.trainedPredictor?.schemaVersion === 2) throw new Error("Native LoRA profiling currently requires the qualified native split-guard profiler");
   if (hash(await json(path(config.ledgerCheckpointPath))) !== manifest.budgets.ledgerCheckpointHash
     || memory.repositorySnapshotId !== `infra-documents:${dataset.manifest.bundle_hash}` || memory.contentHash !== manifest.data.memoryHash || corpus.contentHash !== dataset.lineage.corpusHash
     || manifest.data.datasetHash !== dataset.lineage.taskHash || manifest.data.environmentRevision !== corpus.contentHash
@@ -62,6 +64,7 @@ export async function runOpportunityProfile(configurationPath: string, output: s
     const ledgerPath = resolve(path(config.budgetDirectory), "budget.jsonl"), metadata = await stat(ledgerPath);
     if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
     budget = new DurableBudget(ledgerPath);
+    budget.validateManifestPolicy(manifest.budgets);
     validateInfraLedgerCheckpoint(await json(path(config.ledgerCheckpointPath)), budget.ledger, ledgerPath);
     const embeddings = await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory);
     memoryServices = createInfraMemoryServices({ memory, embeddings, databaseUrl: process.env.ACEPHALE_RESEARCH_DATABASE_URL,
@@ -71,7 +74,7 @@ export async function runOpportunityProfile(configurationPath: string, output: s
   const profile = infraOpportunityProfile(manifest, "documents", { retrievalHash: memoryServices?.profileHash });
   const plan = { version: 2, kind: "document_component_profile", configuration: config, configurationHash: hash(config), manifestHash: hash(manifest), profile,
     sourceDatasetHash: dataset.manifest.bundle_hash, memoryHash: memory.contentHash, corpusHash: corpus.contentHash,
-    predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH, candidateCompilerHash: infraCandidateCompilerHash("documents"),
+    predictorContractHash: predictorContractHash(manifest.predictor), candidateCompilerHash: infraCandidateCompilerHash("documents"),
     rowIds: selected.map(row => row.checkpoint_id), protocol, benchmarkClaim: false };
   await write(join(directory, "profile-plan.json"), { ...plan, contentHash: hash(plan) });
   const lifetime = AbortSignal.timeout(config.maximumLifetimeSeconds * 1000), clockId = `node-profile:${process.pid}:${randomUUID()}`;
@@ -89,7 +92,7 @@ export async function runOpportunityProfile(configurationPath: string, output: s
       const frame = publicInfraFrame(row, memory.repositorySnapshotId), pool = documentCandidates(frame), candidate = pool[0];
       const signal = AbortSignal.any([lifetime, AbortSignal.timeout(180000)]);
       const retrieval = memoryServices?.perRun(`profile:${row.checkpoint_id}`, "neutral_memory_prefetch", row.family_id);
-      const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
+      const predictor = new InfraLocalPredictors(model, { ...manifest.predictor, memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
         ...(retrieval ? { retrieveMemory: retrieval.retrieve, retrievalProfileHash: retrieval.profileHash } : {}) });
       const actorCall = async (suffix: string) => {
         const measured = await timed(() => localActorDecision(row.document_boundary, actor, {

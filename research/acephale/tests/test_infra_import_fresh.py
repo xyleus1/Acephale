@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -9,7 +10,12 @@ import pytest
 from acephale.adapters.tau import TAU_REVISION
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_data import read_jsonl, verify_bundle
-from acephale.infra_import_fresh import ACTOR, import_fresh
+from acephale.infra_import_fresh import (
+    ACTOR,
+    import_fresh,
+    import_fresh_cohorts,
+    verify_parent_audit_source,
+)
 from acephale.storage import file_hash
 
 
@@ -184,6 +190,154 @@ def test_failed_slot_without_public_messages_is_retained(cohort, tmp_path):
     rows = read_jsonl(tmp_path / "bundle/runtime-runs.jsonl")
     assert rows[1]["messages"] == [] and rows[1]["memoryEligible"] is False
     assert len(read_jsonl(tmp_path / "bundle/verdicts.jsonl")) == 4
+
+
+def split_cohorts(cohort, tmp_path):
+    """Independent sealed collections, not concatenated result files."""
+    result = []
+    for name, development in (("primary", False), ("auxiliary", True)):
+        target = tmp_path / name
+        shutil.copytree(cohort, target)
+        config = json.loads((target / "configuration.json").read_text())
+        config["runs"] = [run for run in config["runs"] if (run["familyId"] == "dev") is development]
+        if development:
+            config.update(collectionPurpose="auxiliary-development-validation", hosted={"allocation": "development"})
+        ids = {run["runId"] for run in config["runs"]}
+        manifest = json.loads((target / "manifest.json").read_text())
+        manifest["protocol"]["scheduleHash"] = hash_v1(config["runs"])
+        design = json.loads((target / "design.json").read_text())
+        design["runs"] = config["runs"]
+        contexts = json.loads((target / "public-contexts.json").read_text())
+        for filename, value in (("configuration.json", config), ("manifest.json", manifest), ("design.json", design),
+                                ("public-contexts.json", {key: value for key, value in contexts.items() if key in ids})):
+            write(target / filename, value)
+        outcomes = [row for row in read_jsonl(target / "outcomes.jsonl") if row["runId"] in ids]
+        (target / "outcomes.jsonl").write_text("".join(json.dumps(row) + "\n" for row in outcomes))
+        seal(target)
+        result.append(target)
+    return result
+
+
+def test_multiple_cohorts_preserve_parent_bytes_failures_and_development_exclusion(cohort, tmp_path):
+    parents = split_cohorts(cohort, tmp_path)
+    before = [path.joinpath("cohort-receipt.json").read_bytes() for path in parents]
+    output = tmp_path / "combined"
+    import_fresh_cohorts(parents, output, pilot_count=2, audit_count=1)
+    verify_bundle(output)
+    assert before == [path.joinpath("cohort-receipt.json").read_bytes() for path in parents]
+    aggregate = json.loads((output / "cohort-receipt.json").read_text())
+    assert aggregate["pairedComparisonSlotsReused"] is False
+    assert len(aggregate["cohorts"]) == 2 and len(aggregate["episodeCohorts"]) == 4
+    assert [row["receiptText"].encode() for row in aggregate["cohorts"]] == before
+    lineage = json.loads((output / "lineage.json").read_text())
+    assert lineage["version"] == "acephale-infra-fresh-native-v2"
+    assert lineage["cohort_receipt_sha256"] == file_hash(output / "cohort-receipt.json")
+    assert len(read_jsonl(output / "verdicts.jsonl")) == 4
+    assert {row["split"] for row in read_jsonl(output / "public.jsonl")} == {"train", "development"}
+    memory = json.loads((output / "memory.json").read_text())
+    assert memory["training_families"] == ["train-ok"]
+    root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(["node", "--import", "tsx", "scripts/acephale-infra-memory.ts", "--fresh",
+                             str(output), str(tmp_path / "runtime")], cwd=root, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    artifact = json.loads((tmp_path / "runtime/runtime/artifact.json").read_text())
+    assert {row["id"] for row in artifact["runs"]} == {"run-0", "run-1"}
+
+
+@pytest.mark.parametrize("case", ["duplicate-parent", "implicit-purpose", "wrong-allocation", "actor-configuration", "family-policy", "task-bundle", "cross-domain-policy"])
+def test_multiple_cohorts_reject_incompatible_or_unattributed_sources(cohort, tmp_path, case):
+    parents = split_cohorts(cohort, tmp_path)
+    auxiliary = parents[1]
+    if case == "duplicate-parent":
+        parents[1] = parents[0]
+    elif case in {"implicit-purpose", "wrong-allocation"}:
+        config = json.loads((auxiliary / "configuration.json").read_text())
+        if case == "implicit-purpose":
+            del config["collectionPurpose"]
+        else:
+            config["hosted"]["allocation"] = "training"
+        write(auxiliary / "configuration.json", config)
+        seal(auxiliary)
+    elif case in {"actor-configuration", "family-policy"}:
+        manifest = json.loads((auxiliary / "manifest.json").read_text())
+        if case == "actor-configuration":
+            manifest["actor"]["temperature"] = 0.5
+        else:
+            manifest["data"]["heldoutFamilies"].append("undeclared-test")
+            design = json.loads((auxiliary / "design.json").read_text())
+            design["heldoutFamilies"].append("undeclared-test")
+            write(auxiliary / "design.json", design)
+        write(auxiliary / "manifest.json", manifest)
+        seal(auxiliary)
+    elif case == "task-bundle":
+        tasks = {"version": 1, "tasks": [], "changed": True}
+        config = json.loads((auxiliary / "configuration.json").read_text())
+        config["taskBundleHash"] = hash_v1(tasks)
+        write(auxiliary / "configuration.json", config)
+        write(auxiliary / "tasks.json", tasks)
+        seal(auxiliary)
+    else:
+        contexts = json.loads((auxiliary / "public-contexts.json").read_text())
+        contexts["run-3"]["policy"] = "Changed policy"
+        write(auxiliary / "public-contexts.json", contexts)
+        seal(auxiliary)
+    with pytest.raises(ValueError):
+        import_fresh_cohorts(parents, tmp_path / "bad")
+    assert not (tmp_path / "bad").exists()
+
+
+def test_original_audit_follows_verified_unchanged_parent_prefixes(cohort, tmp_path):
+    parents = split_cohorts(cohort, tmp_path)
+    original = tmp_path / "original"
+    original_manifest = import_fresh(parents[0], original, pilot_count=2, audit_count=1)
+    pilot_path = original / "annotation-pilot/pilot.json"
+    before = pilot_path.read_bytes()
+    pilot = json.loads(before)
+    merged = tmp_path / "merged"
+    merged_manifest = import_fresh_cohorts(parents, merged, parent_bundles=[original])
+    assert merged_manifest["bundle_hash"] != original_manifest["bundle_hash"]
+    binding = verify_parent_audit_source(merged, pilot)
+    assert binding["sourceDatasetHash"] == original_manifest["bundle_hash"]
+    assert pilot_path.read_bytes() == before
+    root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(["node", "--import", "tsx", "scripts/acephale-infra-memory.ts", "--fresh",
+                             str(merged), str(tmp_path / "runtime-parent")], cwd=root, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    pilot["checkpoints"][0]["input_hash"] = "0" * 64
+    with pytest.raises(ValueError, match="changed"):
+        verify_parent_audit_source(merged, pilot)
+    pilot = json.loads(before)
+    pilot["source_dataset_hash"] = "1" * 64
+    with pytest.raises(ValueError, match="unique verified parent"):
+        verify_parent_audit_source(merged, pilot)
+
+
+def test_parent_lineage_cannot_reseal_changed_public_input(cohort, tmp_path):
+    parents = split_cohorts(cohort, tmp_path)
+    original = tmp_path / "original"
+    import_fresh(parents[0], original, pilot_count=2, audit_count=1)
+    merged = tmp_path / "merged"
+    import_fresh_cohorts(parents, merged, parent_bundles=[original])
+    public = read_jsonl(merged / "public.jsonl")
+    public[0]["input"]["policy"] = "A new policy"
+    public[0]["input_hash"] = hash_v1(public[0]["input"])
+    path = merged / "public.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in public))
+    manifest = json.loads((merged / "manifest.json").read_text())
+    manifest["files"]["public.jsonl"]["sha256"] = file_hash(path)
+    manifest["bundle_hash"] = hash_v1(manifest["files"])
+    write(merged / "manifest.json", manifest)
+    pilot = json.loads((original / "annotation-pilot/pilot.json").read_text())
+    with pytest.raises(ValueError, match="bytes or split changed"):
+        verify_parent_audit_source(merged, pilot)
+
+
+def test_multiple_cohorts_reject_duplicated_trials_even_in_different_directories(cohort, tmp_path):
+    parents = split_cohorts(cohort, tmp_path)
+    duplicate = tmp_path / "duplicate-auxiliary"
+    shutil.copytree(parents[1], duplicate)
+    with pytest.raises(ValueError, match="Repeated trial or episode"):
+        import_fresh_cohorts([*parents, duplicate], tmp_path / "bad")
 
 
 def test_hidden_user_simulator_tools_do_not_enter_public_memory(cohort, tmp_path):

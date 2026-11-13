@@ -1,11 +1,12 @@
-import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
-import { ALLOCATIONS, type Reservation } from "../src/lib/acephale/budget";
+import { type Reservation } from "../src/lib/acephale/budget";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 
 export interface AwsBudgetRequest {
+  provider?: "aws" | "lambda";
   operation: "inspect" | "bind" | "reserve";
   ledgerPath: string; checkpointPath: string; checkpointHash: string;
   sliceLedgerPath: string; deploymentHash: string; requireNewReservation?: boolean;
@@ -14,6 +15,8 @@ export interface AwsBudgetRequest {
 
 /** The Python controller never implements or replaces the original journal. */
 export function awsBudget(request: AwsBudgetRequest) {
+  const provider = request.provider ?? "aws";
+  if (provider !== "aws" && provider !== "lambda") throw new Error("Unsupported infrastructure provider");
   const path = resolve(request.ledgerPath), stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink() || !stat.size) throw new Error("Existing nonempty original study journal required");
   const checkpoint = JSON.parse(readFileSync(resolve(request.checkpointPath), "utf8")) as {
@@ -25,6 +28,8 @@ export function awsBudget(request: AwsBudgetRequest) {
   }
   const owner = new DurableBudget(path);
   try {
+    const allocations = owner.ledger.allocations;
+    const totalCeiling = owner.ledger.totalCeilingMicrodollars;
     const current = owner.ledger.snapshot(), byId = new Map(current.map(row => [row.id, row]));
     for (const prior of checkpoint.entries) {
       const next = byId.get(prior.id);
@@ -37,14 +42,17 @@ export function awsBudget(request: AwsBudgetRequest) {
       const roots = rows.filter(row => !row.parentId);
       const committed = roots.reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
       const nonContingency = roots.filter(row => row.allocation !== "contingency").reduce((sum, row) => sum + (row.actual ?? row.maximum), 0);
-      if (committed > 500_000_000 || nonContingency > 500_000_000 - ALLOCATIONS.contingency) throw new Error("Study total or protected contingency exceeded");
+      if (committed > totalCeiling || nonContingency > totalCeiling - allocations.contingency) throw new Error("Study total or protected contingency exceeded");
       return { committedMicrodollars: committed, infrastructureMicrodollars: roots.filter(row => row.allocation === "infrastructure")
         .reduce((sum, row) => sum + (row.actual ?? row.maximum), 0), entriesHash: hash(rows), reservations: rows.length };
     };
     totals();
     const binding = { version: 1, studyLedgerPathHash: hash(path), sliceLedgerPath: resolve(request.sliceLedgerPath),
-      deploymentHash: request.deploymentHash, checkpointHash: request.checkpointHash };
+      deploymentHash: request.deploymentHash, checkpointHash: request.checkpointHash,
+      ...(provider === "lambda" ? { provider } : {}) };
     if (!/^[a-f0-9]{64}$/.test(request.deploymentHash)) throw new Error("Invalid AWS deployment identity");
+    // Retain the original filename as the single exclusive cross-provider binding.
+    // A new provider must not create a second slice or reset cumulative GPU hours.
     const pointer = `${path}.aws-infrastructure-pointer.json`;
     if (request.operation === "bind") {
       // Exclusive creation fences accidental second slice ledgers and hour resets.
@@ -55,13 +63,13 @@ export function awsBudget(request: AwsBudgetRequest) {
         const directory = openSync(dirname(pointer), "r");
         try { fsyncSync(directory); } finally { closeSync(directory); }
       }
-    } else if (request.operation === "reserve") {
+    } else if (request.operation === "reserve" || existsSync(pointer)) {
       if (hash(JSON.parse(readFileSync(pointer, "utf8"))) !== hash(binding)) throw new Error("AWS slice binding differs from original study");
     }
     if (request.operation === "reserve") {
       const id = request.reservationId, maximum = request.maximumMicrodollars;
-      if (!id || !/^aws-infra:[a-f0-9-]{36}$/.test(id) || !Number.isSafeInteger(maximum) || maximum! < 1
-        || maximum! > ALLOCATIONS.infrastructure) throw new Error("Invalid AWS infrastructure reservation");
+      if (!id || !new RegExp(`^${provider}-infra:[a-f0-9-]{36}$`).test(id) || !Number.isSafeInteger(maximum) || maximum! < 1
+        || maximum! > allocations.infrastructure) throw new Error("Invalid AWS infrastructure reservation");
       const existing = byId.get(id);
       if (existing) {
         if (request.requireNewReservation === true) throw new Error("Prior AWS reservation cannot fund another launch");
@@ -69,11 +77,12 @@ export function awsBudget(request: AwsBudgetRequest) {
           throw new Error("Existing AWS reservation differs or is already settled");
         }
       } else {
-        if (totals().committedMicrodollars + maximum! > 500_000_000 - ALLOCATIONS.contingency) throw new Error("Protected study contingency unavailable");
+        if (totals().committedMicrodollars + maximum! > totalCeiling - allocations.contingency) throw new Error("Protected study contingency unavailable");
         owner.ledger.reserve(id, "infrastructure", maximum!);
       }
     } else if (request.operation !== "inspect" && request.operation !== "bind") throw new Error("Unsupported budget operation");
     return { version: 1, ledgerPathHash: hash(path), checkpointHash: request.checkpointHash, ...totals(),
+      ...(owner.policy ? { budgetPolicyHash: owner.policy.policyHash, budgetAmendmentHash: owner.policy.contentHash } : {}),
       ...(request.operation === "reserve" ? { reservationId: request.reservationId, maximumMicrodollars: request.maximumMicrodollars } : {}) };
   } finally { owner.close(); }
 }

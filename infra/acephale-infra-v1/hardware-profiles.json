@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "a6000-48gb-v1": {
+      "instanceType": "gpu_1x_a6000",
+      "gpuNameContains": "A6000",
+      "minimumGpuMemoryMiB": 46000,
+      "actorMaxSequences": 4,
+      "actorGpuMemoryUtilization": 0.65,
+      "predictorMaxSequences": 1,
+      "predictorGpuMemoryUtilization": 0.20,
+      "actorContext": 32768,
+      "predictorContext": 8192
+    },
+    "a100-40gb-v1": {
+      "instanceType": "gpu_1x_a100_sxm4",
+      "gpuNameContains": "A100",
+      "minimumGpuMemoryMiB": 39000,
+      "actorMaxSequences": 1,
+      "actorGpuMemoryUtilization": 0.65,
+      "predictorMaxSequences": 1,
+      "predictorGpuMemoryUtilization": 0.20,
+      "actorContext": 32768,
+      "predictorContext": 8192
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { BudgetLedger, type Reservation } from "../../src/lib/acephale/budget";
 import { canonical, hash } from "../../src/lib/acephale/canonical";
+import { readBudgetPolicy, type BudgetAmendment } from "./budget-policy";
 
 type Record = { sequence: number; previous: string; entries: [string, Reservation][] } |
   { version: 2; sequence: number; previous: string; changes: [string, Reservation][] };
@@ -96,6 +97,7 @@ function equal(a: Reservation | undefined, b: Reservation) {
 // other local processes. Crash locks are intentionally never reclaimed by age.
 export class DurableBudget {
   readonly ledger: BudgetLedger;
+  readonly policy?: BudgetAmendment;
   private descriptor = -1;
   private lockDescriptor: number;
   private sequence = 0;
@@ -157,7 +159,8 @@ export class DurableBudget {
         const directory = openSync(dirname(path), "r");
         try { fsyncSync(directory); } finally { closeSync(directory); }
       }
-      this.ledger = new BudgetLedger(next => this.append(next), entries);
+      this.policy = readBudgetPolicy(path, entries);
+      this.ledger = new BudgetLedger(next => this.append(next), entries, this.policy?.policy.allocationsMicrodollars);
       if (this.options.recoveryCheckpoint !== false) this.checkpoint();
     } catch (error) {
       if (this.descriptor >= 0) closeSync(this.descriptor);
@@ -203,6 +206,14 @@ export class DurableBudget {
     this.priorEntries = new Map(entries);
     this.journalDigest.update(bytes); this.journalBytes += bytes.length;
     this.previous = digest; this.sequence++;
+  }
+  validateManifestPolicy(budgets: { infrastructureMicrodollars: number; budgetPolicyHash?: string; budgetAmendmentHash?: string }) {
+    if (this.policy) {
+      if (budgets.budgetPolicyHash !== this.policy.policyHash || budgets.budgetAmendmentHash !== this.policy.contentHash
+        || budgets.infrastructureMicrodollars > this.ledger.allocations.infrastructure) throw new Error("Manifest budget policy differs from the original journal amendment");
+    } else if (budgets.budgetPolicyHash || budgets.budgetAmendmentHash || budgets.infrastructureMicrodollars > this.ledger.allocations.infrastructure) {
+      throw new Error("Manifest requires an unapplied budget policy amendment");
+    }
   }
   close() {
     if (this.closed) return;

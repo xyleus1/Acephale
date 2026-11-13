@@ -55,7 +55,7 @@ will write. Relative paths below resolve beside `split-guard.json`:
   "inventoryEvidencePath": "deployment-inventory/inventory-evidence.json",
   "sshDestination": "ubuntu@YOUR_VERIFIED_GPU_HOST",
   "sshPort": 22,
-  "expectedInstanceId": "YOUR_OBSERVED_EC2_INSTANCE_ID",
+  "expectedInstanceId": "YOUR_OBSERVED_PROVIDER_INSTANCE_ID",
   "localPorts": {"actor": 18000, "predictor": 18001, "otlp": 14318},
   "maximumLifetimeSeconds": 3600
 }
@@ -67,6 +67,24 @@ known-hosts store. The guard uses `StrictHostKeyChecking=yes` and `BatchMode=yes
 It never auto-accepts a host key, asks for a password, stores a private key or
 changes the SSH configuration. The SSH user must be able to run `python3` and
 read local Docker container status on the GPU host.
+
+For Lambda, additionally set `provider: "lambda"`, `knownHostsPath`,
+`expectedHostKeySha256` and `expectedMachineIdSha256`. The dedicated known-hosts
+file contains exactly the observed host's ed25519 key. The inventory includes
+the actual Lambda API receipt and machine-id hash; it never invents an EC2 ID.
+Initial host trust is a recorded operator observation, not provider attestation.
+Both the Python publisher and Node consumer validate the receipt content hash,
+provider response, approved hardware profile, active lease name, API instance
+and IP association, pinned key and machine identity. Their heartbeat provenance
+includes those exact bindings and the dedicated known-hosts file's bytes. A
+changed file invalidates running checks even when its added text is a comment.
+Use `ubuntu@OBSERVED_IP` for Lambda, as an alias cannot establish the required
+receipt association. Set the optional `identityFilePath` to the existing local
+private-key file, absolute or relative to the guard configuration. The guard
+rejects missing files, directories, symlinks and newline-containing paths, then
+passes the resolved path as `ssh -i` with `IdentitiesOnly=yes`. It never reads,
+hashes or records key material. When omitted, existing OpenSSH identity selection
+applies, including a narrowly scoped `Host OBSERVED_IP` configuration.
 
 The guard verifies the actual inventory hash, instance ID, deployment sections
 and manifest source identity. It owns all three loopback listeners with
@@ -93,7 +111,7 @@ Then use the prepared native collection command from
 and benchmark interpreter. Configure the OpenAI key securely as the final
 credential step. The guard is independent of that key.
 
-The guard performs read-only SSH probes of the remote EC2 DMI identity, exact
+The guard performs read-only SSH probes of the bound provider host identity, exact
 inventory-bound container IDs/image IDs/start times, model health/model catalogs,
 and collector listener. It also checks the model catalogs through its own local
 forwards. Heartbeat freshness uses the Windows observation clock after those
@@ -101,6 +119,24 @@ checks complete, never a remote wall clock. Observations taking more than 2.5
 seconds fail; native dispatch accepts at most three-second-old heartbeats.
 Immutable numbered publications retain failures, and the newest degraded or
 malformed publication never falls back to an older healthy one.
+
+One persistent pinned SSH process owns both the three forwards and the read-only
+remote probe loop. `ExitOnForwardFailure=yes` applies before the remote `READY`
+frame. Startup has a ten-second deadline and publishes degraded heartbeats while
+connecting; `READY` alone never establishes health. Every subsequent observation
+uses a fresh random nonce and increasing sequence. The remote process collects
+its observations after receiving that request and echoes both correlation fields.
+The guard rejects unsolicited, malformed, mismatched or late responses. Local
+model-catalog checks share the same 2.5-second total deadline, including the remote
+probe. The pinned known-hosts file is rechecked on every observation.
+
+The implementation uses bounded queues and reader threads on Windows, with SSH
+multiplexing explicitly disabled. A failure publishes degraded status before
+terminating and draining the owned process and readers. That closes the forwards
+and probe channel together. Reconnection requires confirmed drain; late responses
+cannot enter a replacement session. Final status records both `probeClosed` and
+`tunnelClosed`. The standalone one-shot observation helper remains available for
+diagnostics, but the running guard does not reconnect for each observation.
 
 The Node native service checks the bound heartbeat before startup and every 500
 ms while running. Tunnel exits, stale health, another instance, changed serving
@@ -126,3 +162,13 @@ and retain that receipt separately. Offline tests exercise the real Python
 gateway/new Node runtime handshake and actual loopback trace/metric requests with
 mock model responses. They do not attest an AWS host, a working SSH session,
 remote telemetry storage or model quality.
+
+Local Prometheus snapshots publish through uniquely owned temporary files and
+atomic replacement. Windows sharing denials receive bounded retries within a
+one-second retry window; the live snapshot is never deleted or truncated to force replacement.
+Unchanged rendered bytes skip replacement. The cache advances only after a
+successful publication. Fatal publication errors remain visible and cause drain
+to fail, while close still waits for queued writers and OTLP exporters. Concurrent
+close calls share that same result, including failure. Real Windows handle tests
+exercise denied replacement and recovery; they do not establish cloud telemetry
+readiness or validate an aborted benchmark cohort.

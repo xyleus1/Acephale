@@ -2,7 +2,6 @@ import { lstatSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve, join } from "node:path";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
-import { ALLOCATIONS } from "../src/lib/acephale/budget";
 import { PRICE_SOURCE } from "../services/acephale-runtime/provider";
 
 export function budgetReport(directory: string, destination: string) {
@@ -12,7 +11,7 @@ const budget = new DurableBudget(ledgerPath);
 try {
   const rows = budget.ledger.snapshot();
   const parents = new Set(rows.filter(row => row.parentId).map(row => row.parentId));
-  const allocations = Object.entries(ALLOCATIONS).map(([allocation, ceiling]) => {
+  const allocations = Object.entries(budget.ledger.allocations).map(([allocation, ceiling]) => {
     const entries = rows.filter(row => row.allocation === allocation);
     const requests = entries.filter(row => !parents.has(row.id));
     return { allocation, ceilingUsd: ceiling / 1_000_000,
@@ -21,8 +20,9 @@ try {
       unresolvedRequests: requests.filter(row => row.actual === undefined).length };
   });
   const result = { schemaVersion: 1, currency: "USD", priceSource: PRICE_SOURCE,
+    ...(budget.policy ? { budgetPolicyHash: budget.policy.policyHash, budgetAmendmentHash: budget.policy.contentHash } : {}),
     basis: "Recorded settled costs and unresolved reservations in the original study journal; not independently reconciled to invoices",
-    totalCeilingUsd: 500, allocations,
+    totalCeilingUsd: budget.ledger.totalCeilingMicrodollars / 1_000_000, allocations,
     infrastructureKnownCostUsd: allocations.find(row => row.allocation === "infrastructure")!.knownUsageCostUsd,
     infrastructureSpentOrReservedUsd: allocations.find(row => row.allocation === "infrastructure")!.spentOrReservedUsd,
     totalKnownUsageCostUsd: allocations.reduce((sum, row) => sum + row.knownUsageCostUsd, 0),

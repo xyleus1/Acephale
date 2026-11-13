@@ -1,105 +1,111 @@
-# Acephale state
+# Current state
 
-Updated 2026-11-07. This records the standalone research checkout, not historical
-benchmark results.
+Updated November 13, 2026, 17:44 UTC. This page distinguishes implemented software
+from measured results. Seed 17's optimizer work is complete; receipt recovery and
+the independent second seed are in progress.
 
-## Implemented scope
+## Active training
 
-- Shared TypeScript contracts, current-source binding, workflow/episodic memory,
-  single-call conditional ranking and managed read-only speculative scheduling.
-- Pinned Qwen actor/predictor serving interfaces with unchanged actor weights and
-  tool catalog, authenticated native Python gateway and document adapter.
-- Causal shadow trace collection, independently verified outcome handling,
-  frozen embeddings/retrieval, calibration v2 and deployment-bound opportunity v2.
-- Matched candidate-panel evaluation, paired native trial reporting, original
-  budget accounting and OpenTelemetry/Prometheus observability.
-- Standalone Node/Python project layout and direct research SQL integration.
+Seed 17 completed all 204 optimizer updates and all 204 gradient checks, with
+unchanged base hashes and a changed adapter hash. Its final adapter, reload probe
+and checkpoint-204 are saved. Final result serialization then failed because HF's
+`total_flos` estimate, `7.51775264009134e16`, exceeds the shared numeric range.
+The complete failed attempt was exported and verified. Recovery retains that
+failure and reconstructs a separate result record from saved evidence; it does
+not rerun seed 17's optimizer. Seed 29 retains its full 204-update recipe.
+Both use the same frozen data, effective
+batch of 16, three epochs and rank-16 LoRA. The predictor has 10,822,656 trainable
+adapter parameters; the 9B actor stays fixed. Training loss is a diagnostic,
+not tool-call accuracy or native reward.
 
-## Standalone verification
+The prepared dataset contains 1,074 fitting examples, 117 calibration examples
+and 112 development examples. The fitting set contains 358 complete
+goal/neutral-ranking/conditioned-ranking triplets from 24 fitting families.
+Deterministic context compilation rejected 14 of the original 372 checkpoints:
+13 omitted a required source and one exceeded the mandatory input budget.
+Rejection records remain retained; no test example enters training.
 
-The following local checks ran against this standalone source on 2026-11-07.
-These are software checks, not live model evaluation:
+Runtime/training source is `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
+The pinned checkpoint's 18 FP32 decay vectors were verified on the actual GPU.
+A separately declared warm profile established feasibility after the slow cold
+profile. Disposable profiling weights are not reused. Earlier smoke and serving
+failures remain failed.
 
-| Check | Observed result |
-| --- | --- |
-| `npm run check` | Passed generated-contract checks and TypeScript compilation |
-| Full local `npm test` | 208 tests: 206 passed, 2 skipped; both skips require a real local PostgreSQL database |
-| Subsequently added budget-report tests | 2 passed in a focused run; 210 distinct Node tests are covered across these local runs, not one full local 210-test run |
-| Initial full local research pytest, fresh Python 3.12.14 environment | 276 passed, 1 failed because a native fixture imported an ESM default export that does not exist |
-| Native-profile file rerun after correcting the import | 6 passed, including the previously failing pinned native snapshot/gateway test; the entire research suite was not rerun locally after that fix |
-| Full deployment unittest suite | 124 passed |
-| ESLint | 0 errors, 27 `no-explicit-any` warnings |
-| Research Ruff and `acephale --help` | Passed |
-| Documentation audit | Local links, documented Node/Python entrypoints and npm script names resolve |
+## Results on record
 
-The native test uses actual pinned environment/snapshot/gateway code with mocked
-model responses, not paid model calls. The successful focused rerun resolves the
-initial failure without relabeling the earlier full pytest run as all-passing.
-Do not sum overlapping focused tests as independent coverage. The two later
-budget-report tests are additional, distinct cases.
+The closed 60-trial fitting/calibration collection completed 57/60 native tasks
+(95.0%); 46/60 were known constraint-clean (76.7%). It made 326 logical and
+physical calls without speculation. Mean live latency including drain was
+32.755 seconds; observed p95 was 53.926 seconds, n=60. This is a single-base
+custom tau-compatible collection, not an official score or held-out comparison.
+Its hosted user/judge subtotal is $0.673481 with one unknown charge retained;
+GPU invoices are separate. Three failed slots remain in the denominator.
 
-Retained operator-side logs include `acephale-check-final-20261107.txt`,
-`acephale-node-tests-20261107.txt`, `acephale-python-tests-20261107.txt`,
-`acephale-python-native-final-20261107.txt`, `acephale-deploy-tests-20261107.txt`
-and `acephale-lint-final-20261107.txt`. Their private directory is not a repository path.
-No paid request, cloud provisioning or live benchmark was performed for these checks.
+The original 100-case annotation pilot had 17 positive candidate windows, below
+the required 48. The explicit expansion retains all 372 preexisting public-eligible
+fitting windows, with 79 positives, preserving the original pilot and audit cases.
+Teacher annotation and actual semantic review remain separate requirements.
 
-Local/CI Python unit validation uses 3.12.14, which is installed; 3.12.16 was not
-available as a local interpreter during this separation. The live deployment
-target remains pinned to Python 3.12.16 and must pass its own observed inventory
-checks. Unit-test interpreter selection is not authorization to substitute a
-different production runtime.
+The complete untrained-predictor replay retains all 746 prefixes: 705 completed,
+41 failed and none undispatched. On the reserved development subset, exact next
+read Top-1 was 9/52 (17.3%) over declared eligible checkpoints. This is prediction
+accuracy, not native task success. Fixed-panel Top-3 is three-item panel coverage,
+not a ranking gain. The matched trained-predictor replays are pending.
 
-The [main-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
-passed for source commit `d510c1bbc139e09fe9e40ed1145daead87fbfb18`:
+The exploratory machine review accepted 19/20 preselected cases, with one incorrect
+annotation and zero unsupported bindings. It has zero human reviews. Teacher and
+reviewer use the same pinned model in separate requests; reviewer-model independence
+is not claimed.
 
-| CI check | Observed result |
-| --- | --- |
-| Full Node suite | 210 passed, 0 skipped |
-| Full research pytest | 275 passed, 2 skipped |
-| Full deployment unittest | 124 passed |
-| Typecheck, ESLint, research Ruff and CLI help | Passed |
+The historical November 13 smoke passed strict adapter reload but failed its
+merged-weight comparison. No trained-model accuracy or latency gain has been
+established. See the
+[original pilot](experiments/predictor-lora-pilot-2026-11-10.md) and
+[staged-study record](experiments/staged-study-2026-11-13.md).
 
-The Node suite exercised real pgvector publication, scoped retrieval, immutable
-SQL guards, read-only PostgreSQL transactions and bound query values. CI used
-Ubuntu 24.04, commit-pinned setup actions, frozen dependency locks and the verified
-`pgvector/pgvector:0.8.7-pg17` image digest with a disposable database.
+## Current implementation
 
-The two Python CI skips were the pinned native environment test, whose external
-checkout was not installed on CI, and the Windows-specific sharing test on Linux.
-Both were exercised locally: the former passed in the six-test native-profile
-rerun; the latter was among the initial 276 passing tests. These complementary
-runs are not represented as one homogeneous zero-skip Python execution. CI verifies
-the database integration code, not production database publication or live serving.
+Native training export now checks teacher annotations against their exact public
+sources and emits neutral ranking, conditioned ranking and goal-inference targets.
+Neutral and conditioned examples share candidate order. A single recipe controls
+LoRA settings and effective batch size. The experiment runner composes existing
+commands with immutable inputs, stage receipts, deadlines and verified resume.
 
-## External execution gates
+New score metadata distinguishes autoregressive conditional token probabilities
+from calibrated next-batch membership. Historical v2 artifacts remain readable;
+new binary-predictor calibration uses v3. Source changes require new compiler
+identities and downstream artifacts, not relabeling old results.
 
-1. Recheck current provider quota, price and available capacity. The last recorded
-   GPU quota observation was zero on 2026-11-06; that is historical status, not a
-   current API check. The proposed GPU configuration requires eight vCPUs.
-2. Validate actual serving fit, exact model/tokenizer identities and tool parsing
-   on the guarded host. Regenerate observed deployment inventory after source or
-   environment changes; an example manifest is not evidence.
-3. Prepare and verify the actual research database and publish its reviewed frozen
-   artifacts. Publication/retrieval code passed against disposable PostgreSQL/
-   pgvector in CI; production database readiness and publication remain outstanding.
-4. Resolve the original budget journal through private operator configuration and
-   reconcile outstanding reservations. Preserve the $500 total and its protected
-   allocations; do not reset the experiment's allowance during separation.
-5. Collect fresh fixed-actor shadow traces, audit teacher annotations, freeze
-   training memory, fit compatible calibration and measure admission components.
-6. Run paired development, select heldout size from development costs and remaining
-   budget, freeze all arms, then execute/report every declared slot.
+The user authorized additional spending on November 13. The future v3 policy
+provides a $1,000 working envelope while retaining the original journal, previous
+amendments, reservations and $65 contingency. It was activated after the previous
+collection lease closed. Authorization is not a record of spending; actual
+activation and resource state are recorded in private operator receipts.
 
-## Evidence limits
+The fresh compositional task bundle passed native fixture verification: 88 tasks
+across 44 preassigned families, with 200 omitted-mutation checks all rejected.
+The receipt is `1afeb10e51fe24594216e4abe4a378392214cb6c7ea9bceeb317be84bb5eb48f`.
+These are reference executions, not actor results. No hosted model calls were
+needed for that verification. The budget amendment is active on the original
+journal; its original bytes and unresolved reservations were preserved.
 
-There is no new live task-accuracy or latency-improvement claim for this standalone
-checkout. Mocked native gateway parity is not a tau score. Replay timing is not
-live latency. Prediction hit rate is not task reward. Transparent prefetch may
-increase physical work while leaving logical calls unchanged, and erroneous goal
-conditioning can hurt ranking. Report those effects rather than assuming gains.
+## Remaining experiment gates
 
-Historical reports and hash-bound artifacts remain unmodified in the original
-checkout and Git history. They were not copied into the active research tree.
-Any later import requires explicit source/license, family-split, authorization,
-schema, model and memory-identity review. A renamed artifact is not fresh evidence.
+An explicit machine-audited exploratory protocol now permits autonomous
+execution without counting any automated judgment as a human review. It uses
+the same 20 selected cases and unchanged acceptance thresholds. Its actual
+audit must pass before training; the original human-reviewed study remains
+pending. This protocol amendment is not a measured accuracy improvement.
+
+1. Complete and export both full training seeds, strict reloads and diagnostics.
+2. Qualify each actual adapter in vLLM with unchanged complete-prompt numerical
+   checks; run all three frozen replay conditions and fresh calibration.
+3. Measure native read/prefetch opportunities and run the original 36 paired
+   development slots across all three arms.
+4. Select whole held-out families using development costs alone, reserve every
+   selected slot and run the predeclared paired schedule, up to 96 slots.
+5. Export native outcomes, runtime events and persisted telemetry; report paired
+   family intervals, known and unknown costs, and verify infrastructure cleanup.
+
+Detailed historical operator notes are preserved in the
+[2026-11-11 Git checkpoint](https://github.com/xyleus1/Acephale/blob/ab9d26fedcc698898f2935ac1127835d7fbda4c9/docs/AI_HANDOFF.md).

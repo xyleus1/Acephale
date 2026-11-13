@@ -3,7 +3,7 @@ name: Acephale research tests
 on:
   pull_request:
   push:
-    branches: [main, codex/acephale-standalone]
+    branches: [main, codex/acephale-standalone, codex/predictor-lora-v1]
 
 permissions:
   contents: read
@@ -53,8 +53,14 @@ jobs:
       - run: npm run lint
       - run: uv run --frozen --extra analysis pytest
         working-directory: research/acephale
+      - name: Verify public trainer permissions in Docker
+        env:
+          ACEPHALE_TEST_DOCKER_PERMISSIONS: "1"
+        run: |
+          docker pull python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
+          research/acephale/.venv/bin/python -m pytest research/acephale/tests/test_trainer_image_permissions.py -q
       - run: uv run --frozen --extra analysis acephale --help
         working-directory: research/acephale
       - run: uv run --frozen --extra analysis ruff check src tests
         working-directory: research/acephale
-      - run: research/acephale/.venv/bin/python -m unittest discover -s infra/acephale-infra-v1 -p 'test_*.py' -v
+      - run: research/acephale/.venv/bin/python -m pytest infra/acephale-infra-v1 -q

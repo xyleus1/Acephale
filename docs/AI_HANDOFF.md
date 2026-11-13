@@ -1,39 +1,237 @@
-# Acephale handoff
+# Working on Acephale
 
-Updated 2026-11-07. Work only in this standalone research checkout. Read
-[methods](METHODS.md), [runbook](RUNBOOK.md), [state](STATE.md) and
-[decisions](DECISIONS.md) before continuing.
+An explicit operator-only GPU-hour capacity addendum can prospectively raise the
+cumulative reservation allowance from 64 to 128 hours. It does not change the v3
+$1,000 financial policy, its $200 infrastructure/$150 compute/$50 associated
+allocations, any training window, model contract, prior reservation or deadline.
+The original slice and policy bytes stay unchanged. New provider leases bind the
+creation-only sidecar hash and provider receipts expose the separate engineering
+authorization. Qualified manifests retain base policy `maximumGpuHours: 64` and
+must include the addendum as an explicit run input/provenance artifact. Do not
+claim that the policy itself now says 128. Read the capacity procedure in
+`infra/acephale-infra-v1/GPU_HOUR_CAPACITY.md` before using it. Uncertain launches
+remain funded and still require their existing independent fences.
 
-The active question is whether source-grounded goals improve a PASTE-inspired
-read prefetcher over an otherwise identical neutral-memory prefetcher. Actor
-weights, messages, tools and task limits stay fixed. This is infrastructure
-research; no live performance advantage has been established.
+Seed 17 subsequently completed all 204 updates but failed while hashing its
+result: HF's `total_flos` exceeded the shared numeric range. Its actual saved
+adapter, checkpoint, probe and failure are verified and retained. Do not repeat
+that optimizer work. The private recovery workflow must preserve original source
+and failure lineage, verify saved tensor hashes and mark unavailable metrics
+unknown. The source change below stores future `total_flos` estimates as decimal
+strings, with explicit encoding metadata. It is not deployed into either frozen
+5a training seed and does not retroactively change the failed run.
 
-The TypeScript core and service live under `src/lib/acephale` and
-`services/acephale-runtime`; Python/native evaluation is `research/acephale`.
-Serving and research database definitions are `infra/acephale-infra-v1`.
-Entrypoints are `npm run check`, `npm test`, `acephale:infra`,
-`acephale:infra-native`, `acephale:infra-predict` and `acephale:infra-annotate`.
+The original November 13 host was terminated after its AWS-backed owner
+heartbeat expired. Seed 29's interrupted attempt reached 7/204 updates; it is
+retained as interrupted. Replacement work keeps source `5a36a8b` and the full
+seed 29 recipe, while seed 17 proceeds through saved-artifact recovery only.
+Read the current private execution handoff before issuing any provider or budget
+command; one operator owns the journal and dispatch. Both real adapter exports
+must pass unchanged vLLM qualification before replay or native comparison.
+Offline grading/reliability uses the separately recorded `c8a662c` reader fix.
+The 1,074-row fitting set, machine-audit lineage and pending stages are summarized
+in [current state](STATE.md). Historical counts below describe their own versions.
 
-The [main-branch CI run](https://github.com/xyleus1/Acephale/actions/runs/42357269977)
-passed for `d510c1bbc139e09fe9e40ed1145daead87fbfb18`: Node 210 passed with no skips,
-Python 275 passed with two platform/environment skips, and deployment 124 passed.
-Typecheck, ESLint, Ruff and CLI help succeeded. Real disposable PostgreSQL/pgvector
-publication, scoped retrieval, immutable guards and read-only/bound-value tests
-passed. Production database readiness and publication are still outstanding.
+The owner heartbeat now retries short transport/throttling failures at most three
+times with short SDK request timeouts. It retains redacted operation/error/status
+metadata and never reports a partial two-controller write as a fresh heartbeat.
+Authentication renewal, identity changes and original deadline failures still
+stop publication. Verify the actual login refresh-token horizon before a new
+lease; a currently valid 15-minute access token does not establish eight hours
+of unattended publication. The S3 socket timeouts do not bound the SDK internal
+login-renewal request; an actual session-horizon check remains required. Existing
+watchdog expiry remains unchanged.
 
-Preserve the local repair history: initial Python 276 passed and one ESM fixture
-import failed, followed by all six native-profile tests passing after the fix.
-Both Python CI skips were covered locally: the native fixture in that rerun and
-the Windows sharing test in the initial passing set. Local ESLint recorded zero
-errors and 27 explicit-any warnings. See STATE for exact separate run counts and
-retained logs; do not collapse these into an invented zero-skip Python run.
+New infrastructure reservations can explicitly set `--setup-seconds` from 120
+to 3600; the default remains 1800. This is chosen before reservation and cannot
+extend an existing lease. The funded hard deadline and price reservation stay
+unchanged. Use bounded stage deadlines inside the selected setup window. Frozen
+bootstrap versions with a 30-minute parser limit still need a separately recorded
+phase deadline; do not rewrite their source identity or prior lease artifacts.
 
-Preserve the external original budget journal and credentials in secure operator
-configuration. No paid execution or provisioning follows automatically from local
-checks. The remaining sequence is actual serving/database readiness, fresh shadow
-collection, annotation audit, frozen memory/calibration/profiling, paired
-development and budgeted heldout trials. Consult STATE for evidence limits.
+Goal grading and reliability now validate retained-response replay receipts too.
+The Python reliability builder reuses the shared reader; the TypeScript grader
+checks the same version, file bytes, record count, inner hashes and ordered
+checkpoint/request audit associations. Both retain the original prediction
+denominator and recheck evidence at completion. Use this source as an explicit
+offline analysis update; existing trainer images and replay executions keep their
+own source identities. No new predictions or labels are required for this fix.
 
-Historical artifact bytes and reports remain in the original checkout/history.
-Do not rename/reseal them as current data or import them without provenance review.
+Prospective predictor training preserves the checkpoint's 18 FP32 `A_log`
+tensors through Transformers 5.10.1's strict dtype plan on a scoped subclass.
+Every loaded decay tensor must match the original safetensors bytes; all other
+floating base parameters remain BF16. Implementation and kernel/specification
+receipts record this policy and tensor inventory. Re-export/evaluation rejects
+adapters trained under the previous precision policy instead of relabeling them.
+This requires a new trainer source and image before either main optimizer seed;
+the dataset, LoRA recipe and numerical serving gates are unchanged. The original
+cross-engine failures remain failed. No FP32 language-head change is included.
+
+Replay scoring and calibration now accept the declared response-retention receipt
+and verify its file hash, record count, response hashes and ordered checkpoint
+dispatch evidence. The previous scorer rejected the added metadata by comparing
+the whole receipt against its older five-field shape. Existing replay bytes stay
+unchanged. This is an analysis-reader correction; deployed training and serving
+sources retain their original identities.
+
+The experiment runner verifies every input hash at admission and before/after
+each successful stage. While a child runs, its 250 ms guard checks file identity,
+mode, size and nanosecond modification/change times instead of rereading all
+contents. Metadata is only early change detection; final hash checks still reject
+changed bytes even if metadata appears unchanged. Existing process/container
+drain, source, artifact, stop and deadline checks remain in force. New runs bind
+the new runner hash; do not resume an old attempt under it.
+
+Paired serving segments may consume an explicit whole-cohort reservation. Reserve
+every original trial root once with `scripts/acephale-infra-cohort.ts`, under the
+sole original-journal owner. Each segment supplies that immutable receipt and a
+fresh ledger checkpoint. Atomic zero-cost claim markers prevent retrying a failed
+or interrupted segment; future trial holds and unknown charges remain reserved.
+The original and grouped schedules must contain identical slots, contiguous
+three-arm blocks and unchanged randomized arm order within each block.
+
+Prospective unmerged exports use serving-probe schema2: the shortest complete
+neutral `weight_fit` prompt, ordered by `(promptTokens, id)`, with the pinned
+assistant generation suffix. Dataset, row, prompt and exact token hashes are
+recorded. The internal 256-token strict reload check and the serving top-token
+and 0.01 binary-probability gates remain unchanged. Historical schema1 probes
+remain valid only under their original identities; no failed receipt is resealed.
+
+The prospective `machine_audited_exploratory` protocol can run with a separate,
+source-bound machine critic of the same original 20 audit IDs. It must retain
+zero human reviews, the exact reviewer/audit receipt and the unchanged 90%/zero
+unsupported-binding thresholds. The original human-reviewed mode remains the
+default. See the November 13 protocol amendment before preparing new data or
+reliability artifacts. Do not relabel old annotations, reviews or replays.
+
+Replay now retains parsed model responses before output validation, with token
+probabilities, request/input hashes and bounded failure diagnostics. This changes
+the compiler identity. Retain the earlier replay and run the whole frozen cohort
+again for the new matched comparison; never replace individual failed rows.
+
+The goal instruction now explicitly requires complete joint outcomes, matching
+the teacher's intended alternative-hypothesis semantics. This changes predictor
+and candidate compiler hashes. Prepare fresh source-qualified model inventory,
+public input compilation, calibration and replay before using it. Preserve the
+previous bootstrap and all old annotation artifacts. A separate AI audit found
+one incomplete top goal and seven uncertain cases in the original 20-case audit;
+it is not human approval. Prospective label corrections need their own lineage
+and a revised review packet with the same audit checkpoint IDs.
+
+Native opportunity profiling accepts either the original `cohortPath` or an
+explicit `cohortPaths` list for a combined import. Supply all sealed originals;
+each public prefix routes through its verified owner. Profiling replays only
+previously visible actions and never executes newly measured actor proposals.
+
+## Parent-aware annotation reuse
+
+An original annotation pilot may be used with a verified multi-cohort aggregate
+only through its unique original parent. Verification retains literal public
+JSONL and split hashes, checkpoint ownership and the unchanged audit membership.
+Expanded grading declarations record this parent proof and revalidate it. The
+legacy annotation dispatch cap remains unchanged; larger calibration cohorts need
+explicit bounded batches with already accepted audit labels reused, not rerun.
+
+An unresolved provider launch remains fully reserved. Replacement admission is
+explicit: pass `--unresolved-fence` to reservation and launch, with fresh receipts
+for the same two old-name watchdogs. New work requires separate controllers.
+Never refresh the predecessor heartbeat or overwrite its registered state.
+
+Multi-cohort memory verification now hashes the retained raw public JSONL lines
+for each parent instead of reserializing them. This fixes a Python/RFC8785 byte
+mismatch without changing original prefixes, parent manifests or failed stages.
+Keep any offline recovery under its own source-bound receipt and output directory.
+
+Read [methods](METHODS.md), [state](STATE.md) and [runbook](RUNBOOK.md) first.
+This repository studies goal-conditioned speculative reads with a fixed actor.
+
+Compiler v3 removes duplicate policy text while preserving its mandatory source.
+The phase-one collection closed under `fe0748b`: 57/60 native completions and
+46/60 known constraint-clean completions. Public-only recompilation under
+`bbd95b0` recovered postprocessing without repeating native trials. Preserve both
+attempts and all earlier artifacts. The independent 12-row development-validation
+cohort remains separate from the later paired comparison.
+
+The native exporter now accepts the actual teacher contract. Use explicit v2
+`native_multitask` export for neutral ranking, conditioned ranking and goal targets.
+The default protocol requires 20 attributed human reviews. The separately
+declared exploratory mode requires its actual machine-audit receipt instead,
+with zero human reviews. The old APIGen packet cannot certify a fresh native
+dataset under either protocol.
+
+Optional expanded fitting selection uses `scripts/acephale-native-selection.ts`
+to retain every preexisting public-eligible checkpoint. Pass its receipt,
+`originalPublicEligibility` and the unchanged `originalPilot` JSON together in
+the v2 export configuration. Without these fields, the exact 100-case default
+is unchanged. The receipt may transfer into an auxiliary-development aggregate
+only through verified parent-dataset lineage. Keep the original human audit,
+additional annotation lineage and all fitting coverage requirements intact.
+
+Run stages with `python -m acephale.experiment_runner`. The manifest binds source,
+inputs, commands, deadlines and required successful output fields. Resume only
+verified completed stages. Retain any failed or interrupted attempt and declare a
+new recovery manifest; do not silently rerun individual failed trials.
+The runner owns Linux process groups or Windows kill-on-close Job Objects.
+GPU fitting still runs inside the qualified Linux container.
+
+The single training recipe accepts microbatch/accumulation 1/16, 2/8 or 4/4.
+Profile fitting data before choosing one, then freeze it for both seeds. The
+actor and base predictor remain exact repository pins. A trained checkpoint needs
+new calibration, goal-reliability and opportunity measurements before live use.
+
+The user's subsequent spending authorization supports v3, a $1,000 working
+envelope activated through a creation-only sidecar on the original journal after
+the previous lease closed. Its parent
+amendment binds v2; original reservations, GPU hours and training windows remain
+counted. Policy and amendment hashes must match future execution manifests.
+Never restart an old heartbeat, reuse an expired lease or create a replacement
+budget. Resolve secure paths through operator configuration.
+
+The fresh 88-task native fixture bundle and 200 omitted-mutation checks passed
+before actor execution. Preserve its generator bytes and receipt. Phase one
+collected 60 fitting/calibration trials with shadow prediction disabled and a
+$0.40 hosted-call cap; development and test tasks were withheld. Preserve its
+original task IDs and failed
+slots. Unknown provider tax has a 30% reservation allowance, not an asserted tax
+rate. Keep the prior internal infrastructure split as historical evidence; after
+v3 activation the infrastructure/compute/associated limits are $200/$150/$50.
+
+The November 13 actual Qwen smoke passed strict adapter reload, then failed the
+merged-weight logit comparison. The new v2 predictor artifact preserves the exact
+FP32 adapter with its BF16 base instead of merging. vLLM runtime LoRA arithmetic
+is explicitly BF16. Export verification alone does not admit this artifact: the
+observed server must pass a fixed one-token numerical probe, followed by a fresh
+inventory of the same processes. Native and prediction guards require that proof.
+This is a loading sanity check, not full model equivalence or task accuracy.
+
+Use `training_cli profile` before fitting. It tries microbatch/accumulation 4/4,
+2/8, then 1/16 on the 16 longest distinct fitting rows. Only CUDA OOM permits a
+fallback. One disposable optimizer step must produce finite nonzero gradients,
+changed adapter weights and unchanged base weights; it produces no fitted model.
+Freeze the selected setting for both main seeds and start them independently.
+
+The next trainer pins FLA/core 0.6.0 and verifies actual Qwen DeltaNet function
+identities; convolution remains PyTorch, attention SDPA and packing disabled.
+This changes the image and requires a fresh GPU smoke, strict reload, numerical
+server qualification and measured profile. The 549-pass local research suite
+does not establish throughput or serving compatibility. Expanded fitting means
+1,116 multitask rows and 210 optimizer steps per seed at effective batch 16.
+Do not shorten either seed to fit an obsolete runtime estimate.
+
+Multi-cohort import preserves original receipts and disjoint task/domain/seed
+identities. Collect 12 separate base development-validation trials before model
+calibration; these are not the paired comparison's base arm. Original annotation
+reviews transfer only through verified ancestor receipt, prefix and label hashes.
+No main seed or paired live improvement is verified at this checkpoint.
+
+Use `npm run check`, `npm test`, research pytest and deployment tests. Run the
+real Docker permission fixture in CI, and report unavailable integrations as
+skipped. Update STATE and the experiment report with exact new receipts after
+execution. Preserve the old pilot report and its artifacts.
+
+Prior operator history remains in the
+[2026-11-11 checkpoint](https://github.com/xyleus1/Acephale/blob/ab9d26fedcc698898f2935ac1127835d7fbda4c9/docs/AI_HANDOFF.md).
+
+## Explicit provider region routing
+
+`control.py record-region-route` creates a new sidecar for capacity in another declared US region, with the same hardware, an at-most-$1.99 hourly quote, an exact regional image and a restricted regional SSH firewall. Pass it with `prepare-lease --routing-amendment`. The original financial plan, journal, access receipt and prior reservations are preserved. Routing alone never permits bypassing an unresolved lease. Actual replacement admission needs independent predecessor fencing and separate controllers.

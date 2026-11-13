@@ -79,6 +79,10 @@ def main(argv: list[str] | None = None) -> None:
     panel_replay = commands.add_parser("score-panel-replay")
     for field in ("bundle", "predictions", "output"):
         panel_replay.add_argument(f"--{field}", type=Path, required=True)
+    comparison = commands.add_parser("compare-predictor-replays", help="Compare audited binary predictor weights on reviewed development families only")
+    for field in ("bundle", "partitions", "memory", "output"):
+        comparison.add_argument(f"--{field}", type=Path, required=True)
+    comparison.add_argument("--prediction", action="append", required=True, metavar="NAME=PATH")
     verify = commands.add_parser("verify")
     verify.add_argument("directory", type=Path)
     replay = commands.add_parser("replay-patterns")
@@ -91,6 +95,8 @@ def main(argv: list[str] | None = None) -> None:
     calibration.add_argument("--predictions", type=Path, required=True)
     calibration.add_argument("--condition", choices=["neutral", "conditional", "both"], default="neutral")
     calibration.add_argument("--output", type=Path, required=True)
+    calibration.add_argument("--partitions", type=Path, help="Approved partition beside its original proposal and source-design review")
+    calibration.add_argument("--memory", type=Path, help="Exact reviewed fit-only runtime memory; required with --partitions")
     opportunity = commands.add_parser("build-opportunity")
     opportunity.add_argument("--bundle", type=Path, required=True)
     opportunity.add_argument("--measurements", type=Path, required=True)
@@ -98,6 +104,7 @@ def main(argv: list[str] | None = None) -> None:
     reliability = commands.add_parser("build-goal-reliability")
     for field in ("bundle", "predictions", "annotations", "pilot", "reviews", "grades", "output"):
         reliability.add_argument(f"--{field}", type=Path, required=True)
+    reliability.add_argument("--machine-audit", type=Path, help="Explicit exploratory machine-audit receipt; default remains human review")
     native = commands.add_parser("native")
     for field in ("config", "tasks", "output", "budget-directory", "upstream-root"):
         native.add_argument(f"--{field}", type=Path, required=True)
@@ -117,9 +124,9 @@ def main(argv: list[str] | None = None) -> None:
         from acephale.infra_calibration import fit_calibration, fit_paired_calibration
 
         if args.condition == "both":
-            calibration, report, observations = fit_paired_calibration(args.bundle, args.predictions)
+            calibration, report, observations = fit_paired_calibration(args.bundle, args.predictions, partitions_path=args.partitions, memory_path=args.memory)
         else:
-            calibration, report, observations = fit_calibration(args.bundle, args.predictions, condition=args.condition)
+            calibration, report, observations = fit_calibration(args.bundle, args.predictions, condition=args.condition, partitions_path=args.partitions, memory_path=args.memory)
         result = publish_bundle(args.output, {"calibration.json": calibration, "report.json": report, "joined-scores.jsonl": observations}, parquet=True)
     elif args.command == "build-opportunity":
         from acephale.infra_admission import build_opportunity
@@ -129,7 +136,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "build-goal-reliability":
         from acephale.infra_admission import build_goal_reliability
 
-        artifact, report, observations = build_goal_reliability(args.bundle, args.predictions, args.annotations, args.pilot, args.reviews, args.grades)
+        artifact, report, observations = build_goal_reliability(args.bundle, args.predictions, args.annotations, args.pilot, args.reviews, args.grades,
+                                                              machine_audit_path=args.machine_audit)
         result = publish_bundle(args.output, {"goal-reliability.json": artifact, "report.json": report, "graded-goals.jsonl": observations}, parquet=True)
     elif args.command == "export":
         result = export_dataset(args.trajectories, args.metadata, args.split, args.output, parquet=args.parquet)
@@ -160,6 +168,17 @@ def main(argv: list[str] | None = None) -> None:
         result = publish_bundle(args.output, {"audit.json": audit_gate(_json(args.pilot), read_jsonl(args.reviews)), "lineage.json": {"pilot_sha256": file_hash(args.pilot), "reviews_sha256": file_hash(args.reviews)}})
     elif args.command == "score-fixed-panels":
         result = publish_bundle(args.output, {"prediction-report.json": score_candidate_panels(read_jsonl(args.rows)), "lineage.json": {"rows_sha256": file_hash(args.rows)}})
+    elif args.command == "compare-predictor-replays":
+        from acephale.infra_fairness import compare_predictor_replays
+
+        predictions = {}
+        for value in args.prediction:
+            name, separator, path = value.partition("=")
+            if not separator or not name or not path or name in predictions:
+                raise ValueError("Each prediction requires a distinct NAME=PATH")
+            predictions[name] = Path(path)
+        report, joined = compare_predictor_replays(args.bundle, predictions, args.partitions, args.memory)
+        result = publish_bundle(args.output, {"prediction-report.json": report, "joined-panels.jsonl": joined}, parquet=True)
     elif args.command == "score-panel-replay":
         report, joined = score_fixed_panel_replay(args.bundle, args.predictions)
         result = publish_bundle(args.output, {"prediction-report.json": report, "joined-panels.jsonl": joined}, parquet=True)

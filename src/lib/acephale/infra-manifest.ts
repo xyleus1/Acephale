@@ -1,5 +1,8 @@
+import { predictorServingWeightsHash, resolvePredictorProfile } from "./predictor-artifact";
 import Ajv2020 from "ajv/dist/2020";
 import schema from "./contracts/infra-manifest-v2.schema.json";
+import budgetPolicy from "./contracts/budget-policy-v2.json";
+import budgetPolicyV3 from "./contracts/budget-policy-v3.json";
 import { canonical, copy, hash } from "./canonical";
 import type { InfraExperimentManifestV2 } from "./contracts/infra-manifest-v2.generated";
 
@@ -16,6 +19,9 @@ export function validateInfraManifest(value: unknown): asserts value is InfraExp
   canonical(value);
   if (!validate(value)) throw new Error(`Invalid infra manifest: ${JSON.stringify(validate.errors)}`);
   const manifest = value as unknown as InfraExperimentManifestV2;
+  if (manifest.budgets.budgetPolicyHash !== undefined && ![hash(budgetPolicy), hash(budgetPolicyV3)].includes(manifest.budgets.budgetPolicyHash)) {
+    throw new Error("Unknown budget policy; preserve the declared study amendment");
+  }
   if (manifest.actor.repository !== INFRA_MODEL_PINS.actor.repository || manifest.actor.revision !== INFRA_MODEL_PINS.actor.revision
     || manifest.predictor.repository !== INFRA_MODEL_PINS.predictor.repository || manifest.predictor.revision !== INFRA_MODEL_PINS.predictor.revision
     || manifest.runtime.imageDigest !== INFRA_MODEL_PINS.image) throw new Error("Unexpected model or runtime pin; create an explicit new experiment profile");
@@ -24,6 +30,15 @@ export function validateInfraManifest(value: unknown): asserts value is InfraExp
   }
   if (manifest.actor.contextWindow !== 32768 || manifest.actor.inputBudget !== 28672 || manifest.actor.outputCap !== 4096
     || manifest.predictor.contextWindow !== 8192 || manifest.predictor.inputBudget !== 7168 || manifest.predictor.outputCap !== 1024) throw new Error("Unexpected initial experiment context limits");
+  if (manifest.actor.trainedPredictor || manifest.actor.predictionProtocol || manifest.actor.binaryTokenIds) throw new Error("Actor weights and protocol cannot be changed by predictor training");
+  const profile = resolvePredictorProfile(manifest.predictor);
+  if (profile.trainedPredictor) {
+    const artifact = profile.trainedPredictor;
+    if (manifest.predictor.servedModel !== artifact.servedModel || manifest.predictor.weightsHash !== predictorServingWeightsHash(artifact)
+      || manifest.predictor.tokenizerHash !== artifact.tokenizerHash || manifest.predictor.chatTemplateHash !== artifact.chatTemplateHash) throw new Error("Manifest serving identity differs from trained predictor artifact");
+    if ([...artifact.weightFitFamilies, ...artifact.calibrationFamilies].some(family => !manifest.data.trainingFamilies.includes(family)
+      || manifest.data.developmentFamilies.includes(family) || manifest.data.heldoutFamilies.includes(family))) throw new Error("Trained predictor family provenance crosses experiment partitions");
+  }
   const families = new Set<string>();
   for (const split of [manifest.data.trainingFamilies, manifest.data.developmentFamilies, manifest.data.heldoutFamilies]) {
     for (const family of split) {

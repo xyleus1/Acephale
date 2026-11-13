@@ -13,7 +13,7 @@ interface Event {
   type: string; runId: string; checkpoint: number; boundary: number; boundaryId: string; frameHash: string;
   sequence: number; processClockId: string; monotonicNs: string; publicInputHash: string; actorInputHash: string;
   actorInputHashKind: string; actorResponseHash: string; toolCalls: ToolCall[]; candidatePool: Candidate[]; poolHash: string;
-  probabilitySemantics: string; decision: { action: string; scores: { candidateId: string; probability: number }[] };
+  probabilitySemantics: string; scoreSemanticsVersion?: number; decision: { action: string; scores: { candidateId: string; probability: number }[] };
   candidateId: string; admitted: boolean;
 }
 function objectRows<T>(rows: unknown[]): T[] {
@@ -79,7 +79,8 @@ export function extractCausalMemoryMisses(memoryInput: FrozenExperienceMemory, e
     const actual = generated.toolCalls.map(call => ({ id: call.id, tool: call.name, arguments: call.arguments }));
     if (canonical(actual) !== canonical(episode.nextActions)) throw new Error("Causal actor actions differ from training trace");
     if (!Array.isArray(ranking.candidatePool) || hash(ranking.candidatePool) !== ranking.poolHash
-      || ranking.probabilitySemantics !== "independent_next_batch_hit") throw new Error("Causal candidate pool identity mismatch");
+      || !(ranking.probabilitySemantics === "independent_next_batch_hit" && ranking.scoreSemanticsVersion === undefined
+        || ranking.probabilitySemantics === "next_batch_invocation_membership" && ranking.scoreSemanticsVersion === 3)) throw new Error("Causal candidate pool identity mismatch");
     for (const candidate of ranking.candidatePool) {
       validateContract("Candidate", candidate);
       if (canonical(candidate.invocation.scope) !== canonical(episode.scope)) throw new Error("Causal candidate scope mismatch");

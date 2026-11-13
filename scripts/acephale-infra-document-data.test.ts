@@ -92,6 +92,17 @@ test("closed document collection exports exact frames, retains failures and cali
     const receipt = await runInfraPrediction({ bundle, memory: join(bundle, "runtime-memory.json"), output: prediction,
       baseUrl: `http://127.0.0.1:${port}`, limit: 100, inferGoals: true });
     assert.equal(receipt.completed, 7, JSON.stringify(await rows(join(prediction, "predictions.jsonl"))));
+    const replay = await rows(join(prediction, "predictions.jsonl"));
+    for (const row of replay) {
+      const { contentHash, ...body } = row.audit;
+      assert.equal(contentHash, hash(body));
+      assert.equal(row.orderedCandidatePoolHash, hash(row.candidates));
+      assert.ok(row.audit.rowWallMs >= 0);
+      const dispatched = row.audit.events.filter((event: Record<string, unknown>) => event.type === "model_dispatch");
+      assert.ok(dispatched.length > 0);
+      assert.ok(dispatched.every((event: Record<string, unknown>) => /^[a-f0-9]{64}$/.test(String(event.compiledMessagesHash))));
+      assert.ok(row.audit.events.some((event: Record<string, unknown>) => event.type === "infra_predictor_compiled"));
+    }
     const python = process.platform === "win32" ? "research/acephale/.venv/Scripts/python.exe" : "research/acephale/.venv/bin/python";
     const pythonEnvironment = { ...process.env, OPENBLAS_NUM_THREADS: "1", OMP_NUM_THREADS: "1" };
     const pilotDirectory = join(directory, "pilot");

@@ -12,9 +12,17 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import Field, model_validator
 
+from acephale.annotation_review import review_metadata
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_data import read_jsonl, verify_bundle
+from acephale.replay_receipt import verify_replay_receipt
 from acephale.schemas import Record
+from acephale.score_semantics import (
+    LEGACY_NEXT_BATCH_HIT,
+    NEXT_BATCH_MEMBERSHIP,
+    RAW_SCORE_SEMANTICS,
+    replay_score_semantics,
+)
 from acephale.storage import file_hash
 
 ARMS = ("base", "neutral_memory_prefetch", "acephale")
@@ -43,10 +51,13 @@ class TrialDesign(Record):
     actor_config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     memory_snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     frozen_before_execution: Literal[True]
+    annotation_review: dict[str, Any] | None = None
     trials: tuple[TrialSlot, ...] = Field(min_length=3)
 
     @model_validator(mode="after")
     def paired_blocks(self) -> TrialDesign:
+        if self.annotation_review is not None:
+            review_metadata(self.annotation_review)
         if len({slot.slot_id for slot in self.trials}) != len(self.trials):
             raise ValueError("Duplicate scheduled slot")
         blocks: dict[tuple, list[str]] = defaultdict(list)
@@ -165,17 +176,23 @@ def report_trials(design: TrialDesign, results: list[TrialResult], *, seed: int 
             if left.logical_calls is not None and right.logical_calls is not None:
                 metrics["logical_calls_difference"][family].append(right.logical_calls - left.logical_calls)
         comparisons.append({"baseline": baseline, "treatment": treatment, "metrics": {metric: _paired_interval(metrics[metric], seed=seed, samples=bootstrap_samples) for metric in ("success_difference", "latency_ms_difference", "logical_calls_difference", "physical_calls_difference")}})
-    return {
+    report = {
         "schema_version": design.schema_version, "measurement_kind": design.measurement_kind,
         "label": design.label, "design_hash": hash_v1(design.model_dump(mode="json")),
         "results_hash": hash_v1([row.model_dump(mode="json") for row in sorted(results, key=lambda row: row.slot_id)]),
         "arms": summaries, "paired_comparisons": comparisons,
         "limitations": ["Usage-derived costs are not invoice-reconciled", "Missing telemetry is never imputed as zero", "Execution replay timing is not live latency", "Task success and exact-read prediction use different denominators"],
     }
+    if design.annotation_review is not None:
+        report["annotationReview"] = review_metadata(design.annotation_review)
+        if report["annotationReview"]["reviewProtocol"] == "machine_audited_exploratory":
+            report["limitations"].append("Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests")
+    return report
 
 
-def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootstrap_samples: int = 2000) -> dict[str, Any]:
-    """Score independent exact-read hit marginals on identical fixed panels.
+def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootstrap_samples: int = 2000,
+                           allow_unavailable_panels: bool = False) -> dict[str, Any]:
+    """Score exact-read membership probabilities on identical fixed panels.
 
     A positive is membership anywhere in the immediate next authoritative
     batch. Multiple positives are valid. Missing predictions stay in the
@@ -183,8 +200,16 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
     """
     if not rows:
         raise ValueError("A declared fixed-panel cohort is required")
+    semantics = {row.get("probability_semantics") for row in rows}
+    if len(semantics) != 1 or not semantics <= {LEGACY_NEXT_BATCH_HIT, NEXT_BATCH_MEMBERSHIP}:
+        raise ValueError("One declared score semantics version is required")
+    declared_semantics = next(iter(semantics))
+    raw_semantics = {row.get("raw_score_semantics") for row in rows}
+    if declared_semantics == NEXT_BATCH_MEMBERSHIP and (len(raw_semantics) != 1 or not raw_semantics <= set(RAW_SCORE_SEMANTICS.values())):
+        raise ValueError("Explicit matching raw score semantics required")
     groups: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     identities: dict[str, str] = {}
+    observed_panels: dict[str, str] = {}
     partitions: dict[str, str] = {}
     scored: dict[tuple[str, str], dict[str, float]] = {}
     for row in rows:
@@ -193,8 +218,6 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
             raise ValueError("Condition and checkpoint identity required")
         if checkpoint in groups[condition]:
             raise ValueError("Duplicate condition/checkpoint")
-        if row.get("probability_semantics") != "independent_next_batch_hit":
-            raise ValueError("Independent next-batch hit semantics required")
         family, split = row.get("family_id"), row.get("split")
         if not isinstance(family, str) or not family or split not in {"train", "development", "test"}:
             raise ValueError("Family and declared partition required")
@@ -206,9 +229,14 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
                 raise ValueError("Unique exact invocation identities required")
         if len(panel) > 3 or row.get("panel_hash") != hash_v1(sorted(panel)):
             raise ValueError("Fixed panel hash or size differs")
-        identity = hash_v1({"family": family, "split": split, "panel": sorted(panel), "panel_available": row.get("panel_available", True), "actual": sorted(actual)})
+        identity = hash_v1({"family": family, "split": split, "actual": sorted(actual), **({} if allow_unavailable_panels else {
+            "panel": sorted(panel), "panel_available": row.get("panel_available", True)})})
         if identities.setdefault(checkpoint, identity) != identity:
             raise ValueError("Conditions must share identical panels, labels and checkpoint identities")
+        if row.get("panel_available", True):
+            panel_identity = hash_v1(sorted(panel))
+            if observed_panels.setdefault(checkpoint, panel_identity) != panel_identity:
+                raise ValueError("Conditions must share identical observed panels")
         status = row.get("status")
         if status not in {"completed", "failed", "not_dispatched", "unobserved_actor_action"}:
             raise ValueError("Unknown fixed-panel prediction status")
@@ -220,7 +248,7 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
             if not isinstance(probabilities, dict) or set(probabilities) != set(panel):
                 raise ValueError("Scores must cover every fixed panel candidate, including low scores")
             if any(type(value) not in {int, float} or not math.isfinite(value) or not 0 <= value <= 1 for value in probabilities.values()):
-                raise ValueError("Invalid independent hit probability")
+                raise ValueError("Invalid next-batch membership probability")
             if panel:
                 losses = [-math.log(max(1e-12, probabilities[key] if key in actual else 1 - probabilities[key])) for key in panel]
                 briers = [(probabilities[key] - int(key in actual)) ** 2 for key in panel]
@@ -265,9 +293,11 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
         comparisons.append({"baseline": baseline, "treatment": treatment, "metrics": {
             f"{metric}_difference": _paired_interval(metrics[metric], seed=seed, samples=bootstrap_samples)
             for metric in ("binary_log_loss_nats", "brier")}})
-    return {"schema_version": "acephale-fixed-panel-report-v2", "probability_semantics": "independent_next_batch_hit",
+    return {"schema_version": "acephale-fixed-panel-report-v3" if declared_semantics == NEXT_BATCH_MEMBERSHIP else "acephale-fixed-panel-report-v2",
+            "probability_semantics": declared_semantics, "raw_score_semantics": next(iter(raw_semantics)) or "legacy_unspecified",
             "conditions": summaries, "paired_comparisons": comparisons,
-            "identical_candidate_panels": True, "identical_checkpoint_sets": True,
+            "identical_candidate_panels": all(row.get("panel_available", True) for row in rows),
+            "identical_observed_candidate_panels": True, "identical_checkpoint_sets": True,
             "test_partition_only": all(row["split"] == "test" for row in rows), "heldout_claim": False,
             "interpretation": "Checkpoint-mean binary log loss for membership anywhere in the next authoritative batch, not full-action cross-entropy or true conditional entropy",
             "limitations": ["At most three preselected candidates; panel coverage is reported separately", "Partition labels alone do not verify fresh held-out tasks or a preregistered freeze", "Missing predictions remain declared failures without invented probabilities", "Paired loss differences use jointly scored checkpoints only", "Task success, physical execution work and prediction hit rate are separate outcomes"]}
@@ -276,7 +306,7 @@ def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootst
 def score_fixed_panel_replay(bundle_directory: Path, prediction_directory: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Join a closed prediction replay to private next-batch labels after execution.
 
-    This evaluates recorded raw marginals without fitting on evaluation labels.
+    This evaluates recorded raw scores without fitting on evaluation labels.
     Public predictor inputs never receive the label file or achieved outcome.
     """
     bundle = verify_bundle(bundle_directory)
@@ -285,8 +315,9 @@ def score_fixed_panel_replay(bundle_directory: Path, prediction_directory: Path)
     manifest = json.loads(paths[0].read_text(encoding="utf-8"))
     if manifest.get("contentHash") != hash_v1({key: value for key, value in manifest.items() if key != "contentHash"}):
         raise ValueError("Prediction manifest hash mismatch")
-    if (manifest.get("version") != 2 or manifest.get("kind") != "uncalibrated_prediction_replay"
-            or manifest.get("executionAllowed") is not False or manifest.get("probabilitySemantics") != "independent_next_batch_hit"
+    semantics = replay_score_semantics(manifest)
+    if (manifest.get("kind") != "uncalibrated_prediction_replay"
+            or manifest.get("executionAllowed") is not False
             or manifest.get("predictionMode") != "fixed_panel" or manifest.get("sourceDatasetHash") != bundle["bundle_hash"]):
         raise ValueError("A compatible fixed-panel replay for this dataset is required")
     public_rows = read_jsonl(bundle_directory / "public.jsonl")
@@ -299,10 +330,7 @@ def score_fixed_panel_replay(bundle_directory: Path, prediction_directory: Path)
     ids = [row["checkpoint_id"] for row in predictions]
     if not ids or ids != manifest.get("rowIds") or len(set(ids)) != len(ids):
         raise ValueError("Every declared prediction must be retained exactly once in order")
-    receipt = json.loads(paths[2].read_text(encoding="utf-8"))
-    completed = sum(row.get("status") == "completed" for row in predictions)
-    if receipt != {"declared": len(ids), "completed": completed, "failed": len(ids) - completed, "liveActorExecuted": False, "toolExecutionPerformed": False}:
-        raise ValueError("Prediction receipt does not close the declared cohort")
+    hashes.update(verify_replay_receipt(prediction_directory, manifest, predictions))
     conditions = ("neutral", "conditional") if manifest.get("inferGoals") is True else ("neutral",)
     joined = []
     for row in predictions:
@@ -340,18 +368,18 @@ def score_fixed_panel_replay(bundle_directory: Path, prediction_directory: Path)
                     raise ValueError("Completed replay omitted its condition output")
                 scores = output.get("scores", [])
                 if len(scores) != len(panel) or {score["candidateId"] for score in scores} != set(panel):
-                    raise ValueError("Every panel candidate needs an explicit independent score")
+                    raise ValueError("Every panel candidate needs an explicit membership score")
                 if scoring_status == "completed":
                     probabilities = {identities[score["candidateId"]]: score["probability"] for score in scores}
             exact_panel = sorted(identities.values())
             joined.append({"condition": condition, "checkpoint_id": key, "family_id": row["family_id"], "split": row["split"],
-                           "probability_semantics": "independent_next_batch_hit", "candidate_panel": exact_panel,
+                           "probability_semantics": semantics["probabilitySemantics"], "raw_score_semantics": semantics.get("rawScoreSemantics"), "candidate_panel": exact_panel,
                            "panel_hash": hash_v1(exact_panel), "panel_available": panel_available, "actual_reads": actual,
                            "status": scoring_status, "probabilities": probabilities})
     report = score_candidate_panels(joined)
     report["prediction_manifest_hash"] = manifest["contentHash"]
     report["source_dataset_hash"] = bundle["bundle_hash"]
-    report["probabilities"] = "recorded_raw_marginals_no_evaluation_label_fitting"
+    report["probabilities"] = "recorded_raw_scores_no_evaluation_label_fitting"
     if any(file_hash(path) != digest for path, digest in hashes.items()):
         raise ValueError("Prediction replay changed during evaluation")
     return report, joined

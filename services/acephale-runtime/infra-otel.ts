@@ -7,7 +7,13 @@ import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import type { ClientRequest, RequestOptions } from "node:http";
 import { hash } from "../../src/lib/acephale/canonical";
 
-type Receipt = { kind: "traces" | "metrics"; collectorAccepted: boolean; status?: number; responseHash?: string };
+type Receipt = { kind: "traces" | "metrics"; collectorAccepted: boolean; status?: number; responseHash?: string; transportErrorCode?: string };
+
+function transportErrorCode(error: unknown) {
+  const code = error instanceof Error && "code" in error ? error.code : undefined;
+  if (typeof code === "string" && ["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EPIPE", "ERR_REQUEST_ABORTED"].includes(code)) return code;
+  return error instanceof Error && error.name === "AbortError" ? "AbortError" : "transport_error";
+}
 
 /** SDK exporters report partial OTLP success as success. Observe the actual,
  * bounded collector response before issuing a stronger readiness receipt. */
@@ -22,11 +28,11 @@ function receiptAgent(kind: Receipt["kind"], receipt: (value: Receipt) => void) 
     agent.addRequest = (request, options) => {
       let finished = false;
       const done = (value: Receipt) => { if (!finished) { finished = true; receipt(value); } };
-      request.once("error", () => done({ kind, collectorAccepted: false }));
+      request.once("error", error => done({ kind, collectorAccepted: false, transportErrorCode: transportErrorCode(error) }));
       request.once("response", response => {
         const chunks: Buffer[] = []; let bytes = 0;
         response.on("data", (chunk: Buffer) => { bytes += chunk.length; if (bytes <= 16384) chunks.push(chunk); });
-        response.once("error", () => done({ kind, collectorAccepted: false, status: response.statusCode }));
+        response.once("error", error => done({ kind, collectorAccepted: false, status: response.statusCode, transportErrorCode: transportErrorCode(error) }));
         response.once("end", () => {
           let accepted = false, responseHash: string | undefined;
           try {

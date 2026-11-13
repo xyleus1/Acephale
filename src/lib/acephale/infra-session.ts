@@ -1,4 +1,5 @@
 import { copy, hash } from "./canonical";
+import { NEXT_BATCH_MEMBERSHIP } from "./score-semantics";
 import type { Candidate, ExecutionFrame, GoalSet, Invocation, SourceRef } from "./contracts/generated";
 import { validateContract } from "./contracts/validate";
 import { resolveSource, validateGoals } from "./compiler";
@@ -190,7 +191,7 @@ export class InfraSession {
     validateDecision(decision);
     if (!current() || generation !== this.scheduler.generation) return;
     this.record({ type: "infra_ranking", runId: frame.runId, checkpoint: frame.boundary, boundary: frame.boundary, frameHash: hash(frame),
-      poolHash: hash(candidates), candidatePool: candidates, probabilitySemantics: "independent_next_batch_hit",
+      poolHash: hash(candidates), candidatePool: candidates, scoreSemanticsVersion: 3, probabilitySemantics: NEXT_BATCH_MEMBERSHIP,
       decision, goalsHash: hash(goalView), rankingMs: performance.now() - started, arm: this.policy.arm });
     if (decision.action !== "READ") return;
     const measured = this.policy.opportunity(frame);

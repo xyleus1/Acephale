@@ -1,6 +1,6 @@
 # Acephale current methods
 
-Read [METHODS.md](../METHODS.md) for independent candidate-hit probabilities,
+Read [METHODS.md](../METHODS.md) for per-candidate next-batch membership scores,
 causal trace labels, frozen memory, exact-call promotion and deployment-bound
 calibration/opportunity contracts. Read [RUNBOOK.md](../RUNBOOK.md) for current
 commands and [STATE.md](../STATE.md) for observed evidence and remaining gates.

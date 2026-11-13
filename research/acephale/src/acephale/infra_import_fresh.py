@@ -8,6 +8,7 @@ successful training endpoints with measured zero violations.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path, PureWindowsPath
@@ -21,11 +22,13 @@ from acephale.infra_data import (
     Scope,
     _public_check,
     build_memory,
+    canonical,
     export_rows,
     public_context,
     publish_bundle,
     read_jsonl,
     select_pilot,
+    verify_bundle,
 )
 from acephale.native_common import READS
 from acephale.schemas import Outcome, ToolContract, TraceProvenance, Trajectory
@@ -33,6 +36,8 @@ from acephale.storage import file_hash
 
 ACTOR = {"repository": "Qwen/Qwen3.5-9B", "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a"}
 LINEAGE_VERSION = "acephale-infra-fresh-native-v1"
+MULTI_COHORT_VERSION = "acephale-infra-fresh-native-v2"
+AUXILIARY_DEVELOPMENT = "auxiliary-development-validation"
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -99,7 +104,7 @@ def _runtime_messages(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = None, audit_count: int = 20, parquet: bool = False) -> dict[str, Any]:
+def _read_fresh_cohort(cohort: Path) -> dict[str, Any]:
     receipt, inventory = _inventory(cohort)
     configuration, manifest, design = [_json(cohort / name) for name in ("configuration.json", "manifest.json", "design.json")]
     if receipt.get("configurationHash") != hash_v1(configuration) or receipt.get("manifestHash") != hash_v1(manifest):
@@ -221,17 +226,21 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
              "trajectories.jsonl": [row.model_dump(mode="json") for row in trajectories],
              "split.json": split, "memory.json": memory, "runtime-runs.jsonl": runtime_rows,
              "lineage.json": lineage, "cohort-receipt.json": receipt}
-    # The pilot binds the completed dataset hash. Publish it as a separate
-    # sub-bundle to avoid a circular hash between the pilot and its source.
-    pilot = select_pilot(public, count=pilot_count, audit_count=audit_count) if pilot_count is not None else None
-    # Verify source bytes again before publishing an immutable completion marker.
     final_receipt, final_inventory = _inventory(cohort)
     if final_receipt != receipt or final_inventory != inventory:
         raise ValueError("Fresh source changed during import")
+    return files
+
+
+def _publish_fresh(files: dict[str, Any], destination: Path, *, pilot_count: int | None,
+                   audit_count: int, parquet: bool) -> dict[str, Any]:
+    # The pilot binds the completed dataset hash. Publish it as a separate
+    # sub-bundle to avoid a circular hash between the pilot and its source.
+    pilot = select_pilot(files["public.jsonl"], count=pilot_count, audit_count=audit_count) if pilot_count is not None else None
     dataset = publish_bundle(destination, files, parquet=parquet)
     if pilot is not None:
         pilot["source_dataset_hash"] = dataset["bundle_hash"]
-        pilot["source_split_hash"] = hash_v1(split)
+        pilot["source_split_hash"] = hash_v1(files["split.json"])
         publish_bundle(destination / "annotation-pilot", {
             "pilot.json": {key: value for key, value in pilot.items() if key != "annotation_inputs"},
             "annotation-inputs.jsonl": pilot["annotation_inputs"],
@@ -239,15 +248,178 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
     return dataset
 
 
+def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = None, audit_count: int = 20, parquet: bool = False) -> dict[str, Any]:
+    return _publish_fresh(_read_fresh_cohort(cohort), destination, pilot_count=pilot_count,
+                          audit_count=audit_count, parquet=parquet)
+
+
+def verify_cohort_compatibility(parts: list[dict], configurations: list[dict], manifests: list[dict]) -> None:
+    """Apply the same family, trial and native-contract checks at import and replay."""
+    policy = parts[0]["split.json"]["declared_family_policy"]
+    if any(part["split.json"]["declared_family_policy"] != policy for part in parts):
+        raise ValueError("Cohorts must preserve the same predeclared family policy")
+    if any(manifest["actor"] != manifests[0]["actor"] for manifest in manifests):
+        raise ValueError("Cohorts must use the exact same fixed actor configuration")
+    if any(config["taskBundleHash"] != configurations[0]["taskBundleHash"] for config in configurations):
+        raise ValueError("Cohorts must use the same predeclared task bundle")
+    if any(config.get("collectionPurpose") != AUXILIARY_DEVELOPMENT
+           or config.get("hosted", {}).get("allocation") != "development"
+           or any(policy[run["familyId"]] != "development" for run in config["runs"])
+           for config in configurations[1:]):
+        raise ValueError("Additional cohorts require explicit auxiliary development collection")
+    # An auxiliary run is not a replacement for any paired development base arm.
+    trials, episodes, checkpoints, domains = set(), set(), set(), {}
+    for config, part in zip(configurations, parts, strict=True):
+        for run in config["runs"]:
+            identity = (run["domain"], run["taskId"], run["seed"])
+            if identity in trials or run["runId"] in episodes:
+                raise ValueError("Repeated trial or episode across closed cohorts")
+            trials.add(identity)
+            episodes.add(run["runId"])
+        for row in part["public.jsonl"]:
+            if row["checkpoint_id"] in checkpoints:
+                raise ValueError("Repeated public checkpoint across closed cohorts")
+            checkpoints.add(row["checkpoint_id"])
+            contract = hash_v1({"policy": row["input"]["policy"], "tools": row["input"]["tools"],
+                                "scope": row["scope"], "environment": row["environment_version"]})
+            if domains.setdefault(row["domain"], contract) != contract:
+                raise ValueError("Native public domain contract differs across cohorts")
+
+
+def import_fresh_cohorts(cohorts: list[Path], destination: Path, *, pilot_count: int | None = None,
+                         audit_count: int = 20, parquet: bool = False,
+                         parent_bundles: list[Path] | None = None) -> dict[str, Any]:
+    """Join closed base cohorts without rewriting their identities or paired slots.
+
+    Additional cohorts are explicitly declared auxiliary development collection.
+    Their observations validate calibration and never supply fitting memory.
+    """
+    if len(cohorts) < 2 or len({path.resolve() for path in cohorts}) != len(cohorts):
+        raise ValueError("Multiple distinct closed cohort directories are required")
+    parts = [_read_fresh_cohort(path) for path in cohorts]
+    configurations = [_json(path / "configuration.json") for path in cohorts]
+    manifests = [_json(path / "manifest.json") for path in cohorts]
+    verify_cohort_compatibility(parts, configurations, manifests)
+    policy = parts[0]["split.json"]["declared_family_policy"]
+    checkpoints = {row["checkpoint_id"] for part in parts for row in part["public.jsonl"]}
+    combined = {name: [row for part in parts for row in part[name]] for name in (
+        "public.jsonl", "labels.jsonl", "verdicts.jsonl", "metadata.jsonl", "trajectories.jsonl", "runtime-runs.jsonl")}
+    metadata = {row["episode_id"]: EpisodeMeta.model_validate(row) for row in combined["metadata.jsonl"]}
+    trajectories = [Trajectory.model_validate(row) for row in combined["trajectories.jsonl"]]
+    split = {**parts[0]["split.json"], "method": "preserved-fresh-infra-multiple-closed-cohorts-v2",
+             "families": {family: policy[family] for family in sorted({row.group_id for row in trajectories})},
+             "episodes": {row.trajectory_id: row.group_id for row in trajectories},
+             "metadata_hash": hash_v1([metadata[key].model_dump(mode="json") for key in sorted(metadata)])}
+    combined["split.json"] = split
+    combined["memory.json"] = build_memory(trajectories, metadata, split,
+        eligible_episode_ids={row["id"] for row in combined["runtime-runs.jsonl"] if row["memoryEligible"]})
+    parents, source_map, episode_cohorts = [], {}, {}
+    for path, config, manifest, part in zip(cohorts, configurations, manifests, parts, strict=True):
+        lineage, receipt = part["lineage.json"], part["cohort-receipt.json"]
+        cohort_id = hash_v1(receipt)
+        run_ids = [run["runId"] for run in config["runs"]]
+        parents.append({"cohortId": cohort_id, "receiptSha256": lineage["cohort_receipt_sha256"], "receipt": receipt,
+                        "receiptText": (path / "cohort-receipt.json").read_bytes().decode("utf-8"),
+                        "configuration": config, "manifest": manifest, "runIds": run_ids,
+                        "purpose": config.get("collectionPurpose", "original-base-collection")})
+        for key, source in lineage["fresh_sources"].items():
+            source_map[key] = {**source, "cohort_id": cohort_id}
+            episode_cohorts[key] = cohort_id
+        # Recheck every original artifact after parsing all cohorts.
+        if (_inventory(path) != (receipt, lineage["cohort_files"])
+                or file_hash(path / "cohort-receipt.json") != lineage["cohort_receipt_sha256"]):
+            raise ValueError("Fresh source changed during multi-cohort import")
+    parent_datasets = []
+    for directory in parent_bundles or []:
+        original_manifest = verify_bundle(directory)
+        original_lineage = _json(directory / "lineage.json")
+        cohort_id = original_lineage.get("cohort_receipt_hash")
+        matching = [part for part in parts if part["lineage.json"]["cohort_receipt_hash"] == cohort_id]
+        if (len(matching) != 1 or original_lineage.get("version") != LINEAGE_VERSION
+                or any(row["bundleHash"] == original_manifest["bundle_hash"] for row in parent_datasets)):
+            raise ValueError("Parent dataset must be a unique original single-cohort import")
+        part = matching[0]
+        for name, expected in part.items():
+            actual = read_jsonl(directory / name) if name.endswith(".jsonl") else _json(directory / name)
+            if actual != expected:
+                raise ValueError("Parent dataset differs from its original closed cohort")
+        parent_datasets.append({"bundleHash": original_manifest["bundle_hash"], "manifest": original_manifest,
+                                "cohortId": cohort_id, "split": part["split.json"],
+                                "publicCheckpointIds": [row["checkpoint_id"] for row in part["public.jsonl"]]})
+        if verify_bundle(directory) != original_manifest:
+            raise ValueError("Parent dataset changed during multi-cohort import")
+    receipt_body = {"version": 2, "kind": "acephale-fresh-native-multicohort", "closed": True,
+                    "allDeclaredSlotsRetained": True, "pairedComparisonSlotsReused": False,
+                    "cohorts": parents, "episodeCohorts": episode_cohorts, "parentDatasets": parent_datasets}
+    aggregate = {**receipt_body, "contentHash": hash_v1(receipt_body)}
+    combined["cohort-receipt.json"] = aggregate
+    # This is a new aggregate receipt, not a relabeled execution receipt.
+    lineage = {**parts[0]["lineage.json"], "version": MULTI_COHORT_VERSION,
+               "label": "Closed base collection plus auxiliary development validation; no paired or heldout result",
+               "cohort_receipt_hash": hash_v1(aggregate), "cohort_receipt_sha256": None,
+               "fresh_sources": source_map, "cohort_files": None,
+               "cohort_count": len(parents), "episodes": len(trajectories), "checkpoints": len(checkpoints),
+               "training_checkpoints": sum(row["split"] == "train" for row in combined["public.jsonl"]),
+               "endpoint_constraints_unknown": sum(row["constraintViolations"] is None for row in combined["runtime-runs.jsonl"])}
+    # publish_bundle uses exactly this JSON encoding; bind the actual aggregate bytes.
+    lineage["cohort_receipt_sha256"] = hashlib.sha256((canonical(aggregate) + "\n").encode("utf-8")).hexdigest()
+    combined["lineage.json"] = lineage
+    return _publish_fresh(combined, destination, pilot_count=pilot_count, audit_count=audit_count, parquet=parquet)
+
+
+def verify_parent_audit_source(directory: Path, pilot: dict[str, Any]) -> dict[str, str]:
+    """Reuse an unchanged audit only through its verified original dataset ancestry."""
+    verify_bundle(directory)
+    lineage = _json(directory / "lineage.json")
+    aggregate = _json(directory / "cohort-receipt.json")
+    if (lineage.get("version") != MULTI_COHORT_VERSION
+            or aggregate.get("kind") != "acephale-fresh-native-multicohort"
+            or aggregate.get("contentHash") != hash_v1({key: value for key, value in aggregate.items() if key != "contentHash"})
+            or lineage.get("cohort_receipt_hash") != hash_v1(aggregate)
+            or lineage.get("cohort_receipt_sha256") != file_hash(directory / "cohort-receipt.json")):
+        raise ValueError("Human audit requires verified original parent dataset provenance")
+    matches = [parent for parent in aggregate.get("parentDatasets", []) if parent.get("bundleHash") == pilot.get("source_dataset_hash")]
+    if len(matches) != 1:
+        raise ValueError("Human audit pilot is not a unique verified parent dataset")
+    parent = matches[0]
+    manifest, cohort_id = parent["manifest"], parent["cohortId"]
+    if (manifest.get("bundle_hash") != parent["bundleHash"] or manifest["bundle_hash"] != hash_v1(manifest["files"])
+            or sum(cohort.get("cohortId") == cohort_id for cohort in aggregate["cohorts"]) != 1):
+        raise ValueError("Original audit dataset identity differs")
+    public = [row for row in read_jsonl(directory / "public.jsonl") if aggregate["episodeCohorts"].get(row["episode_id"]) == cohort_id]
+    encoded = "".join(canonical(row) + "\n" for row in public).encode("utf-8")
+    encoded_split = (canonical(parent["split"]) + "\n").encode("utf-8")
+    if ([row["checkpoint_id"] for row in public] != parent["publicCheckpointIds"]
+            or hashlib.sha256(encoded).hexdigest() != manifest["files"]["public.jsonl"]["sha256"]
+            or hashlib.sha256(encoded_split).hexdigest() != manifest["files"]["split.json"]["sha256"]
+            or pilot.get("source_split_hash") != hash_v1(parent["split"])):
+        raise ValueError("Original audited public checkpoint bytes or split changed")
+    by_id = {row["checkpoint_id"]: row for row in public}
+    for item in pilot.get("checkpoints", []):
+        row = by_id.get(item["checkpoint_id"])
+        if (row is None or row["input_hash"] != item.get("input_hash") or hash_v1(row["input"]) != row["input_hash"]
+                or row["split"] != "train" or parent["split"]["families"].get(row["family_id"]) != "train"):
+            raise ValueError("Original audit cannot move to changed or nontraining public inputs")
+    return {"sourceDatasetHash": parent["bundleHash"], "aggregateReceiptHash": hash_v1(aggregate)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cohort", type=Path, required=True)
+    parser.add_argument("--cohort", type=Path, action="append", required=True,
+                        help="Closed base cohort; repeat only for explicitly declared auxiliary development cohorts")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--parent-bundle", type=Path, action="append",
+                        help="Existing immutable single-cohort import whose audit provenance must remain usable")
     parser.add_argument("--pilot-count", type=int, help="Publish a dataset-bound pilot in OUTPUT/annotation-pilot")
     parser.add_argument("--audit-count", type=int, default=20)
     parser.add_argument("--parquet", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(import_fresh(args.cohort, args.output, pilot_count=args.pilot_count, audit_count=args.audit_count, parquet=args.parquet)))
+    importer = import_fresh if len(args.cohort) == 1 else import_fresh_cohorts
+    if args.parent_bundle and len(args.cohort) == 1:
+        parser.error("--parent-bundle requires explicit multi-cohort import")
+    source = args.cohort[0] if len(args.cohort) == 1 else args.cohort
+    options = {"parent_bundles": args.parent_bundle} if len(args.cohort) > 1 else {}
+    print(json.dumps(importer(source, args.output, pilot_count=args.pilot_count, audit_count=args.audit_count, parquet=args.parquet, **options)))
 
 
 if __name__ == "__main__":

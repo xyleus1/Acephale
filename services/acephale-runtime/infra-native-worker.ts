@@ -1,4 +1,5 @@
 import { canonical, copy, hash } from "../../src/lib/acephale/canonical";
+import { NEXT_BATCH_MEMBERSHIP } from "../../src/lib/acephale/score-semantics";
 import type { Candidate, ExecutionFrame, Scope } from "../../src/lib/acephale/contracts/generated";
 import { validateContract } from "../../src/lib/acephale/contracts/validate";
 import { resolveSource } from "../../src/lib/acephale/compiler";
@@ -25,7 +26,7 @@ export type InfraNativeShadowPrediction = (frame: ExecutionFrame, signal: AbortS
 export function infraNativeFrame(boundary: PublicBoundary, configuration: InfraNativeWorkerConfiguration, ordinal: number): ExecutionFrame {
   localActorMessages(boundary);
   if (hash(boundary.tools) !== configuration.scope.toolSchemaHash) throw new Error("Native tool schema changed");
-  const sources: ExecutionFrame["sources"] = {};
+  const sources: ExecutionFrame["sources"] = { policy: boundary.policy };
   const events: BindingEvent[] = [], signatures: string[] = [], requirements: string[] = [];
   const calls = new Map<string, string>();
   boundary.messages.forEach((message, index) => {
@@ -113,7 +114,7 @@ export class InfraNativeBoundaryWorker implements BoundaryWorker {
           this.record({ type: "infra_ranking", mode: "shadow", executionAllowed: false, runId: frame.runId,
             checkpoint: frame.boundary, boundary: frame.boundary, boundaryId, frameHash: hash(frame), publicInputHash,
             poolHash: hash(candidates), candidatePool: copy(candidates), decision: copy(decision), goalsHash: hash(frame.goals),
-            probabilitySemantics: "independent_next_batch_hit", rankingMs: performance.now() - started, arm: "base" });
+            scoreSemanticsVersion: 3, probabilitySemantics: NEXT_BATCH_MEMBERSHIP, rankingMs: performance.now() - started, arm: "base" });
         }).catch(error => this.record({ type: "infra_shadow_prediction_failed", runId: frame.runId, checkpoint: frame.boundary,
           boundaryId, cancelled: shadowSignal.aborted, errorType: error instanceof Error ? error.name : "Error" }));
         this.shadowTasks.add(task);

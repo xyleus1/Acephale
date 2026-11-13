@@ -79,6 +79,19 @@ def test_design_rejects_unpaired_blocks():
         TrialDesign.model_validate({**design.model_dump(), "trials": design.model_dump()["trials"][:-1]})
 
 
+def test_exploratory_report_preserves_machine_review_identity():
+    design, rows = experiment()
+    metadata = {"reviewProtocol": "machine_audited_exploratory", "humanReviewCount": 0,
+        "machineReviewCount": 20, "machineAuditHash": "d" * 64,
+        "reviewerModel": "gpt-5.4-2026-03-05", "reviewIndependence": "separate_request_and_prompt_same_model"}
+    design = TrialDesign.model_validate({**design.model_dump(), "annotation_review": metadata})
+    report = report_trials(design, rows)
+    assert report["annotationReview"] == metadata
+    assert any("zero human reviews" in item for item in report["limitations"])
+    with pytest.raises(ValueError, match="zero-human"):
+        TrialDesign.model_validate({**design.model_dump(), "annotation_review": {**metadata, "humanReviewCount": False}})
+
+
 def test_result_cannot_claim_success_when_budget_terminated():
     _, rows = experiment()
     with pytest.raises(ValueError, match="remain failures"):
@@ -139,6 +152,18 @@ def test_fixed_panel_scores_all_next_batch_hits_as_independent_marginals():
     assert report["heldout_claim"] is False
     assert report["paired_comparisons"][0]["metrics"]["binary_log_loss_nats_difference"]["families"] == 2
     assert "not full-action" in report["interpretation"]
+
+
+def test_binary_panel_reports_conditional_raw_scores_and_rejects_relabelling():
+    rows = panel_rows()
+    for row in rows:
+        row.update(probability_semantics="next_batch_invocation_membership", raw_score_semantics="autoregressive_binary_conditional")
+    report = score_candidate_panels(rows, bootstrap_samples=100)
+    assert report["schema_version"] == "acephale-fixed-panel-report-v3"
+    assert report["raw_score_semantics"] == "autoregressive_binary_conditional"
+    rows[0]["probability_semantics"] = "independent_next_batch_hit"
+    with pytest.raises(ValueError, match="semantics"):
+        score_candidate_panels(rows)
 
 
 @pytest.mark.parametrize("defect", ["missing_score", "different_panel", "different_labels", "missing_checkpoint", "nan", "first_call", "family_split"])

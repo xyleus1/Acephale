@@ -16,7 +16,7 @@ SPEC.loader.exec_module(control)
 
 
 class Provider:
-    def __init__(self, cents=109, fail_launch=False):
+    def __init__(self, cents=199, fail_launch=False):
         self.calls = []
         self.cents = cents
         self.fail_launch = fail_launch
@@ -25,7 +25,7 @@ class Provider:
     def request(self, method, path, payload=None):
         self.calls.append((method, path, payload))
         if path == "/instance-types":
-            return {"gpu_1x_a6000": {"instance_type": {"name": "gpu_1x_a6000", "price_cents_per_hour": self.cents, "specs": {"gpus": 1}, "architecture": "x86_64"}, "regions_with_capacity": [{"name": "test-region"}]}}
+            return {"gpu_1x_a100_sxm4": {"instance_type": {"name": "gpu_1x_a100_sxm4", "price_cents_per_hour": self.cents, "specs": {"gpus": 1}, "architecture": "x86_64"}, "regions_with_capacity_available": [{"name": "test-region"}]}}
         if path == "/images":
             return [{"id": "image-1", "family": "gpu-base-24-04", "architecture": "x86_64", "region": {"name": "test-region"}, "created_time": "2026-11-01"}]
         if path == "/instance-operations/launch":
@@ -51,22 +51,139 @@ class ControlTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.ledger = self.root / "ledger.json"
-        self.initial = control.init_ledger(self.ledger, 166.891414, 0, 0)
+        self.budget_calls = []
+        def budget(plan, operation, lease=None):
+            self.budget_calls.append(operation)
+            result = {"committedMicrodollars": 166891414, "infrastructureMicrodollars": 0}
+            if lease:
+                result.update(reservationId="lambda-infra:" + lease["id"], maximumMicrodollars=lease["reservedMicrodollars"])
+            return result
+        self.budget = budget
+        self.plan = {"version": 1, "provider": "lambda", "profile": control.PROFILE, "hardwareProfile": "a100-40gb-v1",
+                     "sourceCommit": "a" * 40,
+                     "region": "test-region", "sshKeyName": "research-key", "firewallRulesetId": "firewall-1",
+                     "infrastructureLedgerPath": str(self.ledger.resolve())}
+        self.initial = control.init_bound_ledger(self.ledger, self.plan, 0, budget=self.budget)
         self.client = Provider()
         self.now = 10000.0
         self.watchdog = self.root / "watchdog.json"
-        control.write_new(self.watchdog, {"profile": control.PROFILE, "controllerKind": "independent_always_on", "maxPollSeconds": 60, "verifiedAt": self.now, "ledgerPath": str(self.ledger.resolve())})
+        self.prepared = None
+
+    def prepare(self):
+        if self.prepared is None:
+            self.prepared = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget)
+        lease = self.prepared
+        controllers = [{"profile": control.PROFILE, "controllerKind": "independent_always_on", "hostingKind": "aws_lambda",
+                        "maxPollSeconds": 60, "verifiedAt": self.now, "planHash": control.digest(self.plan),
+                        "leaseId": lease["id"], "expectedName": lease["name"], "deadline": lease["deadline"], "setupDeadline": lease["setupDeadline"],
+                        "controllerId": "acephale-watchdog-" + suffix,
+                        "hostId": f"arn:aws:lambda:{region}:123456789012:function:acephale-watchdog-{suffix}",
+                        "codeSha256": control.sha256(control.HERE / "lambda_gpu_watchdog.py"), "recoveryEvidenceSha256": "b" * 64,
+                        "readOnlyProbeSucceeded": True, "recoveryTestPassed": True}
+                       for suffix, region in [("a", "us-east-1"), ("b", "us-west-2")]]
+        control.atomic_json(self.watchdog, {"version": 1, "controllers": controllers})
+        return lease
 
     def tearDown(self):
         self.temp.cleanup()
 
     def launch(self):
-        return control.launch(self.client, self.ledger, "test-region", "research-key", 2, 1, self.watchdog, self.now, "firewall-1")
+        lease = self.prepare()
+        return control.launch(self.client, self.ledger, lease["id"], self.watchdog, now=self.now, budget=self.budget)
 
     def test_configuration_is_private_and_pinned(self):
         result = control.validate_config()
         self.assertTrue(result["valid"])
         self.assertFalse(result["containerExecutionValidated"])
+
+    def test_source_amendment_preserves_original_slice_and_binding(self):
+        evidence, output = self.root / "readiness.json", self.root / "source-amendment.json"
+        control.write_new(evidence, {"awsConcurrentExecutions": 10, "reservedConcurrencyAvailable": False})
+        before = self.ledger.read_bytes()
+        value = control.record_source_amendment(self.ledger, output, "Use conditional S3 locks for observed account quota", evidence,
+            source_probe=lambda _: "b" * 40, budget=self.budget)
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.assertEqual(value["planHash"], self.initial["planHash"])
+        self.assertFalse(value["financialBindingChanged"])
+        self.assertEqual(self.budget_calls[-1], "inspect")
+        actual = control.deployment_source(self.initial, output, source_probe=lambda _: "b" * 40)
+        self.assertEqual(actual["executingSourceCommit"], "b" * 40)
+        with self.assertRaisesRegex(ValueError, "required"):
+            control.deployment_source(self.initial, None, source_probe=lambda _: "b" * 40)
+        with self.assertRaisesRegex(ValueError, "does not bind"):
+            control.deployment_source(self.initial, output, source_probe=lambda _: "c" * 40)
+        value["planHash"] = "f" * 64
+        value["contentHash"] = control.digest({key: item for key, item in value.items() if key != "contentHash"})
+        control.atomic_json(output, value)
+        with self.assertRaisesRegex(ValueError, "does not bind"):
+            control.deployment_source(self.initial, output, source_probe=lambda _: "b" * 40)
+
+    def test_missing_actual_capacity_field_is_not_assumed_available(self):
+        request = self.client.request
+        def old_api(method, path, payload=None):
+            result = request(method, path, payload)
+            if path == "/instance-types":
+                item = result["gpu_1x_a100_sxm4"]
+                item["regions_with_capacity"] = item.pop("regions_with_capacity_available")
+            return result
+        self.client.request = old_api
+        with self.assertRaisesRegex(ValueError, "no reported capacity"):
+            control.quote(self.client, "test-region", self.now)
+
+    def test_unbound_numeric_slice_cannot_launch(self):
+        path = self.root / "unbound.json"
+        control.init_ledger(path, 100, 0, 0)
+        with self.assertRaisesRegex(ValueError, "Original-study-bound"):
+            control.prepare_lease(self.client, path, 1, 0, budget=self.budget)
+        self.assertEqual(self.client.calls, [])
+
+    def test_uncertain_original_reservation_blocks_second_attempt(self):
+        def fail(plan, operation, lease=None):
+            if operation == "reserve":
+                raise RuntimeError("uncertain journal response")
+            return self.budget(plan, operation, lease)
+        with self.assertRaises(RuntimeError):
+            control.prepare_lease(self.client, self.ledger, 1, 0, now=self.now, budget=fail)
+        rows = control.read_json(self.ledger)["leases"]
+        self.assertEqual(rows[0]["status"], "reservation_pending")
+        with self.assertRaisesRegex(ValueError, "unresolved"):
+            control.prepare_lease(self.client, self.ledger, 1, 0, now=self.now, budget=self.budget)
+        self.assertFalse(any(call[0] == "POST" for call in self.client.calls))
+
+    def test_associated_charges_and_compute_have_separate_ceilings(self):
+        control.reserve_overhead(self.ledger, "11111111-1111-4111-8111-111111111111", 5, budget=self.budget)
+        with self.assertRaisesRegex(ValueError, "five dollars"):
+            control.reserve_overhead(self.ledger, "22222222-2222-4222-8222-222222222222", 0.01, budget=self.budget)
+        with self.assertRaisesRegex(ValueError, "allocation"):
+            control.prepare_lease(self.client, self.ledger, 1, 0.01, now=self.now, budget=self.budget)
+        value = control.prepare_lease(self.client, self.ledger, 8, 0, now=self.now, budget=self.budget)
+        self.assertEqual(value["reservedComputeUsd"], 15.92)
+
+    def test_a100_profile_changes_concurrency_without_lowering_legacy_guard(self):
+        selected = control.hardware_profile("a100-40gb-v1")
+        legacy = control.hardware_profile("a6000-48gb-v1")
+        self.assertEqual(selected["minimumGpuMemoryMiB"], 39000)
+        self.assertEqual(legacy["minimumGpuMemoryMiB"], 46000)
+        value = control.read_json(control.HERE / "compose.json")
+        control.apply_hardware(value, selected["id"])
+        for role, context in (("actor", "32768"), ("predictor", "8192")):
+            command = value["services"][role]["command"]
+            self.assertEqual(command[command.index("--max-num-seqs") + 1], "1")
+            self.assertEqual(command[command.index("--max-model-len") + 1], context)
+
+    def test_training_window_is_bound_and_cumulatively_limited(self):
+        lease = self.launch()
+        probe = self.root / "preflight.json"
+        control.write_new(probe, {"profile": "acephale-training-preflight-v1", "observedAt": self.now,
+            "hardwareProfile": "a100-40gb-v1", "hardwareProfileHash": lease["quote"]["hardwareProfileHash"],
+            "actorStopped": True, "gpuProcesses": 0})
+        with patch.object(control.time, "time", return_value=self.now):
+            first = control.training_lease(self.ledger, lease["id"], probe, self.root / "train1.json", 1)
+            second = control.training_lease(self.ledger, lease["id"], probe, self.root / "train2.json", 1)
+            self.assertEqual(first["studyReservation"], lease["studyReservation"])
+            self.assertEqual(first["deadline"], second["deadline"])
+            with self.assertRaisesRegex(ValueError, "two-hour"):
+                control.training_lease(self.ledger, lease["id"], probe, self.root / "train3.json", 0.01)
 
     def test_runtime_image_contains_serving_and_compiler_identity_inputs(self):
         root = Path(__file__).resolve().parents[2]
@@ -118,12 +235,12 @@ class ControlTests(unittest.TestCase):
 
     def test_quote_uses_live_price_and_pins_image(self):
         value = control.quote(self.client, "test-region", self.now)
-        self.assertEqual(value["hourlyUsd"], 1.09)
+        self.assertEqual(value["hourlyUsd"], 1.99)
         self.assertEqual(value["imageId"], "image-1")
         self.assertTrue(all(call[0] == "GET" for call in self.client.calls))
 
     def test_quote_rejects_expensive_or_unavailable_host(self):
-        for provider, region in [(Provider(126), "test-region"), (Provider(), "missing")]:
+        for provider, region in [(Provider(251), "test-region"), (Provider(), "missing")]:
             with self.assertRaises(ValueError):
                 control.quote(provider, region, self.now)
 
@@ -138,7 +255,7 @@ class ControlTests(unittest.TestCase):
                 recorded = control.read_json(self.ledger)["leases"][0]
                 self.assertEqual(recorded["status"], "launching")
                 self.assertGreater(recorded["reservedUsd"], 0)
-                self.assertEqual(payload["instance_type_name"], "gpu_1x_a6000")
+                self.assertEqual(payload["instance_type_name"], "gpu_1x_a100_sxm4")
                 self.assertEqual(payload["firewall_rulesets"], [{"id": "firewall-1"}])
                 self.assertEqual(payload["image"], {"id": "image-1"})
             return original(method, path, payload)
@@ -159,12 +276,15 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(len([call for call in self.client.calls if call[1].endswith("/launch")]), 1)
 
     def test_launch_requires_fresh_watchdog_for_same_ledger(self):
-        for change in ({"verifiedAt": 1}, {"ledgerPath": "elsewhere"}, {"controllerKind": "laptop"}, {"maxPollSeconds": 120}):
-            data = control.read_json(self.watchdog)
-            data.update(change)
+        lease = self.prepare()
+        self.client.calls.clear()
+        original = control.read_json(self.watchdog)
+        for change in ({"verifiedAt": 1}, {"planHash": "elsewhere"}, {"controllerKind": "laptop"}, {"maxPollSeconds": 120}):
+            data = json.loads(json.dumps(original))
+            data["controllers"][0].update(change)
             control.atomic_json(self.watchdog, data)
             with self.assertRaises(ValueError):
-                self.launch()
+                control.launch(self.client, self.ledger, lease["id"], self.watchdog, now=self.now, budget=self.budget)
         self.assertEqual(self.client.calls, [])
 
     def test_expired_quote_and_future_quote_rejected(self):
@@ -173,9 +293,40 @@ class ControlTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 control.reserve_lease(self.initial, quote, 2, 1, now)
 
+    def test_setup_allowance_is_prospective_and_keeps_funded_deadline(self):
+        quote = control.quote(self.client, "test-region", self.now)
+        default = control.reserve_lease(self.initial, quote, 2, 1, self.now)
+        longer = control.reserve_lease(self.initial, quote, 2, 1, self.now, setup_seconds=3600)
+        self.assertEqual(default["setupDeadline"], self.now + 1800)
+        self.assertEqual(longer["setupDeadline"], self.now + 3600)
+        for key in ("deadline", "reservedHours", "reservedUsd", "reservedComputeUsd", "ready"):
+            self.assertEqual(default[key], longer[key])
+        self.assertEqual(self.initial["leases"], [])
+
+    def test_setup_allowance_never_outlives_short_lease(self):
+        quote = control.quote(self.client, "test-region", self.now)
+        lease = control.reserve_lease(self.initial, quote, .1, 0, self.now, setup_seconds=3600)
+        self.assertEqual(lease["setupDeadline"], lease["deadline"])
+
+    def test_invalid_setup_allowance_cannot_create_reservation(self):
+        for seconds in (False, 0, 119, 3601, 1800.0, float("nan"), "3600"):
+            before = control.read_json(self.ledger)
+            reserved = self.budget_calls.count("reserve")
+            with self.subTest(seconds=seconds), self.assertRaises(ValueError):
+                control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now,
+                                      budget=self.budget, setup_seconds=seconds)
+            self.assertEqual(control.read_json(self.ledger), before)
+            self.assertEqual(self.budget_calls.count("reserve"), reserved)
+
+    def test_prepare_lease_persists_explicit_setup_deadline(self):
+        lease = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now,
+                                      budget=self.budget, setup_seconds=3600)
+        self.assertEqual(lease["setupDeadline"], self.now + 3600)
+        self.assertEqual(control.read_json(self.ledger)["leases"][0], lease)
+
     def test_budget_and_cumulative_hours_fail_closed(self):
         quote = control.quote(self.client, "test-region", self.now)
-        for ledger, hours, allowance in [({**self.initial, "priorInfraUsd": 34}, 2, 1), ({**self.initial, "priorGpuHours": 23}, 2, 1), (self.initial, 9, 1), (self.initial, 2, 0), (self.initial, float("nan"), 1)]:
+        for ledger, hours, allowance in [({**self.initial, "priorInfraUsd": 34}, 2, 1), ({**self.initial, "priorGpuHours": 23}, 2, 1), (self.initial, 9, 1), (self.initial, 2, -1), (self.initial, float("nan"), 1)]:
             with self.assertRaises(ValueError):
                 control.reserve_lease(ledger, quote, hours, allowance, self.now)
 
@@ -280,6 +431,55 @@ class ControlTests(unittest.TestCase):
         control.write_new(path, {"profile": control.PROFILE, "images": {}})
         with self.assertRaises(ValueError):
             control.locked_compose(path, self.root / "compose.json")
+
+    def access_amendment(self):
+        original = self.client.request
+        self.access_key = {"id": "new-key", "name": "acephale-new-key", "public_key": "ssh-ed25519 test-public-key"}
+        def request(method, path, payload=None):
+            if path == "/ssh-keys":
+                return [self.access_key]
+            if path == "/firewall-rulesets/new-firewall":
+                return original(method, "/firewall-rulesets/firewall-1", payload)
+            return original(method, path, payload)
+        self.client.request = request
+        output = self.root / "new-access.json"
+        before = self.ledger.read_bytes()
+        value = control.record_access_amendment(self.client, self.ledger, output, "acephale-new-key", "new-firewall",
+            "Replace access resources deleted after verified cleanup", source_probe=lambda _: "b" * 40)
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.assertFalse(value["financialBindingChanged"])
+        return output
+
+    def test_access_amendment_preserves_plan_and_binds_actual_launch_resources(self):
+        output = self.access_amendment()
+        self.prepared = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget,
+                                              access_amendment=output)
+        lease = self.launch()
+        payload = next(payload for _, path, payload in self.client.calls if path == "/instance-operations/launch")
+        self.assertEqual(payload["ssh_key_names"], ["acephale-new-key"])
+        self.assertEqual(payload["firewall_rulesets"], [{"id": "new-firewall"}])
+        self.assertEqual(control.read_json(self.ledger)["plan"], self.plan)
+        self.assertEqual(lease["accessAmendment"], control.read_json(output))
+
+    def test_access_public_key_change_after_reservation_blocks_dispatch(self):
+        output = self.access_amendment()
+        self.prepared = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget,
+                                              access_amendment=output)
+        self.access_key["public_key"] = "ssh-ed25519 replaced-public-key"
+        with self.assertRaisesRegex(ValueError, "public-key identity"):
+            self.launch()
+        self.assertFalse(any(path == "/instance-operations/launch" for _, path, _ in self.client.calls))
+        self.assertEqual(control.read_json(self.ledger)["leases"][0]["status"], "reserved")
+
+    def test_resealed_access_amendment_cannot_change_financial_plan(self):
+        output = self.access_amendment()
+        value = control.read_json(output)
+        value["planHash"] = "f" * 64
+        value["contentHash"] = control.digest({key: item for key, item in value.items() if key != "contentHash"})
+        control.atomic_json(output, value)
+        with self.assertRaisesRegex(ValueError, "financial plan"):
+            control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now, budget=self.budget, access_amendment=output)
+        self.assertEqual(control.read_json(self.ledger)["leases"], [])
 
 
 if __name__ == "__main__":

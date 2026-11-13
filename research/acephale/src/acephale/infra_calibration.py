@@ -14,22 +14,28 @@ from jsonschema import Draft202012Validator
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_admission import validate_predicted_goals
 from acephale.infra_data import read_jsonl, verify_bundle
+from acephale.infra_fairness import load_reviewed_selection, validate_model_selection
+from acephale.replay_receipt import verify_replay_receipt
+from acephale.score_semantics import CALIBRATED_MEMBERSHIP, replay_score_semantics
 from acephale.storage import file_hash
+from acephale.training_data import calibration_families
 
 BOUNDS = tuple(index / 10 for index in range(1, 11))
-PROBABILITY_SEMANTICS = "independent_next_batch_hit"
 
 
-def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+def fit_paired_calibration(bundle_directory: Path, prediction_directory: Path, *, partitions_path: Path | None = None,
+                           memory_path: Path | None = None) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Keep the two independently fitted maps under one experiment artifact hash."""
-    neutral, neutral_report, neutral_rows = fit_calibration(bundle_directory, prediction_directory)
-    conditional, conditional_report, conditional_rows = fit_calibration(bundle_directory, prediction_directory, condition="conditional")
-    for field in ("fittingFamilies", "validationFamilies", "sourceDatasetHash"):
+    neutral, neutral_report, neutral_rows = fit_calibration(bundle_directory, prediction_directory, partitions_path=partitions_path, memory_path=memory_path)
+    conditional, conditional_report, conditional_rows = fit_calibration(bundle_directory, prediction_directory, condition="conditional", partitions_path=partitions_path, memory_path=memory_path)
+    for field in ("version", "probabilitySemantics", "fittingFamilies", "validationFamilies", "sourceDatasetHash"):
         if neutral[field] != conditional[field]:
             raise ValueError("Paired calibration needs the same fitting and validation families")
     for field in ("model", "memoryHash", "predictorContractHash", "candidateCompilerHash", "retrievalHash", "predictionManifestHash", "predictionRowsHash"):
         if neutral["provenance"][field] != conditional["provenance"][field]:
             raise ValueError("Replay changed between calibration conditions")
+    if neutral["provenance"].get("reviewedSelection") != conditional["provenance"].get("reviewedSelection"):
+        raise ValueError("Reviewed family selection changed between calibration conditions")
     body = {key: value for key, value in neutral.items() if key != "contentHash"}
     body["conditionalCalibration"] = conditional
     artifact = {**body, "contentHash": hash_v1(body)}
@@ -55,7 +61,8 @@ def _metrics(samples: list[dict[str, Any]], probability_field: str) -> dict[str,
     }
 
 
-def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condition: Literal["neutral", "conditional"] = "neutral") -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condition: Literal["neutral", "conditional"] = "neutral",
+                    partitions_path: Path | None = None, memory_path: Path | None = None) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     if condition not in {"neutral", "conditional"}:
         raise ValueError("Unknown calibration condition")
     bundle = verify_bundle(bundle_directory)
@@ -67,8 +74,9 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         raise ValueError("Prediction manifest hash mismatch")
     if manifest.get("kind") != "uncalibrated_prediction_replay" or manifest.get("executionAllowed") is not False or manifest.get("sourceDatasetHash") != bundle["bundle_hash"]:
         raise ValueError("Wrong prediction source dataset or experiment kind")
-    if manifest.get("version") != 2 or manifest.get("probabilitySemantics") != PROBABILITY_SEMANTICS or manifest.get("predictionMode") not in {"selected_candidates", "fixed_panel"}:
-        raise ValueError("Independent next-batch probability semantics and replay mode are required")
+    semantics = replay_score_semantics(manifest)
+    if manifest.get("predictionMode") not in {"selected_candidates", "fixed_panel"}:
+        raise ValueError("Explicit next-batch membership replay mode is required")
     model = manifest.get("model", {})
     if not isinstance(model, dict) or not isinstance(model.get("repository"), str) or not re.fullmatch(r"[0-9a-f]{40}", model.get("revision", "")):
         raise ValueError("Exact predictor model revision required")
@@ -77,6 +85,13 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
     if condition == "conditional" and manifest.get("inferGoals") is not True:
         raise ValueError("Conditional calibration requires actually executed goal predictions")
     public_rows = read_jsonl(bundle_directory / "public.jsonl")
+    if (partitions_path is None) != (memory_path is None):
+        raise ValueError("Reviewed calibration requires both partition and fit-only memory paths")
+    selection = load_reviewed_selection(partitions_path, memory_path, bundle["bundle_hash"], public_rows) if partitions_path is not None else None
+    if selection:
+        validate_model_selection(model, selection)
+        if manifest["memoryHash"] != selection["memoryHash"]:
+            raise ValueError("Replay differs from the reviewed fit-only memory")
     public = {row["checkpoint_id"]: row for row in public_rows}
     labels_list = read_jsonl(bundle_directory / "labels.jsonl")
     labels = {row["checkpoint_id"]: row for row in labels_list}
@@ -86,10 +101,7 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
     predictions = read_jsonl(prediction_path)
     if [row["checkpoint_id"] for row in predictions] != manifest.get("rowIds") or len({row["checkpoint_id"] for row in predictions}) != len(predictions):
         raise ValueError("Every declared prediction row must be retained exactly once in order")
-    receipt = json.loads((prediction_directory / "receipt.json").read_text(encoding="utf-8"))
-    completed = sum(row.get("status") == "completed" for row in predictions)
-    if receipt.get("declared") != len(predictions) or receipt.get("completed") != completed or receipt.get("failed") != len(predictions) - completed or receipt.get("liveActorExecuted") is not False or receipt.get("toolExecutionPerformed") is not False:
-        raise ValueError("Prediction cohort is not closed or receipt differs")
+    receipt_files = verify_replay_receipt(prediction_directory, manifest, predictions)
     family_partitions: dict[str, set[str]] = defaultdict(set)
     joined = []
     failures, not_dispatched, empty, unknown_goals, unobserved_actions = [], [], [], [], []
@@ -158,8 +170,16 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
             joined.append({"checkpoint_id": key, "input_hash": prefix["input_hash"], "family_id": prefix["family_id"], "split": prefix["split"], "candidate_id": score["candidateId"], "invocation_hash": identity, "raw_probability": score["probability"], "exact_match": int(identity in actual), "action": raw["action"]})
     if any(len(partitions) != 1 for partitions in family_partitions.values()):
         raise ValueError("A family crosses fitting and validation partitions")
-    fitting = [row for row in joined if row["split"] == "train"]
+    reserved_calibration = set(selection["calibrationFamilies"]) if selection else calibration_families(model)
+    fitting = [row for row in joined if row["split"] == "train" and (reserved_calibration is None or row["family_id"] in reserved_calibration)]
     validation = [row for row in joined if row["split"] == "development"]
+    if selection and {row["family_id"] for row in validation} != set(selection["developmentFamilies"]):
+        raise ValueError("Every reviewed development family requires observed validation scores")
+    if reserved_calibration is not None:
+        if reserved_calibration & {row["family_id"] for row in validation}:
+            raise ValueError("Calibration families overlap model-selection development")
+        if {row["family_id"] for row in fitting} != reserved_calibration:
+            raise ValueError("Every declared calibration family requires observed fitting scores")
     if not fitting or not validation:
         raise ValueError("Observed raw candidate scores required in both training and development families")
     counts = [{"count": 0, "successes": 0} for _ in BOUNDS]
@@ -177,7 +197,8 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         # probabilities must not be normalized as mutually exclusive classes.
         row["runtime_probability"] = row["calibrated_probability"]
     body = {
-        "version": 2, "probabilitySemantics": PROBABILITY_SEMANTICS,
+        **semantics,
+        **({"calibratedScoreSemantics": CALIBRATED_MEMBERSHIP} if semantics["version"] == 3 else {}),
         "predictionMode": manifest["predictionMode"],
         "fittingFamilies": sorted({row["family_id"] for row in fitting}),
         "validationFamilies": sorted({row["family_id"] for row in validation}),
@@ -187,12 +208,13 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
             "predictorContractHash": manifest["predictorContractHash"], "candidateCompilerHash": manifest["candidateCompilerHash"], "retrievalHash": manifest["retrievalHash"],
             "predictionManifestHash": manifest_hash, "predictionRowsHash": predictions_hash,
             "method": "fixed_deciles_empty_forward_merge_laplace_1_1",
+            **({"reviewedSelection": selection} if selection else {}),
         },
     }
     calibration = {**body, "contentHash": hash_v1(body)}
     report = {
         "version": "acephale-infra-calibration-report-v2", "condition": condition,
-        "probabilitySemantics": PROBABILITY_SEMANTICS, "predictionMode": manifest["predictionMode"],
+        "probabilitySemantics": semantics["probabilitySemantics"], "rawScoreSemantics": semantics.get("rawScoreSemantics", "legacy_unspecified"), "predictionMode": manifest["predictionMode"],
         "calibrationHash": calibration["contentHash"], "declaredCheckpoints": len(predictions),
         "failedCheckpoints": failures, "notDispatchedCheckpoints": not_dispatched, "completedWithoutCandidateScores": empty,
         "unknownOnlyGoalsExcluded": unknown_goals,
@@ -200,8 +222,10 @@ def fit_calibration(bundle_directory: Path, prediction_directory: Path, *, condi
         "fit": {field: _metrics(fitting, field) for field in ("raw_probability", "calibrated_probability", "runtime_probability")},
         "development": {field: _metrics(validation, field) for field in ("raw_probability", "calibrated_probability", "runtime_probability")},
         "calibrationBins": bins, "validationUsedForFit": False, "heldoutClaim": False,
+        **({"reviewedSelectionHash": selection["contentHash"]} if selection else {}),
         "limitations": ["Calibration covers the declared scored candidates, not absent candidates or task success", "Each label means membership anywhere in the immediate next authoritative batch", "Binary log loss is not full-action cross-entropy or true conditional entropy", "No fallback values are fabricated for failed predictions", "Fitted values are specific to the recorded model, prompts, memory, selection mode and condition"],
     }
-    if file_hash(prediction_path) != predictions_hash or json.loads(manifest_path.read_text(encoding="utf-8")) != manifest:
+    if (file_hash(prediction_path) != predictions_hash or json.loads(manifest_path.read_text(encoding="utf-8")) != manifest
+            or any(file_hash(path) != digest for path, digest in receipt_files.items())):
         raise ValueError("Prediction artifacts changed during calibration")
     return calibration, report, joined
