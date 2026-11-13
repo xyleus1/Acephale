@@ -1,5 +1,16 @@
 # Acephale decisions
 
+## 2026-11-13: Qualify serving with a complete fitting prompt
+
+The retained 256-token serving probe ends inside a candidate identifier in an
+unfinished user message. It tests identifier continuation, not the intended
+assistant response. Future unmerged exports therefore select the shortest complete
+neutral fitting prompt by `(promptTokens, id)`, without examining completions or
+evaluation rows. Probe schema2 records its dataset, training specification, row,
+family, prompt and exact input-token identities. Keep the separate internal reload
+probe and both numerical acceptance thresholds unchanged. The old failed probe
+and qualification remain immutable; the new probe requires a new real serving run.
+
 ## 2026-11-13: Make joint-outcome hypothesis semantics explicit
 
 Teacher instructions already require alternative complete goal hypotheses with

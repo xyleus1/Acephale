@@ -20,9 +20,21 @@ export function validateParityBinding(binding, sourceCommit, hash) {
   assert.equal(artifact.servingWeightsHash, hash(Object.fromEntries(['base','baseWeightsHash','adapterHash','adapterStorageDtype','runtimeLoraDtype'].map(key => [key,artifact[key]]))));
   assert.equal(artifact.servedModel, 'acephale-predictor-' + artifact.servingWeightsHash.slice(0,12));
   assert.equal(hash(probe), artifact.servingProbeHash);
-  assert.equal(probe.schemaVersion,1); assert.equal(probe.kind,'acephale-lora-serving-probe');
+  assert([1,2].includes(probe.schemaVersion)); assert.equal(probe.kind,'acephale-lora-serving-probe');
   assert.deepEqual(probe.gate,gate); assert.equal(probe.nativeTaskAccuracyMeasured,false);
-  assert(Array.isArray(probe.inputTokenIds) && probe.inputTokenIds.length >= 1 && probe.inputTokenIds.length <= 256 && probe.inputTokenIds.every(integer));
+  assert(Array.isArray(probe.inputTokenIds) && probe.inputTokenIds.length >= 1
+    && probe.inputTokenIds.length <= (probe.schemaVersion===1 ? 256 : 7168) && probe.inputTokenIds.every(integer));
+  if (probe.schemaVersion===2) {
+    const selection=probe.selection;
+    assert.equal(probe.inputHash,hash(probe.inputTokenIds));
+    assert.deepEqual(Object.keys(selection).sort(),['datasetManifestHash','eligibleRows','familyId','promptHash','promptTokens','rowId','rule','trainingManifestHash']);
+    assert.equal(selection.rule,'shortest_complete_neutral_weight_fit_prompt_v1');
+    assert.equal(selection.trainingManifestHash,artifact.trainingManifestHash);
+    assert([selection.datasetManifestHash,selection.trainingManifestHash,selection.promptHash].every(sha));
+    assert(typeof selection.rowId==='string' && selection.rowId.length>0 && artifact.weightFitFamilies.includes(selection.familyId));
+    assert(Number.isSafeInteger(selection.promptTokens) && selection.promptTokens===probe.inputTokenIds.length);
+    assert(Number.isSafeInteger(selection.eligibleRows) && selection.eligibleRows>=1);
+  }
   assert(integer(probe.topTokenId));
   assert.deepEqual(probe.binaryTokenIds,artifact.binaryTokenIds);
   assert.deepEqual(Object.keys(probe.binaryTokenIds).sort(),['one','zero']);

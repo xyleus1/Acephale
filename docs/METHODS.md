@@ -261,7 +261,13 @@ weights and unchanged base hashes. Merged v1 export retains its original strict
 reload/merge checks. Explicit unmerged v2 export preserves the FP32 adapter bytes,
 the pinned BF16 base and every trained target; it separately declares BF16 vLLM
 LoRA arithmetic. Its identity binds base and adapter inventories, tokenizer,
-training specification, partitions, protocol and a numerical probe. No file is
+training specification, partitions, protocol and a numerical probe. New serving
+probes use schema2 and the shortest complete neutral fitting prompt ordered by
+`(promptTokens, id)`. The pinned chat template supplies the full assistant prefix;
+no completion, calibration or test row enters selection. Dataset/specification,
+row/family, prompt and input-token hashes accompany the probe. The internal
+256-token strict reload check remains separate. Historical schema1 serving
+probes retain their original meaning and receipts. No file is
 silently cast or relabeled to bypass the failed merged export.
 
 The v2 server must return the exact top token and a conditional binary probability

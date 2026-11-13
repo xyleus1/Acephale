@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-13: Separate complete serving prompts from reload probes
+
+New unmerged exports first run the unchanged strict 256-token reload comparison,
+then measure a complete neutral fitting prompt using the same BF16 inference
+context. Probe schema2 binds deterministic fitting-only selection and exact token
+IDs, retaining the artifact's existing weight identity. Python, TypeScript and
+the HTTP qualification helper accept both explicit probe versions without
+changing numerical thresholds. Focused validation: 39 Python tests, including
+cross-language qualification fixtures, and five Node parity tests passed. These
+are software checks, not a successful GPU serving qualification.
+
 ## 2026-11-13: Align goal inference with complete-outcome teacher targets
 
 Clarified the shared predictor and supervised-goal instruction: simultaneous

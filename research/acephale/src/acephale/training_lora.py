@@ -17,6 +17,10 @@ ARTIFACT_KEYS = {"schemaVersion", "kind", "storageMode", "base", "baseReceiptHas
                  "tokenizerHash", "chatTemplateHash", "trainingManifestHash", "weightFitFamilies", "calibrationFamilies",
                  "protocol", "binaryTokenIds", "servedModel", "contentHash"}
 PARITY_GATE = {"version": 1, "requireTopTokenMatch": True, "maximumConditionalProbabilityDifference": 0.01}
+SERVING_SELECTION_RULE = "shortest_complete_neutral_weight_fit_prompt_v1"
+ASSISTANT_GENERATION_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+SELECTION_KEYS = {"rule", "datasetManifestHash", "trainingManifestHash", "rowId", "familyId",
+                  "promptHash", "promptTokens", "eligibleRows"}
 
 
 def _read(path: Path) -> dict:
@@ -113,12 +117,14 @@ def _conditional_one(zero: float, one: float) -> float:
 
 
 def validate_serving_probe(probe: dict, artifact: dict) -> dict:
-    if (hash_v1(probe) != artifact["servingProbeHash"] or probe.get("schemaVersion") != 1
+    version = probe.get("schemaVersion")
+    if (hash_v1(probe) != artifact["servingProbeHash"] or type(version) is not int or version not in {1, 2}
             or probe.get("kind") != "acephale-lora-serving-probe" or probe.get("binaryTokenIds") != artifact["binaryTokenIds"]
             or probe.get("gate") != PARITY_GATE or probe.get("nativeTaskAccuracyMeasured") is not False):
         raise ValueError("Serving probe identity or predeclared gate changed")
     ids, logs = probe.get("inputTokenIds"), probe.get("referenceLogprobs")
-    if (not isinstance(ids, list) or not 1 <= len(ids) <= 256 or any(type(item) is not int or item < 0 for item in ids)
+    if (not isinstance(ids, list) or not 1 <= len(ids) <= (256 if version == 1 else 7168)
+            or any(type(item) is not int or item < 0 for item in ids)
             or type(probe.get("topTokenId")) is not int or probe["topTokenId"] < 0
             or not isinstance(logs, dict) or set(logs) != {"zero", "one"}
             or any(type(value) not in {int, float} or not math.isfinite(value) or value > 0 for value in logs.values())):
@@ -127,7 +133,39 @@ def validate_serving_probe(probe: dict, artifact: dict) -> dict:
     if (type(probability) not in {int, float} or not math.isfinite(probability)
             or abs(probability - _conditional_one(logs["zero"], logs["one"])) > 1e-12):
         raise ValueError("Serving probe conditional probability is inconsistent")
+    if version == 2:
+        selection = probe.get("selection", {})
+        if (probe.get("inputHash") != hash_v1(ids) or set(selection) != SELECTION_KEYS
+                or selection.get("rule") != SERVING_SELECTION_RULE
+                or selection.get("trainingManifestHash") != artifact["trainingManifestHash"]
+                or any(not re.fullmatch("[a-f0-9]{64}", str(selection.get(key, "")))
+                       for key in ("datasetManifestHash", "trainingManifestHash", "promptHash"))
+                or not isinstance(selection.get("rowId"), str) or not selection["rowId"]
+                or selection.get("familyId") not in artifact["weightFitFamilies"]
+                or type(selection.get("promptTokens")) is not int or selection["promptTokens"] != len(ids)
+                or type(selection.get("eligibleRows")) is not int or selection["eligibleRows"] < 1):
+            raise ValueError("Complete serving probe requires exact fitting-prompt selection provenance")
     return probe
+
+
+def select_serving_prompt(dataset: Path, manifest: dict, specification: dict, tokenizer) -> tuple[list[int], dict]:
+    """Select using public prompt metadata only; never tokenize a completion."""
+    from acephale.training_data import load_partition
+
+    eligible = [row for row in load_partition(dataset, "weight_fit")
+                if row["partition"] == "weight_fit" and row["task"] == "rank_binary" and row["condition"] == "neutral"]
+    if not eligible:
+        raise ValueError("A complete neutral fitting prompt is required for serving qualification")
+    row = min(eligible, key=lambda item: (item["promptTokens"], item["id"]))
+    rendered = tokenizer.apply_chat_template(row["prompt"], tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    ids = tokenizer.encode(rendered, add_special_tokens=False)
+    if (not rendered.endswith(ASSISTANT_GENERATION_SUFFIX) or len(ids) != row["promptTokens"]
+            or not 1 <= len(ids) <= 7168 or any(type(token) is not int or token < 0 for token in ids)
+            or hash_v1(row["prompt"]) != row["compiledInputHash"] or row["familyId"] not in manifest["weightFitFamilies"]):
+        raise ValueError("Serving probe must retain the complete exact fitting prompt and assistant generation prefix")
+    return ids, {"rule": SERVING_SELECTION_RULE, "datasetManifestHash": manifest["contentHash"],
+                 "trainingManifestHash": specification["contentHash"], "rowId": row["id"], "familyId": row["familyId"],
+                 "promptHash": row["compiledInputHash"], "promptTokens": len(ids), "eligibleRows": len(eligible)}
 
 
 def export_unmerged(dataset: Path, model_path: Path, run: Path, output: Path, lease_path: Path) -> dict:
@@ -168,18 +206,23 @@ def export_unmerged(dataset: Path, model_path: Path, run: Path, output: Path, le
 
     probe = torch.load(run / "reload-probe.pt", map_location="cpu", weights_only=True)
     _verify_probe_context(probe, specification)
-    base, _ = _load_model(model_path)
+    base, tokenizer = _load_model(model_path)
     model = PeftModel.from_pretrained(base, run / "adapter", is_trainable=False, local_files_only=True).eval()
     reloaded = _probe_logits(model, probe["input_ids"].to("cuda"))
     torch.testing.assert_close(reloaded, probe["logits"], rtol=0.02, atol=0.03)
     if not torch.isfinite(reloaded).all():
         raise ValueError("Reloaded adapter produced nonfinite logits")
-    logprobs = torch.log_softmax(reloaded[0], dim=-1)
+    serving_ids, selection = select_serving_prompt(dataset, manifest, specification, tokenizer)
+    serving_logits = _probe_logits(model, torch.tensor([serving_ids], dtype=torch.long, device="cuda"))
+    if not torch.isfinite(serving_logits).all():
+        raise ValueError("Complete serving prompt produced nonfinite logits")
+    logprobs = torch.log_softmax(serving_logits[0], dim=-1)
     logs = {key: logprobs[token].item() for key, token in receipt["binaryTokenIds"].items()}
-    serving_probe = {"schemaVersion": 1, "kind": "acephale-lora-serving-probe",
-        "inputTokenIds": probe["input_ids"][0].tolist(), "binaryTokenIds": receipt["binaryTokenIds"],
+    serving_probe = {"schemaVersion": 2, "kind": "acephale-lora-serving-probe",
+        "inputTokenIds": serving_ids, "inputHash": hash_v1(serving_ids), "selection": selection,
+        "binaryTokenIds": receipt["binaryTokenIds"],
         "referenceLogprobs": logs, "referenceConditionalOneProbability": _conditional_one(logs["zero"], logs["one"]),
-        "topTokenId": reloaded[0].argmax().item(), "gate": PARITY_GATE, "nativeTaskAccuracyMeasured": False}
+        "topTokenId": serving_logits[0].argmax().item(), "gate": PARITY_GATE, "nativeTaskAccuracyMeasured": False}
     artifact = {"schemaVersion": 2, "kind": "acephale-trained-predictor", "storageMode": "unmerged_lora", "base": BASE,
         "baseReceiptHash": hash_v1(base_receipt), "baseWeightsHash": base_weights_hash(base_receipt),
         "adapterHash": hash_v1(receipt["adapterFiles"]), "adapterStorageDtype": "float32", "runtimeLoraDtype": "bfloat16",
@@ -252,5 +295,10 @@ def verify_unmerged_export(directory: Path) -> dict:
             or verification.get("vllmQualificationRequired") is not True or verification.get("vllmQualificationPassed") is not False
             or verification.get("nativeTaskSuccessMeasured") is not False):
         raise ValueError("Unmerged export lacks unchanged strict reload evidence or misstates server qualification")
-    validate_serving_probe(_read(directory / "serving-probe.json"), artifact)
+    serving_probe = validate_serving_probe(_read(directory / "serving-probe.json"), artifact)
+    if serving_probe["schemaVersion"] == 2:
+        selection = serving_probe["selection"]
+        if (selection["datasetManifestHash"] != dataset["contentHash"]
+                or selection["eligibleRows"] > dataset["counts"]["weight_fit"]):
+            raise ValueError("Complete serving probe selection differs from the retained fitting dataset")
     return artifact

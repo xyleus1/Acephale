@@ -1,5 +1,12 @@
 # Working on Acephale
 
+Prospective unmerged exports use serving-probe schema2: the shortest complete
+neutral `weight_fit` prompt, ordered by `(promptTokens, id)`, with the pinned
+assistant generation suffix. Dataset, row, prompt and exact token hashes are
+recorded. The internal 256-token strict reload check and the serving top-token
+and 0.01 binary-probability gates remain unchanged. Historical schema1 probes
+remain valid only under their original identities; no failed receipt is resealed.
+
 The prospective `machine_audited_exploratory` protocol can run with a separate,
 source-bound machine critic of the same original 20 audit IDs. It must retain
 zero human reviews, the exact reviewer/audit receipt and the unchanged 90%/zero

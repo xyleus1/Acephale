@@ -31,7 +31,8 @@ def validate_native_lora_serving(predictor: dict, inventory: dict, source_commit
     _require(set(proof) == {"version", "binding", "response", "receipt"} and type(proof.get("version")) is int and proof["version"] == 1)
     binding, response, receipt = (proof[key] for key in ("binding", "response", "receipt"))
     prior, deployment, probe = (binding[key] for key in ("inventory", "deployment", "probe"))
-    validate_serving_probe(probe, artifact)
+    # Schema1 remains historical; schema2 also validates the complete fitting-prompt selection.
+    probe = validate_serving_probe(probe, artifact)
     _require(hash_v1(probe["gate"]) == hash_v1(PARITY_GATE))
     _require(binding.get("schemaVersion") == 1 and hash_v1(binding["artifact"]) == hash_v1(artifact)
              and deployment.get("observed") is True and deployment.get("evidenceHash") == hash_v1(prior)

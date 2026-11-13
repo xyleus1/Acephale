@@ -16,10 +16,21 @@ export function validateNativeLoraServing(predictor: Record<string, any>, invent
   const proof = inventory.nativeLoraQualification ?? {};
   requireProof(Object.keys(proof).sort().join() === "binding,receipt,response,version" && proof.version === 1);
   const { binding, response, receipt } = proof, { inventory: prior, deployment, probe } = binding;
-  requireProof(hash(probe) === artifact.servingProbeHash && probe.schemaVersion === 1 && probe.kind === "acephale-lora-serving-probe"
+  requireProof(hash(probe) === artifact.servingProbeHash && [1, 2].includes(probe.schemaVersion) && probe.kind === "acephale-lora-serving-probe"
     && hash(probe.binaryTokenIds) === hash(artifact.binaryTokenIds) && hash(probe.gate) === hash(gate) && probe.nativeTaskAccuracyMeasured === false
-    && Array.isArray(probe.inputTokenIds) && probe.inputTokenIds.length > 0 && probe.inputTokenIds.length <= 256
+    && Array.isArray(probe.inputTokenIds) && probe.inputTokenIds.length > 0 && probe.inputTokenIds.length <= (probe.schemaVersion === 1 ? 256 : 7168)
     && probe.inputTokenIds.every((id: unknown) => Number.isSafeInteger(id) && Number(id) >= 0) && Number.isSafeInteger(probe.topTokenId) && probe.topTokenId >= 0);
+  if (probe.schemaVersion === 2) {
+    const selection = probe.selection;
+    requireProof(probe.inputHash === hash(probe.inputTokenIds)
+      && Object.keys(selection).sort().join() === "datasetManifestHash,eligibleRows,familyId,promptHash,promptTokens,rowId,rule,trainingManifestHash"
+      && selection.rule === "shortest_complete_neutral_weight_fit_prompt_v1"
+      && selection.trainingManifestHash === artifact.trainingManifestHash
+      && [selection.datasetManifestHash, selection.trainingManifestHash, selection.promptHash].every(value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value))
+      && typeof selection.rowId === "string" && selection.rowId.length > 0 && artifact.weightFitFamilies.includes(selection.familyId)
+      && Number.isSafeInteger(selection.promptTokens) && selection.promptTokens === probe.inputTokenIds.length
+      && Number.isSafeInteger(selection.eligibleRows) && selection.eligibleRows >= 1);
+  }
   const conditionalOne = (zero: number, one: number) => { const max = Math.max(zero, one); return Math.exp(one - max) / (Math.exp(zero - max) + Math.exp(one - max)); };
   requireProof(Object.keys(probe.referenceLogprobs).sort().join() === "one,zero" && Object.values(probe.referenceLogprobs).every(finiteLog)
     && Number.isFinite(probe.referenceConditionalOneProbability)

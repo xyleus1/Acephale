@@ -77,3 +77,33 @@ test('native LoRA probability comparison is stable for very small vocabulary pro
   response.choices[0].logprobs.top_logprobs[0]={'token_id:15':-10000,'token_id:16':-10000};
   assert.equal(verifyParityResponse(response,binding.artifact,binding.probe,identity,hash,timing).observedConditionalOneProbability,0.5);
 });
+
+test('complete-prompt probe keeps the unchanged numerical gate and rejects altered selection',()=>{
+  function complete() {
+    const {binding}=fixture();
+    const ids=Array.from({length:300},(_,index)=>index);
+    Object.assign(binding.probe,{schemaVersion:2,inputTokenIds:ids,inputHash:hash(ids),selection:{
+      rule:'shortest_complete_neutral_weight_fit_prompt_v1',datasetManifestHash:hash('dataset'),
+      trainingManifestHash:binding.artifact.trainingManifestHash,rowId:'fit:neutral',familyId:'fit',
+      promptHash:hash('prompt'),promptTokens:300,eligibleRows:24}});
+    function reseal() {
+      binding.artifact.servingProbeHash=hash(binding.probe);
+      const {contentHash,...body}=binding.artifact;
+      binding.artifact.contentHash=hash(body);
+      binding.deployment.evidenceHash=hash(binding.inventory);
+    }
+    reseal();
+    return {binding,reseal};
+  }
+  const {binding}=complete();
+  assert.equal(validateParityBinding(binding,source,hash).servingProbeHash,hash(binding.probe));
+  assert.equal(parityRequest(binding.artifact,binding.probe).prompt.length,300);
+  for (const edit of [
+    p=>{p.inputHash=hash('other');},p=>{p.selection.familyId='cal';},p=>{p.selection.promptTokens=256;},
+    p=>{p.selection.trainingManifestHash=hash('other');},p=>{p.selection.eligibleRows=0;},
+    p=>{p.selection.rule='select_by_output';},
+  ]) {
+    const value=complete();edit(value.binding.probe);value.reseal();
+    assert.throws(()=>validateParityBinding(value.binding,source,hash));
+  }
+});

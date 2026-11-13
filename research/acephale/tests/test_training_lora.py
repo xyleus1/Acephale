@@ -14,16 +14,20 @@ from acephale.infra_fairness import _model_identity
 from acephale.training import PROBE_CONTEXT, TARGET_SUFFIXES, tokenizer_identity, verify_export
 from acephale.training_data import BASE, file_inventory, hashed
 from acephale.training_lora import (
+    ASSISTANT_GENERATION_SUFFIX,
     PARITY_GATE,
+    SERVING_SELECTION_RULE,
     adapter_inventory,
     base_weights_hash,
+    select_serving_prompt,
     serving_weights_hash,
     validate_lora_artifact,
+    validate_serving_probe,
     verify_unmerged_export,
 )
 
 
-def export_fixture(directory):
+def export_fixture(directory, *, probe_version=1):
     adapter = directory / "adapter"
     adapter.mkdir(parents=True)
     targets = sorted("model.language_model.layers.0." + name for name in TARGET_SUFFIXES)
@@ -46,7 +50,7 @@ def export_fixture(directory):
     base = {**BASE, "role": "predictor", "files": [
         {"path": "config.json", "sha256": "a" * 64, "bytes": 2},
         {"path": "model.safetensors", "sha256": "b" * 64, "bytes": 10}]}
-    dataset = hashed({"base": BASE, "weightFitFamilies": ["fit"], "calibrationFamilies": ["cal"],
+    dataset = hashed({"base": BASE, "weightFitFamilies": ["fit"], "calibrationFamilies": ["cal"], "counts": {"weight_fit": 2},
                       "tokenizerHash": tokenizer, "chatTemplateHash": template})
     specification = hashed({"base": BASE, "baseReceiptHash": hash_v1(base), "datasetManifestHash": dataset["contentHash"],
                             "targets": targets, "trainableCount": offset // 4, "probeContext": PROBE_CONTEXT})
@@ -59,6 +63,11 @@ def export_fixture(directory):
              "binaryTokenIds": receipt["binaryTokenIds"], "referenceLogprobs": {"zero": -3.0, "one": -3.0},
              "referenceConditionalOneProbability": 0.5, "topTokenId": 17, "gate": PARITY_GATE,
              "nativeTaskAccuracyMeasured": False}
+    if probe_version == 2:
+        probe.update(schemaVersion=2, inputTokenIds=list(range(300)), inputHash=hash_v1(list(range(300))),
+                     selection={"rule": SERVING_SELECTION_RULE, "datasetManifestHash": dataset["contentHash"],
+                         "trainingManifestHash": specification["contentHash"], "rowId": "fit:neutral", "familyId": "fit",
+                         "promptHash": hash_v1("prompt"), "promptTokens": 300, "eligibleRows": 2})
     artifact = {"schemaVersion": 2, "kind": "acephale-trained-predictor", "storageMode": "unmerged_lora", "base": BASE,
                 "baseReceiptHash": hash_v1(base), "baseWeightsHash": base_weights_hash(base), "adapterHash": hash_v1(files),
                 "adapterStorageDtype": "float32", "runtimeLoraDtype": "bfloat16", "servingProbeHash": hash_v1(probe),
@@ -98,6 +107,93 @@ def test_unmerged_export_retains_actual_adapter_bytes_and_requires_separate_runt
     assert _model_identity({**BASE, "trainedPredictor": artifact}, artifact["binaryTokenIds"], selection) == artifact["servedModel"]
     with pytest.raises(ValueError, match="tokenizer"):
         _model_identity({**BASE, "trainedPredictor": artifact}, {"zero": 15, "one": 999}, selection)
+
+
+def test_complete_probe_export_keeps_the_same_weight_identity_and_strict_reload(tmp_path):
+    old = export_fixture(tmp_path / "old")
+    complete = export_fixture(tmp_path / "complete", probe_version=2)
+    assert verify_unmerged_export(tmp_path / "complete") == complete["predictor.json"]
+    assert old["predictor.json"]["servingWeightsHash"] == complete["predictor.json"]["servingWeightsHash"]
+    assert old["predictor.json"]["servedModel"] == complete["predictor.json"]["servedModel"]
+    assert old["predictor.json"]["servingProbeHash"] != complete["predictor.json"]["servingProbeHash"]
+    assert old["verification.json"]["reload"] == complete["verification.json"]["reload"]
+    assert complete["serving-probe.json"]["gate"] == PARITY_GATE
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda p: p.update(inputHash="f" * 64),
+    lambda p: p["selection"].update(familyId="cal"),
+    lambda p: p["selection"].update(promptTokens=256),
+    lambda p: p["selection"].update(trainingManifestHash="f" * 64),
+    lambda p: p["selection"].update(eligibleRows=0),
+    lambda p: p["selection"].update(rule="choose_by_output"),
+])
+def test_complete_probe_rejects_changed_selection_even_after_rehash(tmp_path, mutation):
+    documents = export_fixture(tmp_path, probe_version=2)
+    probe, artifact = documents["serving-probe.json"], documents["predictor.json"]
+    mutation(probe)
+    artifact["servingProbeHash"] = hash_v1(probe)
+    with pytest.raises(ValueError, match="selection provenance"):
+        validate_serving_probe(probe, artifact)
+
+
+@pytest.mark.parametrize("change", ["dataset", "count"])
+def test_complete_probe_selection_binds_the_retained_dataset_after_rehash(tmp_path, change):
+    documents = export_fixture(tmp_path, probe_version=2)
+    probe, artifact, verification = (documents[name] for name in ("serving-probe.json", "predictor.json", "verification.json"))
+    if change == "dataset":
+        probe["selection"]["datasetManifestHash"] = "f" * 64
+    else:
+        probe["selection"]["eligibleRows"] = 3
+    artifact = reseal({**artifact, "servingProbeHash": hash_v1(probe)})
+    verification = reseal({**verification, "artifactHash": artifact["contentHash"]})
+    for name, value in [("serving-probe.json", probe), ("predictor.json", artifact), ("verification.json", verification)]:
+        (tmp_path / name).write_text(json.dumps(value))
+    with pytest.raises(ValueError, match="retained fitting dataset"):
+        verify_unmerged_export(tmp_path)
+
+
+def test_complete_prompt_selection_is_fit_only_neutral_deterministic_and_completion_free(monkeypatch):
+    from acephale import training_data
+
+    prompt = [{"role": "user", "content": "Visible request only"}]
+    base = {"partition": "weight_fit", "task": "rank_binary", "condition": "neutral", "familyId": "fit",
+            "prompt": prompt, "compiledInputHash": hash_v1(prompt), "promptTokens": 300,
+            "completion": object()}
+    rows = [{**base, "id": "b"}, {**base, "id": "a"}, {**base, "id": "long", "promptTokens": 400},
+            {**base, "id": "cal", "partition": "calibration", "promptTokens": 1},
+            {**base, "id": "conditional", "condition": "conditional", "promptTokens": 2},
+            {**base, "id": "goal", "task": "goal", "condition": None, "promptTokens": 3}]
+    monkeypatch.setattr(training_data, "load_partition", lambda path, partition: rows if partition == "weight_fit" else pytest.fail("other partition"))
+    calls = []
+    def template(messages, **options):
+        assert messages == prompt
+        assert options == {"tokenize": False, "add_generation_prompt": True, "enable_thinking": False}
+        calls.append(messages)
+        return "Complete input" + ASSISTANT_GENERATION_SUFFIX
+    tokenizer = SimpleNamespace(apply_chat_template=template, encode=lambda rendered, **options: list(range(300)))
+    ids, selection = select_serving_prompt(None, {"contentHash": "a" * 64, "weightFitFamilies": ["fit"]},
+                                           {"contentHash": "b" * 64}, tokenizer)
+    assert ids == list(range(300)) and selection["rowId"] == "a" and selection["eligibleRows"] == 3
+    assert selection["promptTokens"] == 300 and selection["promptHash"] == hash_v1(prompt) and len(calls) == 1
+
+
+@pytest.mark.parametrize("change", ["suffix", "tokens", "hash", "no_neutral"])
+def test_complete_prompt_never_falls_back_to_truncation_or_other_partition(monkeypatch, change):
+    from acephale import training_data
+
+    prompt = [{"role": "user", "content": "Visible request"}]
+    row = {"partition": "weight_fit", "task": "rank_binary", "condition": "neutral", "id": "a", "familyId": "fit",
+           "prompt": prompt, "compiledInputHash": hash_v1(prompt), "promptTokens": 300}
+    if change == "hash":
+        row["compiledInputHash"] = "f" * 64
+    if change == "no_neutral":
+        row["condition"] = "conditional"
+    monkeypatch.setattr(training_data, "load_partition", lambda *_: [row])
+    tokenizer = SimpleNamespace(apply_chat_template=lambda *a, **k: "incomplete" if change == "suffix" else "prompt" + ASSISTANT_GENERATION_SUFFIX,
+                                encode=lambda *a, **k: list(range(299 if change == "tokens" else 300)))
+    with pytest.raises(ValueError, match="complete|Complete"):
+        select_serving_prompt(None, {"contentHash": "a" * 64, "weightFitFamilies": ["fit"]}, {"contentHash": "b" * 64}, tokenizer)
 
 
 @pytest.mark.parametrize("field,value", [("runtimeLoraDtype", "float32"), ("adapterStorageDtype", "bfloat16"),

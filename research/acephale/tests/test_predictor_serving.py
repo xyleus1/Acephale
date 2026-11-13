@@ -19,10 +19,15 @@ SOURCE = "a" * 40
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def qualified_fixture():
+def qualified_fixture(probe_version=1):
     probe = {"schemaVersion": 1, "kind": "acephale-lora-serving-probe", "inputTokenIds": [10, 20, 30],
              "binaryTokenIds": {"zero": 15, "one": 16}, "referenceLogprobs": {"zero": -1e-7, "one": -1e-7},
              "referenceConditionalOneProbability": 0.5, "topTokenId": 42, "gate": PARITY_GATE, "nativeTaskAccuracyMeasured": False}
+    if probe_version == 2:
+        probe.update(schemaVersion=2, inputTokenIds=list(range(300)), inputHash=hash_v1(list(range(300))),
+                     selection={"rule": "shortest_complete_neutral_weight_fit_prompt_v1", "datasetManifestHash": hash_v1("dataset"),
+                         "trainingManifestHash": hash_v1("manifest"), "rowId": "fit:neutral", "familyId": "fit",
+                         "promptHash": hash_v1("prompt"), "promptTokens": 300, "eligibleRows": 24})
     artifact = {"schemaVersion": 2, "kind": "acephale-trained-predictor", "storageMode": "unmerged_lora", "base": BASE,
                 "baseReceiptHash": hash_v1("receipt"), "baseWeightsHash": hash_v1("base"), "adapterHash": hash_v1("adapter"),
                 "adapterStorageDtype": "float32", "runtimeLoraDtype": "bfloat16", "servingProbeHash": hash_v1(probe),
@@ -38,8 +43,8 @@ def qualified_fixture():
                  "startedAt": "2026-11-13T00:00:00Z", "modelMountReadOnly": True} for role, char in (("actor", "b"), ("predictor", "c"))}}
     deployment = {"observed": True, "sourceCommit": SOURCE, "evidenceHash": hash_v1(prior), "predictor": predictor}
     binding = {"schemaVersion": 1, "artifact": artifact, "probe": probe, "deployment": deployment, "inventory": prior}
-    response = {"model": artifact["servedModel"], "usage": {"prompt_tokens": 3, "completion_tokens": 1}, "choices": [{
-        "prompt_token_ids": [10, 20, 30], "token_ids": [42], "logprobs": {"top_logprobs": [{"token_id:15": -1e-7, "token_id:16": -1e-7}]}}]}
+    response = {"model": artifact["servedModel"], "usage": {"prompt_tokens": len(probe["inputTokenIds"]), "completion_tokens": 1}, "choices": [{
+        "prompt_token_ids": list(probe["inputTokenIds"]), "token_ids": [42], "logprobs": {"top_logprobs": [{"token_id:15": -1e-7, "token_id:16": -1e-7}]}}]}
     container = prior["containers"]["predictor"]
     receipt = hashed({"version": 1, "kind": "acephale-native-lora-serving-qualification", "artifactHash": artifact["contentHash"],
         "servingProbeHash": artifact["servingProbeHash"], "servingWeightsHash": artifact["servingWeightsHash"], "baseReceiptHash": artifact["baseReceiptHash"],
@@ -56,8 +61,9 @@ def qualified_fixture():
     return {"predictor": predictor, "inventory": inventory, "sourceCommit": SOURCE}
 
 
-def test_post_probe_qualification_requires_actual_same_process_and_numerical_evidence(tmp_path):
-    valid = qualified_fixture()
+@pytest.mark.parametrize("probe_version", [1, 2])
+def test_post_probe_qualification_requires_actual_same_process_and_numerical_evidence(tmp_path, probe_version):
+    valid = qualified_fixture(probe_version)
     expected = valid["inventory"]["nativeLoraQualification"]["receipt"]["contentHash"]
     assert validate_native_lora_serving(valid["predictor"], valid["inventory"], SOURCE) == expected
     edits = [
