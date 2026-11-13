@@ -46,6 +46,19 @@ def training_versions() -> dict[str, str]:
     return observed
 
 
+def _receipt_training_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Keep HF's operation estimate without exceeding the shared numeric range."""
+    retained = dict(metrics)
+    if "total_flos" in retained:
+        estimate = retained["total_flos"]
+        if type(estimate) not in (int, float) or not math.isfinite(estimate) or estimate < 0:
+            raise ValueError("Training operation estimate must be finite and nonnegative")
+        # str preserves the original number's round trip. This is an estimated
+        # operation count, not an exact counter or a measured throughput metric.
+        retained["total_flos"] = str(estimate)
+    return retained
+
+
 def validate_training_lease(path: Path, *, now: float | None = None) -> dict[str, Any]:
     lease = json.loads(path.read_text(encoding="utf-8"))
     now = time.time() if now is None else now
@@ -393,7 +406,8 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
             "seed": seed, "steps": trainer.state.global_step, "gradientChecks": guard.gradient_checks,
             "adapterBeforeHash": adapter_before, "adapterAfterHash": adapter_after, "frozenBeforeHash": frozen_before,
             "frozenAfterHash": frozen_after, "elapsedSeconds": time.monotonic() - started,
-            "trainingMetrics": result.metrics, "developmentMetrics": metrics,
+            "trainingMetrics": _receipt_training_metrics(result.metrics), "developmentMetrics": metrics,
+            "trainingMetricEncodings": {"total_flos": "estimated_operations_decimal_string"},
             "peakGpuBytes": torch.cuda.max_memory_allocated(), "adapterFiles": file_inventory(adapter_dir),
             "probeHash": file_hash(output / "reload-probe.pt"), "binaryTokenIds": binary_ids, **review_fields})
         write_new(output / "receipt.json", receipt)

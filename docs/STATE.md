@@ -1,12 +1,19 @@
 # Current state
 
-Updated November 13, 2026, 17:24 UTC. This page distinguishes implemented software
-from measured results. Full training is now running on the A100.
+Updated November 13, 2026, 17:44 UTC. This page distinguishes implemented software
+from measured results. Seed 17's optimizer work is complete; receipt recovery and
+the independent second seed are in progress.
 
 ## Active training
 
-Seed 17 has reached 157 of 204 optimizer updates. Seed 29 follows automatically
-with its own full 204-update recipe. Both use the same frozen data, effective
+Seed 17 completed all 204 optimizer updates and all 204 gradient checks, with
+unchanged base hashes and a changed adapter hash. Its final adapter, reload probe
+and checkpoint-204 are saved. Final result serialization then failed because HF's
+`total_flos` estimate, `7.51775264009134e16`, exceeds the shared numeric range.
+The complete failed attempt was exported and verified. Recovery retains that
+failure and reconstructs a separate result record from saved evidence; it does
+not rerun seed 17's optimizer. Seed 29 retains its full 204-update recipe.
+Both use the same frozen data, effective
 batch of 16, three epochs and rank-16 LoRA. The predictor has 10,822,656 trainable
 adapter parameters; the 9B actor stays fixed. Training loss is a diagnostic,
 not tool-call accuracy or native reward.

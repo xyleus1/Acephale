@@ -1,5 +1,14 @@
 # Working on Acephale
 
+Seed 17 subsequently completed all 204 updates but failed while hashing its
+result: HF's `total_flos` exceeded the shared numeric range. Its actual saved
+adapter, checkpoint, probe and failure are verified and retained. Do not repeat
+that optimizer work. The private recovery workflow must preserve original source
+and failure lineage, verify saved tensor hashes and mark unavailable metrics
+unknown. The source change below stores future `total_flos` estimates as decimal
+strings, with explicit encoding metadata. It is not deployed into either frozen
+5a training seed and does not retroactively change the failed run.
+
 The full November 13 training run is active under source `5a36a8b` and the
 original funded lease. At 17:24 UTC seed 17 had completed 157/204 optimizer
 updates; seed 29 follows automatically. Do not restart or shorten either recipe.

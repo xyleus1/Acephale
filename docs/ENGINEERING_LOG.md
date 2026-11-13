@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-13: Serialize large training operation estimates
+
+The real seed-17 run completed 204 updates, then failed receipt hashing because
+HF's operation estimate was `7.51775264009134e16`, above the shared numeric range.
+Future training receipts store `total_flos` as a round-trippable decimal string
+and declare its encoding. Nonfinite/negative estimates remain invalid, and all
+other metrics retain the existing shared-wire validation. The input metrics are
+not mutated. Focused training/export validation passed 69 tests, including the
+actual overflowing value and preservation of a large integer without rounding.
+No active image, optimizer, checkpoint, historical receipt or tolerance changed.
+
 ## 2026-11-13: Record actual main training and closed baseline
 
 Replaced the stale current-state claim that neither main seed had started.

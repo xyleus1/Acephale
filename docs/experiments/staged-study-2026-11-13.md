@@ -139,6 +139,22 @@ the recipe, source and setting remain common to both independent main seeds.
 Actual trained serving qualification, paired comparisons and final artifacts
 are still pending.
 
+## Completed first seed, failed result publication
+
+Seed 17 completed 204 updates, 204 finite nonzero-gradient checks and epoch 3.
+Its failure record preserves matching frozen-base before/after hashes and a
+changed adapter hash. The final adapter, reload probe and checkpoint-204 were
+saved before receipt hashing rejected `total_flos = 7.51775264009134e16`.
+The shared numeric profile permits magnitudes only through `2^53 - 1`.
+
+The failed stage remains failed. Its complete 294,421,841-byte archive was
+downloaded and 93 files individually verified; archive SHA-256:
+`911df173104cb2e83298b7c781e9d921ee32d0cc8534796bfe52a828f2757e70`.
+Recovery must verify the saved weights and original evidence in a new artifact,
+retain unknown metrics as unknown, and perform the normal strict reload and
+serving checks. There is no reason to repeat these completed optimizer updates.
+The independent seed 29 keeps its original source, image and complete recipe.
+
 ## Reporting still required
 
 Report semantic annotation acceptance, both full training seeds, goal/tool/argument

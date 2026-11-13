@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-13: Keep large diagnostic estimates outside numeric wire fields
+
+HF's `total_flos` is an estimated operation count and can exceed the common
+TypeScript/Python numeric bound in a complete training run. Encode that named
+metric as decimal text in new receipts, preserving the original numeric value's
+round trip and identifying the encoding. Do not weaken canonical validation for
+other fields. Failed historical result publication requires a separate evidence
+recovery record; it does not authorize repeating already completed optimizer work
+or inventing missing runtime metrics.
+
 ## 2026-11-13: Report both seed and task variation explicitly
 
 Keep the predeclared paired schedule. Development assigns variant v0 to predictor
