@@ -153,6 +153,9 @@ def publish(receipt_path, ledger, lease_id):
         except s3.exceptions.NoSuchKey:
             previous = None
         if previous and previous["leaseId"] != lease_id:
+            prior = next((row for row in checked_bound_ledger(ledger)["leases"] if row["id"] == previous["leaseId"]), None)
+            if prior is None or prior["status"] != "terminated":
+                raise ValueError("Cannot replace an unresolved controller lease, even when its name is absent")
             existing = select_instance(previous, Provider(os.environ.get("LAMBDA_API_KEY", "")).request("GET", "/instances")["data"])
             if existing and existing.get("status") != "terminated":
                 raise ValueError("Cannot replace a live controller lease")

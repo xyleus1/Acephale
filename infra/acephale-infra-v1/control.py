@@ -897,7 +897,7 @@ def committed_source(initial_commit: str) -> str:
 
 def controller_source_files() -> list[dict]:
     return [{"path": name, "sha256": sha256(HERE / name)} for name in
-            ("control.py", "provider_routing.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json")]
+            ("control.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json")]
 
 
 def record_source_amendment(ledger_path: Path, output: Path, reason: str, readiness_evidence: Path,
@@ -976,7 +976,7 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
 
 
 def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: float, extra_allowance_usd: float,
-                  now: float) -> dict[str, Any]:
+                  now: float, *, unresolved_fence: dict | None = None) -> dict[str, Any]:
     hours = finite_number(hours, "session hours", 0.01)
     allowance = finite_number(extra_allowance_usd, "tax/storage/export allowance", 0)
     rate = finite_number(current_quote["hourlyUsd"], "hourly quote", 0.01)
@@ -992,7 +992,12 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
         raise ValueError("Unapproved instance or image")
     leases = ledger["leases"]
     if any(lease["status"] != "terminated" for lease in leases):
-        raise ValueError("Another lease is active or unresolved")
+        if unresolved_fence is None:
+            raise ValueError("Another lease is active or unresolved")
+        from unresolved_launch import checked_fence
+        checked_fence(ledger, unresolved_fence, now)
+    elif unresolved_fence is not None:
+        raise ValueError("A replacement fence requires an unresolved predecessor")
     used_hours = ledger["priorGpuHours"] + sum(lease["reservedHours"] for lease in leases)
     reserved = ledger["priorInfraUsd"] + sum(lease["reservedUsd"] for lease in leases + ledger.get("overheads", []))
     cost = round(rate * hours + allowance, 6)
@@ -1066,7 +1071,7 @@ def record_access_amendment(client: Any, ledger_path: Path, output: Path, ssh_ke
 def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_usd: float,
                   *, now: float | None = None, budget=study_budget, purpose: str = "research",
                   recovery_controller_id: str | None = None, access_amendment: Path | None = None,
-                  routing_amendment: Path | None = None) -> dict[str, Any]:
+                  routing_amendment: Path | None = None, unresolved_fence: Path | None = None) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
     current = time.time() if now is None else now
@@ -1091,7 +1096,8 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
         if route:
             verify_quote(route, current_quote)
         validate_firewall(client, access["firewallRulesetId"], region)
-        lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current)
+        fence = read_json(unresolved_fence) if unresolved_fence else None
+        lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current, unresolved_fence=fence)
         lease["name"] = "acephale-infra-" + lease["id"]
         lease["purpose"] = purpose
         lease["recoveryControllerId"] = recovery_controller_id
@@ -1099,6 +1105,8 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
             lease["accessAmendment"] = access
         if route:
             lease["routingAmendment"] = route
+        if fence is not None:
+            lease["unresolvedPredecessor"] = {"reservationFence": fence, "receiptSha256": sha256(unresolved_fence)}
         lease["status"] = "reservation_pending"
         ledger["leases"].append(lease)
         atomic_json(ledger_path, ledger)
@@ -1168,7 +1176,7 @@ def observe_termination(client: Any, ledger_path: Path, lease_id: str) -> dict:
 
 
 def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path,
-           *, now: float | None = None, budget=study_budget) -> dict[str, Any]:
+           *, now: float | None = None, budget=study_budget, unresolved_fence: Path | None = None) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
     current = time.time() if now is None else now
@@ -1178,10 +1186,23 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         lease = next(item for item in ledger["leases"] if item["id"] == lease_id)
         if lease["status"] != "reserved" or not lease.get("studyReservation") or current >= lease["setupDeadline"]:
             raise ValueError("Only an unattempted, funded lease within setup window can launch")
-        if any(item["id"] != lease_id and item["status"] != "terminated" for item in ledger["leases"]):
-            raise ValueError("Another unresolved lease blocks launch")
+        fence = None
+        pending = any(item["id"] != lease_id and item["status"] != "terminated" for item in ledger["leases"])
+        if pending or "unresolvedPredecessor" in lease:
+            from unresolved_launch import checked_fence, identities
+            if unresolved_fence is None or "unresolvedPredecessor" not in lease:
+                raise ValueError("An explicitly reserved replacement and refreshed predecessor fence are required")
+            fence = checked_fence(ledger, read_json(unresolved_fence), current, current_lease_id=lease_id)
+            original = lease["unresolvedPredecessor"]["reservationFence"]
+            if fence["predecessor"] != original["predecessor"] or identities(fence) != identities(original):
+                raise ValueError("Replacement changed the unresolved predecessor or dedicated controllers")
+        elif unresolved_fence is not None:
+            raise ValueError("Unexpected predecessor fence for an ordinary launch")
         enrollments = watchdog_enrollments(watchdog_receipt, ledger, lease, current)
         route = checked_route(ledger, lease["routingAmendment"]) if "routingAmendment" in lease else None
+        if fence is not None:
+            from unresolved_launch import check_new_controllers
+            check_new_controllers(fence, enrollments)
         access = checked_access_amendment(ledger, lease["accessAmendment"]) if "accessAmendment" in lease else plan
         if route:
             access = route
@@ -1196,6 +1217,8 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         validate_firewall(client, access["firewallRulesetId"], region)
         budget(plan, "inspect")
         lease["watchdogs"] = enrollments
+        if fence is not None:
+            lease["unresolvedPredecessor"].update(launchFence=fence, launchReceiptSha256=sha256(unresolved_fence))
         lease["status"] = "launching"
         atomic_json(ledger_path, ledger)
         try:
@@ -1372,6 +1395,7 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--recovery-controller-id")
     prepare.add_argument("--access-amendment", type=Path)
     prepare.add_argument("--routing-amendment", type=Path)
+    prepare.add_argument("--unresolved-fence", type=Path)
     canary_stop = commands.add_parser("request-canary-termination")
     canary_stop.add_argument("--ledger", type=Path, required=True)
     canary_stop.add_argument("--lease-id", required=True)
@@ -1382,6 +1406,7 @@ def main(argv: list[str] | None = None) -> int:
     start.add_argument("--ledger", type=Path, required=True)
     start.add_argument("--lease-id", required=True)
     start.add_argument("--watchdog-receipt", type=Path, required=True)
+    start.add_argument("--unresolved-fence", type=Path)
     ready = commands.add_parser("mark-ready")
     ready.add_argument("--ledger", type=Path, required=True)
     ready.add_argument("--lease-id", required=True)
@@ -1457,7 +1482,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "prepare-lease":
             value = prepare_lease(client, args.ledger, args.hours, args.extra_allowance_usd, purpose=args.purpose,
                                   recovery_controller_id=args.recovery_controller_id, access_amendment=args.access_amendment,
-                                  routing_amendment=args.routing_amendment)
+                                  routing_amendment=args.routing_amendment, unresolved_fence=args.unresolved_fence)
         elif args.command == "record-region-route":
             from provider_routing import record_route
             value = record_route(client, args.ledger, args.output, args.region, args.firewall_ruleset_id,
@@ -1469,7 +1494,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "observe-termination":
             value = observe_termination(client, args.ledger, args.lease_id)
         elif args.command == "launch":
-            value = launch(client, args.ledger, args.lease_id, args.watchdog_receipt)
+            value = launch(client, args.ledger, args.lease_id, args.watchdog_receipt, unresolved_fence=args.unresolved_fence)
         elif args.command == "terminate":
             value = terminate(client, args.ledger, args.lease_id, args.export_root, args.export_receipt, args.emergency)
         elif args.command == "watchdog":

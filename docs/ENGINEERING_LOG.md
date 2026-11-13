@@ -27,6 +27,18 @@ changes, foreign development rows and rehashed proof tampering. The actual
 100-checkpoint pilot and 20 audit cases verified against the closed 72-episode
 aggregate without a provider call. No labels or human-review claims were added.
 
+## 2026-11-13: Gate replacement of an unobserved launch
+
+Added an explicit unresolved-launch receipt validator and reservation/launch
+parameters. The old lease and financial reservation remain byte-for-byte equal;
+ordinary active leases, ambiguous predecessors and stale receipts still reject.
+The old pair must remain scheduled and dedicated to its exact name, with a stale
+owner heartbeat. New launches, including recovery canaries, require new controller
+identities. Publishing a new lease cannot overwrite an unresolved prior state.
+Offline tests cover receipt tampering, shared controllers, reservation totals and
+late-arrival termination while leaving the replacement untouched. This does not
+assert provider termination or invoice settlement for an absent instance.
+
 ## 2026-11-13: Preserve parent JSONL bytes during aggregate verification
 
 The closed auxiliary development import retained all original public prefixes,

@@ -19,6 +19,15 @@ Keep calibration-family labels separate from fitting labels and preserve the
 original dispatcher budget cap; additional annotation requires its own declared
 bounded batches and retained provider lineage.
 
+## 2026-11-13: Preserve uncertain launches behind dedicated cleanup controllers
+
+An empty running-instance listing cannot establish that an uncertain launch was
+never created or billed. Keep its status, full reservation and original cleanup
+controllers. Explicit replacement admission requires two fresh, independently
+hosted old-name fence observations, enabled schedules, exact function permissions
+and an expired owner heartbeat. Both replacement controllers must be distinct.
+Revalidate before launch; never turn absence into a termination or zero-cost claim.
+
 ## 2026-11-13: Verify imported parent prefixes as original bytes
 
 Use literal JSONL source lines for parent-file SHA-256 verification. Parsing is

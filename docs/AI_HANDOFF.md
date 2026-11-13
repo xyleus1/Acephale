@@ -14,6 +14,11 @@ Expanded grading declarations record this parent proof and revalidate it. The
 legacy annotation dispatch cap remains unchanged; larger calibration cohorts need
 explicit bounded batches with already accepted audit labels reused, not rerun.
 
+An unresolved provider launch remains fully reserved. Replacement admission is
+explicit: pass `--unresolved-fence` to reservation and launch, with fresh receipts
+for the same two old-name watchdogs. New work requires separate controllers.
+Never refresh the predecessor heartbeat or overwrite its registered state.
+
 Multi-cohort memory verification now hashes the retained raw public JSONL lines
 for each parent instead of reserializing them. This fixes a Python/RFC8785 byte
 mismatch without changing original prefixes, parent manifests or failed stages.
