@@ -863,7 +863,10 @@ def deployment_source(ledger: dict, amendment: Path | None, *, source_probe=comm
     return {"initialSourceCommit": initial, "executingSourceCommit": current, "amendment": value}
 
 
-def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *, budget=study_budget) -> dict[str, Any]:
+def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
+                     kind: str = "watchdog_storage_export", budget=study_budget) -> dict[str, Any]:
+    if kind not in {"watchdog_storage_export", "provider_tax_allowance"}:
+        raise ValueError("Explicit supported associated-charge kind required")
     if str(uuid.UUID(reservation_id)) != reservation_id:
         raise ValueError("Explicit unique overhead reservation UUID required")
     maximum = finite_number(maximum_usd, "overhead allowance", 0.01)
@@ -879,7 +882,7 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *, bud
         if charges + maximum > associated:
             raise ValueError("Associated infrastructure charges exceed five dollars" if associated == 5
                              else "Associated infrastructure charges exceed the approved allowance")
-        row = {"id": reservation_id, "kind": "watchdog_storage_export", "status": "reservation_pending",
+        row = {"id": reservation_id, "kind": kind, "status": "reservation_pending",
                "reservedUsd": maximum, "reservedMicrodollars": math.ceil(maximum * 1_000_000)}
         value["overheads"].append(row)
         atomic_json(path, value)
@@ -1222,6 +1225,7 @@ def main(argv: list[str] | None = None) -> int:
     overhead.add_argument("--ledger", type=Path, required=True)
     overhead.add_argument("--reservation-id", required=True)
     overhead.add_argument("--maximum-usd", type=float, required=True)
+    overhead.add_argument("--kind", choices=["watchdog_storage_export", "provider_tax_allowance"], default="watchdog_storage_export")
     suballocation = commands.add_parser("record-infrastructure-suballocation")
     suballocation.add_argument("--ledger", type=Path, required=True)
     suballocation.add_argument("--reason", required=True)
@@ -1296,7 +1300,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "init-ledger":
         value = init_bound_ledger(args.ledger, load_plan(args.plan), args.prior_gpu_hours)
     elif args.command == "reserve-overhead":
-        value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd)
+        value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd, kind=args.kind)
     elif args.command == "record-infrastructure-suballocation":
         value = record_infrastructure_suballocation(args.ledger, args.reason)
     elif args.command == "record-source-amendment":

@@ -180,3 +180,18 @@ def test_suballocation_fails_if_source_slice_changes_during_journal_inspection(a
     with pytest.raises(ValueError, match="changed during"):
         suballocate(path, budget=change)
     assert not control.infrastructure_suballocation_path(path).exists()
+
+
+def test_tax_allowance_keeps_an_explicit_kind_and_existing_overhead_default(amended):
+    path, _, _ = amended
+    def budget(plan, operation, row):
+        return {"reservationId": row["id"], "maximumMicrodollars": row["reservedMicrodollars"]}
+    tax = control.reserve_overhead(path, "11111111-1111-4111-8111-111111111111", 1,
+                                   kind="provider_tax_allowance", budget=budget)
+    normal = control.reserve_overhead(path, "22222222-2222-4222-8222-222222222222", 1, budget=budget)
+    assert tax["kind"] == "provider_tax_allowance" and tax["reservedUsd"] == 1
+    assert normal["kind"] == "watchdog_storage_export"
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="associated-charge kind"):
+        control.reserve_overhead(path, "33333333-3333-4333-8333-333333333333", 1, kind="arbitrary", budget=budget)
+    assert path.read_bytes() == before
