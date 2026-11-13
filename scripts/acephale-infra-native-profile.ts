@@ -27,7 +27,7 @@ import { selectInfraReplayRows } from "./acephale-infra-predict";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
 
 export interface NativeProfileConfig {
-  version: 1; datasetPath: string; cohortPath: string; memoryPath: string; manifestPath: string; ledgerCheckpointPath: string;
+  version: 1; datasetPath: string; cohortPath?: string; cohortPaths?: string[]; memoryPath: string; manifestPath: string; ledgerCheckpointPath: string;
   budgetDirectory: string; actorBaseUrl: string; predictorBaseUrl: string; limit: number; seed: number; maximumLifetimeSeconds: number;
   otlpBaseUrl?: string; splitGuardPath?: string; episodicEmbeddingsPath?: string; stream?: boolean;
 }
@@ -37,6 +37,26 @@ type Spans = Partial<Record<"actorLeadMs" | "predictionMs" | "toolMs" | "validat
 const json = async <T = any>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8"));
 const write = (file: string, value: unknown) => writeFile(file, canonical(value) + "\n", { flag: "wx", mode: 0o600 });
 export { NATIVE_PROFILE_PROTOCOL };
+
+export function nativeProfileCohorts(config: Pick<NativeProfileConfig, "cohortPath" | "cohortPaths">, base: string): string[] {
+  const single = config.cohortPath !== undefined, multiple = config.cohortPaths !== undefined;
+  if (single === multiple) throw new Error("Declare cohortPath or cohortPaths, exclusively");
+  const paths = single ? [config.cohortPath] : config.cohortPaths;
+  if (!Array.isArray(paths) || paths.length < (single ? 1 : 2)
+    || paths.some(path => typeof path !== "string" || !path.trim())) throw new Error("Original native cohort paths are required");
+  const resolved = paths.map(path => resolve(base, path!));
+  if (new Set(resolved).size !== resolved.length) throw new Error("Native cohort paths must be distinct");
+  return resolved;
+}
+
+export function validateNativePrefixSource(prefix: any, row: any, lineage: any): void {
+  const source = lineage.fresh_sources?.[row.episode_id];
+  const cohort = source?.cohort_id ?? lineage.cohort_receipt_hash;
+  if (!source || prefix.sourceRunSha256 !== source.raw_sha256 || prefix.sourceCohortId !== cohort
+    || prefix.checkpoint_id !== row.checkpoint_id || prefix.input_hash !== row.input_hash || prefix.verifiedPublicPrefix !== true
+    || prefix.boundaryHash !== hash(prefix.boundary) || hash(prefix.boundary.tools) !== row.runtime_tool_schema_hash
+    || prefix.boundary.policy !== row.input.policy) throw new Error("Native prefix gateway provenance mismatch");
+}
 
 /** Bind the original journal prefix while allowing later billed profiling entries. */
 export async function nativeProfileJournalPrefix(ledgerPath: string, bytes?: number) {
@@ -51,6 +71,7 @@ export async function nativeProfileJournalPrefix(ledgerPath: string, bytes?: num
 async function inputs(configurationPath: string) {
   const config = await json<NativeProfileConfig>(configurationPath), base = dirname(resolve(configurationPath));
   const path = (file: string) => resolve(base, file);
+  nativeProfileCohorts(config, base);
   if (config.version !== 1 || !Number.isSafeInteger(config.limit) || config.limit < 1 || config.limit > 100
     || !Number.isSafeInteger(config.seed) || config.seed < 0 || !Number.isSafeInteger(config.maximumLifetimeSeconds)
     || config.maximumLifetimeSeconds < 1 || config.maximumLifetimeSeconds > 28800
@@ -186,9 +207,7 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
   if (contentHash !== hash(planBody) || plan.configurationHash !== hash(config) || plan.manifestHash !== hash(manifest)
     || plan.sourceDatasetHash !== dataset.manifest.bundle_hash || plan.candidateCompilerHash !== infraCandidateCompilerHash("native") || !row) throw new Error("Prepared native profile identity changed");
   const prefix = await json(join(output, `prefix-${ordinal}.json`));
-  if (prefix.checkpoint_id !== row.checkpoint_id || prefix.input_hash !== row.input_hash || prefix.verifiedPublicPrefix !== true
-    || prefix.boundaryHash !== hash(prefix.boundary) || hash(prefix.boundary.tools) !== row.runtime_tool_schema_hash
-    || prefix.boundary.policy !== row.input.policy) throw new Error("Native prefix gateway provenance mismatch");
+  validateNativePrefixSource(prefix, row, dataset.lineage);
   const { frame, policy, candidates } = poolFor(row, memory, dataset.expected);
   if (hash(candidates[0]) !== hash(declared.candidate)) throw new Error("Native candidate identity changed");
   const gateway = new NativeGateway(process.env.ACEPHALE_GATEWAY_URL ?? "", process.env.ACEPHALE_GATEWAY_TOKEN ?? "");

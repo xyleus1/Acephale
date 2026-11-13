@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-13: Route aggregate profiles through their original collections
+
+An aggregate import does not replace its original execution receipts. Native
+profiling verifies every source, applies the importer's shared compatibility
+checks and reconstructs each public prefix from its original task and trace.
+Source cohort and raw-trace hashes accompany the Python gateway proof and are
+checked by Node before model or read dispatch. One-cohort configuration remains
+supported. This permits combined calibration data without merging native state
+or changing the evaluation split.
+
 ## 2026-11-13: Verify imported parent prefixes as original bytes
 
 Use literal JSONL source lines for parent-file SHA-256 verification. Parsing is

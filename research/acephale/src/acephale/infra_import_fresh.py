@@ -253,19 +253,8 @@ def import_fresh(cohort: Path, destination: Path, *, pilot_count: int | None = N
                           audit_count=audit_count, parquet=parquet)
 
 
-def import_fresh_cohorts(cohorts: list[Path], destination: Path, *, pilot_count: int | None = None,
-                         audit_count: int = 20, parquet: bool = False,
-                         parent_bundles: list[Path] | None = None) -> dict[str, Any]:
-    """Join closed base cohorts without rewriting their identities or paired slots.
-
-    Additional cohorts are explicitly declared auxiliary development collection.
-    Their observations validate calibration and never supply fitting memory.
-    """
-    if len(cohorts) < 2 or len({path.resolve() for path in cohorts}) != len(cohorts):
-        raise ValueError("Multiple distinct closed cohort directories are required")
-    parts = [_read_fresh_cohort(path) for path in cohorts]
-    configurations = [_json(path / "configuration.json") for path in cohorts]
-    manifests = [_json(path / "manifest.json") for path in cohorts]
+def verify_cohort_compatibility(parts: list[dict], configurations: list[dict], manifests: list[dict]) -> None:
+    """Apply the same family, trial and native-contract checks at import and replay."""
     policy = parts[0]["split.json"]["declared_family_policy"]
     if any(part["split.json"]["declared_family_policy"] != policy for part in parts):
         raise ValueError("Cohorts must preserve the same predeclared family policy")
@@ -295,6 +284,24 @@ def import_fresh_cohorts(cohorts: list[Path], destination: Path, *, pilot_count:
                                 "scope": row["scope"], "environment": row["environment_version"]})
             if domains.setdefault(row["domain"], contract) != contract:
                 raise ValueError("Native public domain contract differs across cohorts")
+
+
+def import_fresh_cohorts(cohorts: list[Path], destination: Path, *, pilot_count: int | None = None,
+                         audit_count: int = 20, parquet: bool = False,
+                         parent_bundles: list[Path] | None = None) -> dict[str, Any]:
+    """Join closed base cohorts without rewriting their identities or paired slots.
+
+    Additional cohorts are explicitly declared auxiliary development collection.
+    Their observations validate calibration and never supply fitting memory.
+    """
+    if len(cohorts) < 2 or len({path.resolve() for path in cohorts}) != len(cohorts):
+        raise ValueError("Multiple distinct closed cohort directories are required")
+    parts = [_read_fresh_cohort(path) for path in cohorts]
+    configurations = [_json(path / "configuration.json") for path in cohorts]
+    manifests = [_json(path / "manifest.json") for path in cohorts]
+    verify_cohort_compatibility(parts, configurations, manifests)
+    policy = parts[0]["split.json"]["declared_family_policy"]
+    checkpoints = {row["checkpoint_id"] for part in parts for row in part["public.jsonl"]}
     combined = {name: [row for part in parts for row in part[name]] for name in (
         "public.jsonl", "labels.jsonl", "verdicts.jsonl", "metadata.jsonl", "trajectories.jsonl", "runtime-runs.jsonl")}
     metadata = {row["episode_id"]: EpisodeMeta.model_validate(row) for row in combined["metadata.jsonl"]}

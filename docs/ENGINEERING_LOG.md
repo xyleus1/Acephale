@@ -1,5 +1,22 @@
 # Acephale engineering log
 
+## 2026-11-13: Reconstruct profiles from multiple sealed cohorts
+
+Native profiling now verifies all original collection receipts and routes each
+public checkpoint to its owning trace, task and environment. Import and profile
+paths share compatibility checks. Node independently checks the source cohort and
+raw-trace hashes before measurement; the original single-cohort path remains valid.
+
+Focused validation passed 48 Python tests, including the pinned native gateway,
+and nine Node tests; TypeScript checking and Ruff passed. A first pytest invocation
+could not access the machine's default temporary directory; an explicit new test
+directory resolved that environment failure. The new routing tests also reject
+resealed source changes, reordered prefixes and rehashed ownership changes.
+Actual read-only verification checked all 746 public prefixes in the 60+12 trial
+aggregate and reconstructed four longest prefixes across both sources/domains,
+replaying 37 already visible tool calls. No new actor proposals were executed.
+These checks establish reconstruction, not task accuracy or latency improvement.
+
 ## 2026-11-13: Preserve parent JSONL bytes during aggregate verification
 
 The closed auxiliary development import retained all original public prefixes,

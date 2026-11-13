@@ -267,11 +267,18 @@ calibration. Test partition membership alone is not a fresh heldout claim.
 
 ## 7. Profile the actual serving configuration
 
-Native profile config requires `version: 1`, `datasetPath`, `cohortPath`,
+Native profile config requires `version: 1`, `datasetPath`,
 `memoryPath`, `manifestPath`, `ledgerCheckpointPath`, `budgetDirectory`, actor and
 predictor URLs, `limit`, a manifest `seed` and `maximumLifetimeSeconds`. `stream`
 defaults to true and must match execution. Optional `episodicEmbeddingsPath`,
 `splitGuardPath` and `otlpBaseUrl` bind their actual services.
+
+Specify exactly one of `cohortPath` for an original single-cohort import or
+`cohortPaths` for an aggregate. The latter must contain every original closed
+collection directory exactly once. Python verifies the original receipts, public
+prefixes, trial identities and shared native contracts before routing a checkpoint
+to its source environment. Node checks the source cohort and trace hashes before
+measurement. Failed slots remain retained and heldout prefixes remain excluded.
 
 Document profile config replaces `cohortPath` with `corpusPath`; optional episodic
 retrieval also requires the original budget directory. Paths resolve beside config.

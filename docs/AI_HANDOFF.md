@@ -1,5 +1,10 @@
 # Working on Acephale
 
+Native opportunity profiling accepts either the original `cohortPath` or an
+explicit `cohortPaths` list for a combined import. Supply all sealed originals;
+each public prefix routes through its verified owner. Profiling replays only
+previously visible actions and never executes newly measured actor proposals.
+
 Multi-cohort memory verification now hashes the retained raw public JSONL lines
 for each parent instead of reserializing them. This fixes a Python/RFC8785 byte
 mismatch without changing original prefixes, parent manifests or failed stages.
