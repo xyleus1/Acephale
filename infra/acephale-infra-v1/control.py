@@ -411,6 +411,14 @@ def provider_receipt(client: Any, ledger_path: Path, lease_id: str, ssh_observat
              "hardwareProfileHash": lease["quote"]["hardwareProfileHash"], "instance": item,
              "ssh": ssh, "providerResponseHash": digest(item), "studyBindingHash": ledger["planHash"],
              "launchImageId": lease["quote"]["imageId"]}
+    if "gpuHourCapacityAddendumHash" in lease:
+        maximum, capacity = effective_gpu_hour_capacity(ledger)
+        if capacity is None or lease["gpuHourCapacityAddendumHash"] != capacity["contentHash"]:
+            raise ValueError("Actual provider lease must bind its engineering capacity authorization")
+        value["infrastructureCapacityAuthorization"] = {
+            "profile": capacity["profile"], "contentHash": capacity["contentHash"],
+            "sha256": sha256(gpu_hour_capacity_path(ledger_path)), "basePolicyMaximumGpuHours": 64,
+            "engineeringMaximumGpuHours": maximum, "financialPolicyChanged": False}
     value["contentHash"] = digest(value)
     write_new(output, value)
     return {"path": str(output), "sha256": sha256(output), "instanceId": item["id"]}
@@ -807,6 +815,136 @@ def record_infrastructure_suballocation(ledger_path: Path, reason: str, *, sourc
         return value
 
 
+def gpu_hour_capacity_path(ledger_path: Path) -> Path:
+    return ledger_path.with_name(ledger_path.name + ".gpu-hour-capacity-v1.json")
+
+
+def gpu_hour_capacity_history(ledger: dict, slice_sha256: str) -> dict:
+    """Snapshot existing operations; an unresolved launch is never called closed."""
+    body = {"version": 1, "profile": "acephale-gpu-hour-operational-history-v1",
+            "originalSliceSha256": slice_sha256, "planHash": ledger["planHash"],
+            "financialBindingHash": _financial_binding_hash(ledger), "priorGpuHours": ledger["priorGpuHours"],
+            **{key: ledger.get(key, []) for key in ("leases", "overheads", "trainingWindows")},
+            "reservedGpuHours": finite_number(ledger["priorGpuHours"], "prior GPU hours")
+                + sum(finite_number(row["reservedHours"], "retained GPU hours") for row in ledger["leases"]),
+            "reservedTotals": _infrastructure_reserved_totals(ledger)}
+    return {**body, "contentHash": digest(body)}
+
+
+def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dict) -> dict:
+    policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v3.json")
+    history = value.get("operationalHistory", {})
+    if (amendment is None or amendment["version"] != 3 or amendment["policy"]["maxGpuHours"] != 64
+            or value.get("version") != 1 or value.get("profile") != "acephale-gpu-hour-capacity-v1"
+            or value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("budgetAmendmentHash") != amendment["contentHash"]
+            or value.get("budgetAmendmentSha256") != sha256(policy_path)
+            or value.get("budgetPolicyHash") != amendment["policyHash"]
+            or value.get("planHash") != ledger["planHash"]
+            or value.get("financialBindingHash") != _financial_binding_hash(ledger)
+            or value.get("basePolicyMaximumGpuHours") != 64 or value.get("engineeringMaximumGpuHours") != 128
+            or any(value.get(key) is not False for key in
+                   ("financialPolicyChanged", "existingReservationsChanged", "existingDeadlinesChanged", "modelContractsChanged"))
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str) or not value["authorizationReason"].strip()
+            or len(value["authorizationReason"]) > 1024
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("operationalHistorySha256", ""))
+            or history.get("contentHash") != digest({key: item for key, item in history.items() if key != "contentHash"})
+            or history.get("profile") != "acephale-gpu-hour-operational-history-v1" or history.get("version") != 1
+            or any(history.get(key) != value.get(key) for key in ("planHash", "financialBindingHash", "originalSliceSha256"))):
+        raise ValueError("GPU-hour capacity addendum must preserve the exact v3 financial policy and original binding")
+    recorded = finite_number(value.get("recordedAt"), "GPU-hour authorization timestamp")
+    if recorded < _budget_authorized_at(amendment):
+        raise ValueError("GPU-hour authorization cannot predate the v3 amendment")
+    baseline = {**ledger, **{key: history[key] for key in ("leases", "overheads", "trainingWindows")}}
+    if gpu_hour_capacity_history(baseline, value["originalSliceSha256"]) != history:
+        raise ValueError("GPU-hour capacity operational history is inconsistent")
+    current = _infrastructure_reservations(ledger)
+    retained = _infrastructure_reservations(baseline)
+    if any(current[key][:len(retained[key])] != retained[key] for key in current):
+        raise ValueError("GPU-hour capacity cannot release or rewrite prior reservations")
+    windows = history["trainingWindows"]
+    if ledger.get("trainingWindows", [])[:len(windows)] != windows:
+        raise ValueError("GPU-hour capacity cannot replace prior training windows")
+    for old, row in zip(history["leases"], ledger["leases"], strict=False):
+        if (old.get("status") not in {"terminated", "launch_unknown"}
+                or (old["status"] == "launch_unknown" and old.get("instanceId") is not None)
+                or any(row.get(key) != old.get(key) for key in
+                       ("id", "name", "reservedAt", "deadline", "setupDeadline", "quote", "studyReservation"))
+                or (old["status"] == "terminated" and
+                    (row.get("status") != "terminated" or row.get("instanceId") != old.get("instanceId")))):
+            raise ValueError("GPU-hour history requires closed work or explicitly retained unknown launches")
+    extra = ledger["leases"][len(history["leases"]):]
+    if any(row.get("gpuHourCapacityAddendumHash") != value["contentHash"]
+           or finite_number(row.get("reservedAt"), "capacity-bound reservation timestamp") < recorded for row in extra):
+        raise ValueError("New provider lease must bind the GPU-hour capacity addendum")
+    hours = finite_number(ledger["priorGpuHours"], "prior GPU hours") + sum(
+        finite_number(row["reservedHours"], "retained GPU hours") for row in ledger["leases"])
+    caps = infrastructure_caps(ledger)
+    totals = _infrastructure_reserved_totals(ledger)
+    if hours > 128 or any(totals[key] > cap for key, cap in zip(
+            ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
+        raise ValueError("GPU-hour capacity addendum cannot exceed unchanged financial allocations")
+    return value
+
+
+def effective_gpu_hour_capacity(ledger: dict) -> tuple[float, dict | None]:
+    """Layer an explicit engineering limit over the unchanged financial policy."""
+    amendment = effective_budget_policy(ledger)
+    original = amendment["policy"]["maxGpuHours"] if amendment else 24
+    ledger_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
+    path = gpu_hour_capacity_path(Path(ledger_path)) if ledger_path else None
+    if path is None or not path.exists():
+        if any("gpuHourCapacityAddendumHash" in row for row in ledger.get("leases", [])):
+            raise ValueError("Provider lease requires its retained GPU-hour capacity addendum")
+        return original, None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError("Invalid GPU-hour capacity addendum file")
+    value = _validate_gpu_hour_capacity(ledger, amendment, read_json(path))
+    return value["engineeringMaximumGpuHours"], value
+
+
+def record_gpu_hour_capacity_addendum(ledger_path: Path, authorization_reason: str, operational_history: Path,
+                                      *, source_probe=None, budget=study_budget) -> dict:
+    """Create the prospective 128-hour engineering allowance, without financial writes."""
+    source_probe = source_probe or committed_source
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        output = gpu_hour_capacity_path(ledger_path)
+        if output.exists():
+            raise ValueError("GPU-hour capacity addendum already exists and cannot be overwritten")
+        amendment = effective_budget_policy(ledger)
+        if (amendment is None or amendment["version"] != 3 or not isinstance(authorization_reason, str)
+                or not authorization_reason.strip() or len(authorization_reason) > 1024
+                or operational_history.is_symlink() or not operational_history.is_file()
+                or operational_history.stat().st_size > 16 * 1024 * 1024):
+            raise ValueError("Existing v3 policy, explicit authorization and retained operational history required")
+        before, history_sha = sha256(ledger_path), sha256(operational_history)
+        history = read_json(operational_history)
+        if history != gpu_hour_capacity_history(ledger, before):
+            raise ValueError("Operational history must exactly snapshot the current original slice")
+        policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v3.json")
+        policy_sha = sha256(policy_path)
+        journal = budget(ledger["plan"], "inspect")
+        body = {"version": 1, "profile": "acephale-gpu-hour-capacity-v1", "planHash": ledger["planHash"],
+                "financialBindingHash": _financial_binding_hash(ledger), "originalSliceSha256": before,
+                "budgetAmendmentHash": amendment["contentHash"], "budgetAmendmentSha256": policy_sha,
+                "budgetPolicyHash": amendment["policyHash"], "basePolicyMaximumGpuHours": 64,
+                "engineeringMaximumGpuHours": 128, "authorizationSource": "explicit_user_instruction",
+                "authorizationReason": authorization_reason.strip(), "recordedAt": time.time(),
+                "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+                "operationalHistory": history, "operationalHistorySha256": history_sha,
+                "originalJournalEvidence": journal, "financialPolicyChanged": False,
+                "existingReservationsChanged": False, "existingDeadlinesChanged": False, "modelContractsChanged": False}
+        value = _validate_gpu_hour_capacity(ledger, amendment, {**body, "contentHash": digest(body)})
+        if (sha256(ledger_path) != before or sha256(policy_path) != policy_sha
+                or sha256(operational_history) != history_sha):
+            raise ValueError("Original slice, policy or history changed during capacity authorization")
+        write_new(output, value)
+        return value
+
+
 def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
     current = sha256(HERE / "versions.json")
     if ledger.get("versionsSha256") == current:
@@ -840,6 +978,7 @@ def checked_bound_ledger(path: Path) -> dict[str, Any]:
     value = _checked_bound_ledger_identity(path)
     effective_versions_metadata(path, value)
     infrastructure_caps(value)
+    effective_gpu_hour_capacity(value)
     return value
 
 
@@ -1006,7 +1145,10 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     compute = ledger.get("priorComputeUsd", ledger["priorInfraUsd"]) + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
     charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
     infrastructure_cap, compute_cap, associated_cap = infrastructure_caps(ledger)
-    if (used_hours + hours > (policy["maxGpuHours"] if policy else 24) or reserved + cost > infrastructure_cap
+    maximum_gpu_hours, capacity = effective_gpu_hour_capacity(ledger)
+    if capacity and now < capacity["recordedAt"]:
+        raise ValueError("Provider reservation cannot predate its capacity authorization")
+    if (used_hours + hours > maximum_gpu_hours or reserved + cost > infrastructure_cap
             or compute + rate * hours > compute_cap or charges + allowance > associated_cap):
         raise ValueError("Cumulative infrastructure allocation exceeded")
     # Do not release reservations after termination without invoice reconciliation.
@@ -1014,7 +1156,8 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
             "reservedAt": now, "deadline": now + hours * 3600,
             "setupDeadline": now + min(setup_seconds, hours * 3600), "reservedHours": hours,
             "reservedUsd": cost, "reservedComputeUsd": round(rate * hours, 6),
-            "reservedMicrodollars": math.ceil(cost * 1_000_000), "instanceId": None, "ready": False}
+            "reservedMicrodollars": math.ceil(cost * 1_000_000), "instanceId": None, "ready": False,
+            **({"gpuHourCapacityAddendumHash": capacity["contentHash"]} if capacity else {})}
 
 
 def validate_firewall(client: Any, ruleset_id: str, region: str) -> None:
@@ -1368,6 +1511,10 @@ def main(argv: list[str] | None = None) -> int:
     suballocation = commands.add_parser("record-infrastructure-suballocation")
     suballocation.add_argument("--ledger", type=Path, required=True)
     suballocation.add_argument("--reason", required=True)
+    capacity = commands.add_parser("record-gpu-hour-capacity-addendum")
+    capacity.add_argument("--ledger", type=Path, required=True)
+    capacity.add_argument("--authorization-reason", required=True)
+    capacity.add_argument("--operational-history", type=Path, required=True)
     source_amendment = commands.add_parser("record-source-amendment")
     source_amendment.add_argument("--ledger", type=Path, required=True)
     source_amendment.add_argument("--output", type=Path, required=True)
@@ -1454,6 +1601,8 @@ def main(argv: list[str] | None = None) -> int:
         value = reserve_overhead(args.ledger, args.reservation_id, args.maximum_usd, kind=args.kind)
     elif args.command == "record-infrastructure-suballocation":
         value = record_infrastructure_suballocation(args.ledger, args.reason)
+    elif args.command == "record-gpu-hour-capacity-addendum":
+        value = record_gpu_hour_capacity_addendum(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "record-source-amendment":
         value = record_source_amendment(args.ledger, args.output, args.reason, args.readiness_evidence)
     elif args.command == "record-versions-metadata-amendment":

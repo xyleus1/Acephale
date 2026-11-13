@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-13: Prospective GPU-hour engineering capacity
+
+Added a creation-only operator sidecar for an explicitly authorized cumulative
+GPU-hour reservation allowance of 128 instead of 64. The v3 financial policy and
+all monetary/training/model limits remain unchanged. Reservation admission binds
+the sidecar; validation retains the original operational history, including
+unknown launches, costs and deadlines. Provider receipts record this separate
+authorization. Tests cover unchanged monetary denial, unresolved-fence admission,
+provider inventory, and compatibility with the actual unchanged 5a training-lease
+reader. This is an infrastructure control change, not an experiment result.
+
 ## 2026-11-13: Serialize large training operation estimates
 
 The real seed-17 run completed 204 updates, then failed receipt hashing because

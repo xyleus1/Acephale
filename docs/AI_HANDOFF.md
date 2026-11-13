@@ -1,5 +1,17 @@
 # Working on Acephale
 
+An explicit operator-only GPU-hour capacity addendum can prospectively raise the
+cumulative reservation allowance from 64 to 128 hours. It does not change the v3
+$1,000 financial policy, its $200 infrastructure/$150 compute/$50 associated
+allocations, any training window, model contract, prior reservation or deadline.
+The original slice and policy bytes stay unchanged. New provider leases bind the
+creation-only sidecar hash and provider receipts expose the separate engineering
+authorization. Qualified manifests retain base policy `maximumGpuHours: 64` and
+must include the addendum as an explicit run input/provenance artifact. Do not
+claim that the policy itself now says 128. Read the capacity procedure in
+`infra/acephale-infra-v1/GPU_HOUR_CAPACITY.md` before using it. Uncertain launches
+remain funded and still require their existing independent fences.
+
 Seed 17 subsequently completed all 204 updates but failed while hashing its
 result: HF's `total_flos` exceeded the shared numeric range. Its actual saved
 adapter, checkpoint, probe and failure are verified and retained. Do not repeat

@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-13: GPU-hour capacity remains separate from financial policy
+
+The user's authorization to continue necessary work permits a prospective
+operator engineering allowance of 128 cumulative reserved GPU hours. Preserve the
+existing v3 policy, financial allocations and frozen training-lease schema. Bind
+the new capacity sidecar to the unchanged original slice, v3 amendment and full
+operational history; keep unresolved reservations and independent-fence checks.
+Every future affected lease and run provenance must identify this explicit
+addendum. No earlier failure, charge, deadline or model-source identity changes.
+
 ## 2026-11-13: Keep large diagnostic estimates outside numeric wire fields
 
 HF's `total_flos` is an estimated operation count and can exceed the common
