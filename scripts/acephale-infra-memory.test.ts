@@ -7,7 +7,6 @@ import { join, resolve } from "node:path";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 import { attachCausalInfraMemory, bridgeFreshFitInfraMemory, bridgeFreshInfraMemory, validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
 import { buildMemoryArtifact, validateMemoryArtifact } from "../src/lib/acephale/experience-memory";
-import { INFRA_MODEL_PINS } from "../src/lib/acephale/infra-manifest";
 
 function fixture() {
   const directory = resolve("research/acephale/runs", `infra-memory-test-${randomUUID()}`);
