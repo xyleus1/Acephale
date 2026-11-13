@@ -1,5 +1,17 @@
 # Acephale engineering log
 
+## 2026-11-13: Preserve parent JSONL bytes during aggregate verification
+
+The closed auxiliary development import retained all original public prefixes,
+but memory verification rejected the parent after reserializing Python JSON
+numbers through RFC8785. Filter the original UTF-8 lines by their verified cohort
+owner and hash their unchanged bytes, including original line endings. The
+checkpoint order, parent manifest, split, ownership and semantic checks remain.
+Seven focused memory tests and TypeScript checking passed. Regression fixtures
+cover Python exponent/Unicode spelling, LF/CRLF, changed values, reordered rows
+and semantically equivalent reserialization. Earlier failed stage artifacts stay
+unchanged; successful verification is not a new native execution or model result.
+
 ## 2026-11-13: Closed collection and declared FLA trainer
 
 Published the actual 60-slot fixed-base collection: 57 native completions, 46

@@ -1,5 +1,12 @@
 # Acephale decisions
 
+## 2026-11-13: Verify imported parent prefixes as original bytes
+
+Use literal JSONL source lines for parent-file SHA-256 verification. Parsing is
+required for cohort ownership and semantic checks, but reserialization cannot
+establish original byte identity across Python and JavaScript. Preserve all
+existing parent manifests and failed import-stage receipts.
+
 ## 2026-11-13: Use the official FLA integration before sizing full fitting
 
 Pin `flash-linear-attention[cuda]` and `fla-core` at 0.6.0 without changing the

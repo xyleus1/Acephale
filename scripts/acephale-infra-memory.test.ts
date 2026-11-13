@@ -149,3 +149,77 @@ test("fit-only memory rejects changed reviewed family lists and changed review b
   review.historicalAPIGenExcluded = false; writeFileSync(path, canonical(review));
   assert.throws(() => bridgeFreshFitInfraMemory(second.directory, second.partitionPath, join(second.directory, "bad")), /review artifact hash/);
 });
+
+function multiCohortFixture(newline = "\n") {
+  const { directory } = freshSelectionFixture();
+  const read = (name: string) => JSON.parse(readFileSync(join(directory, name), "utf8"));
+  const manifest = read("manifest.json"), lineage = read("lineage.json");
+  const put = (name: string, value: unknown, text = canonical(value) + "\n") => {
+    writeFileSync(join(directory, name), text);
+    manifest.files[name] = { sha256: createHash("sha256").update(text).digest("hex") };
+  };
+  const policy = { fitting: "train", calibration: "development" };
+  const split = { families: policy, declared_family_policy: policy, fresh_heldout: false };
+  const memory = { frozen: true, split_hash: hash(split), training_families: ["fitting"] };
+  put("split.json", split); put("memory.json", { ...memory, snapshot_hash: hash(memory) });
+  const metadata = readFileSync(join(directory, "metadata.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
+  const publicRows = metadata.flatMap(meta => [0, 1].map(index => ({ episode_id: meta.episode_id,
+    checkpoint_id: `${meta.episode_id}:${index}`, family_id: meta.family_id,
+    split: policy[meta.family_id as keyof typeof policy], runtime_tool_schema_hash: meta.tool_schema_hash,
+    tool_schema_hash: meta.tool_schema_hash, environment_version: meta.environment_version, scope: meta.scope,
+    input: { observation: { fraction: 1e-7, name: "caf\u00e9" } }, input_hash: hash({ observation: { fraction: 1e-7, name: "caf\u00e9" } }) })));
+  // Match Python's exponent and escaped Unicode forms, both semantically valid
+  // JSON that differ from RFC8785 and JavaScript's serialization.
+  const lines = publicRows.map(row => JSON.stringify(row).replaceAll("1e-7", "1e-07").replaceAll("\u00e9", "\\u00e9") + newline);
+  put("public.jsonl", null, lines.join(""));
+  const cohorts = metadata.map((meta, index) => {
+    const runs = [{ runId: meta.episode_id, familyId: meta.family_id, domain: "retail", taskId: `task-${index}`, seed: 17, arm: "base" }];
+    const configuration = { stage: "collection", runs, taskBundleHash: hash("tasks"),
+      ...(index ? { collectionPurpose: "auxiliary-development-validation", hosted: { allocation: "development" } } : {}) };
+    const modelManifest = { actor: INFRA_MODEL_PINS.actor, protocol: { scheduleHash: hash(runs) },
+      data: { trainingFamilies: ["fitting"], developmentFamilies: ["calibration"], heldoutFamilies: [] } };
+    const receipt = { version: 1, stage: "collection", closed: true, completed: true,
+      allDeclaredSlotsRetained: true, serviceExitCode: 0, configurationHash: hash(configuration), manifestHash: hash(modelManifest),
+      files: [{ path: `${meta.episode_id}.json`, sha256: lineage.fresh_sources[meta.episode_id].raw_sha256 }] };
+    const receiptText = canonical(receipt) + "\n", cohortId = hash(receipt);
+    lineage.fresh_sources[meta.episode_id].cohort_id = cohortId;
+    return { receipt, receiptText, receiptSha256: createHash("sha256").update(receiptText).digest("hex"),
+      cohortId, configuration, manifest: modelManifest, runIds: [meta.episode_id],
+      purpose: index ? "auxiliary-development-validation" : "original-base-collection" };
+  });
+  const parentFiles = { "public.jsonl": { sha256: createHash("sha256").update(lines.slice(0, 2).join("")).digest("hex") },
+    "split.json": manifest.files["split.json"] };
+  const aggregateBody = { version: 2, kind: "acephale-fresh-native-multicohort", closed: true,
+    allDeclaredSlotsRetained: true, pairedComparisonSlotsReused: false, cohorts,
+    episodeCohorts: Object.fromEntries(cohorts.map(cohort => [cohort.runIds[0], cohort.cohortId])),
+    parentDatasets: [{ bundleHash: hash(parentFiles), cohortId: cohorts[0].cohortId,
+      manifest: { bundle_hash: hash(parentFiles), files: parentFiles }, split,
+      publicCheckpointIds: publicRows.slice(0, 2).map(row => row.checkpoint_id) }] };
+  const aggregate = { ...aggregateBody, contentHash: hash(aggregateBody) };
+  put("cohort-receipt.json", aggregate);
+  Object.assign(lineage, { version: "acephale-infra-fresh-native-v2", cohort_count: 2, cohort_files: null,
+    cohort_receipt_sha256: manifest.files["cohort-receipt.json"].sha256, cohort_receipt_hash: hash(aggregate) });
+  put("lineage.json", lineage);
+  const seal = () => writeFileSync(join(directory, "manifest.json"), canonical({ ...manifest, bundle_hash: hash(manifest.files) }));
+  seal();
+  return { directory, lines, put, seal };
+}
+
+test("multi-cohort parent identity uses exact Python JSONL bytes and original line endings", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const fixture = multiCohortFixture(newline);
+    assert.equal(verifyInfraPilotBundle(fixture.directory).lineage.cohort_count, 2);
+  }
+});
+
+test("multi-cohort parent rejects reserialization, changed values and reordered source rows even after resealing", () => {
+  for (const change of ["reserialize", "value", "order"]) {
+    const fixture = multiCohortFixture();
+    const lines = [...fixture.lines];
+    if (change === "reserialize") lines[0] = canonical(JSON.parse(lines[0])) + "\n";
+    else if (change === "value") lines[0] = lines[0].replace("1e-07", "2e-07");
+    else [lines[0], lines[1]] = [lines[1], lines[0]];
+    fixture.put("public.jsonl", null, lines.join("")); fixture.seal();
+    assert.throws(() => verifyInfraPilotBundle(fixture.directory), /Original parent public prefixes or split changed/);
+  }
+});

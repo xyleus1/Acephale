@@ -68,15 +68,26 @@ function verifyMultiCohortLineage(directory: string, lineage: any, split: any) {
   if (hash(owners) !== hash(aggregate.episodeCohorts) || hash(Object.keys(owners).sort()) !== hash(Object.keys(lineage.fresh_sources).sort())
     || Object.keys(owners).length !== lineage.episodes) throw new Error("Multi-cohort declared slots were omitted or repeated");
   if (!Array.isArray(aggregate.parentDatasets)) throw new Error("Explicit parent dataset lineage required");
-  const publicRows = readFileSync(join(directory, "public.jsonl"), "utf8").split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+  // Parent manifests hash the original JSONL bytes, including Python's numeric
+  // spelling. Parse rows for ownership without reserializing their source lines.
+  const publicBytes = readFileSync(join(directory, "public.jsonl"));
+  const publicRows: { row: any; bytes: Buffer }[] = [];
+  for (let start = 0; start < publicBytes.length;) {
+    const newline = publicBytes.indexOf(10, start);
+    const end = newline === -1 ? publicBytes.length : newline + 1;
+    const bytes = publicBytes.subarray(start, end);
+    if (!bytes.toString("utf8").trim()) throw new Error("Empty aggregate public checkpoint line");
+    publicRows.push({ row: JSON.parse(bytes.toString("utf8")), bytes });
+    start = end;
+  }
   const parents = new Set<string>();
   for (const parent of aggregate.parentDatasets) {
     if (parents.has(parent.bundleHash) || !cohortIds.has(parent.cohortId) || parent.bundleHash !== parent.manifest?.bundle_hash
       || parent.bundleHash !== hash(parent.manifest.files)) throw new Error("Invalid original parent dataset identity");
     parents.add(parent.bundleHash);
-    const rows = publicRows.filter(row => owners[row.episode_id] === parent.cohortId);
-    if (hash(rows.map(row => row.checkpoint_id)) !== hash(parent.publicCheckpointIds)
-      || createHash("sha256").update(rows.map(row => canonical(row) + "\n").join("")).digest("hex") !== parent.manifest.files["public.jsonl"]?.sha256
+    const rows = publicRows.filter(({ row }) => owners[row.episode_id] === parent.cohortId);
+    if (hash(rows.map(({ row }) => row.checkpoint_id)) !== hash(parent.publicCheckpointIds)
+      || createHash("sha256").update(Buffer.concat(rows.map(({ bytes }) => bytes))).digest("hex") !== parent.manifest.files["public.jsonl"]?.sha256
       || createHash("sha256").update(canonical(parent.split) + "\n").digest("hex") !== parent.manifest.files["split.json"]?.sha256) {
       throw new Error("Original parent public prefixes or split changed");
     }

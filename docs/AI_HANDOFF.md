@@ -1,5 +1,10 @@
 # Working on Acephale
 
+Multi-cohort memory verification now hashes the retained raw public JSONL lines
+for each parent instead of reserializing them. This fixes a Python/RFC8785 byte
+mismatch without changing original prefixes, parent manifests or failed stages.
+Keep any offline recovery under its own source-bound receipt and output directory.
+
 Read [methods](METHODS.md), [state](STATE.md) and [runbook](RUNBOOK.md) first.
 This repository studies goal-conditioned speculative reads with a fixed actor.
 
