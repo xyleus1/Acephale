@@ -9,15 +9,26 @@ unknown. The source change below stores future `total_flos` estimates as decimal
 strings, with explicit encoding metadata. It is not deployed into either frozen
 5a training seed and does not retroactively change the failed run.
 
-The full November 13 training run is active under source `5a36a8b` and the
-original funded lease. At 17:24 UTC seed 17 had completed 157/204 optimizer
-updates; seed 29 follows automatically. Do not restart or shorten either recipe.
+The original November 13 host was terminated after its AWS-backed owner
+heartbeat expired. Seed 29's interrupted attempt reached 7/204 updates; it is
+retained as interrupted. Replacement work keeps source `5a36a8b` and the full
+seed 29 recipe, while seed 17 proceeds through saved-artifact recovery only.
 Read the current private execution handoff before issuing any provider or budget
 command; one operator owns the journal and dispatch. Both real adapter exports
 must pass unchanged vLLM qualification before replay or native comparison.
 Offline grading/reliability uses the separately recorded `c8a662c` reader fix.
 The 1,074-row fitting set, machine-audit lineage and pending stages are summarized
 in [current state](STATE.md). Historical counts below describe their own versions.
+
+The owner heartbeat now retries short transport/throttling failures at most three
+times with short SDK request timeouts. It retains redacted operation/error/status
+metadata and never reports a partial two-controller write as a fresh heartbeat.
+Authentication renewal, identity changes and original deadline failures still
+stop publication. Verify the actual login refresh-token horizon before a new
+lease; a currently valid 15-minute access token does not establish eight hours
+of unattended publication. The S3 socket timeouts do not bound the SDK internal
+login-renewal request; an actual session-horizon check remains required. Existing
+watchdog expiry remains unchanged.
 
 New infrastructure reservations can explicitly set `--setup-seconds` from 120
 to 3600; the default remains 1800. This is chosen before reservation and cannot

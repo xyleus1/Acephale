@@ -645,3 +645,19 @@ only retained response hashes, so its post-response failures cannot be diagnosed
 fully from those artifacts. New source requires fresh matched replay; old failures
 and results remain unchanged. Validation and measured outcomes are recorded when
 their actual runs complete.
+
+## 2026-11-13: retain heartbeat failure diagnostics and retry transient requests
+
+A local heartbeat worker stopped after an AWS SDK error during a full optimizer
+run. Independent controller evidence records owner-heartbeat expiry and actual
+termination. The completed first seed had already been exported; the second
+partial attempt remains interrupted. This is an infrastructure failure, not a
+model result. The prospective publisher retries transient connection/throttling
+errors with bounded attempts, checks the original lease identity and deadline
+before each attempt, and emits only allowlisted SDK diagnostic fields. It does
+not print exception messages or credential/request values. Authentication
+refresh failures remain explicit and do not extend watchdog grace.
+
+Eleven focused retry, redaction, identity and deadline tests passed. Full integration
+validation is recorded with the combined operator revision; these unit tests
+do not establish credential lifetime or cloud recovery.

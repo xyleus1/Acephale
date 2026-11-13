@@ -512,3 +512,12 @@ and zero unsupported bindings. Record the critic's actual pinned model, separate
 prompt/request and shared-teacher limitation. Human counts remain zero; default
 human-reviewed admission rejects machine artifacts. Retain pre-amendment results
 and run a complete matched baseline under the new compiler identity.
+
+## 2026-11-13: credential renewal covers the funded lease
+
+Check the login session's actual renewal horizon before reserving a long GPU
+lease. Short-lived access-token validity alone is insufficient. Keep the original
+independent heartbeat expiry and hard deadline; do not extend them to conceal an
+authentication failure. Retry only short transport/throttling failures, preserve
+redacted SDK operation/code/status evidence, and retain interrupted optimizer
+attempts separately from subsequent authorized attempts.

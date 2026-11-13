@@ -10,12 +10,22 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import time
 import zipfile
+from pathlib import Path
 
-from control import atomic_json, checked_bound_ledger, deployment_source, digest, read_json, sha256, study_budget, watchdog_state, write_new
+from control import (
+    atomic_json,
+    checked_bound_ledger,
+    deployment_source,
+    digest,
+    read_json,
+    sha256,
+    study_budget,
+    watchdog_state,
+    write_new,
+)
 from lambda_gpu_watchdog import Provider, select_instance
 
 HERE = Path(__file__).resolve().parent
@@ -142,12 +152,16 @@ def checked_receipt(path):
     return value
 
 
-def publish(receipt_path, ledger, lease_id):
+def publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
+    options = {}
+    if bounded_requests:
+        from botocore.config import Config
+        options["config"] = Config(connect_timeout=3, read_timeout=3, retries={"total_max_attempts": 1})
     receipt = checked_receipt(receipt_path)
     state = watchdog_state(ledger, lease_id)
     data = json.dumps(state, sort_keys=True, separators=(",", ":")).encode()
     for row in receipt["controllers"]:
-        s3 = session(receipt["config"], row["region"]).client("s3")
+        s3 = session(receipt["config"], row["region"]).client("s3", **options)
         try:
             previous = json.loads(s3.get_object(Bucket=row["bucket"], Key="state.json")["Body"].read())
         except s3.exceptions.NoSuchKey:
@@ -162,6 +176,67 @@ def publish(receipt_path, ledger, lease_id):
         s3.put_object(Bucket=row["bucket"], Key="state.json", Body=data,
             ContentType="application/json", ServerSideEncryption="AES256", ExpectedBucketOwner=row["account"])
     return {"leaseId": lease_id, "stateHash": digest(state), "ownerHeartbeatAt": state["ownerHeartbeatAt"]}
+
+
+def heartbeat_error(error):
+    """Retain SDK diagnostics without request bodies, credential values or messages."""
+    transient_codes = {"InternalError", "InternalFailure", "RequestTimeout", "SlowDown", "Throttling",
+                       "ThrottlingException", "TooManyRequestsException", "ServiceUnavailable"}
+    auth_codes = {"ExpiredToken", "ExpiredTokenException", "InvalidClientTokenId", "InvalidGrantException",
+                  "InvalidIdentityToken", "UnauthorizedException", "AccessDenied", "AccessDeniedException"}
+    response = getattr(error, "response", {})
+    code = response.get("Error", {}).get("Code") if isinstance(response, dict) else None
+    status = response.get("ResponseMetadata", {}).get("HTTPStatusCode") if isinstance(response, dict) else None
+    name = type(error).__name__
+    operation = getattr(error, "operation_name", None)
+    auth_required = name in {"LoginRefreshRequired", "LoginTokenLoadError"} or code in auth_codes
+    return {"errorType": name if name in {"ClientError", "LoginRefreshRequired", "LoginTokenLoadError",
+                "EndpointConnectionError", "ConnectTimeoutError", "ReadTimeoutError", "ConnectionClosedError"} else "OtherError",
+            "awsErrorCode": code if code in transient_codes | auth_codes else None,
+            "operation": operation if operation in {"GetObject", "PutObject", "CreateOAuth2Token", "CreateOAuth2TokenWithIAM"} else None,
+            "httpStatus": status if type(status) is int and 100 <= status <= 599 else None,
+            "authenticationRefreshRequired": auth_required,
+            "retryable": not auth_required and (name in {"EndpointConnectionError", "ConnectTimeoutError", "ReadTimeoutError", "ConnectionClosedError"}
+                or name == "ClientError" and (code in transient_codes or type(status) is int and 500 <= status <= 599))}
+
+
+def heartbeat(receipt_path, ledger, lease_id, *, publish_fn=publish, state_fn=watchdog_state,
+              clock=time.time, sleeper=time.sleep, emit=None):
+    """Retry short transport failures without changing either watchdog deadline.
+
+    S3 socket limits do not bound the SDK's internal login-renewal call. The
+    independent watchdog still enforces expiry if that call stalls; admission
+    must separately verify the login refresh session covers the funded lease.
+    """
+    emit = emit or (lambda value: print(json.dumps(value), flush=True))
+    identity = None
+    while True:
+        attempt_started = clock()
+        for attempt in range(3):
+            state = state_fn(ledger, lease_id)
+            current = tuple(state.get(key) for key in ("leaseId", "instanceId", "expectedName", "planHash", "setupDeadline", "deadline"))
+            if state.get("leaseId") != lease_id or identity is not None and current != identity:
+                raise ValueError("Heartbeat lease identity or original deadlines changed")
+            identity = current
+            effective_deadline = state["deadline"] if state.get("ready") is True else state["setupDeadline"]
+            if state["status"] != "terminated" and clock() >= effective_deadline:
+                raise ValueError("Original effective heartbeat lease deadline reached")
+            try:
+                result = publish_fn(receipt_path, ledger, lease_id, bounded_requests=True)
+            except Exception as error:
+                details = heartbeat_error(error)
+                retry = details["retryable"] and attempt < 2 and clock() - attempt_started < 20
+                emit({"ok": False, "leaseId": lease_id, "heartbeatPublished": False,
+                      "observedAt": clock(), "attempt": attempt + 1, "retrying": retry, **details})
+                if not retry:
+                    raise
+                sleeper(2 * (attempt + 1))
+                continue
+            emit(result)
+            if state_fn(ledger, lease_id)["status"] == "terminated":
+                return result
+            sleeper(20)
+            break
 
 
 def invoke_enrollment(client, function_arn, code_hash, *, sleeper=time.sleep):
@@ -280,12 +355,7 @@ def main():
     elif args.command == "publish":
         result = publish(args.receipt, args.ledger, args.lease_id)
     elif args.command == "heartbeat":
-        while True:
-            result = publish(args.receipt, args.ledger, args.lease_id)
-            print(json.dumps(result), flush=True)
-            if watchdog_state(args.ledger, args.lease_id)["status"] == "terminated":
-                break
-            time.sleep(30)
+        result = heartbeat(args.receipt, args.ledger, args.lease_id)
     elif args.command == "enroll":
         result = enroll(args.receipt, args.output)
     elif args.command == "export":
@@ -298,7 +368,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - redact all CLI boundary failures
         # Provider and AWS SDK errors may contain request data; never echo them.
-        print(json.dumps({"ok": False, "errorType": type(error).__name__, "details": "Omitted; inspect nonsecret deployment stage receipt"}))
+        print(json.dumps({"ok": False, **heartbeat_error(error), "details": "Request and credential values omitted"}))
         raise SystemExit(2)
