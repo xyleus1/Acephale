@@ -55,6 +55,10 @@ Goal probabilities describe mutually exclusive interpretations of the complete
 requested outcome. Each interpretation includes all concurrent explicit user
 objectives; subgoals and execution prerequisites are not competing hypotheses.
 The predictor instruction and supervised goal prompt share this interpretation.
+Requested outcomes persist until the user changes or withdraws them. Progress
+and execution permission are separate: completed parts of a joint request remain
+part of that request, and an unconfirmed operation can be desired while still
+unauthorized. The executor checks current state and permission independently.
 The prompt correction changes the compiler contract hash, so earlier calibration,
 qualification and replay artifacts cannot be relabeled as the corrected version.
 
@@ -158,6 +162,14 @@ review: the declared design is 100 annotations with at least 20 human-reviewed
 examples, at least 90% semantic acceptance and zero unsupported bindings.
 Independently graded training predictions provide agreement evidence. Agreement
 with a teacher is not the native success metric.
+
+The separate [machine-audited exploratory protocol](experiments/machine-audited-pilot-2026-11-13.md)
+retains those 20 selected IDs and acceptance thresholds with zero human reviews.
+Its critic uses a separate prompt/request to the annotation teacher's same pinned
+model, so reviewer-model independence is not claimed. Dataset, training,
+reliability and live manifests bind the exact machine-audit receipt. The default
+human-reviewed protocol rejects these artifacts; automated review never supplies
+a human-review count. Reports distinguish this exploratory evidence throughout.
 
 Opportunity v2 binds eight hashes: hardware, serving/stream/concurrency, model,
 memory, compiler, retrieval, prompt and protocol. At least ten complete measured

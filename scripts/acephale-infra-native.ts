@@ -168,6 +168,7 @@ export function validateInfraNativeConfiguration(configuration: InfraNativeConfi
     if (!calibration.conditionalCalibration) throw new Error("Goal conditioning requires separate conditional calibration");
     if (!artifacts.goalReliability) throw new Error("Goal conditioning requires an audited reliability artifact");
     validateInfraGoalReliabilityArtifact(artifacts.goalReliability, { ...artifactScope,
+      annotationReview: manifest.protocol.annotationReview,
       allowedFamilies: manifest.data.trainingFamilies, predictor: {
       model: predictorModelIdentity(manifest.predictor),
       memoryHash: memory.contentHash, predictorContractHash: predictorContractHash(manifest.predictor),

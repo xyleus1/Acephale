@@ -195,11 +195,18 @@ def wilson_lower(agreed: int, count: int) -> float:
 
 
 def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, annotations_path: Path,
-                           pilot_path: Path, reviews_path: Path, grades_path: Path) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+                           pilot_path: Path, reviews_path: Path, grades_path: Path, *,
+                           machine_audit_path: Path | None = None) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Grade every declared training replay row and enforce the annotation audit."""
     dataset_hash, public = _dataset(bundle_directory)
     paths = [prediction_directory / name for name in ("manifest.json", "predictions.jsonl", "receipt.json")]
     paths.extend([annotations_path, pilot_path, reviews_path, grades_path])
+    if machine_audit_path is not None:
+        paths.append(machine_audit_path)
+        evidence_files = _json(machine_audit_path).get("evidenceFiles", {})
+        if not isinstance(evidence_files, dict) or any(not isinstance(name, str) or Path(name).name != name for name in evidence_files):
+            raise ValueError("Machine review evidence must name local immutable files")
+        paths.extend(machine_audit_path.parent / name for name in evidence_files)
     hashes = {str(path): file_hash(path) for path in paths}
     manifest = _hashed(_json(paths[0]))
     if manifest.get("kind") != "uncalibrated_prediction_replay" or manifest.get("executionAllowed") is not False or manifest.get("inferGoals") is not True or manifest.get("sourceDatasetHash") != dataset_hash:
@@ -244,19 +251,26 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
         if annotation is None or row.get("input_hash") != annotation["input_hash"]:
             raise ValueError("Every pilot checkpoint needs its exact annotation")
     if not {row["checkpoint_id"] for row in pilot.get("audit", [])} <= {row["checkpoint_id"] for row in checkpoints}:
-        raise ValueError("Human audit selected outside the pilot")
+        raise ValueError("Annotation audit selected outside the pilot")
     if len({row["checkpoint_id"] for row in pilot.get("audit", [])}) != len(pilot.get("audit", [])):
-        raise ValueError("Human audit cannot select a checkpoint more than once")
+        raise ValueError("Annotation audit cannot select a checkpoint more than once")
     reviews = read_jsonl(reviews_path)
     for review in reviews:
         annotation = annotation_map.get(review["checkpoint_id"])
         if annotation is None or review.get("annotationHash") != hash_v1(annotation):
-            raise ValueError("Human review must bind the exact teacher annotation hash")
+            raise ValueError("Annotation review must bind the exact teacher annotation hash")
     if len(reviews) < 20:
-        raise ValueError("At least twenty human annotation reviews are required")
-    audit = audit_gate(pilot, reviews)
+        raise ValueError("At least twenty annotation reviews are required")
+    if machine_audit_path is not None:
+        from acephale.annotation_review import verify_machine_review
+
+        audit = verify_machine_review(pilot, reviews, annotations, machine_audit_path, calibration=True)
+    else:
+        if any(row.get("review_kind") not in {None, "human"} for row in reviews):
+            raise ValueError("Machine review requires the explicit exploratory reliability protocol")
+        audit = audit_gate(pilot, reviews)
     if not audit["goal_conditioning_allowed"]:
-        raise ValueError("Human audit gate failed; goal-conditioned execution remains disabled")
+        raise ValueError("Annotation audit gate failed; goal-conditioned execution remains disabled")
     from acephale.training_data import calibration_families
 
     reserved_calibration = calibration_families(model)
@@ -295,6 +309,10 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
                            "gradesHash": file_hash(grades_path), "method": "reserved_calibration_full_cohort_wilson_lower_95" if reserved_calibration is not None else "training_replay_full_cohort_wilson_lower_95"}}
     if audit_source is not None:
         body["provenance"]["originalAuditSource"] = audit_source
+    if machine_audit_path is not None:
+        from acephale.annotation_review import review_metadata
+
+        body["provenance"].update(review_metadata(audit))
     if any(file_hash(path) != hashes[str(path)] for path in paths):
         raise ValueError("Goal evidence changed during aggregation")
     artifact = {**body, "contentHash": hash_v1(body)}
@@ -303,4 +321,9 @@ def build_goal_reliability(bundle_directory: Path, prediction_directory: Path, a
               "excludedDevelopmentCheckpoints": [row["checkpoint_id"] for row in predictions if row["split"] == "development"],
               "heldoutClaim": False, "limitations": ["Agreement with audited teacher labels is not calibrated task success",
                   "The Wilson interval treats checkpoints as independent; within-family dependence can make it optimistic"]}
+    if machine_audit_path is not None:
+        report["reviewProtocol"] = "machine_audited_exploratory"
+        report["humanReviewCount"] = 0
+        report["machineReviewCount"] = 20
+        report["limitations"].append("Machine-audited exploratory result, not the primary human-reviewed study")
     return artifact, report, joined

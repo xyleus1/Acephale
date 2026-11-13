@@ -51,6 +51,12 @@ export interface InfraModelEvent {
   type: string; requestId: string; model: string; clockId: string; utc: string; monotonicNs: string;
   [key: string]: unknown;
 }
+/** Parsed provider output, retained before task/output validation. Never HTTP headers or credentials. */
+export interface InfraResponseRecord {
+  version: 1; requestId: string; model: string; inputHash: string; requestContractHash: string;
+  responseHash: string; continuation: InfraAssistantMessage; text: string;
+  logprobs: InfraTokenLogprob[]; finishReason: string; usage: InfraUsage | null; contentHash: string;
+}
 export interface LocalChatModelConfiguration {
   baseUrl: string;
   model: string;
@@ -61,6 +67,7 @@ export interface LocalChatModelConfiguration {
   stream?: boolean;
   fetch?: typeof globalThis.fetch;
   record?: (event: InfraModelEvent) => void;
+  retainResponse?: (response: InfraResponseRecord) => Promise<void>;
 }
 
 const clockId = `node:${process.pid}:${randomUUID()}`;
@@ -262,12 +269,13 @@ export class LocalChatModelPort {
         ...(request.responseFormat ? { response_format: { type: "json_schema", json_schema: request.responseFormat } } : {}) };
       controller.signal.throwIfAborted();
       const dispatchStart = process.hrtime.bigint();
+      const requestContractHash = hash({ maxOutputTokens: request.maxOutputTokens, temperature: 0, topP: 1,
+        seed: request.seed ?? 0, stream: this.stream, responseFormat: request.responseFormat ?? null,
+        logprobTokenIds: request.logprobTokenIds ?? null, tools, enableThinking: false });
       this.emit(request.id, "model_dispatch", { inputHash, inputTokens, omittedGroups, attempt: 0,
         compiledMessagesHash: hash(messages), compiledTokenIdsHash: hash(compiled.tokenIds),
         selectedMessageIndexes: [...selected], compilerVersion: "acephale-local-input-v1",
-        requestContractHash: hash({ maxOutputTokens: request.maxOutputTokens, temperature: 0, topP: 1,
-          seed: request.seed ?? 0, stream: this.stream, responseFormat: request.responseFormat ?? null,
-          logprobTokenIds: request.logprobTokenIds ?? null, tools, enableThinking: false }) });
+        requestContractHash });
       dispatched = true;
       // The supported SDK owns HTTP transport. Keep the bounded protocol parser,
       // including terminal SSE and real call-ID validation, on its raw response.
@@ -291,8 +299,17 @@ export class LocalChatModelPort {
       };
       const wire = this.stream ? await readStream(response, this.model, firstToken, controller.signal, !!request.logprobTokenIds)
         : readCompletion(await response.json(), this.model, !!request.logprobTokenIds);
-      controller.signal.throwIfAborted();
       const generationMs = milliseconds(dispatchStart);
+      if (this.configuration.retainResponse) {
+        const payload = { version: 1 as const, requestId: request.id, model: this.model, inputHash, requestContractHash,
+          responseHash: hash(wire.message), continuation: copy(wire.message), text: wire.message.content ?? "",
+          logprobs: copy(wire.logprobs), finishReason: wire.finishReason, usage: wire.usage };
+        const contentHash = hash(payload);
+        await this.configuration.retainResponse({ ...payload, contentHash });
+        this.emit(request.id, "model_response_retained", { inputHash, requestContractHash,
+          responseHash: payload.responseHash, responsePayloadHash: contentHash });
+      }
+      controller.signal.throwIfAborted();
       this.emit(request.id, "model_generation_completed", { finishReason: wire.finishReason, usage: wire.usage,
         latencyMs: generationMs, hasRefusal: !!wire.message.refusal });
       if (wire.usage && wire.usage.prompt_tokens !== inputTokens) fail("tokenizer_mismatch", "Generation token usage differs from the compiled tokenizer input");

@@ -187,7 +187,14 @@ def file_inventory(directory: Path) -> list[dict[str, Any]]:
             for path in paths if path.is_file()]
 
 
-def verify_review(pilot: dict[str, Any], reviews: list[dict[str, Any]], annotations: list[dict[str, Any]]) -> dict[str, Any]:
+def verify_review(pilot: dict[str, Any], reviews: list[dict[str, Any]], annotations: list[dict[str, Any]],
+                  *, machine_audit: Path | None = None) -> dict[str, Any]:
+    if machine_audit is not None:
+        from acephale.annotation_review import verify_machine_review
+
+        return verify_machine_review(pilot, reviews, annotations, machine_audit)
+    if any(row.get("review_kind") not in {None, "human"} or row.get("reviewProtocol") == "machine_audited_exploratory" for row in reviews):
+        raise ValueError("Machine judgments require the explicit exploratory review protocol")
     by_id = {row["checkpoint_id"]: row for row in annotations}
     if len(by_id) != len(annotations) or len(reviews) < 20:
         raise ValueError("Twenty attributed human reviews and unique annotations required")
@@ -232,6 +239,10 @@ def multitask_training_coverage(rows: list[TrainingExample]) -> dict[str, Any] |
 
 
 def _dataset_body(rows: list[dict[str, Any]], review: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    if review is not None:
+        from acephale.annotation_review import review_metadata
+
+        review_metadata(review)
     parsed = [TrainingExample.model_validate(row) for row in rows]
     if not parsed or len({row.id for row in parsed}) != len(parsed):
         raise ValueError("Nonempty unique training example IDs required")
@@ -247,6 +258,8 @@ def _dataset_body(rows: list[dict[str, Any]], review: dict[str, Any] | None) -> 
             identities[key].add(row.provenance[key])
         if row.task == "goal" or row.condition == "conditional":
             if not review or review.get("goal_conditioning_allowed") is not True or review.get("audited", 0) < 20 or row.provenance.get("annotationHash") not in review.get("annotationHashes", []):
+                if review and review.get("reviewProtocol") == "machine_audited_exploratory":
+                    raise ValueError("Goal training requires completed exploratory machine annotation review")
                 raise ValueError("Goal training requires completed human annotation review")
         grouped[row.partition].append(row.model_dump(mode="json"))
     if any(len(values) > 1 for values in [*families.values(), *public_partitions.values()]):

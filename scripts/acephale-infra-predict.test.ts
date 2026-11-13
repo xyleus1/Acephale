@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { hash } from "../src/lib/acephale/canonical";
-import { freezeInfraReplayRetrieval, publicInfraFrame, sealInfraReplayAudit, selectInfraCandidatePanel, selectInfraReplayRows } from "./acephale-infra-predict";
+import { freezeInfraReplayRetrieval, infraReplayFailure, publicInfraFrame, sealInfraReplayAudit, selectInfraCandidatePanel, selectInfraReplayRows } from "./acephale-infra-predict";
 import { mixInfraDecisions } from "../src/lib/acephale/infra-session";
 
 test("public replay reconstructs only current sources and rejects changed or future inputs", () => {
@@ -77,4 +77,13 @@ test("replay audit retains failed request evidence and cannot mutate after seali
   const { contentHash, ...body } = audit;
   assert.equal(contentHash, hash(body));
   assert.throws(() => sealInfraReplayAudit([], Number.NaN));
+});
+
+test("replay failure diagnostics retain useful reasons without transport secrets or stacks", () => {
+  assert.equal(infraReplayFailure(new Error("Binary labels must be distinct single tokens")).errorMessage,
+    "Binary labels must be distinct single tokens");
+  const failure = infraReplayFailure(new Error("Bearer sensitive-token sk-private-value https://user:password@host/?api_key=secret&token=hidden\n" + "x".repeat(1000)));
+  assert.ok(failure.errorMessage.length <= 512);
+  for (const secret of ["sensitive-token", "sk-private-value", "password@", "=secret", "=hidden", "\n"]) assert.ok(!failure.errorMessage.includes(secret));
+  assert.deepEqual(Object.keys(failure).sort(), ["errorMessage", "errorType"]);
 });

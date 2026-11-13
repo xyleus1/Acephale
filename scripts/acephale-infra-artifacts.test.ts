@@ -50,3 +50,29 @@ test("audited goal reliability cannot be reused across frozen predictor identiti
   assert.throws(() => validateInfraGoalReliabilityArtifact({ ...unbound, contentHash: hash(unbound) }, scope), /not bound/);
   assert.throws(() => validateInfraGoalReliabilityArtifact(artifact, { ...scope, allowedFamilies: ["test"] }), /audit/);
 });
+
+test("machine reliability cannot authorize a human-reviewed or differently audited experiment", () => {
+  const review = { reviewProtocol: "machine_audited_exploratory" as const, humanReviewCount: 0 as const, machineReviewCount: 20 as const,
+    machineAuditHash: hash("machine-audit"), reviewerModel: "gpt-5.4-2026-03-05" as const,
+    reviewIndependence: "separate_request_and_prompt_same_model" as const };
+  const predictor = { model: { repository: "fixture/model", revision: "a".repeat(40) }, memoryHash: hash("memory"),
+    predictorContractHash: hash("prompt"), candidateCompilerHash: hash("compiler"), retrievalHash: hash("retrieval") };
+  const scope = { datasetHash: hash("dataset"), allowedFamilies: ["train"], predictor };
+  const body = { version: 1 as const, sourceDatasetHash: scope.datasetHash, families: ["train"], annotationHash: hash("annotations"),
+    auditedCount: 20, acceptedCount: 18, unsupportedBindings: 0, gradedCount: 20, agreedCount: 18,
+    reliability: wilsonLower(18, 20), provenance: { ...predictor, ...review } };
+  const artifact = { ...body, contentHash: hash(body) };
+  assert.throws(() => validateInfraGoalReliabilityArtifact(artifact, scope), /review protocol differs/);
+  assert.equal(validateInfraGoalReliabilityArtifact(artifact, { ...scope, annotationReview: review }).auditedCount, 20);
+  assert.throws(() => validateInfraGoalReliabilityArtifact(artifact, { ...scope,
+    annotationReview: { ...review, machineAuditHash: hash("different-audit") } }), /exact declared provenance/);
+  const mislabeled = { ...body, provenance: { ...body.provenance, reviewProtocol: "human_reviewed" } };
+  assert.throws(() => validateInfraGoalReliabilityArtifact({ ...mislabeled, contentHash: hash(mislabeled) }, scope), /cannot contain machine/);
+  for (const field of ["reviewerModel", "reviewIndependence"] as const) {
+    const orphaned = { ...body, provenance: { ...predictor, [field]: review[field] } };
+    assert.throws(() => validateInfraGoalReliabilityArtifact({ ...orphaned, contentHash: hash(orphaned) }, scope), /cannot contain machine/);
+  }
+  const unsupported = { ...body, unsupportedBindings: 1 };
+  assert.throws(() => validateInfraGoalReliabilityArtifact({ ...unsupported, contentHash: hash(unsupported) },
+    { ...scope, annotationReview: review }), /valid independent audit/);
+});

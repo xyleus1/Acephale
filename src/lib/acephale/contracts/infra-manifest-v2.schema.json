@@ -68,6 +68,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["actorContext", "exposeEvidence", "frozenMemory", "sameCandidatePool", "lookaheadHops", "rankedCandidates", "perRunConcurrency", "globalConcurrency", "startsPerRun", "deadlineMs", "cachePolicy", "scheduleHash"],
       "properties": {
+        "annotationReview": { "$ref": "#/$defs/AnnotationReview" },
         "actorContext": { "const": "none" }, "exposeEvidence": { "const": false }, "frozenMemory": { "const": true }, "sameCandidatePool": { "const": true },
         "lookaheadHops": { "const": 1 }, "rankedCandidates": { "const": 3 }, "perRunConcurrency": { "const": 2 }, "globalConcurrency": { "const": 4 },
         "startsPerRun": { "const": 12 }, "deadlineMs": { "const": 5000 }, "cachePolicy": { "type": "string", "minLength": 1 }, "scheduleHash": { "$ref": "#/$defs/Sha256" }
@@ -75,6 +76,31 @@
     }
   },
   "$defs": {
+    "AnnotationReview": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["reviewProtocol", "humanReviewCount", "machineReviewCount"],
+          "properties": {
+            "reviewProtocol": { "const": "human_reviewed" },
+            "humanReviewCount": { "type": "integer", "minimum": 20 },
+            "machineReviewCount": { "const": 0 }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["reviewProtocol", "humanReviewCount", "machineReviewCount", "machineAuditHash", "reviewerModel", "reviewIndependence"],
+          "properties": {
+            "reviewProtocol": { "const": "machine_audited_exploratory" },
+            "humanReviewCount": { "const": 0 },
+            "machineReviewCount": { "const": 20 },
+            "machineAuditHash": { "$ref": "#/$defs/Sha256" },
+            "reviewerModel": { "const": "gpt-5.4-2026-03-05" },
+            "reviewIndependence": { "const": "separate_request_and_prompt_same_model" }
+          }
+        }
+      ]
+    },
     "Sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "GitRevision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "ImageDigest": { "type": "string", "pattern": "^.+@sha256:[a-f0-9]{64}$" },

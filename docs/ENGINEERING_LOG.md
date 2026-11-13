@@ -538,3 +538,14 @@ These checks do not establish repaired real-model reload or benchmark gains.
 ## 2026-11-13: preserve regional launch provenance
 
 Added a creation-only provider routing sidecar. Reservation and dispatch recheck the exact regional hardware/image, price ceiling, existing SSH public key and restricted firewall. The original financial binding and all prior leases remain unchanged. Offline routing tests cover actual launch payloads, altered prices/images/keys, wrong-region firewalls, resealed financial changes and refusal to overwrite a sidecar. No benchmark or cloud execution result follows from these tests.
+
+## 2026-11-13: exploratory review provenance and replay diagnostics
+
+Added explicit machine-review provenance to the manifest and reliability gate,
+without changing default human-review admission. Replay persists parsed responses
+and token log probabilities before output validation, binds the response-file
+hash in its receipt, and retains bounded failure messages. The previous replay
+only retained response hashes, so its post-response failures cannot be diagnosed
+fully from those artifacts. New source requires fresh matched replay; old failures
+and results remain unchanged. Validation and measured outcomes are recorded when
+their actual runs complete.

@@ -115,6 +115,17 @@ can be compiled while review is pending; preparing goal-labelled training data
 requires the completed attributed review. Candidate-only preparation still
 requires observed authoritative traces and the same partition checks.
 
+For the explicitly declared machine-audited exploratory protocol, supply
+`--machine-audit ACTUAL_MACHINE_AUDIT_RECEIPT.json` to `training_cli prepare`
+alongside the pilot, exact revised annotations and actual machine review rows.
+The receipt must retain the separate reviewer request/response evidence. It
+records zero human reviews and cannot satisfy default human-review admission.
+Pass the same receipt to `infra_cli build-goal-reliability --machine-audit` and
+copy its exact review metadata into the live manifest's
+`protocol.annotationReview`. Do not enable this mode implicitly or reuse a
+receipt after changing labels. See the
+[exploratory protocol amendment](experiments/machine-audited-pilot-2026-11-13.md).
+
 Do not reuse the fixed-predictor calibration, goal-reliability or opportunity
 artifacts after training. Publish the derived predictor artifact, fit new maps
 on reserved calibration families and measure its actual serving configuration.

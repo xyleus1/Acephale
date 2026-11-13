@@ -1,5 +1,17 @@
 # Working on Acephale
 
+The prospective `machine_audited_exploratory` protocol can run with a separate,
+source-bound machine critic of the same original 20 audit IDs. It must retain
+zero human reviews, the exact reviewer/audit receipt and the unchanged 90%/zero
+unsupported-binding thresholds. The original human-reviewed mode remains the
+default. See the November 13 protocol amendment before preparing new data or
+reliability artifacts. Do not relabel old annotations, reviews or replays.
+
+Replay now retains parsed model responses before output validation, with token
+probabilities, request/input hashes and bounded failure diagnostics. This changes
+the compiler identity. Retain the earlier replay and run the whole frozen cohort
+again for the new matched comparison; never replace individual failed rows.
+
 The goal instruction now explicitly requires complete joint outcomes, matching
 the teacher's intended alternative-hypothesis semantics. This changes predictor
 and candidate compiler hashes. Prepare fresh source-qualified model inventory,
@@ -45,8 +57,10 @@ cohort remains separate from the later paired comparison.
 
 The native exporter now accepts the actual teacher contract. Use explicit v2
 `native_multitask` export for neutral ranking, conditioned ranking and goal targets.
-Goal-labelled dataset preparation still requires 20 attributed human reviews.
-The old APIGen packet cannot certify a fresh native dataset.
+The default protocol requires 20 attributed human reviews. The separately
+declared exploratory mode requires its actual machine-audit receipt instead,
+with zero human reviews. The old APIGen packet cannot certify a fresh native
+dataset under either protocol.
 
 Optional expanded fitting selection uses `scripts/acephale-native-selection.ts`
 to retain every preexisting public-eligible checkpoint. Pass its receipt,

@@ -122,6 +122,7 @@ export async function runLive(configurationPath: string, output: string) {
       if (opportunity.sampleCount < 10) throw new Error("Insufficient measured opportunity samples");
       estimate = opportunity.estimate; expectedInfraSaving(1, estimate);
       const audit = validateInfraGoalReliabilityArtifact(await artifact(config.goalReliabilityPath), { ...provenance, allowedFamilies: manifest.data.trainingFamilies,
+        annotationReview: manifest.protocol.annotationReview,
         predictor: { model: predictorModelIdentity(manifest.predictor), memoryHash: memory.contentHash,
           retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : LEXICAL_MEMORY_RETRIEVAL_HASH,
           predictorContractHash: predictorContractHash(manifest.predictor), candidateCompilerHash: infraCandidateCompilerHash("documents") } });

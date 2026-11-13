@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, appendFile, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 import { hash, copy, canonical } from "../src/lib/acephale/canonical";
 import { NEXT_BATCH_MEMBERSHIP, rawScoreSemantics } from "../src/lib/acephale/score-semantics";
 import type { Candidate, GoalSet } from "../src/lib/acephale/contracts/generated";
@@ -65,6 +66,16 @@ export function sealInfraReplayAudit(events: Record<string, unknown>[], rowWallM
   const body = { version: 1, events: copy(events), rowWallMs };
   return { ...body, contentHash: hash(body) };
 }
+/** Bounded diagnostics; do not serialize Error objects, stacks or transport configuration. */
+export function infraReplayFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown replay failure";
+  return { errorType: error instanceof Error ? error.name.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 64) : "Error",
+    errorMessage: message.replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+      .replace(/\bsk-[a-zA-Z0-9_-]+/g, "[redacted]")
+      .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
+      .replace(/([?&](?:token|api_key|key|password|secret)=)[^&\s]+/gi, "$1[redacted]")
+      .replace(/[\r\n\t]/g, " ").slice(0, 512) };
+}
 export async function runInfraPrediction(input: { bundle: string; memory: string; output: string; baseUrl: string; limit: number; inferGoals: boolean; fixedPanel?: boolean; partition?: "calibration" | "test"; episodic?: InfraPredictionEpisodicConfig; predictor?: PredictorProfile; servingConfigurationPath?: string }) {
   const servingGuard = predictionSplitGuard(input.predictor ?? {}, input.baseUrl, input.servingConfigurationPath);
   const servingIdentity = servingGuard?.(), servingStop = new AbortController();
@@ -78,14 +89,23 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   if (!rows.length) throw new Error("No public checkpoints in the declared replay partition");
   if (input.partition === "test" && !input.fixedPanel) throw new Error("Held-out scoring requires the fixed common panel protocol");
   const output = resolve(input.output); await mkdir(output, { recursive: false });
+  const responsesPath = join(output, "model-responses.jsonl");
+  await writeFile(responsesPath, "", { flag: "wx", mode: 0o600 });
   if (documents && memory.repositorySnapshotId !== `infra-documents:${pilot.manifest.bundle_hash}`) throw new Error("Document memory belongs to another dataset");
   const candidateCompilerHash = infraCandidateCompilerHash(documents ? "documents" : "native");
   const profile = resolvePredictorProfile(input.predictor);
   const modelIdentity = predictorModelIdentity(input.predictor);
   let rowEvents: Record<string, unknown>[] = [];
+  let currentRow: PublicRow | undefined, responseCount = 0;
   const record = (event: Record<string, unknown>) => rowEvents.push(copy(event));
   const model = new LocalChatModelPort({ baseUrl: input.baseUrl, model: profile.trainedPredictor?.servedModel ?? modelIdentity.repository,
     contextWindow: 8192, inputBudget: 7168, maxOutputTokens: 1024, record,
+    retainResponse: async response => {
+      if (!currentRow) throw new Error("Response has no active replay checkpoint");
+      await appendFile(responsesPath, canonical({ checkpoint_id: currentRow.checkpoint_id,
+        publicInputHash: currentRow.input_hash, response }) + "\n");
+      responseCount++;
+    },
     ...(servingGuard ? { fetch: (url: Parameters<typeof fetch>[0], options?: Parameters<typeof fetch>[1]) => {
       servingGuard(); servingStop.signal.throwIfAborted();
       return fetch(url, { ...options, signal: AbortSignal.any([servingStop.signal, ...(options?.signal ? [options.signal] : [])]) });
@@ -116,7 +136,7 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   const lineage = { version: 3, kind: "uncalibrated_prediction_replay", model: modelIdentity, memoryHash: memory.contentHash,
     probabilitySemantics: NEXT_BATCH_MEMBERSHIP, rawScoreSemantics: rawScoreSemantics(profile.protocol), predictionMode: input.fixedPanel ? "fixed_panel" : "selected_candidates",
     panelSelection: input.fixedPanel ? "first_three_common_compiler_candidates_before_goal_inference_v1" : null,
-    partition: input.partition ?? "calibration", compilerAuditVersion: 1,
+    partition: input.partition ?? "calibration", compilerAuditVersion: 1, responseRetentionVersion: 1,
     predictionProtocol: profile.protocol, binaryTokenIds: profile.binaryTokenIds ?? null,
     ...(servingIdentity ? { splitGuard: servingIdentity } : {}),
     serving: { contextWindow: 8192, inputBudget: 7168, outputCap: 1024, temperature: 0, topP: 1, seed: 0, stream: true, enableThinking: false },
@@ -127,6 +147,7 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
   let completed = 0;
   const lifetime = AbortSignal.any([AbortSignal.timeout(2 * 3600 * 1000), servingStop.signal]);
   for (const row of rows) {
+    currentRow = row;
     rowEvents = [];
     const rowStarted = performance.now();
     const audit = () => sealInfraReplayAudit(rowEvents, performance.now() - rowStarted);
@@ -153,12 +174,14 @@ export async function runInfraPrediction(input: { bundle: string; memory: string
       await appendFile(join(output, "predictions.jsonl"), canonical({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash, family_id: row.family_id,
         split: row.split, ...(candidates ? { candidates, orderedCandidatePoolHash: hash(candidates), ...(input.fixedPanel ? {
           candidatePanel: candidates.map(candidate => candidate.id), panelHash: hash(candidates.map(candidate => candidate.id).sort()) } : {}) } : {}),
-        status: expiredBeforeRow ? "not_dispatched" : "failed", errorType: error instanceof Error ? error.name : "Error", audit: audit() }) + "\n");
+        status: expiredBeforeRow ? "not_dispatched" : "failed", ...infraReplayFailure(error), audit: audit() }) + "\n");
     }
   }
   await memoryServices?.drain();
   await writeFile(join(output, "retrieval-events.jsonl"), retrievalEvents.map(event => canonical(event) + "\n").join(""), { flag: "wx", mode: 0o600 });
-  const receipt = { declared: rows.length, completed, failed: rows.length - completed, liveActorExecuted: false, toolExecutionPerformed: false };
+  const receipt = { declared: rows.length, completed, failed: rows.length - completed, liveActorExecuted: false, toolExecutionPerformed: false,
+    responsePayloads: { version: 1, file: "model-responses.jsonl", count: responseCount,
+      sha256: createHash("sha256").update(await readFile(responsesPath)).digest("hex") } };
   await writeFile(join(output, "receipt.json"), canonical(receipt) + "\n", { flag: "wx" }); return receipt;
   } finally {
     if (servingTimer) clearInterval(servingTimer);

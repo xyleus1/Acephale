@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { LocalChatModelPort, type InfraChatMessage, type InfraModelEvent, type InfraFunctionTool } from "../src/lib/acephale/infra-model";
+import { LocalChatModelPort, type InfraChatMessage, type InfraModelEvent, type InfraFunctionTool, type LocalChatModelConfiguration, type InfraResponseRecord } from "../src/lib/acephale/infra-model";
 import { freezeInfraManifest, INFRA_MODEL_PINS, validateInfraManifest, type InfraExperimentManifestV2 } from "../src/lib/acephale/infra-manifest";
 import budgetPolicyV2 from "../src/lib/acephale/contracts/budget-policy-v2.json";
 import budgetPolicyV3 from "../src/lib/acephale/contracts/budget-policy-v3.json";
@@ -20,10 +20,10 @@ const tokenResponse = (count = 8) => Response.json({ count, max_model_len: 32768
 const completion = (overrides: Record<string, unknown> = {}) => ({ model: modelName,
   choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: [call] }, finish_reason: "tool_calls" }],
   usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }, ...overrides });
-function mockPort(value: unknown = completion(), options: { stream?: boolean; record?: (event: InfraModelEvent) => void } = {}) {
+function mockPort(value: unknown = completion(), options: Pick<LocalChatModelConfiguration, "stream" | "record" | "retainResponse"> = {}) {
   const bodies: { path: string; body: Record<string, unknown> }[] = [];
   const port = new LocalChatModelPort({ baseUrl: "http://localhost:8000/v1", model: modelName, stream: options.stream ?? false,
-    record: options.record, fetch: (async (input, init) => {
+    record: options.record, retainResponse: options.retainResponse, fetch: (async (input, init) => {
       const path = new URL(String(input)).pathname;
       bodies.push({ path, body: JSON.parse(String(init?.body)) });
       return path === "/tokenize" ? tokenResponse() : value instanceof Response ? value : Response.json(value);
@@ -80,6 +80,32 @@ test("dispatch audit preserves actual model-independent inputs even when generat
   assert.match(String(dispatch.requestContractHash), /^[a-f0-9]{64}$/);
   assert.ok(events.some(event => event.type === "model_failed" && event.dispatched === true));
   assert.ok(!events.some(event => event.type === "model_completed"));
+});
+
+test("replay retains the exact parsed response before structured output rejection", async () => {
+  const retained: InfraResponseRecord[] = [], events: InfraModelEvent[] = [];
+  const text = '{"wrong":true}';
+  const response = completion({ choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }] });
+  const { port } = mockPort(response, { record: event => events.push(event), retainResponse: async value => { retained.push(value); } });
+  await assert.rejects(port.complete({ ...request, tools: [], responseFormat: { name: "test", strict: true,
+    schema: { type: "object", additionalProperties: false, required: ["answer"], properties: { answer: { type: "string" } } } } }), /requested output schema/);
+  assert.equal(retained.length, 1);
+  assert.equal(retained[0].text, text);
+  assert.deepEqual(retained[0].continuation, { role: "assistant", content: text });
+  const { contentHash, ...body } = retained[0];
+  assert.equal(contentHash, hash(body));
+  const dispatch = events.find(event => event.type === "model_dispatch")!;
+  assert.equal(body.inputHash, dispatch.inputHash);
+  assert.equal(body.requestContractHash, dispatch.requestContractHash);
+  assert.equal(body.responseHash, hash(body.continuation));
+  assert.ok(events.findIndex(event => event.type === "model_response_retained") < events.findIndex(event => event.type === "model_failed"));
+  assert.ok(!events.some(event => event.type === "model_completed"));
+  assert.ok(!JSON.stringify(body).includes("local-no-secret"));
+});
+
+test("response retention failure fails closed instead of returning an unaudited success", async () => {
+  const { port } = mockPort(completion(), { retainResponse: async () => { throw new Error("disk unavailable"); } });
+  await assert.rejects(port.complete(request), /transport or protocol failed/);
 });
 
 test("prompt audit hashes stay identical across weight names while request identities remain distinct", async () => {
@@ -320,6 +346,20 @@ test("v2 manifest freezes exact pins and artifact lineage without changing v1", 
   assert.ok(Object.isFrozen(frozen.manifest.actor));
   value.actor.servedModel = "changed";
   assert.equal(frozen.manifest.actor.servedModel, "actor");
+});
+
+test("machine annotation review is an explicit exploratory manifest protocol", () => {
+  const value = manifest();
+  value.protocol.annotationReview = { reviewProtocol: "machine_audited_exploratory", humanReviewCount: 0,
+    machineReviewCount: 20, machineAuditHash: hash("actual-review"), reviewerModel: "gpt-5.4-2026-03-05",
+    reviewIndependence: "separate_request_and_prompt_same_model" };
+  validateInfraManifest(value);
+  for (const change of [{ humanReviewCount: 20 }, { machineReviewCount: 19 }, { machineAuditHash: "missing" },
+    { reviewerModel: "unknown" }, { reviewIndependence: "independent_model_weights" }]) {
+    const changed = structuredClone(value);
+    Object.assign(changed.protocol.annotationReview!, change);
+    assert.throws(() => validateInfraManifest(changed));
+  }
 });
 
 test("v2 manifest rejects substitutions, contamination, invalid budgets and behavioral arms", () => {

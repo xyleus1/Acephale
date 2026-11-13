@@ -79,6 +79,19 @@ def test_design_rejects_unpaired_blocks():
         TrialDesign.model_validate({**design.model_dump(), "trials": design.model_dump()["trials"][:-1]})
 
 
+def test_exploratory_report_preserves_machine_review_identity():
+    design, rows = experiment()
+    metadata = {"reviewProtocol": "machine_audited_exploratory", "humanReviewCount": 0,
+        "machineReviewCount": 20, "machineAuditHash": "d" * 64,
+        "reviewerModel": "gpt-5.4-2026-03-05", "reviewIndependence": "separate_request_and_prompt_same_model"}
+    design = TrialDesign.model_validate({**design.model_dump(), "annotation_review": metadata})
+    report = report_trials(design, rows)
+    assert report["annotationReview"] == metadata
+    assert any("zero human reviews" in item for item in report["limitations"])
+    with pytest.raises(ValueError, match="zero-human"):
+        TrialDesign.model_validate({**design.model_dump(), "annotation_review": {**metadata, "humanReviewCount": False}})
+
+
 def test_result_cannot_claim_success_when_budget_terminated():
     _, rows = experiment()
     with pytest.raises(ValueError, match="remain failures"):

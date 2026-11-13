@@ -315,6 +315,8 @@ def _write_receipt(output: Path, configuration: dict, manifest: dict, summary: d
     receipt = {"version": 1, "stage": configuration["stage"], "configurationHash": hash_v1(configuration),
         "manifestHash": hash_v1(manifest), "files": files, "allDeclaredSlotsRetained": True,
         "serviceExitCode": summary["serviceExitCode"], "closed": True, "completed": not summary["stageAborted"]}
+    if summary.get("annotationReview") is not None:
+        receipt["annotationReview"] = summary["annotationReview"]
     write(output / "cohort-receipt.json", receipt)
     return receipt
 
@@ -406,6 +408,9 @@ def _run_cohort(configuration: dict, manifest: dict, bundle: dict, output: Path,
         "startupFailure": startup_failure, "finalServiceDrainSeconds": final_drain,
         "stageWallSeconds": time.perf_counter() - started, "accountingScope": "hosted_user_and_judge",
         "gpuCostStatus": "separate_infrastructure_ledger", **summarize_costs(rows)}
+    if manifest.get("protocol", {}).get("annotationReview") is not None:
+        from acephale.annotation_review import review_metadata
+        summary["annotationReview"] = review_metadata(manifest["protocol"]["annotationReview"])
     write(output / "summary.json", summary)
     _write_receipt(output, configuration, manifest, summary)
     return summary

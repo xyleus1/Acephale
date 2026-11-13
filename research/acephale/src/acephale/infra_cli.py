@@ -104,6 +104,7 @@ def main(argv: list[str] | None = None) -> None:
     reliability = commands.add_parser("build-goal-reliability")
     for field in ("bundle", "predictions", "annotations", "pilot", "reviews", "grades", "output"):
         reliability.add_argument(f"--{field}", type=Path, required=True)
+    reliability.add_argument("--machine-audit", type=Path, help="Explicit exploratory machine-audit receipt; default remains human review")
     native = commands.add_parser("native")
     for field in ("config", "tasks", "output", "budget-directory", "upstream-root"):
         native.add_argument(f"--{field}", type=Path, required=True)
@@ -135,7 +136,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "build-goal-reliability":
         from acephale.infra_admission import build_goal_reliability
 
-        artifact, report, observations = build_goal_reliability(args.bundle, args.predictions, args.annotations, args.pilot, args.reviews, args.grades)
+        artifact, report, observations = build_goal_reliability(args.bundle, args.predictions, args.annotations, args.pilot, args.reviews, args.grades,
+                                                              machine_audit_path=args.machine_audit)
         result = publish_bundle(args.output, {"goal-reliability.json": artifact, "report.json": report, "graded-goals.jsonl": observations}, parquet=True)
     elif args.command == "export":
         result = export_dataset(args.trajectories, args.metadata, args.split, args.output, parquet=args.parquet)

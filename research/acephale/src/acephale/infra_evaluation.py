@@ -12,6 +12,7 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import Field, model_validator
 
+from acephale.annotation_review import review_metadata
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_data import read_jsonl, verify_bundle
 from acephale.schemas import Record
@@ -49,10 +50,13 @@ class TrialDesign(Record):
     actor_config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     memory_snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     frozen_before_execution: Literal[True]
+    annotation_review: dict[str, Any] | None = None
     trials: tuple[TrialSlot, ...] = Field(min_length=3)
 
     @model_validator(mode="after")
     def paired_blocks(self) -> TrialDesign:
+        if self.annotation_review is not None:
+            review_metadata(self.annotation_review)
         if len({slot.slot_id for slot in self.trials}) != len(self.trials):
             raise ValueError("Duplicate scheduled slot")
         blocks: dict[tuple, list[str]] = defaultdict(list)
@@ -171,13 +175,18 @@ def report_trials(design: TrialDesign, results: list[TrialResult], *, seed: int 
             if left.logical_calls is not None and right.logical_calls is not None:
                 metrics["logical_calls_difference"][family].append(right.logical_calls - left.logical_calls)
         comparisons.append({"baseline": baseline, "treatment": treatment, "metrics": {metric: _paired_interval(metrics[metric], seed=seed, samples=bootstrap_samples) for metric in ("success_difference", "latency_ms_difference", "logical_calls_difference", "physical_calls_difference")}})
-    return {
+    report = {
         "schema_version": design.schema_version, "measurement_kind": design.measurement_kind,
         "label": design.label, "design_hash": hash_v1(design.model_dump(mode="json")),
         "results_hash": hash_v1([row.model_dump(mode="json") for row in sorted(results, key=lambda row: row.slot_id)]),
         "arms": summaries, "paired_comparisons": comparisons,
         "limitations": ["Usage-derived costs are not invoice-reconciled", "Missing telemetry is never imputed as zero", "Execution replay timing is not live latency", "Task success and exact-read prediction use different denominators"],
     }
+    if design.annotation_review is not None:
+        report["annotationReview"] = review_metadata(design.annotation_review)
+        if report["annotationReview"]["reviewProtocol"] == "machine_audited_exploratory":
+            report["limitations"].append("Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests")
+    return report
 
 
 def score_candidate_panels(rows: list[dict[str, Any]], *, seed: int = 42, bootstrap_samples: int = 2000,

@@ -51,6 +51,12 @@ journal; its original bytes and unresolved reservations were preserved.
 
 ## Remaining experiment gates
 
+An explicit machine-audited exploratory protocol now permits autonomous
+execution without counting any automated judgment as a human review. It uses
+the same 20 selected cases and unchanged acceptance thresholds. Its actual
+audit must pass before training; the original human-reviewed study remains
+pending. This protocol amendment is not a measured accuracy improvement.
+
 1. Preserve the exported `fe0748b` 60-trial collection and its public-only
    recompilation under `bbd95b0`. Collect the separate 12 base development-validation
    trials; these do not replace paired comparison trials.

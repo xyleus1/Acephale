@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> None:
     prepare.add_argument("--output", type=Path, required=True)
     for name in ("review-pilot", "reviews", "annotations"):
         prepare.add_argument(f"--{name}", type=Path)
+    prepare.add_argument("--machine-audit", type=Path, help="Explicit machine-audited exploratory review receipt; never human approval")
     verify = commands.add_parser("verify")
     verify.add_argument("directory", type=Path)
     verify_export_parser = commands.add_parser("verify-export", help="Verify trained weights and their complete immutable artifact chain without loading a model")
@@ -52,8 +53,10 @@ def main(argv: list[str] | None = None) -> None:
         supplied = [args.review_pilot, args.reviews, args.annotations]
         if any(supplied) and not all(supplied):
             parser.error("Review requires --review-pilot, --reviews and --annotations together")
+        if args.machine_audit and not all(supplied):
+            parser.error("Machine audit requires the original pilot, actual reviews and exact annotations")
         review = verify_review(json.loads(args.review_pilot.read_text(encoding="utf-8")),
-                               read_jsonl(args.reviews), read_jsonl(args.annotations)) if all(supplied) else None
+                               read_jsonl(args.reviews), read_jsonl(args.annotations), machine_audit=args.machine_audit) if all(supplied) else None
         result = prepare_dataset(read_jsonl(args.rows), args.output, review=review)
     elif args.command == "verify":
         result = verify_dataset(args.directory)

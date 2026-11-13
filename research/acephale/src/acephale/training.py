@@ -310,13 +310,17 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
     binary_ids = binary_token_ids(tokenizer)
     frozen_before, adapter_before = _parameter_hash(model, adapter=False), _parameter_hash(model, adapter=True)
     output.mkdir(parents=True, exist_ok=False)
+    review_fields = {}
+    if (manifest.get("review") or {}).get("reviewProtocol") == "machine_audited_exploratory":
+        from acephale.annotation_review import review_metadata
+        review_fields["annotationReview"] = review_metadata(manifest["review"])
     specification = hashed({"schemaVersion": 1, "base": BASE, "datasetManifestHash": manifest["contentHash"],
         "seed": seed, "mode": "smoke" if smoke else "fit", "recipe": recipe, "versions": versions,
         "kernelProfile": kernel_profile, "implementation": implementation, "targets": targets,
         "probeContext": dict(PROBE_CONTEXT),
         "trainableParameters": trainable, "trainableCount": sum(trainable.values()), "binaryTokenIds": binary_ids,
         "leaseHash": hash_v1(lease), "baseReceiptHash": hash_v1(base_receipt), "frozenBeforeHash": frozen_before,
-        "adapterBeforeHash": adapter_before})
+        "adapterBeforeHash": adapter_before, **review_fields})
     write_new(output / "training-specification.json", specification)
 
     class Guard(TrainerCallback):
@@ -381,7 +385,7 @@ def train(dataset: Path, model_path: Path, output: Path, lease_path: Path, *, se
             "frozenAfterHash": frozen_after, "elapsedSeconds": time.monotonic() - started,
             "trainingMetrics": result.metrics, "developmentMetrics": metrics,
             "peakGpuBytes": torch.cuda.max_memory_allocated(), "adapterFiles": file_inventory(adapter_dir),
-            "probeHash": file_hash(output / "reload-probe.pt"), "binaryTokenIds": binary_ids})
+            "probeHash": file_hash(output / "reload-probe.pt"), "binaryTokenIds": binary_ids, **review_fields})
         write_new(output / "receipt.json", receipt)
         return receipt
     except BaseException as error:

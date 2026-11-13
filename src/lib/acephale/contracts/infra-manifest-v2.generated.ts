@@ -25,6 +25,24 @@ export type Families = string[];
  * via the `definition` "ImageDigest".
  */
 export type ImageDigest = string;
+/**
+ * This interface was referenced by `InfraExperimentManifestV2`'s JSON-Schema
+ * via the `definition` "AnnotationReview".
+ */
+export type AnnotationReview =
+  | {
+      reviewProtocol: "human_reviewed";
+      humanReviewCount: number;
+      machineReviewCount: 0;
+    }
+  | {
+      reviewProtocol: "machine_audited_exploratory";
+      humanReviewCount: 0;
+      machineReviewCount: 20;
+      machineAuditHash: Sha256;
+      reviewerModel: "gpt-5.4-2026-03-05";
+      reviewIndependence: "separate_request_and_prompt_same_model";
+    };
 
 export interface InfraExperimentManifestV2 {
   version: 2;
@@ -93,6 +111,7 @@ export interface InfraExperimentManifestV2 {
     budgetAmendmentHash?: Sha256;
   };
   protocol: {
+    annotationReview?: AnnotationReview;
     actorContext: "none";
     exposeEvidence: false;
     frozenMemory: true;

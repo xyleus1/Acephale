@@ -413,3 +413,12 @@ their exact source, checkpoint and label ancestry is verified.
 ## 2026-11-13: regional capacity is an explicit operator amendment
 
 A capacity-driven region change must be recorded separately from the original financial plan. It cannot silently change hardware, model recipes or hourly allowance. Region-specific image and firewall identities are verified again before dispatch. An unresolved prior launch retains its reservation and status; a route sidecar by itself is insufficient authority for another launch.
+
+## 2026-11-13: explicit exploratory annotation review
+
+Allow a separately declared machine-audited exploratory protocol while the
+original human review remains pending. Preserve the same 20 cases, 90% acceptance
+and zero unsupported bindings. Record the critic's actual pinned model, separate
+prompt/request and shared-teacher limitation. Human counts remain zero; default
+human-reviewed admission rejects machine artifacts. Retain pre-amendment results
+and run a complete matched baseline under the new compiler identity.
