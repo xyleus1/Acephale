@@ -293,6 +293,37 @@ class ControlTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 control.reserve_lease(self.initial, quote, 2, 1, now)
 
+    def test_setup_allowance_is_prospective_and_keeps_funded_deadline(self):
+        quote = control.quote(self.client, "test-region", self.now)
+        default = control.reserve_lease(self.initial, quote, 2, 1, self.now)
+        longer = control.reserve_lease(self.initial, quote, 2, 1, self.now, setup_seconds=3600)
+        self.assertEqual(default["setupDeadline"], self.now + 1800)
+        self.assertEqual(longer["setupDeadline"], self.now + 3600)
+        for key in ("deadline", "reservedHours", "reservedUsd", "reservedComputeUsd", "ready"):
+            self.assertEqual(default[key], longer[key])
+        self.assertEqual(self.initial["leases"], [])
+
+    def test_setup_allowance_never_outlives_short_lease(self):
+        quote = control.quote(self.client, "test-region", self.now)
+        lease = control.reserve_lease(self.initial, quote, .1, 0, self.now, setup_seconds=3600)
+        self.assertEqual(lease["setupDeadline"], lease["deadline"])
+
+    def test_invalid_setup_allowance_cannot_create_reservation(self):
+        for seconds in (False, 0, 119, 3601, 1800.0, float("nan"), "3600"):
+            before = control.read_json(self.ledger)
+            reserved = self.budget_calls.count("reserve")
+            with self.subTest(seconds=seconds), self.assertRaises(ValueError):
+                control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now,
+                                      budget=self.budget, setup_seconds=seconds)
+            self.assertEqual(control.read_json(self.ledger), before)
+            self.assertEqual(self.budget_calls.count("reserve"), reserved)
+
+    def test_prepare_lease_persists_explicit_setup_deadline(self):
+        lease = control.prepare_lease(self.client, self.ledger, 2, 1, now=self.now,
+                                      budget=self.budget, setup_seconds=3600)
+        self.assertEqual(lease["setupDeadline"], self.now + 3600)
+        self.assertEqual(control.read_json(self.ledger)["leases"][0], lease)
+
     def test_budget_and_cumulative_hours_fail_closed(self):
         quote = control.quote(self.client, "test-region", self.now)
         for ledger, hours, allowance in [({**self.initial, "priorInfraUsd": 34}, 2, 1), ({**self.initial, "priorGpuHours": 23}, 2, 1), (self.initial, 9, 1), (self.initial, 2, -1), (self.initial, float("nan"), 1)]:

@@ -1,5 +1,13 @@
 # Acephale engineering log
 
+## 2026-11-13: Add an explicit setup allowance
+
+Added `setup_seconds` to reservation and preparation and `--setup-seconds` to
+the controller CLI. Integer allowances from 120 to 3600 are accepted only for new
+leases and clipped to the funded lifetime. Tests cover the unchanged default,
+explicit persistence, short leases and rejection without a financial reservation.
+No existing lease or experiment artifact is modified.
+
 ## 2026-11-13: Verify retained responses during goal grading and reliability
 
 Two remaining readers compared replay receipts against the old five-field shape.

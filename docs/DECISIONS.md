@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-13: Bound prospective setup windows
+
+Allow an explicit setup interval up to 3600 seconds when reserving a new GPU
+lease. Downloading pinned images, building the trainer and measuring a real
+training batch must fit their declared stage bounds. Retain the 1800-second
+default, the funded hard deadline, independent watchdogs and all existing lease
+deadlines. This changes infrastructure admission only, not the training recipe,
+model, data or evaluation protocol.
+
 ## 2026-11-13: Apply replay closure checks to semantic grading
 
 Goal reliability and blind goal grading must consume the same verified replay

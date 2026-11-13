@@ -1,5 +1,12 @@
 # Working on Acephale
 
+New infrastructure reservations can explicitly set `--setup-seconds` from 120
+to 3600; the default remains 1800. This is chosen before reservation and cannot
+extend an existing lease. The funded hard deadline and price reservation stay
+unchanged. Use bounded stage deadlines inside the selected setup window. Frozen
+bootstrap versions with a 30-minute parser limit still need a separately recorded
+phase deadline; do not rewrite their source identity or prior lease artifacts.
+
 Goal grading and reliability now validate retained-response replay receipts too.
 The Python reliability builder reuses the shared reader; the TypeScript grader
 checks the same version, file bytes, record count, inner hashes and ordered

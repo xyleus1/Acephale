@@ -976,7 +976,9 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
 
 
 def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: float, extra_allowance_usd: float,
-                  now: float, *, unresolved_fence: dict | None = None) -> dict[str, Any]:
+                  now: float, *, unresolved_fence: dict | None = None, setup_seconds: int = 1800) -> dict[str, Any]:
+    if type(setup_seconds) is not int or not 120 <= setup_seconds <= 3600:
+        raise ValueError("Setup allowance must be an integer from 120 to 3600 seconds")
     hours = finite_number(hours, "session hours", 0.01)
     allowance = finite_number(extra_allowance_usd, "tax/storage/export allowance", 0)
     rate = finite_number(current_quote["hourlyUsd"], "hourly quote", 0.01)
@@ -1010,7 +1012,7 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     # Do not release reservations after termination without invoice reconciliation.
     return {"id": str(uuid.uuid4()), "status": "reserved", "quote": current_quote,
             "reservedAt": now, "deadline": now + hours * 3600,
-            "setupDeadline": now + min(1800, hours * 3600), "reservedHours": hours,
+            "setupDeadline": now + min(setup_seconds, hours * 3600), "reservedHours": hours,
             "reservedUsd": cost, "reservedComputeUsd": round(rate * hours, 6),
             "reservedMicrodollars": math.ceil(cost * 1_000_000), "instanceId": None, "ready": False}
 
@@ -1071,7 +1073,8 @@ def record_access_amendment(client: Any, ledger_path: Path, output: Path, ssh_ke
 def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_usd: float,
                   *, now: float | None = None, budget=study_budget, purpose: str = "research",
                   recovery_controller_id: str | None = None, access_amendment: Path | None = None,
-                  routing_amendment: Path | None = None, unresolved_fence: Path | None = None) -> dict[str, Any]:
+                  routing_amendment: Path | None = None, unresolved_fence: Path | None = None,
+                  setup_seconds: int = 1800) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
     current = time.time() if now is None else now
@@ -1097,7 +1100,8 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
             verify_quote(route, current_quote)
         validate_firewall(client, access["firewallRulesetId"], region)
         fence = read_json(unresolved_fence) if unresolved_fence else None
-        lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current, unresolved_fence=fence)
+        lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current,
+                              unresolved_fence=fence, setup_seconds=setup_seconds)
         lease["name"] = "acephale-infra-" + lease["id"]
         lease["purpose"] = purpose
         lease["recoveryControllerId"] = recovery_controller_id
@@ -1391,6 +1395,8 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--ledger", type=Path, required=True)
     prepare.add_argument("--hours", type=float, required=True)
     prepare.add_argument("--extra-allowance-usd", type=float, required=True)
+    prepare.add_argument("--setup-seconds", type=int, default=1800,
+                         help="Prospective setup allowance, 120-3600 seconds, bounded by the funded lease")
     prepare.add_argument("--purpose", choices=["research", "cleanup_canary"], default="research")
     prepare.add_argument("--recovery-controller-id")
     prepare.add_argument("--access-amendment", type=Path)
@@ -1482,7 +1488,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "prepare-lease":
             value = prepare_lease(client, args.ledger, args.hours, args.extra_allowance_usd, purpose=args.purpose,
                                   recovery_controller_id=args.recovery_controller_id, access_amendment=args.access_amendment,
-                                  routing_amendment=args.routing_amendment, unresolved_fence=args.unresolved_fence)
+                                  routing_amendment=args.routing_amendment, unresolved_fence=args.unresolved_fence,
+                                  setup_seconds=args.setup_seconds)
         elif args.command == "record-region-route":
             from provider_routing import record_route
             value = record_route(client, args.ledger, args.output, args.region, args.firewall_ruleset_id,
