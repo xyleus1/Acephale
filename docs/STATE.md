@@ -22,9 +22,12 @@ Windows path-length error affected local extraction, not archived bytes; all
 
 The evaluation-only continuation uses the completed weights. Its authorization
 allows diagnostic, export and evaluation actions and forbids optimizer work.
-The diagnostic checks exact loaded parameter bytes, precision and forward
-wrappers, and records FLA kernel selections against the original probe. Kernel
-autotuning history is a hypothesis pending GPU evidence, not an established cause.
+The cold diagnostic reproduced failures for both seeds despite exact loaded
+parameter hashes. One common inference-only fitting-batch warmup then reproduced
+all 248,320 original reference logits bit-for-bit for both seeds, including a
+repeat probe. Kernel selections changed. This supports a tuning-history effect
+without isolating a single causal kernel. Strict export and vLLM qualification
+remain separate requirements. See the [GPU diagnostic](experiments/reload-preparation-2026-11-15.md).
 
 The fourth continuation had failed before profiling or seed 29 because the two
 earlier fitting windows exhausted their cumulative allowance. A prospective

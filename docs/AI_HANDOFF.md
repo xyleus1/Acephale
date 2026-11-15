@@ -8,12 +8,20 @@ Read the current private operator handoff for the evaluation-only continuation.
 Historical instructions below about obtaining another fitting window are not
 instructions to retrain these completed seeds.
 
+The evaluation-only GPU diagnostic is closed and verified. Cold reloads failed
+for both seeds despite exact parameter hashes. The same inference-only first
+fitting-batch warmup reproduced each original probe exactly, twice. Do not rerun
+training or replace references. Apply preparation inside the prospective export
+process and require both unchanged strict export and vLLM qualification before
+benchmarks. Details are in `experiments/reload-preparation-2026-11-15.md`.
+
 `python -m acephale.reload_diagnostic` investigates a retained 204-update
 checkpoint's reload failure. It requires the separate evaluation-only admission
 change, `validate_execution_lease(..., action="diagnostic")`. Original input and
 loaded parameter hashes must match. Comparisons use a new output directory;
 the tool cannot publish acceptance or run an optimizer. Run both saved seeds to
-distinguish image differences from shared loading behavior. GPU evidence is pending.
+distinguish image differences from shared loading behavior. The closed GPU
+diagnostic above supersedes the earlier pending status.
 
 A separate operator training-window amendment now permits exactly one additional
 four-hour fit window: v3 cumulative fitting capacity 28,800 to 43,200 seconds.

@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-15: Reproduce both saved probes with inference-only preparation
+
+Cold diagnostics failed the unchanged gate for both seeds with exact original
+parameter hashes. One reconstructed fitting-batch forward pass, without an
+optimizer, restored all 248,320 original logits exactly for both seeds and both
+repeat probes. CPU byte comparisons independently confirmed equality. Retained
+FLA/Triton selections changed; unique kernel causality is not established.
+The prospective export will apply the same preparation inside its own process
+and still require the original strict gate and separate vLLM acceptance.
+See [measurements and procedure](experiments/reload-preparation-2026-11-15.md).
+
 ## 2026-11-15: Continue from completed weights
 
 Both original optimizer seeds reached all 204 declared updates and gradient

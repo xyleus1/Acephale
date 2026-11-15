@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-15: Use one declared inference preparation for both saved seeds
+
+Both original probes were reproduced bit-for-bit after the same fitting-batch
+warmup procedure, without modifying weights or references. Apply this procedure
+prospectively in the strict export process for both seeds. Retain selected
+kernel configurations and batch hashes; do not claim recovery of historical
+sampler state. Keep the original export tolerances and vLLM acceptance gate.
+Diagnostic success alone does not authorize benchmark dispatch.
+
 ## 2026-11-15: Preserve the original reload gate during diagnosis
 
 Diagnose completed predictor weights without another optimizer run, replacement
