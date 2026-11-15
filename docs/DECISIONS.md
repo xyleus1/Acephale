@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-15: Preserve the original reload gate during diagnosis
+
+Diagnose completed predictor weights without another optimizer run, replacement
+reference logits or wider tolerances. Keep diagnostic results separate from
+export qualification. A passing variant is evidence for a numerical-context
+hypothesis, not permission to promote an adapter. Compare both saved seeds and
+record exact parameter, buffer, dependency and backend identities first.
+
 ## 2026-11-15: Add finite fitting capacity without rewriting financial policy
 
 Retained attempts consumed both v3 four-hour fitting windows before the next

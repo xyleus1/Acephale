@@ -1,5 +1,17 @@
 # Acephale engineering log
 
+## 2026-11-15: Diagnose retained checkpoint reload without training
+
+Added an evaluation-only diagnostic for a completed 204-update checkpoint.
+It verifies original receipt, probe and adapter files, then requires loaded base
+and adapter parameter hashes to match the original training hashes. Eleven
+forward comparisons retain the original full-vocabulary tolerance and test
+repeatability, cache behavior, Trainer wrappers and numerical backend flags.
+No optimizer is constructed and no acceptance reference is replaced.
+Focused local verification: 12 passed, one PyTorch-dependent test skipped because
+the local test interpreter has no PyTorch. The actual seed 17 input gate passed.
+GPU results and a confirmed causal correction are pending.
+
 ## 2026-11-15: Admit one declared fitting window before provisioning
 
 The fourth continuation completed foundation setup, training-image preparation
