@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { type Reservation } from "../src/lib/acephale/budget";
 import { canonical, hash } from "../src/lib/acephale/canonical";
+import { frozenApiProjection } from "../services/acephale-runtime/infrastructure-funding";
 
 export interface AwsBudgetRequest {
   provider?: "aws" | "lambda";
@@ -26,8 +27,11 @@ export function awsBudget(request: AwsBudgetRequest) {
     || !Array.isArray(checkpoint.entries) || !checkpoint.entries.length || hash(checkpoint.entries) !== checkpoint.entriesHash) {
     throw new Error("Original study checkpoint identity invalid");
   }
-  const owner = new DurableBudget(path);
+  const owner = new DurableBudget(path, { infrastructureOwner: true });
   try {
+    if (owner.infrastructureFunding && owner.infrastructureFunding.infrastructureLedgerPathHash !== hash(resolve(request.sliceLedgerPath))) {
+      throw new Error("Infrastructure funding slice differs from the original binding");
+    }
     const allocations = owner.ledger.allocations;
     const totalCeiling = owner.ledger.totalCeilingMicrodollars;
     const current = owner.ledger.snapshot(), byId = new Map(current.map(row => [row.id, row]));
@@ -77,12 +81,19 @@ export function awsBudget(request: AwsBudgetRequest) {
           throw new Error("Existing AWS reservation differs or is already settled");
         }
       } else {
+        if (owner.infrastructureFunding) frozenApiProjection(owner.ledger.snapshot(), maximum!, owner.policy!, owner.infrastructureFunding);
         if (totals().committedMicrodollars + maximum! > totalCeiling - allocations.contingency) throw new Error("Protected study contingency unavailable");
         owner.ledger.reserve(id, "infrastructure", maximum!);
       }
     } else if (request.operation !== "inspect" && request.operation !== "bind") throw new Error("Unsupported budget operation");
     return { version: 1, ledgerPathHash: hash(path), checkpointHash: request.checkpointHash, ...totals(),
       ...(owner.policy ? { budgetPolicyHash: owner.policy.policyHash, budgetAmendmentHash: owner.policy.contentHash } : {}),
+      ...(owner.infrastructureFunding ? { infrastructureFundingSupplementHash: owner.infrastructureFunding.contentHash,
+        effectiveFinancialCeilingsChanged: true, effectiveTotalCeilingMicrodollars: totalCeiling,
+        effectiveInfrastructureMicrodollars: allocations.infrastructure,
+        effectiveComputeMicrodollars: owner.infrastructureFunding.policy.effectiveComputeMicrodollars,
+        effectiveAssociatedMicrodollars: owner.infrastructureFunding.policy.effectiveAssociatedMicrodollars,
+        ...frozenApiProjection(owner.ledger.snapshot(), 0, owner.policy!, owner.infrastructureFunding) } : {}),
       ...(request.operation === "reserve" ? { reservationId: request.reservationId, maximumMicrodollars: request.maximumMicrodollars } : {}) };
   } finally { owner.close(); }
 }

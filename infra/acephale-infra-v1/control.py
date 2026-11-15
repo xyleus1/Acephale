@@ -419,6 +419,17 @@ def provider_receipt(client: Any, ledger_path: Path, lease_id: str, ssh_observat
             "profile": capacity["profile"], "contentHash": capacity["contentHash"],
             "sha256": sha256(gpu_hour_capacity_path(ledger_path)), "basePolicyMaximumGpuHours": 64,
             "engineeringMaximumGpuHours": maximum, "financialPolicyChanged": False}
+    funding = infrastructure_funding(ledger)
+    if funding:
+        if lease.get("infrastructureFundingSupplementHash") != funding["contentHash"]:
+            raise ValueError("Actual provider lease must bind its financial authority")
+        value["infrastructureFundingAuthorization"] = {
+            "profile": funding["profile"], "contentHash": funding["contentHash"],
+            "baseBudgetPolicyHash": funding["baseBudgetPolicyHash"], "basePolicyBytesChanged": False,
+            "effectiveFinancialCeilingsChanged": True, "effectiveTotalMicrodollars": funding["policy"]["effectiveTotalMicrodollars"],
+            "effectiveInfrastructureMicrodollars": funding["policy"]["effectiveInfrastructureMicrodollars"],
+            "effectiveComputeMicrodollars": funding["policy"]["effectiveComputeMicrodollars"],
+            "effectiveAssociatedMicrodollars": funding["policy"]["effectiveAssociatedMicrodollars"]}
     value["contentHash"] = digest(value)
     write_new(output, value)
     return {"path": str(output), "sha256": sha256(output), "instanceId": item["id"]}
@@ -723,10 +734,76 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
         _validate_infrastructure_suballocation(historical, parent, read_json(path))
         if amendment is None or amendment["version"] == 2:
             return 50, 36.25, 13.75
+    funding = infrastructure_funding(ledger)
+    if funding:
+        policy = funding["policy"]
+        return tuple(policy[key] / 1_000_000 for key in
+                     ("effectiveInfrastructureMicrodollars", "effectiveComputeMicrodollars", "effectiveAssociatedMicrodollars"))
     if not amendment:
         return 35, 30, 5
     policy = amendment["policy"]
     return policy["allocationsMicrodollars"]["infrastructure"] / 1_000_000, policy["infrastructureComputeUsd"], policy["infrastructureAssociatedUsd"]
+
+
+def infrastructure_funding(ledger: dict) -> dict | None:
+    """Separate prospective funding; the frozen v3 model/API policy stays intact."""
+    journal = ledger.get("plan", {}).get("studyLedgerPath")
+    if not journal:
+        return None
+    path = Path(str(Path(journal).resolve()) + ".infrastructure-funding-v1.json")
+    if not path.exists():
+        if any("infrastructureFundingSupplementHash" in row for row in ledger.get("leases", [])):
+            raise ValueError("Infrastructure funding authority is missing")
+        return None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError("Invalid infrastructure funding file")
+    value, amendment = read_json(path), effective_budget_policy(ledger)
+    approved = read_json(ROOT / "src/lib/acephale/contracts/infrastructure-funding-v1.json")
+    if (amendment is None or amendment["version"] != 3 or type(value.get("version")) is not int or value.get("version") != 1
+            or value.get("profile") != "acephale-infrastructure-funding-v1"
+            or value.get("contentHash") != _budget_digest({key: item for key, item in value.items() if key != "contentHash"})
+            or _budget_digest(value.get("policy")) != _budget_digest(approved) or value.get("policyHash") != _budget_digest(approved)
+            or value.get("baseBudgetPolicyHash") != amendment["policyHash"]
+            or value.get("baseBudgetAmendmentHash") != amendment["contentHash"]
+            or value.get("baseBudgetAmendmentSha256") != sha256(Path(str(Path(journal).resolve()) + ".policy-v3.json"))
+            or value.get("studyLedgerPathHash") != _budget_digest(str(Path(journal).resolve()))
+            or value.get("infrastructureLedgerPathHash") != _budget_digest(str(Path(ledger["plan"]["infrastructureLedgerPath"]).resolve()))
+            or value.get("infrastructureBindingHash") != _budget_binding_hash(ledger)
+            or value.get("infrastructurePlanHash") != ledger["planHash"]
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str) or not value["authorizationReason"].strip()
+            or len(value["authorizationReason"]) > 1024 or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or value.get("effectiveFinancialCeilingsChanged") is not True
+            or any(value.get(key) is not False for key in ("basePolicyBytesChanged", "existingReservationsChanged", "modelContractsChanged"))):
+        raise ValueError("Infrastructure funding must bind the unchanged base policy and original study")
+    authorized = _budget_authorized_at(value)
+    if authorized < _budget_authorized_at(amendment):
+        raise ValueError("Infrastructure funding cannot predate the base amendment")
+    baseline = {**ledger}
+    for name, field in (("baselineLeases", "leases"), ("baselineOverheads", "overheads"), ("baselineTrainingWindows", "trainingWindows")):
+        prior = value.get(name)
+        if not isinstance(prior, list):
+            raise TypeError("Infrastructure funding requires retained operational history")
+        baseline[field] = prior
+    current, retained = _infrastructure_reservations(ledger), _infrastructure_reservations(baseline)
+    if any(current[key][:len(retained[key])] != retained[key] for key in retained):
+        raise ValueError("Infrastructure funding cannot release or rewrite retained reservations")
+    windows = baseline["trainingWindows"]
+    if ledger.get("trainingWindows", [])[:len(windows)] != windows:
+        raise ValueError("Infrastructure funding cannot replace training windows")
+    for old, row in zip(baseline["leases"], ledger["leases"], strict=False):
+        if (old.get("status") not in {"terminated", "launch_unknown"}
+                or (old["status"] == "launch_unknown" and old.get("instanceId") is not None)
+                or any(row.get(key) != old.get(key) for key in
+                       ("id", "name", "reservedAt", "deadline", "setupDeadline", "quote", "studyReservation"))
+                or (old["status"] == "terminated" and
+                    (row.get("status") != "terminated" or row.get("instanceId") != old.get("instanceId")))):
+            raise ValueError("Funding history must retain closed work and unresolved launches")
+    for row in ledger["leases"][len(baseline["leases"]):]:
+        if (row.get("infrastructureFundingSupplementHash") != value["contentHash"]
+                or finite_number(row.get("reservedAt"), "funding-bound reservation timestamp") < authorized):
+            raise ValueError("New provider lease must bind the infrastructure funding authority")
+    return value
 
 
 def infrastructure_suballocation_path(ledger_path: Path) -> Path:
@@ -885,7 +962,7 @@ def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dic
     totals = _infrastructure_reserved_totals(ledger)
     if hours > 128 or any(totals[key] > cap for key, cap in zip(
             ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
-        raise ValueError("GPU-hour capacity addendum cannot exceed unchanged financial allocations")
+        raise ValueError("GPU-hour capacity addendum cannot exceed effective financial authority")
     return value
 
 
@@ -1145,6 +1222,9 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     compute = ledger.get("priorComputeUsd", ledger["priorInfraUsd"]) + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
     charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
     infrastructure_cap, compute_cap, associated_cap = infrastructure_caps(ledger)
+    funding = infrastructure_funding(ledger)
+    if funding and now < _budget_authorized_at(funding):
+        raise ValueError("Provider reservation cannot predate its financial authority")
     maximum_gpu_hours, capacity = effective_gpu_hour_capacity(ledger)
     if capacity and now < capacity["recordedAt"]:
         raise ValueError("Provider reservation cannot predate its capacity authorization")
@@ -1157,7 +1237,8 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
             "setupDeadline": now + min(setup_seconds, hours * 3600), "reservedHours": hours,
             "reservedUsd": cost, "reservedComputeUsd": round(rate * hours, 6),
             "reservedMicrodollars": math.ceil(cost * 1_000_000), "instanceId": None, "ready": False,
-            **({"gpuHourCapacityAddendumHash": capacity["contentHash"]} if capacity else {})}
+            **({"gpuHourCapacityAddendumHash": capacity["contentHash"]} if capacity else {}),
+            **({"infrastructureFundingSupplementHash": funding["contentHash"]} if funding else {})}
 
 
 def validate_firewall(client: Any, ruleset_id: str, region: str) -> None:
@@ -1237,7 +1318,7 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
         region = route["region"] if route else plan["region"]
         if access_amendment or route:
             verify_access_key(client, access)
-        budget(plan, "inspect")
+        inspection = budget(plan, "inspect")
         current_quote = quote(client, region, current, plan["hardwareProfile"])
         if route:
             verify_quote(route, current_quote)
@@ -1245,6 +1326,14 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
         fence = read_json(unresolved_fence) if unresolved_fence else None
         lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current,
                               unresolved_fence=fence, setup_seconds=setup_seconds)
+        funding = infrastructure_funding(ledger)
+        if funding and (inspection.get("infrastructureFundingSupplementHash") != funding["contentHash"]
+                        or inspection.get("frozenApiHeadroomMicrodollars") != funding["policy"]["frozenApiHeadroomMicrodollars"]
+                        or inspection.get("frozenApiPlanHash") != _budget_digest(funding["policy"]["frozenApiPlanMicrodollars"])
+                        or inspection.get("frozenNonContingencyCeilingMicrodollars") != 935_000_000
+                        or type(inspection.get("frozenProjectedNonContingencyMicrodollars")) is not int
+                        or inspection["frozenProjectedNonContingencyMicrodollars"] + lease["reservedMicrodollars"] > 935_000_000):
+            raise ValueError("New GPU reservation requires verified frozen API headroom")
         lease["name"] = "acephale-infra-" + lease["id"]
         lease["purpose"] = purpose
         lease["recoveryControllerId"] = recovery_controller_id

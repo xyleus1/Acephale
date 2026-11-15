@@ -1,5 +1,15 @@
 # Working on Acephale
 
+An explicit infrastructure funding supplement can add $100 to the existing v3
+study envelope without rewriting its policy bytes. Only the infrastructure owner
+consumes effective $1,100 total/$300 infrastructure/$225 compute/$75 associated
+ceilings. Frozen model/API owners retain $1,000 total and $935 excluding
+contingency. Before another GPU, a declared $600 remaining API projection must
+fit those stricter ceilings after all retained holds and the proposed reservation.
+Read `infra/acephale-infra-v1/INFRASTRUCTURE_FUNDING.md`. This is prospective code,
+not evidence that a live supplement was activated. Preserve every unknown hold
+and record the distinct operator source and funding hash in run provenance.
+
 An explicit operator-only GPU-hour capacity addendum can prospectively raise the
 cumulative reservation allowance from 64 to 128 hours. It does not change the v3
 $1,000 financial policy, its $200 infrastructure/$150 compute/$50 associated
