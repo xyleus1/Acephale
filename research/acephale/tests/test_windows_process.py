@@ -171,11 +171,18 @@ def test_stop_raised_by_predispatch_guard_never_creates_windows_process(tmp_path
 
 
 @pytest.mark.parametrize("reason", ["timeout", "stop", "guard"])
-def test_actual_runner_drains_tree_on_timeout_stop_and_guard_error(tmp_path, reason):
+def test_actual_runner_drains_tree_on_timeout_stop_and_guard_error(tmp_path, reason, monkeypatch):
+    from types import SimpleNamespace
+
     stage = runner.Stage(id="native", command=[sys.executable], timeoutSeconds=10,
                          artifacts=[runner.ArtifactCheck(path="unused", kind="json", expected={"status": "completed"})])
     command, stopped, handles = tree_command(tmp_path), [], []
-    deadline = time.time() + (1 if reason == "timeout" else 10)
+    deadline = time.time() + 20
+    # Observe the actual child tree before expiring the runner's clock. A short
+    # wall-clock deadline can otherwise expire during Windows process startup.
+    if reason == "timeout":
+        monkeypatch.setattr(runner, "time", SimpleNamespace(
+            time=lambda: deadline + 1 if handles else time.time(), sleep=time.sleep))
 
     def guard():
         if (tmp_path / "pid-2").exists() and not handles:

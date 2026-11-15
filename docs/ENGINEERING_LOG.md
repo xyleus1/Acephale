@@ -10,6 +10,12 @@ verified every archived member after the Windows path-length failure. The new
 evaluation authorization and diagnostic preserve original training source `5a36a8b3`
 and separately identify execution source `8185b861`. Native scores are pending.
 
+The Windows process-tree timeout test now observes all three real processes
+before advancing the runner's test clock past its deadline. The old one-second
+startup assumption failed under load before the tree existed. Production process
+ownership is unchanged; all ten Windows process tests passed with the revised
+fixture against the frozen execution source.
+
 ## 2026-11-15: Diagnose retained checkpoint reload without training
 
 Added an evaluation-only diagnostic for a completed 204-update checkpoint.
