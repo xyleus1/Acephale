@@ -11,6 +11,13 @@ The prospective export will apply the same preparation inside its own process
 and still require the original strict gate and separate vLLM acceptance.
 See [measurements and procedure](experiments/reload-preparation-2026-11-15.md).
 
+The inference-only diagnostic is now included as `acephale.reload_warmup_diagnostic`.
+Its published source differs from executed source `057bffc2` only in import
+formatting; the parsed AST is identical and all five focused tests passed.
+The report plotting script reads the exact completed report and finalization
+receipt, copies existing confidence intervals, and labels sample sizes. It does
+not run models or rescore trials; actual figure review awaits completed results.
+
 ## 2026-11-15: Continue from completed weights
 
 Both original optimizer seeds reached all 204 declared updates and gradient
