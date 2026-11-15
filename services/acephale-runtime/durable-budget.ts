@@ -5,6 +5,7 @@ import { StringDecoder } from "node:string_decoder";
 import { BudgetLedger, type Reservation } from "../../src/lib/acephale/budget";
 import { canonical, hash } from "../../src/lib/acephale/canonical";
 import { readBudgetPolicy, type BudgetAmendment } from "./budget-policy";
+import { readInfrastructureFunding, type InfrastructureFunding } from "./infrastructure-funding";
 
 type Record = { sequence: number; previous: string; entries: [string, Reservation][] } |
   { version: 2; sequence: number; previous: string; changes: [string, Reservation][] };
@@ -98,6 +99,7 @@ function equal(a: Reservation | undefined, b: Reservation) {
 export class DurableBudget {
   readonly ledger: BudgetLedger;
   readonly policy?: BudgetAmendment;
+  readonly infrastructureFunding?: InfrastructureFunding;
   private descriptor = -1;
   private lockDescriptor: number;
   private sequence = 0;
@@ -108,7 +110,7 @@ export class DurableBudget {
   private journalDigest = createHash("sha256");
   private journalBytes = 0;
   readonly recovery: { checkpointUsed: boolean; verifiedPrefixBytes: number; replayedRecords: number } = { checkpointUsed: false, verifiedPrefixBytes: 0, replayedRecords: 0 };
-  constructor(private path: string, private options: { recoveryCheckpoint?: boolean } = {}) {
+  constructor(private path: string, private options: { recoveryCheckpoint?: boolean; infrastructureOwner?: boolean } = {}) {
     mkdirSync(dirname(path), { recursive: true });
     this.lockDescriptor = openSync(`${path}.lock`, "wx", 0o600);
     try {
@@ -160,7 +162,12 @@ export class DurableBudget {
         try { fsyncSync(directory); } finally { closeSync(directory); }
       }
       this.policy = readBudgetPolicy(path, entries);
-      this.ledger = new BudgetLedger(next => this.append(next), entries, this.policy?.policy.allocationsMicrodollars);
+      // Model/native owners keep the frozen base ceiling. Only the infrastructure
+      // owner and its report explicitly consume the separate financial authority.
+      this.infrastructureFunding = this.options.infrastructureOwner ? readInfrastructureFunding(path, entries, this.policy) : undefined;
+      const allocations = this.infrastructureFunding ? { ...this.policy!.policy.allocationsMicrodollars,
+        infrastructure: this.infrastructureFunding.policy.effectiveInfrastructureMicrodollars } : this.policy?.policy.allocationsMicrodollars;
+      this.ledger = new BudgetLedger(next => this.append(next), entries, allocations);
       if (this.options.recoveryCheckpoint !== false) this.checkpoint();
     } catch (error) {
       if (this.descriptor >= 0) closeSync(this.descriptor);
@@ -210,7 +217,7 @@ export class DurableBudget {
   validateManifestPolicy(budgets: { infrastructureMicrodollars: number; budgetPolicyHash?: string; budgetAmendmentHash?: string }) {
     if (this.policy) {
       if (budgets.budgetPolicyHash !== this.policy.policyHash || budgets.budgetAmendmentHash !== this.policy.contentHash
-        || budgets.infrastructureMicrodollars > this.ledger.allocations.infrastructure) throw new Error("Manifest budget policy differs from the original journal amendment");
+        || budgets.infrastructureMicrodollars > this.policy.policy.allocationsMicrodollars.infrastructure) throw new Error("Manifest budget policy differs from the original journal amendment");
     } else if (budgets.budgetPolicyHash || budgets.budgetAmendmentHash || budgets.infrastructureMicrodollars > this.ledger.allocations.infrastructure) {
       throw new Error("Manifest requires an unapplied budget policy amendment");
     }

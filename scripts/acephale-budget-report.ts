@@ -7,7 +7,7 @@ import { PRICE_SOURCE } from "../services/acephale-runtime/provider";
 export function budgetReport(directory: string, destination: string) {
 const ledgerPath = join(resolve(directory), "budget.jsonl"), metadata = lstatSync(ledgerPath);
 if (!metadata.isFile() || metadata.isSymbolicLink() || !metadata.size) throw new Error("Existing nonempty original budget journal required");
-const budget = new DurableBudget(ledgerPath);
+const budget = new DurableBudget(ledgerPath, { infrastructureOwner: true });
 try {
   const rows = budget.ledger.snapshot();
   const parents = new Set(rows.filter(row => row.parentId).map(row => row.parentId));
@@ -21,6 +21,10 @@ try {
   });
   const result = { schemaVersion: 1, currency: "USD", priceSource: PRICE_SOURCE,
     ...(budget.policy ? { budgetPolicyHash: budget.policy.policyHash, budgetAmendmentHash: budget.policy.contentHash } : {}),
+    ...(budget.infrastructureFunding ? { infrastructureFundingSupplementHash: budget.infrastructureFunding.contentHash,
+      effectiveFinancialCeilingsChanged: true, baseTotalCeilingUsd: budget.policy!.policy.totalMicrodollars / 1_000_000,
+      baseInfrastructureCeilingUsd: budget.policy!.policy.allocationsMicrodollars.infrastructure / 1_000_000,
+      frozenApiHeadroomUsd: budget.infrastructureFunding.policy.frozenApiHeadroomMicrodollars / 1_000_000 } : {}),
     basis: "Recorded settled costs and unresolved reservations in the original study journal; not independently reconciled to invoices",
     totalCeilingUsd: budget.ledger.totalCeilingMicrodollars / 1_000_000, allocations,
     infrastructureKnownCostUsd: allocations.find(row => row.allocation === "infrastructure")!.knownUsageCostUsd,

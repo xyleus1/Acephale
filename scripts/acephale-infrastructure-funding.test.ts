@@ -1,0 +1,113 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve, sep } from "node:path";
+import { DurableBudget } from "../services/acephale-runtime/durable-budget";
+import { budgetPolicyPath } from "../services/acephale-runtime/budget-policy";
+import { frozenApiProjection, infrastructureFundingPath } from "../services/acephale-runtime/infrastructure-funding";
+import { canonical, hash } from "../src/lib/acephale/canonical";
+import { amendBudgetPolicy } from "./acephale-budget-policy";
+import { addInfrastructureFunding } from "./acephale-infrastructure-funding";
+import { awsBudget } from "./acephale-aws-budget";
+
+function fixture() {
+  const directory = mkdtempSync(join(tmpdir(), "acephale-funding-")), ledger = join(directory, "budget.jsonl"), slice = join(directory, "slice.json");
+  let owner = new DurableBudget(ledger);
+  owner.ledger.reserve("prior-infrastructure", "infrastructure", 25_000_000);
+  owner.ledger.reserve("retained-model-unknown", "training", 1_000_000); owner.close();
+  const plan = { studyLedgerPath: ledger, infrastructureLedgerPath: slice };
+  const value = { schemaVersion: 2, provider: "lambda", plan, planHash: hash(plan), priorGpuHours: 0,
+    leases: [{ id: "old", status: "terminated", instanceId: "old-instance", reservedHours: 10,
+      reservedUsd: 25, reservedComputeUsd: 20 }], overheads: [], trainingWindows: [{ reservedSeconds: 7200 }] };
+  writeFileSync(slice, canonical(value));
+  amendBudgetPolicy(ledger, slice, "2026-11-13T00:00:00Z", 2);
+  const base = amendBudgetPolicy(ledger, slice, "2026-11-13T08:00:00Z", 3);
+  owner = new DurableBudget(ledger);
+  owner.ledger.reserve("retained-gpu-unknown", "infrastructure", 166_801_503);
+  const entries = owner.ledger.snapshot(); owner.close();
+  value.leases.push({ id: "unknown", status: "launch_unknown", instanceId: null as unknown as string,
+    reservedHours: 61.5, reservedUsd: 166.801503, reservedComputeUsd: 122.285002 });
+  writeFileSync(slice, canonical(value));
+  const checkpointPath = join(directory, "original-checkpoint.json");
+  const checkpoint = {version:1,ledgerPathHash:hash(ledger),entriesHash:hash(entries),entries};
+  writeFileSync(checkpointPath,canonical(checkpoint));
+  const request = {provider:"lambda" as const,ledgerPath:ledger,checkpointPath,checkpointHash:hash(checkpoint),
+    sliceLedgerPath:slice,deploymentHash:hash(plan)};
+  awsBudget({...request,operation:"bind"});
+  return {directory,ledger,slice,value,base,request,close(){
+    if (!resolve(directory).startsWith(resolve(tmpdir())+sep)) throw new Error("Unsafe fixture path");
+    rmSync(directory,{recursive:true,force:true});
+  }};
+}
+const authorize = (f: ReturnType<typeof fixture>) => addInfrastructureFunding(f.ledger,f.slice,"2026-11-15T00:00:00Z",
+  "Explicit user instruction: continue necessary training and evaluation.",()=>"b".repeat(40));
+
+test("separate funding preserves old bytes and expands only the infrastructure owner",()=>{
+  const f=fixture(); try {
+    const originals=[f.ledger,f.slice,budgetPolicyPath(f.ledger,2),budgetPolicyPath(f.ledger,3)].map(path=>[path,readFileSync(path)] as const);
+    const funding=authorize(f);
+    assert.throws(()=>awsBudget({...f.request,sliceLedgerPath:join(f.directory,"wrong-slice.json"),operation:"inspect"}),/funding slice/);
+    for(const [path,bytes] of originals) assert.deepEqual(readFileSync(path),bytes);
+    assert.throws(()=>authorize(f),/EEXIST/);
+    const infra=new DurableBudget(f.ledger,{infrastructureOwner:true});
+    assert.equal(infra.ledger.totalCeilingMicrodollars,1_100_000_000);
+    assert.equal(infra.ledger.allocations.infrastructure,300_000_000);
+    assert.equal(infra.infrastructureFunding?.contentHash,funding.contentHash);
+    assert.deepEqual({...infra.ledger.allocations,infrastructure:200_000_000},f.base.policy.allocationsMicrodollars);
+    assert.throws(()=>infra.validateManifestPolicy({infrastructureMicrodollars:300_000_000,
+      budgetPolicyHash:f.base.policyHash,budgetAmendmentHash:f.base.contentHash}),/differs/); infra.close();
+    const result=awsBudget({...f.request,operation:"reserve",reservationId:"lambda-infra:00000000-0000-0000-0000-000000000001",
+      maximumMicrodollars:20_696_000,requireNewReservation:true});
+    assert.equal(result.infrastructureMicrodollars,212_497_503);
+    assert.equal(result.infrastructureFundingSupplementHash,funding.contentHash);
+    assert.equal(result.frozenProjectedNonContingencyMicrodollars,813_497_503);
+    const frozen=new DurableBudget(f.ledger);
+    assert.equal(frozen.ledger.totalCeilingMicrodollars,1_000_000_000);
+    assert.equal(frozen.ledger.remaining("infrastructure"),0);
+    frozen.ledger.reserveMany([{id:"native-development",allocation:"development",maximum:1_000_000}]);
+    frozen.ledger.reserveChild("native-development","native-child",200);
+    frozen.ledger.settle("native-child",50); frozen.ledger.finishParent("native-development");
+    assert.equal(frozen.ledger.snapshot().find(row=>row.id==="retained-gpu-unknown")?.actual,undefined);
+    assert.throws(()=>frozen.ledger.reserve("no-extra-infra","infrastructure",1),/exhausted/); frozen.close();
+  } finally {f.close();}
+});
+
+test("funding rejects changed identities, retained journal history and revised financial claims",()=>{
+  const f=fixture(); try {
+    const funding=authorize(f);
+    for(const change of [
+      {baseBudgetPolicyHash:"f".repeat(64)}, {infrastructurePlanHash:"f".repeat(64)},
+      {effectiveFinancialCeilingsChanged:false}, {authorizedAt:"2026-01-01T00:00:00Z"},
+      {policy:{...funding.policy,effectiveInfrastructureMicrodollars:400_000_000}},
+      {baselineEntries:[{id:"missing",allocation:"infrastructure",maximum:1}]},
+    ]) {
+      const {contentHash:_,...body}={...funding,...change};
+      writeFileSync(infrastructureFundingPath(f.ledger),canonical({...body,contentHash:hash(body)}));
+      assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/funding/i);
+    }
+  } finally {f.close();}
+});
+
+test("GPU reservation preserves the declared frozen API headroom before any new journal entry",()=>{
+  const f=fixture(); try {
+    const funding=authorize(f), owner=new DurableBudget(f.ledger,{infrastructureOwner:true});
+    const snapshot=owner.ledger.snapshot();
+    const projection=frozenApiProjection(snapshot,20_696_000,owner.policy!,funding);
+    assert.equal(projection.frozenApiHeadroomMicrodollars,600_000_000);
+    assert.throws(()=>frozenApiProjection(snapshot,200_000_000,owner.policy!,funding),/headroom/);
+    assert.throws(()=>frozenApiProjection([...snapshot,{id:"old-dev",allocation:"development",maximum:1}],0,owner.policy!,funding),/unchanged allocation/);
+    owner.ledger.reserve("large-prior-training","training",98_000_000); owner.close();
+    const before=readFileSync(f.ledger);
+    assert.throws(()=>awsBudget({...f.request,operation:"reserve",reservationId:"lambda-infra:00000000-0000-0000-0000-000000000002",
+      maximumMicrodollars:60_000_000,requireNewReservation:true}),/headroom/);
+    assert.deepEqual(readFileSync(f.ledger),before);
+  } finally {f.close();}
+});
+
+test("supplement writer retains unknown launches but rejects active work",()=>{
+  const f=fixture(); try {
+    f.value.leases[1].status="active"; writeFileSync(f.slice,canonical(f.value));
+    assert.throws(()=>authorize(f),/closed or retained unknown/);
+  } finally {f.close();}
+});

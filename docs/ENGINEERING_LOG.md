@@ -1,5 +1,26 @@
 # Acephale engineering log
 
+## 2026-11-15: Prospective infrastructure-only funding authority
+
+Added a creation-only supplement with original journal/slice/policy bindings,
+unchanged historical holds and separate effective financial ceilings. The
+infrastructure bridge opts into this authority; ordinary and frozen model/API
+owners retain the base policy. Admission reserves the declared remaining API
+headroom before another GPU. Provider and budget evidence distinguish both
+authorities. Local tests cover journal recovery, strict native budgets, denied
+overcommitment, changed identities, unknown holds and v3 training compatibility.
+No live journal, provider resource, model call or immutable experiment artifact
+was changed while implementing this authority.
+
+Validation: TypeScript check passed; the full Node suite passed 299 tests with
+two skips. Infrastructure pytest passed 313 tests with two skips and 111
+subtests; research pytest passed 630 with 22 environment-dependent skips.
+After final slice-binding and canonical-number checks, the affected eight Node
+tests and 14 funding Python tests passed again. Initial local test failures were
+an inaccessible default pytest temporary directory, an inherited older editable
+Python package and a missing worktree virtualenv path; explicit local test paths
+resolved them. No production code was changed to bypass those environment errors.
+
 ## 2026-11-13: Prospective GPU-hour engineering capacity
 
 Added a creation-only operator sidecar for an explicitly authorized cumulative

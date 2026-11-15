@@ -1,5 +1,18 @@
 # Acephale decisions
 
+## 2026-11-15: Separate added infrastructure funds from frozen model budgets
+
+The user's instruction to spend what is necessary authorizes a bounded $100
+infrastructure supplement. Effective infrastructure authority becomes $300,
+split $225 compute/$75 associated; the combined envelope becomes $1,100. Keep
+the original v3 contract and its $1,000 ceiling visible as the frozen API budget.
+Do not present either policy hash as authorizing the other ceiling. Preserve all
+old reservations and source identities. An unchanged frozen-reader fixture
+established recovery and non-infrastructure dispatch with $212.497503 retained
+infrastructure, while correctly rejecting new infrastructure under its base cap.
+Require a separate conservative $600 future API projection before another GPU.
+No invoice settlement is inferred from provider termination.
+
 ## 2026-11-13: GPU-hour capacity remains separate from financial policy
 
 The user's authorization to continue necessary work permits a prospective
