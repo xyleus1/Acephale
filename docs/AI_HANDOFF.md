@@ -1,5 +1,12 @@
 # Working on Acephale
 
+`python -m acephale.reload_diagnostic` investigates a retained 204-update
+checkpoint's reload failure. It requires the separate evaluation-only admission
+change, `validate_execution_lease(..., action="diagnostic")`. Original input and
+loaded parameter hashes must match. Comparisons use a new output directory;
+the tool cannot publish acceptance or run an optimizer. Run both saved seeds to
+distinguish image differences from shared loading behavior. GPU evidence is pending.
+
 A separate operator training-window amendment now permits exactly one additional
 four-hour fit window: v3 cumulative fitting capacity 28,800 to 43,200 seconds.
 The v3 policy bytes, 900 additional smoke seconds, four-hour per-window maximum,
