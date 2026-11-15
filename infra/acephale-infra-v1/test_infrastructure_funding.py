@@ -109,7 +109,8 @@ def test_preparation_rejects_missing_or_exhausted_api_projection_before_journal_
     mock_ledger = copy.deepcopy(ledger)
     mock_ledger["plan"].update(region="test-region", firewallRulesetId="firewall", hardwareProfile="a100-40gb-v1")
     for inspection in ({}, {"infrastructureFundingSupplementHash": funding["contentHash"],
-            "frozenApiHeadroomMicrodollars": 600000000, "frozenNonContingencyCeilingMicrodollars": 935000000,
+            "frozenApiHeadroomMicrodollars": 303000000, "frozenNonContingencyCeilingMicrodollars": 935000000,
+            "frozenApiPlanHash": control._budget_digest(funding["policy"]["frozenApiPlanMicrodollars"]),
             "frozenProjectedNonContingencyMicrodollars": 930000000}):
         with patch.object(control, "checked_bound_ledger", return_value=mock_ledger), \
              patch.object(control, "infrastructure_funding", return_value=funding), \

@@ -61,7 +61,7 @@ test("separate funding preserves old bytes and expands only the infrastructure o
       maximumMicrodollars:20_696_000,requireNewReservation:true});
     assert.equal(result.infrastructureMicrodollars,212_497_503);
     assert.equal(result.infrastructureFundingSupplementHash,funding.contentHash);
-    assert.equal(result.frozenProjectedNonContingencyMicrodollars,813_497_503);
+    assert.equal(result.frozenProjectedNonContingencyMicrodollars,516_497_503);
     const frozen=new DurableBudget(f.ledger);
     assert.equal(frozen.ledger.totalCeilingMicrodollars,1_000_000_000);
     assert.equal(frozen.ledger.remaining("infrastructure"),0);
@@ -94,10 +94,16 @@ test("GPU reservation preserves the declared frozen API headroom before any new 
     const funding=authorize(f), owner=new DurableBudget(f.ledger,{infrastructureOwner:true});
     const snapshot=owner.ledger.snapshot();
     const projection=frozenApiProjection(snapshot,20_696_000,owner.policy!,funding);
-    assert.equal(projection.frozenApiHeadroomMicrodollars,600_000_000);
-    assert.throws(()=>frozenApiProjection(snapshot,200_000_000,owner.policy!,funding),/headroom/);
-    assert.throws(()=>frozenApiProjection([...snapshot,{id:"old-dev",allocation:"development",maximum:1}],0,owner.policy!,funding),/unchanged allocation/);
-    owner.ledger.reserve("large-prior-training","training",98_000_000); owner.close();
+    assert.equal(projection.frozenApiHeadroomMicrodollars,303_000_000);
+    assert.throws(()=>frozenApiProjection(snapshot,540_000_000,owner.policy!,funding),/headroom/);
+    assert.throws(()=>frozenApiProjection([...snapshot,{id:"old-dev",allocation:"development",maximum:55_000_001}],0,owner.policy!,funding),/unchanged allocation/);
+    owner.ledger.reserveMany([
+      {id:"large-prior-training",allocation:"training",maximum:98_000_000},
+      {id:"prior-preparation",allocation:"preparation",maximum:100_000_000},
+      {id:"prior-development",allocation:"development",maximum:55_000_000},
+      {id:"prior-heldout",allocation:"heldout",maximum:112_000_000},
+      {id:"prior-replay",allocation:"replay",maximum:65_000_000},
+    ]); owner.close();
     const before=readFileSync(f.ledger);
     assert.throws(()=>awsBudget({...f.request,operation:"reserve",reservationId:"lambda-infra:00000000-0000-0000-0000-000000000002",
       maximumMicrodollars:60_000_000,requireNewReservation:true}),/headroom/);
@@ -109,5 +115,25 @@ test("supplement writer retains unknown launches but rejects active work",()=>{
   const f=fixture(); try {
     f.value.leases[1].status="active"; writeFileSync(f.slice,canonical(f.value));
     assert.throws(()=>authorize(f),/closed or retained unknown/);
+  } finally {f.close();}
+});
+
+test("remaining-stage projection fits the observed retained balances without releasing holds",()=>{
+  const f=fixture(); try {
+    const funding=authorize(f);
+    const entries=[
+      {id:"retained-preparation",allocation:"preparation" as const,maximum:41_903_897},
+      {id:"retained-development",allocation:"development" as const,maximum:21_297_341},
+      {id:"retained-heldout",allocation:"heldout" as const,maximum:111_883_904},
+      {id:"retained-replay",allocation:"replay" as const,maximum:12_540_687},
+      {id:"retained-training",allocation:"training" as const,maximum:5_922_048},
+      {id:"retained-infrastructure",allocation:"infrastructure" as const,maximum:191_801_503},
+    ];
+    const before=canonical(entries);
+    const result=frozenApiProjection(entries,20_696_000,f.base,funding);
+    assert.equal(result.frozenProjectedNonContingencyMicrodollars,709_045_380);
+    assert.equal(result.frozenApiHeadroomMicrodollars,303_000_000);
+    assert.equal(canonical(entries),before);
+    assert.deepEqual(funding.policy.frozenApiPlanMicrodollars,{preparation:0,training:0,development:65_000_000,heldout:238_000_000,replay:0});
   } finally {f.close();}
 });
