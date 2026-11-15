@@ -8,9 +8,11 @@ and adapter parameter hashes to match the original training hashes. Eleven
 forward comparisons retain the original full-vocabulary tolerance and test
 repeatability, cache behavior, Trainer wrappers and numerical backend flags.
 No optimizer is constructed and no acceptance reference is replaced.
-Focused local verification: 12 passed, one PyTorch-dependent test skipped because
+Focused local verification: 13 passed, one PyTorch-dependent test skipped because
 the local test interpreter has no PyTorch. The actual seed 17 input gate passed.
 GPU results and a confirmed causal correction are pending.
+Passive capture also retains selected FLA/Triton autotune configurations and
+exact kernel source hashes, without clearing caches or choosing configurations.
 
 ## 2026-11-15: Admit one declared fitting window before provisioning
 
