@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-15: Own the full continuation independently of the UI
+
+One persistent supervisor must compose the reviewed setup, optimizer, recovery,
+serving and evaluation owners. Retain dispatch claims and original deadlines.
+Retry bounded observation failures only; never interpret an interrupted claim
+as permission to repeat optimizer work or replace a scientific trial. Export
+available evidence and verify exact provider termination after an unrecoverable
+stop. A completed phase is distinct from a completed study and from confirmed
+resource cleanup.
+
 ## 2026-11-15: Separate added infrastructure funds from frozen model budgets
 
 The user's instruction to spend what is necessary authorizes a bounded $100

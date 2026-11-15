@@ -1,10 +1,22 @@
 # Current state
 
-Updated November 13, 2026, 17:44 UTC. This page distinguishes implemented software
-from measured results. Seed 17's optimizer work is complete; receipt recovery and
-the independent second seed are in progress.
+Updated November 15, 2026, 01:40 UTC. This page distinguishes implemented software
+from measured results. Seed 17's optimizer work is saved. No GPU is currently
+running; the second seed and paired evaluation remain incomplete.
 
-## Active training
+## Training and continuation
+
+The most recent host completed its disposable profile, but a subsequent ownership
+observation failed. Main seed 29 was never dispatched on that host. Independent
+controllers terminated it at its original deadline. Its closed replacement
+watchdogs are disabled; fences for the earlier unresolved launch remain active.
+
+The prospective continuation runs setup, seed 29, saved-artifact recovery,
+serving qualification, replay and paired native evaluation under one independent
+owner. Bounded retries apply only to observations. Interrupted scientific
+dispatches are retained, and uncertain work is not automatically repeated.
+Terminal cleanup requires verified provider termination. Local lifecycle tests
+passed; the complete real chain has not yet run.
 
 Seed 17 completed all 204 optimizer updates and all 204 gradient checks, with
 unchanged base hashes and a changed adapter hash. Its final adapter, reload probe

@@ -1,5 +1,22 @@
 # Acephale engineering log
 
+## 2026-11-15: Close the interrupted continuation
+
+The replacement host completed its disposable profile but failed its final
+ownership observation before another scheduled heartbeat publication. Timing
+and source review support a publication race; the precise cloud state at that
+instant was not retained. The setup owner had no automatic main/evaluation
+handoff. Independent controllers later terminated the idle host at its original
+deadline. No main seed 29 updates occurred on that host.
+
+Prospective private orchestration now retains phase claims before dispatch,
+retries transient observations within 75 seconds, verifies existing exports
+before adopting them, and executes subsequent phases synchronously. Cleanup
+checks actual provider termination; a silent cleanup return is insufficient.
+Independent local checks passed 34 lifecycle/recovery tests and seven downstream
+context tests against the retained study inputs. These tests establish no new
+model accuracy, native task score or live latency result.
+
 ## 2026-11-15: Prospective infrastructure-only funding authority
 
 Added a creation-only supplement with original journal/slice/policy bindings,

@@ -38,6 +38,11 @@ seed 29 recipe, while seed 17 proceeds through saved-artifact recovery only.
 Read the current private execution handoff before issuing any provider or budget
 command; one operator owns the journal and dispatch. Both real adapter exports
 must pass unchanged vLLM qualification before replay or native comparison.
+The subsequent replacement completed its disposable profile but did not dispatch
+main seed 29 after an ownership-observation failure. It was independently
+terminated at its original deadline. Do not treat that profile as main training.
+Use the reviewed independent continuation owner for the next complete sequence;
+readiness of one stage is not a durable handoff to another.
 Offline grading/reliability uses the separately recorded `c8a662c` reader fix.
 The 1,074-row fitting set, machine-audit lineage and pending stages are summarized
 in [current state](STATE.md). Historical counts below describe their own versions.
