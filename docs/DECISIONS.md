@@ -20,7 +20,11 @@ Do not present either policy hash as authorizing the other ceiling. Preserve all
 old reservations and source identities. An unchanged frozen-reader fixture
 established recovery and non-infrastructure dispatch with $212.497503 retained
 infrastructure, while correctly rejecting new infrastructure under its base cap.
-Require a separate conservative $600 future API projection before another GPU.
+Require a separate conservative $303 future API projection before another GPU.
+An initial $600 projection failed before activation against the actual retained
+balances. The approved revision budgets $45 for 36 development trials, $20 for
+four grading batches charged to development, and $238 held-out. It preserves all
+prior holds and adds no preparation, training-library or replay API work.
 No invoice settlement is inferred from provider termination.
 
 ## 2026-11-13: GPU-hour capacity remains separate from financial policy

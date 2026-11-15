@@ -25,19 +25,29 @@ Provider receipts identify the separate financial authority. Frozen training
 leases remain v3 and carry the funding hash inside their actual study reservation.
 
 Before the initial continuation GPU reservation, a fixed remaining API plan must fit under the
-frozen base ceilings: $65 preparation, $0 training-library collection, $120
-development, $350 held-out and $65 replay, totaling $600. Admission counts all
+frozen base ceilings: $0 preparation, $0 training-library collection, $65
+development, $238 held-out and $0 replay, totaling $303. Development covers
+36 trials at $1.25 ($45), plus four goal-grading batches capped at $5 each ($20).
+The grader charges development. The remaining workflow needs no preparation,
+training-library or replay API calls. Admission counts all
 current root reservations at actual cost if settled, otherwise at their full
-maximum, then the proposed GPU reservation, then the future $600. This must fit
+maximum, then the proposed GPU reservation, then the future $303. This must fit
 under $935 excluding contingency and $1,000 overall. Each planned API allocation
 must also fit its unchanged base allocation. This is a prospective initial-run
-projection, not a general runtime reconciliation check. Even a small completed
-development charge prevents reserving the full future $120 again. The bridge's
+projection, not a general runtime reconciliation check. The bridge's
 `inspect` operation also checks this projection; it is not a heartbeat or runtime
 health endpoint. Existing owner heartbeat and provider watchdog paths do not
 call it. The plan is conservative and may deny a later session after evaluation
 has progressed. If it fails, review the
 remaining stage caps explicitly; do not reduce unknown holds or bypass the gate.
+
+The initial $600 proposal failed against existing reservations before any
+funding sidecar was created. The revised projection retains $385.349380 already
+spent or reserved, adds the proposed $20.696 GPU reservation and $303 for the
+remaining stages: $709.045380 against the frozen $935 non-contingency ceiling.
+The $238 held-out allowance fits the observed $238.116096 remaining allocation.
+Keep the earlier failed request as evidence; this revision releases no hold and
+does not amend the base policy or effective infrastructure ceilings above.
 
 The sole operator first closes provider-confirmed terminated work and verifies
 the retained unknown-launch fences. Use a clean, separately committed operator

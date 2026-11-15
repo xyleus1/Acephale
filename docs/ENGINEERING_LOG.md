@@ -17,6 +17,20 @@ Independent local checks passed 34 lifecycle/recovery tests and seven downstream
 context tests against the retained study inputs. These tests establish no new
 model accuracy, native task score or live latency result.
 
+## 2026-11-15: Bind the remaining stages to their actual allocations
+
+The first $600 prospective API projection failed before creating a funding
+sidecar. Existing holds already consumed part of preparation, development,
+held-out and replay allocations. Revised only the prospective API plan to $303:
+$45 for 36 development trials, $20 for four goal-grading batches charged to
+development, and $238 held-out. No future preparation, training-library or
+replay API work is needed. The observed $385.349380 retained balance, another
+$20.696 GPU reservation and this plan sum to $709.045380, below the frozen $935
+non-contingency limit. Prior requests, failed admission, unknown holds, base
+policies and effective infrastructure ceilings remain unchanged.
+The revised projection passed nine affected Node tests, 14 funding Python tests
+and the TypeScript/schema check, including the exact retained-balance fixture.
+
 ## 2026-11-15: Prospective infrastructure-only funding authority
 
 Added a creation-only supplement with original journal/slice/policy bindings,

@@ -6,12 +6,12 @@
   "effectiveInfrastructureMicrodollars": 300000000,
   "effectiveComputeMicrodollars": 225000000,
   "effectiveAssociatedMicrodollars": 75000000,
-  "frozenApiHeadroomMicrodollars": 600000000,
+  "frozenApiHeadroomMicrodollars": 303000000,
   "frozenApiPlanMicrodollars": {
-    "preparation": 65000000,
+    "preparation": 0,
     "training": 0,
-    "development": 120000000,
-    "heldout": 350000000,
-    "replay": 65000000
+    "development": 65000000,
+    "heldout": 238000000,
+    "replay": 0
   }
 }
