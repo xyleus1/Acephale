@@ -356,11 +356,10 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
     if deadline <= current:
         raise ValueError("GPU lease expired")
     windows = ledger.setdefault("trainingWindows", [])
+    capacity = None
     if policy:
-        extra = windows[len(amendment["baselineTrainingWindows"]):]
-        limit = policy["additionalSmokeSeconds"] if kind == "smoke" else policy["additionalFittingSeconds"]
-        if sum(row["reservedSeconds"] for row in extra if row["trainingKind"] == kind) + deadline - current > limit:
-            raise ValueError("Additional training windows exceed the approved kind allowance")
+        _, capacity = _training_window_admission(ledger, amendment,
+            [{"name": "actual-training-lease", "kind": kind, "seconds": deadline - current}])
     elif sum(row["reservedSeconds"] for row in windows) + deadline - current > 7200:
         raise ValueError("Combined training windows exceed the approved two-hour ceiling")
     if output.exists():
@@ -373,8 +372,11 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
     if policy:
         value.update(version=amendment["version"], profile=f"acephale-training-lease-v{amendment['version']}", trainingKind=kind, budgetPolicy=policy,
                      budgetPolicyHash=amendment["policyHash"], budgetAmendmentHash=amendment["contentHash"])
+    if capacity:
+        value["trainingWindowCapacityAddendumHash"] = capacity["contentHash"]
     windows.append({"leaseId": lease_id, "reservedSeconds": deadline - current, "startedAt": current, "deadline": deadline,
-                    "receiptHash": digest(value), **({"trainingKind": kind, "budgetAmendmentHash": amendment["contentHash"]} if policy else {})})
+                     "receiptHash": digest(value), **({"trainingKind": kind, "budgetAmendmentHash": amendment["contentHash"]} if policy else {}),
+                     **({"trainingWindowCapacityAddendumHash": capacity["contentHash"]} if capacity else {})})
     atomic_json(ledger_path, ledger)
     write_new(output, value)
     return value
@@ -430,6 +432,16 @@ def provider_receipt(client: Any, ledger_path: Path, lease_id: str, ssh_observat
             "effectiveInfrastructureMicrodollars": funding["policy"]["effectiveInfrastructureMicrodollars"],
             "effectiveComputeMicrodollars": funding["policy"]["effectiveComputeMicrodollars"],
             "effectiveAssociatedMicrodollars": funding["policy"]["effectiveAssociatedMicrodollars"]}
+    amendment = effective_budget_policy(ledger)
+    if amendment:
+        limits, training_capacity = _training_window_limits(ledger, amendment)
+        if training_capacity:
+            value["trainingWindowCapacityAuthorization"] = {
+                "profile": training_capacity["profile"], "contentHash": training_capacity["contentHash"],
+                "sha256": sha256(training_window_capacity_path(ledger_path)),
+                "baseAdditionalFittingSeconds": amendment["policy"]["additionalFittingSeconds"],
+                "effectiveAdditionalFittingSeconds": limits["fit"], "additionalSmokeSeconds": limits["smoke"],
+                "maxTrainingWindowSeconds": amendment["policy"]["maxTrainingWindowSeconds"], "financialAuthorityChanged": False}
     value["contentHash"] = digest(value)
     write_new(output, value)
     return {"path": str(output), "sha256": sha256(output), "instanceId": item["id"]}
@@ -706,10 +718,174 @@ def _read_budget_amendment(ledger: dict, version: int) -> dict | None:
     extra = ledger.get("trainingWindows", [])[len(value["baselineTrainingWindows"]):]
     if any(row.get("trainingKind") not in {"fit", "smoke"} or row.get("budgetAmendmentHash") != value["contentHash"] for row in extra):
         raise ValueError("Training window does not bind the budget amendment")
-    for kind, key in (("fit", "additionalFittingSeconds"), ("smoke", "additionalSmokeSeconds")):
-        if sum(row["reservedSeconds"] for row in extra if row["trainingKind"] == kind) > approved[key]:
+    limits, _ = _training_window_limits(ledger, value)
+    for kind in ("fit", "smoke"):
+        if sum(row["reservedSeconds"] for row in extra if row["trainingKind"] == kind) > limits[kind]:
             raise ValueError("Training windows exceed the approved amendment")
     return value
+
+
+def training_window_capacity_path(ledger_path: Path) -> Path:
+    return ledger_path.with_name(ledger_path.name + ".training-window-capacity-v1.json")
+
+
+def training_window_history(ledger: dict, slice_sha256: str) -> dict:
+    body = {"version": 1, "profile": "acephale-training-window-operational-history-v1",
+            "originalSliceSha256": slice_sha256, "planHash": ledger["planHash"],
+            "financialBindingHash": _financial_binding_hash(ledger),
+            **{key: ledger.get(key, []) for key in ("leases", "overheads", "trainingWindows")},
+            "reservedTotals": _infrastructure_reserved_totals(ledger)}
+    return {**body, "contentHash": digest(body)}
+
+
+def _validate_training_window_capacity(ledger: dict, amendment: dict, value: dict) -> dict:
+    """No effective-policy calls here: this is part of that policy's validation."""
+    approved = read_json(HERE / "training-window-capacity-v1.json")
+    policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v3.json")
+    history = value.get("operationalHistory", {})
+    if (amendment["version"] != 3 or amendment["policy"]["additionalFittingSeconds"] != approved["baseAdditionalFittingSeconds"]
+            or any(amendment["policy"][key] != approved[key] for key in ("additionalSmokeSeconds", "maxTrainingWindowSeconds"))
+            or type(value.get("version")) is not int or value["version"] != 1 or value.get("profile") != "acephale-training-window-capacity-v1"
+            or digest(value.get("capacityPolicy")) != digest(approved) or value.get("capacityPolicyHash") != digest(approved)
+            or value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("budgetAmendmentHash") != amendment["contentHash"]
+            or value.get("budgetAmendmentSha256") != sha256(policy_path)
+            or value.get("budgetPolicyHash") != amendment["policyHash"]
+            or value.get("planHash") != ledger["planHash"] or value.get("financialBindingHash") != _financial_binding_hash(ledger)
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str) or not value["authorizationReason"].strip()
+            or len(value["authorizationReason"]) > 1024
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("operationalHistorySha256", ""))
+            or any(value.get(key) is not False for key in ("financialAuthorityChanged", "existingReservationsChanged",
+                    "existingWindowsChanged", "existingDeadlinesChanged", "modelContractsChanged"))
+            or any(history.get(key) != value.get(key) for key in ("planHash", "financialBindingHash", "originalSliceSha256"))):
+        raise ValueError("Training-window capacity requires the unchanged v3 policy and explicit engineering authority")
+    recorded = finite_number(value.get("recordedAt"), "training-window authorization timestamp")
+    if recorded < _budget_authorized_at(amendment):
+        raise ValueError("Training-window authorization predates its base policy")
+    baseline = {**ledger, **{key: history.get(key) for key in ("leases", "overheads", "trainingWindows")}}
+    if any(not isinstance(baseline[key], list) for key in ("leases", "overheads", "trainingWindows")):
+        raise ValueError("Complete retained training-window operational history required")
+    if training_window_history(baseline, value["originalSliceSha256"]) != history:
+        raise ValueError("Training-window operational history is inconsistent")
+    current, retained = _infrastructure_reservations(ledger), _infrastructure_reservations(baseline)
+    if any(current[key][:len(retained[key])] != retained[key] for key in current):
+        raise ValueError("Training-window capacity cannot change existing financial reservations")
+    old_windows = history["trainingWindows"]
+    if ledger.get("trainingWindows", [])[:len(old_windows)] != old_windows:
+        raise ValueError("Training-window capacity cannot change or remove retained windows")
+    old_extra = old_windows[len(amendment["baselineTrainingWindows"]):]
+    for kind, key in (("fit", "additionalFittingSeconds"), ("smoke", "additionalSmokeSeconds")):
+        if sum(row["reservedSeconds"] for row in old_extra if row.get("trainingKind") == kind) > amendment["policy"][key]:
+            raise ValueError("Training-window capacity cannot authorize a prior overrun")
+    for old, row in zip(history["leases"], ledger["leases"], strict=False):
+        if (old.get("status") not in {"terminated", "launch_unknown"}
+                or old.get("status") == "launch_unknown" and old.get("instanceId") is not None
+                or any(row.get(key) != old.get(key) for key in ("id", "name", "reservedAt", "deadline", "setupDeadline", "quote", "studyReservation"))
+                or old.get("status") == "terminated" and (row.get("status") != "terminated" or row.get("instanceId") != old.get("instanceId"))):
+            raise ValueError("Training-window history requires closed work or retained unknown launches")
+    for row in ledger.get("trainingWindows", [])[len(old_windows):]:
+        if (row.get("trainingWindowCapacityAddendumHash") != value["contentHash"]
+                or finite_number(row.get("startedAt"), "training-window start") < recorded
+                or finite_number(row.get("deadline"), "training-window deadline") - row["startedAt"] != row.get("reservedSeconds")
+                or not re.fullmatch(r"[a-f0-9]{64}", row.get("receiptHash", ""))
+                or row.get("budgetAmendmentHash") != amendment["contentHash"]
+                or row.get("trainingKind") not in {"fit", "smoke"}
+                or not 0 < finite_number(row.get("reservedSeconds"), "training-window duration") <= approved["maxTrainingWindowSeconds"]):
+            raise ValueError("New training window must bind the finite engineering capacity")
+    return value
+
+
+def _training_window_limits(ledger: dict, amendment: dict) -> tuple[dict, dict | None]:
+    policy = amendment["policy"]
+    limits = {"fit": policy["additionalFittingSeconds"], "smoke": policy["additionalSmokeSeconds"]}
+    if amendment["version"] != 3:
+        return limits, None
+    ledger_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
+    path = training_window_capacity_path(Path(ledger_path)) if ledger_path else None
+    if path is None or not path.exists():
+        if any("trainingWindowCapacityAddendumHash" in row for row in ledger.get("trainingWindows", [])):
+            raise ValueError("Training window requires its retained capacity addendum")
+        return limits, None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError("Invalid training-window capacity file")
+    value = _validate_training_window_capacity(ledger, amendment, read_json(path))
+    return {"fit": value["capacityPolicy"]["additionalFittingSeconds"], "smoke": limits["smoke"]}, value
+
+
+def record_training_window_capacity_addendum(ledger_path: Path, authorization_reason: str, operational_history: Path,
+                                            *, source_probe=None, budget=study_budget) -> dict:
+    """Add one prospective four-hour fitting window; reserve no money or host."""
+    source_probe = source_probe or committed_source
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        output = training_window_capacity_path(ledger_path)
+        if output.exists():
+            raise ValueError("Training-window capacity addendum cannot be overwritten")
+        amendment = effective_budget_policy(ledger)
+        if (amendment is None or amendment["version"] != 3 or operational_history.is_symlink()
+                or not operational_history.is_file() or operational_history.stat().st_size > 16 * 1024 * 1024):
+            raise ValueError("Existing v3 policy and exact retained operational history required")
+        before, history_sha = sha256(ledger_path), sha256(operational_history)
+        history = read_json(operational_history)
+        if history != training_window_history(ledger, before):
+            raise ValueError("Training history must snapshot the current original slice")
+        policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v3.json")
+        policy_sha = sha256(policy_path)
+        approved = read_json(HERE / "training-window-capacity-v1.json")
+        body = {"version": 1, "profile": "acephale-training-window-capacity-v1", "planHash": ledger["planHash"],
+                "financialBindingHash": _financial_binding_hash(ledger), "originalSliceSha256": before,
+                "budgetAmendmentHash": amendment["contentHash"], "budgetAmendmentSha256": policy_sha,
+                "budgetPolicyHash": amendment["policyHash"], "capacityPolicy": approved, "capacityPolicyHash": digest(approved),
+                "authorizationSource": "explicit_user_instruction", "authorizationReason": authorization_reason,
+                "recordedAt": time.time(), "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+                "operationalHistory": history, "operationalHistorySha256": history_sha,
+                "originalJournalEvidence": budget(ledger["plan"], "inspect"), "financialAuthorityChanged": False,
+                "existingReservationsChanged": False, "existingWindowsChanged": False,
+                "existingDeadlinesChanged": False, "modelContractsChanged": False}
+        value = _validate_training_window_capacity(ledger, amendment, {**body, "contentHash": digest(body)})
+        if sha256(ledger_path) != before or sha256(policy_path) != policy_sha or sha256(operational_history) != history_sha:
+            raise ValueError("Original slice, policy or training history changed during authorization")
+        write_new(output, value)
+        return value
+
+
+def _training_window_admission(ledger: dict, amendment: dict, windows: list) -> tuple[dict, dict | None]:
+    """One cumulative/per-window admission rule for prelaunch and real leases."""
+    limits, capacity = _training_window_limits(ledger, amendment)
+    extra = ledger.get("trainingWindows", [])[len(amendment["baselineTrainingWindows"]):]
+    used = {kind: sum(row["reservedSeconds"] for row in extra if row["trainingKind"] == kind) for kind in limits}
+    requested, names = {"fit": 0, "smoke": 0}, set()
+    for window in windows:
+        kind, name = window.get("kind"), window.get("name")
+        duration = finite_number(window.get("seconds"), "declared training-window seconds", 1)
+        if (kind not in limits or not isinstance(name, str) or not name.strip() or name in names
+                or duration > (amendment["policy"]["additionalSmokeSeconds"] if kind == "smoke" else amendment["policy"]["maxTrainingWindowSeconds"])):
+            raise ValueError("Every declared stage window must respect its unchanged per-window limit")
+        names.add(name)
+        requested[kind] += duration
+    if any(used[kind] + requested[kind] > limits[kind] for kind in limits):
+        raise ValueError("Additional training windows exceed the approved kind allowance (declared future footprint)")
+    return {"usedSeconds": used, "requestedSeconds": requested, "effectiveAdditionalSeconds": limits,
+            "remainingSeconds": {kind: limits[kind] - used[kind] - requested[kind] for kind in limits}}, capacity
+
+
+def training_window_headroom(ledger_path: Path, request: dict) -> dict:
+    """Read-only preprovisioning check of every declared future training window."""
+    before = sha256(ledger_path)
+    ledger = checked_bound_ledger(ledger_path)
+    amendment = effective_budget_policy(ledger)
+    if amendment is None or type(request.get("version")) is not int or request["version"] != 1 or not isinstance(request.get("windows"), list):
+        raise ValueError("Explicit future training-window footprint and current amendment required")
+    admission, capacity = _training_window_admission(ledger, amendment, request["windows"])
+    if sha256(ledger_path) != before:
+        raise ValueError("Original slice changed during training footprint check")
+    return {"version": 1, "profile": "acephale-training-window-headroom-v1", "verified": True, "requestHash": digest(request),
+            "infrastructureSliceSha256": before,
+            "budgetAmendmentHash": amendment["contentHash"], "trainingWindowCapacityAddendumHash": capacity["contentHash"] if capacity else None,
+            **admission,
+            "financialReservationPerformed": False, "providerDispatched": False}
 
 
 def _budget_digest(value: Any) -> str:
@@ -1113,7 +1289,7 @@ def committed_source(initial_commit: str) -> str:
 
 def controller_source_files() -> list[dict]:
     return [{"path": name, "sha256": sha256(HERE / name)} for name in
-            ("control.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json")]
+            ("control.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json", "training-window-capacity-v1.json")]
 
 
 def record_source_amendment(ledger_path: Path, output: Path, reason: str, readiness_evidence: Path,
@@ -1604,6 +1780,13 @@ def main(argv: list[str] | None = None) -> int:
     capacity.add_argument("--ledger", type=Path, required=True)
     capacity.add_argument("--authorization-reason", required=True)
     capacity.add_argument("--operational-history", type=Path, required=True)
+    training_capacity = commands.add_parser("record-training-window-capacity-addendum")
+    training_capacity.add_argument("--ledger", type=Path, required=True)
+    training_capacity.add_argument("--authorization-reason", required=True)
+    training_capacity.add_argument("--operational-history", type=Path, required=True)
+    training_headroom = commands.add_parser("training-window-headroom")
+    training_headroom.add_argument("--ledger", type=Path, required=True)
+    training_headroom.add_argument("--request", type=Path, required=True)
     source_amendment = commands.add_parser("record-source-amendment")
     source_amendment.add_argument("--ledger", type=Path, required=True)
     source_amendment.add_argument("--output", type=Path, required=True)
@@ -1692,6 +1875,10 @@ def main(argv: list[str] | None = None) -> int:
         value = record_infrastructure_suballocation(args.ledger, args.reason)
     elif args.command == "record-gpu-hour-capacity-addendum":
         value = record_gpu_hour_capacity_addendum(args.ledger, args.authorization_reason, args.operational_history)
+    elif args.command == "record-training-window-capacity-addendum":
+        value = record_training_window_capacity_addendum(args.ledger, args.authorization_reason, args.operational_history)
+    elif args.command == "training-window-headroom":
+        value = training_window_headroom(args.ledger, read_json(args.request))
     elif args.command == "record-source-amendment":
         value = record_source_amendment(args.ledger, args.output, args.reason, args.readiness_evidence)
     elif args.command == "record-versions-metadata-amendment":

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "profile": "acephale-training-window-capacity-policy-v1",
+  "baseAdditionalFittingSeconds": 28800,
+  "additionalFittingSeconds": 43200,
+  "additionalSmokeSeconds": 900,
+  "maxTrainingWindowSeconds": 14400
+}

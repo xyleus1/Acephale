@@ -1,15 +1,22 @@
 # Current state
 
-Updated November 15, 2026, 01:40 UTC. This page distinguishes implemented software
+Updated November 15, 2026. This page distinguishes implemented software
 from measured results. Seed 17's optimizer work is saved. No GPU is currently
 running; the second seed and paired evaluation remain incomplete.
 
 ## Training and continuation
 
-The most recent host completed its disposable profile, but a subsequent ownership
-observation failed. Main seed 29 was never dispatched on that host. Independent
-controllers terminated it at its original deadline. Its closed replacement
-watchdogs are disabled; fences for the earlier unresolved launch remain active.
+The fourth continuation completed foundation setup, training-image preparation
+and input staging. Prepare/profile admission then failed because both retained
+four-hour fitting windows had exhausted v3's cumulative allowance. No disposable
+profile or seed 29 optimizer ran. Export, managed drain and provider termination
+were verified. A prospective sidecar now permits exactly one more four-hour fit
+window, with a shared prelaunch capacity gate; policy bytes and old holds remain.
+
+The preceding replacement completed a disposable profile but failed a later
+ownership observation. Main seed 29 was never dispatched there either. Its
+controllers terminated it at its original deadline; the earlier unresolved
+launch still retains its independent fences.
 
 The prospective continuation runs setup, seed 29, saved-artifact recovery,
 serving qualification, replay and paired native evaluation under one independent

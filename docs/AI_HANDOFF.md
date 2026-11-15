@@ -1,5 +1,20 @@
 # Working on Acephale
 
+A separate operator training-window amendment now permits exactly one additional
+four-hour fit window: v3 cumulative fitting capacity 28,800 to 43,200 seconds.
+The v3 policy bytes, 900 additional smoke seconds, four-hour per-window maximum,
+all retained windows and financial authority stay unchanged. Use the shared
+read-only `training-window-headroom` gate before any host-associated reservation.
+Read `infra/acephale-infra-v1/TRAINING_WINDOW_CAPACITY.md`; all new operator readers
+must retain the sidecar and its packaged capacity contract. Frozen 5a trainer and
+native API contracts remain unchanged; keep engineering provenance separate.
+
+The fourth continuation completed foundation, image and input preparation, then
+failed before disposable profiling or seed 29 because both old four-hour fitting
+windows had already consumed v3's cumulative allowance. Export, managed drain
+and provider termination were verified. No new optimizer result or task score
+was produced. Preserve that failure and every old window.
+
 An explicit infrastructure funding supplement can add $100 to the existing v3
 study envelope without rewriting its policy bytes. Only the infrastructure owner
 consumes effective $1,100 total/$300 infrastructure/$225 compute/$75 associated

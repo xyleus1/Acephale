@@ -8,6 +8,12 @@ be new. This guide does not execute paid requests or provision infrastructure.
 
 ## 1. Verify local code and deployment inputs
 
+Before any new training host, run the declared remaining-window admission in
+[training-window capacity](../infra/acephale-infra-v1/TRAINING_WINDOW_CAPACITY.md).
+Check this engineering allowance separately from GPU hours, actual financial
+headroom, authentication horizon and ownership. A funded host alone does not
+authorize another training window.
+
 ```text
 npm ci --ignore-scripts
 npm run check

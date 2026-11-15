@@ -1,5 +1,27 @@
 # Acephale engineering log
 
+## 2026-11-15: Admit one declared fitting window before provisioning
+
+The fourth continuation completed foundation setup, training-image preparation
+and input staging. Prepare/profile admission then failed at the exhausted
+cumulative fitting allowance, before disposable profiling or main seed 29.
+Managed export/drain and exact provider termination were verified. No new
+optimizer or benchmark result exists from that attempt.
+
+Added a separate capacity contract and immutable operational-history binding for
+one additional four-hour fit window. Original v3 budgets, all old windows, smoke
+allowance and financial reservations remain unchanged. Prelaunch and real lease
+creation share the same admission function. New provenance survives checked-ledger,
+provider, heartbeat and cleanup paths; the capacity contract enters the controller
+source inventory. Validation passed: 335 infrastructure tests and 111 subtests
+(two skips), 300 Node tests (two skips), 630 research tests (22 skips), and the
+TypeScript/schema check. Skips require Linux process groups, optional GPU/Docker
+dependencies, the explicit native environment or private replay fixtures.
+The 21 new capacity tests include the frozen trainer's unchanged AST identity.
+An independent raw-Git 5a proof verified 254 source files, unchanged native budget
+readers and the actual emitted third-window receipt against isolated artifacts.
+No live provider call, journal mutation or model execution was part of these tests.
+
 ## 2026-11-15: Close the interrupted continuation
 
 The replacement host completed its disposable profile but failed its final

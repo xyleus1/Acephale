@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-15: Add finite fitting capacity without rewriting financial policy
+
+Retained attempts consumed both v3 four-hour fitting windows before the next
+optimizer could start. Authorize one additional four-hour window through a
+creation-only operator sidecar, raising cumulative fitting seconds to 43,200.
+Keep v3 policy bytes, baseline windows, smoke allowance, per-window limit and
+all financial holds. Share one admission function between prelaunch footprint
+checks and actual training-lease creation. Every later checked-ledger read must
+authenticate the same sidecar so heartbeat, observation and cleanup remain valid.
+Frozen model/API readers keep their original policies and per-window contracts;
+new operator provenance does not silently amend their financial authority.
+
 ## 2026-11-15: Own the full continuation independently of the UI
 
 One persistent supervisor must compose the reviewed setup, optimizer, recovery,
