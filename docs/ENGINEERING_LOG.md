@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## 2026-11-15: Continue from completed weights
+
+Both original optimizer seeds reached all 204 declared updates and gradient
+checks. Separate CPU receipt recovery verified the saved files without changing
+weights or rerunning optimization. R5's strict HF reload failed; its raw evidence
+and original failure remain retained. A short-path extraction independently
+verified every archived member after the Windows path-length failure. The new
+evaluation authorization and diagnostic preserve original training source `5a36a8b3`
+and separately identify execution source `8185b861`. Native scores are pending.
+
 ## 2026-11-15: Diagnose retained checkpoint reload without training
 
 Added an evaluation-only diagnostic for a completed 204-update checkpoint.

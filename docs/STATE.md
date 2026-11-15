@@ -1,29 +1,45 @@
 # Current state
 
-Updated November 15, 2026. This page distinguishes implemented software
-from measured results. Seed 17's optimizer work is saved. No GPU is currently
-running; the second seed and paired evaluation remain incomplete.
+Updated November 15, 2026. Both predictor seeds completed their 204 optimizer
+updates. The saved adapters are intact. Strict reload qualification and the
+paired native evaluation remain incomplete; training completion is not a
+benchmark result.
 
 ## Training and continuation
 
-The fourth continuation completed foundation setup, training-image preparation
-and input staging. Prepare/profile admission then failed because both retained
-four-hour fitting windows had exhausted v3's cumulative allowance. No disposable
-profile or seed 29 optimizer ran. Export, managed drain and provider termination
-were verified. A prospective sidecar now permits exactly one more four-hour fit
-window, with a shared prelaunch capacity gate; policy bytes and old holds remain.
+The fifth continuation completed seed 29's 204 updates, three epochs and 204
+gradient checks. Both seeds then encountered the same final metadata error:
+HF's `total_flos` estimate exceeded the shared numeric range. Separate CPU
+recovery verified the saved adapters, original failures, complete checkpoints,
+source and data identities. Neither optimizer was repeated.
+
+The subsequent seed 17 HF export failed its unchanged reload gate: 14,972 of
+248,320 logits were outside `rtol=0.02, atol=0.03`; the maximum absolute error
+was 0.1875. No trained serving qualification or paired native trial followed.
+The provider instance was terminated and all evidence exported. A separate
+Windows path-length error affected local extraction, not archived bytes; all
+86 archive members were independently verified under a shorter directory.
+
+The evaluation-only continuation uses the completed weights. Its authorization
+allows diagnostic, export and evaluation actions and forbids optimizer work.
+The diagnostic checks exact loaded parameter bytes, precision and forward
+wrappers, and records FLA kernel selections against the original probe. Kernel
+autotuning history is a hypothesis pending GPU evidence, not an established cause.
+
+The fourth continuation had failed before profiling or seed 29 because the two
+earlier fitting windows exhausted their cumulative allowance. A prospective
+sidecar supplied the third window used by the fifth continuation. All earlier
+failed attempts, reservations and unresolved holds remain retained.
 
 The preceding replacement completed a disposable profile but failed a later
 ownership observation. Main seed 29 was never dispatched there either. Its
 controllers terminated it at its original deadline; the earlier unresolved
 launch still retains its independent fences.
 
-The prospective continuation runs setup, seed 29, saved-artifact recovery,
-serving qualification, replay and paired native evaluation under one independent
-owner. Bounded retries apply only to observations. Interrupted scientific
-dispatches are retained, and uncertain work is not automatically repeated.
-Terminal cleanup requires verified provider termination. Local lifecycle tests
-passed; the complete real chain has not yet run.
+The remaining sequence is strict saved-weight reload, serving qualification,
+matched replay and paired native evaluation. Bounded retries apply only to
+observations. Interrupted scientific dispatches are retained, and uncertain
+work is not automatically repeated. The complete real chain has not yet run.
 
 Seed 17 completed all 204 optimizer updates and all 204 gradient checks, with
 unchanged base hashes and a changed adapter hash. Its final adapter, reload probe
@@ -31,8 +47,8 @@ and checkpoint-204 are saved. Final result serialization then failed because HF'
 `total_flos` estimate, `7.51775264009134e16`, exceeds the shared numeric range.
 The complete failed attempt was exported and verified. Recovery retains that
 failure and reconstructs a separate result record from saved evidence; it does
-not rerun seed 17's optimizer. Seed 29 retains its full 204-update recipe.
-Both use the same frozen data, effective
+not rerun seed 17's optimizer. Seed 29 completed the same 204-update recipe.
+Both used the same frozen data, effective
 batch of 16, three epochs and rank-16 LoRA. The predictor has 10,822,656 trainable
 adapter parameters; the 9B actor stays fixed. Training loss is a diagnostic,
 not tool-call accuracy or native reward.

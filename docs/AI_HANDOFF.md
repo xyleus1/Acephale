@@ -1,5 +1,13 @@
 # Working on Acephale
 
+Both main seeds completed 204 optimizer updates and 204 gradient checks. Do not
+repeat training. Separate CPU recovery preserves each original serialization
+failure and verifies its final checkpoint, adapter and probe. The R5 provider
+run is closed. Its strict seed 17 reload failed; no paired native trial ran.
+Read the current private operator handoff for the evaluation-only continuation.
+Historical instructions below about obtaining another fitting window are not
+instructions to retrain these completed seeds.
+
 `python -m acephale.reload_diagnostic` investigates a retained 204-update
 checkpoint's reload failure. It requires the separate evaluation-only admission
 change, `validate_execution_lease(..., action="diagnostic")`. Original input and
