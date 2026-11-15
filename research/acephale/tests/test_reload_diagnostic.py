@@ -69,6 +69,18 @@ def test_temporary_backend_flag_restores_after_failure():
     assert flags.allow_tf32 is False
 
 
+def test_autotune_observation_is_read_only_and_handles_wrappers():
+    config = SimpleNamespace(kwargs={"BK": 32}, num_warps=2, num_stages=3)
+    cache = {(16, 128): config}
+    kernel = SimpleNamespace(cache=cache, configs=[config], keys=["H", "K"], fn=None)
+    wrapper = SimpleNamespace(fn=kernel)
+    module = SimpleNamespace(kernel=wrapper, imported_alias=kernel)
+    rows = diagnostic.kernel_observation([("fla.test", module), ("unrelated", module)])
+    assert len(rows) == 1
+    assert rows[0]["selected"] == [{"key": "(16, 128)", "kwargs": {"BK": 32}, "numWarps": 2, "numStages": 3}]
+    assert kernel.cache is cache and cache[(16, 128)] is config
+
+
 def test_diagnostic_has_no_optimizer_or_training_entry():
     source = inspect.getsource(diagnostic)
     tree = ast.parse(source)

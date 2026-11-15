@@ -11,6 +11,7 @@ import contextlib
 import hashlib
 import inspect
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -63,6 +64,29 @@ def model_observation(model) -> dict:
                          "attentionImplementation": getattr(child.config, "_attn_implementation", None)}
                         for name, child in model.named_modules() if hasattr(child, "config")],
             "gradientCheckpointing": bool(model.is_gradient_checkpointing)}
+
+
+def kernel_observation(modules=None) -> list[dict]:
+    """Read selected Triton launch configurations without clearing or tuning them."""
+    modules = list(sys.modules.items()) if modules is None else modules
+    rows, seen = [], set()
+    for module_name, module in modules:
+        if not module_name.startswith("fla.") or module is None:
+            continue
+        for name, candidate in list(vars(module).items()):
+            chain_seen = set()
+            while candidate is not None and id(candidate) not in chain_seen:
+                chain_seen.add(id(candidate))
+                cache = getattr(candidate, "cache", None)
+                if isinstance(cache, dict) and id(candidate) not in seen and hasattr(candidate, "configs"):
+                    seen.add(id(candidate))
+                    rows.append({"module": module_name, "name": name,
+                                 "keyNames": list(getattr(candidate, "keys", [])),
+                                 "selected": [{"key": str(key), "kwargs": dict(config.kwargs),
+                                               "numWarps": config.num_warps, "numStages": config.num_stages}
+                                              for key, config in cache.items() if hasattr(config, "kwargs")]})
+                candidate = getattr(candidate, "fn", None)
+    return rows
 
 
 @contextlib.contextmanager
@@ -122,7 +146,10 @@ def diagnose(model_path: Path, run: Path, output: Path, lease_path: Path, *, max
     modules = [torch, __import__("peft.peft_model", fromlist=["x"]),
                __import__("transformers.models.qwen3_5.modeling_qwen3_5", fromlist=["x"]),
                __import__("fla.ops.gated_delta_rule.chunk", fromlist=["x"]),
-               __import__("fla.modules.norm", fromlist=["x"])]
+               __import__("fla.ops.gated_delta_rule.chunk_fwd", fromlist=["x"]),
+               __import__("fla.ops.common.chunk_delta_h", fromlist=["x"]),
+               __import__("fla.ops.common.chunk_o", fromlist=["x"]),
+               __import__("fla.modules.norm.fused_norm_gate", fromlist=["x"])]
     write_new(output / "runtime.json", {"versions": versions, "torchCuda": torch.version.cuda,
               "cudnn": torch.backends.cudnn.version(), "gpu": torch.cuda.get_device_name(),
               "matmulPrecision": torch.get_float32_matmul_precision(),
@@ -147,7 +174,8 @@ def diagnose(model_path: Path, run: Path, output: Path, lease_path: Path, *, max
             values = _probe_logits(model, ids) if operation is None else operation()
             comparison = compare(values, reference)
             torch.save(values, output / f"{name}-logits.pt")
-            result = {"mode": name, "comparison": comparison, "elapsedSeconds": time.monotonic() - began}
+            result = {"mode": name, "comparison": comparison, "elapsedSeconds": time.monotonic() - began,
+                      "kernelConfigurations": kernel_observation()}
         except Exception as error:
             result = {"mode": name, "errorType": type(error).__name__, "message": str(error)[:2000]}
         write_new(output / f"{name}.json", result)
@@ -200,7 +228,7 @@ def diagnose(model_path: Path, run: Path, output: Path, lease_path: Path, *, max
             raise ValueError("Diagnostic changed model parameters")
         result = {"kind": "acephale-reload-diagnostic-v1", "status": "completed", "seed": spec["seed"],
                   "optimizerCreated": False, "weightsUnchanged": True, "originalProbeUnchanged": True,
-                  "isExportAcceptance": False, "results": results}
+                  "isExportAcceptance": False, "qualified": False, "results": results}
         if file_hash(run / "reload-probe.pt") != receipt["probeHash"]:
             raise ValueError("Original probe changed")
         write_new(output / "result.json", result)
