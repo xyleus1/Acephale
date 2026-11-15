@@ -360,7 +360,7 @@ def test_unmerged_evaluation_uses_declared_bf16_context_and_remains_a_diagnostic
 
     manifest = {"contentHash": "e" * 64, "tokenizerHash": artifact["tokenizerHash"], "chatTemplateHash": artifact["chatTemplateHash"]}
     monkeypatch.setattr(training, "verify_dataset", lambda path: manifest)
-    monkeypatch.setattr(training, "validate_training_lease", lambda path: {"active": True})
+    monkeypatch.setattr(training, "validate_execution_lease", lambda path, *, action: {"active": True})
     monkeypatch.setattr(training, "training_versions", lambda: {})
     monkeypatch.setattr(training, "tokenizer_identity", lambda path: (artifact["tokenizerHash"], artifact["chatTemplateHash"]))
     monkeypatch.setattr(training, "_load_evaluation_model", lambda *args: (object(), object(), artifact))

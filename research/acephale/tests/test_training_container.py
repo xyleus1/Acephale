@@ -49,7 +49,7 @@ def test_cache_creation_failure_remains_visible(tmp_path):
 
 
 @pytest.mark.parametrize("action,unmerged", [("smoke", False), ("smoke", True), ("profile", False), ("train", False),
-    ("export", False), ("evaluate", False), ("export", True), ("evaluate", True)])
+    ("export", False), ("evaluate", False), ("export", True), ("evaluate", True), ("diagnostic", False)])
 def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, monkeypatch, action, unmerged):
     inputs = [{"path": "training/uv.lock", "bytes": 1, "sha256": "a" * 64}]
     image = {"Id": "sha256:" + "c" * 64, "Config": {"Labels": {container.LABEL: hash_v1(inputs)}}}
@@ -64,7 +64,7 @@ def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, 
     lease_path.write_text("{}")
     actor_id = "f" * 64
     monkeypatch.setattr(container, "os", SimpleNamespace(name="posix", getuid=lambda: 1000, getgid=lambda: 1000))
-    monkeypatch.setattr(container, "validate_training_lease", lambda path: {"testFixture": True})
+    monkeypatch.setattr(container, "validate_execution_lease", lambda path, *, action: {"testFixture": True})
     monkeypatch.setattr(container, "checked", lambda command, **kwargs: json.dumps([image if command[1] == "image" else
         {"Id": actor_id, "State": {"Running": False}}]))
     calls = []
@@ -83,14 +83,17 @@ def test_launch_retains_cache_environment_without_weakening_isolation(tmp_path, 
         run=lambda command, **kwargs: SimpleNamespace(returncode=0)))
     output = tmp_path / "run"
     args = SimpleNamespace(actor_container=actor_id, lease=lease_path, receipt=receipt_path, output=output,
-        action=action, model=model, dataset=dataset, training_run=prior if action == "export" else None,
+        action=action, model=model, dataset=dataset, training_run=prior if action in {"export", "diagnostic"} else None,
         artifact_mode="unmerged_lora" if unmerged and action in {"export", "smoke"} else "merged",
         predictor_export=prior if unmerged and action == "evaluate" else None,
         seed=17, max_steps=500, maximum_seconds=None, partition="development")
     assert container.run(args)["status"] == "completed"
     command = calls[0]
-    if action in {"profile", "train"}:
-        assert command[command.index("--maximum-seconds") + 1] == ("600" if action == "profile" else "3600")
+    if action in {"profile", "train", "diagnostic"}:
+        assert command[command.index("--maximum-seconds") + 1] == ("3600" if action == "train" else "600")
+    if action == "diagnostic":
+        assert command[command.index("--run") + 1] == "/training-run"
+        assert "--max-steps" not in command and "--seed" not in command
     if action in {"export", "smoke"}:
         assert command[command.index("--artifact-mode") + 1] == ("unmerged_lora" if unmerged else "merged")
     if unmerged and action == "evaluate":

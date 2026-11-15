@@ -382,6 +382,70 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
     return value
 
 
+def evaluation_preflight(hardware: str, provider_receipt_path: Path,
+                         *, machine_id_path: Path = Path("/etc/machine-id")) -> dict[str, Any]:
+    """Bind an actual idle-host observation to the already verified provider host."""
+    provider = read_json(provider_receipt_path)
+    if (provider.get("profile") != PROFILE or provider.get("provider") != "lambda"
+            or provider.get("contentHash") != digest({key: value for key, value in provider.items() if key != "contentHash"})
+            or provider.get("hardwareProfile") != hardware
+            or provider.get("ssh", {}).get("machineIdSha256") != sha256(machine_id_path)
+            or provider.get("instance", {}).get("status") != "active"):
+        raise ValueError("Actual machine identity differs from the verified current provider receipt")
+    observed = training_preflight(hardware)
+    if observed["hardwareProfileHash"] != provider["hardwareProfileHash"]:
+        raise ValueError("Actual evaluation hardware differs from the provider receipt")
+    return {**observed, "profile": "acephale-evaluation-preflight-v1", "leaseId": provider["leaseId"],
+        "instanceId": provider["instance"]["id"], "studyBindingHash": provider["studyBindingHash"],
+        "machineIdSha256": sha256(machine_id_path), "providerReceiptSha256": sha256(provider_receipt_path)}
+
+
+def evaluation_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path,
+                     seconds: float, *, source_probe=None) -> dict[str, Any]:
+    """Authorize read-only model work inside an existing funded provider window.
+
+    This creates no financial reservation or training window. The stopped-actor
+    observation is the same actual, recent GPU preflight required by training.
+    """
+    with ledger_lock(ledger_path):
+        ledger = checked_bound_ledger(ledger_path)
+        amendment = effective_budget_policy(ledger)
+        lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+        checked = read_json(preflight_path)
+        current = time.time()
+        duration = finite_number(seconds, "evaluation seconds", 1)
+        if (amendment is None or amendment["version"] != 3 or duration > 28800
+                or lease["status"] != "active" or not lease.get("instanceId")
+                or checked.get("profile") != "acephale-evaluation-preflight-v1"
+                or checked.get("leaseId") != lease_id or checked.get("instanceId") != lease["instanceId"]
+                or checked.get("studyBindingHash") != ledger["planHash"]
+                or not re.fullmatch(r"[a-f0-9]{64}", str(checked.get("machineIdSha256", "")))
+                or not re.fullmatch(r"[a-f0-9]{64}", str(checked.get("providerReceiptSha256", "")))
+                or checked.get("actorStopped") is not True or checked.get("gpuProcesses") != 0
+                or not 0 <= current - finite_number(checked.get("observedAt"), "preflight time") <= 120
+                or checked.get("hardwareProfile") != "a100-40gb-v1"
+                or checked.get("hardwareProfileHash") != lease["quote"]["hardwareProfileHash"]):
+            raise ValueError("Existing active funded GPU and actual recent idle-GPU preflight required")
+        if current + duration > lease["deadline"] - 300:
+            raise ValueError("Evaluation must fit the existing provider deadline with cleanup margin")
+        source = (source_probe or committed_source)(ledger["plan"]["sourceCommit"])
+        if not re.fullmatch(r"[a-f0-9]{40}", source):
+            raise ValueError("Exact clean committed evaluation source required")
+        value = {"version": 1, "profile": "acephale-evaluation-lease-v1", "phase": "predictor_evaluation",
+            "status": "active", "allowedActions": ["diagnostic", "export", "evaluate"], "optimizerAllowed": False,
+            "leaseId": lease_id, "instanceId": lease["instanceId"], "hardwareProfile": checked["hardwareProfile"],
+            "startedAt": current, "deadline": current + duration, "providerDeadline": lease["deadline"],
+            "providerReservedAt": lease["reservedAt"], "actorStopped": True,
+            "studyReservation": lease["studyReservation"], "studyBindingHash": ledger["planHash"],
+            "providerLeaseHash": digest(lease), "preflightHash": sha256(preflight_path),
+            "executingSourceCommit": source, "budgetPolicy": amendment["policy"],
+            "budgetPolicyHash": amendment["policyHash"], "budgetAmendmentHash": amendment["contentHash"],
+            "newFinancialReservation": False, "trainingWindowCreated": False}
+        value["contentHash"] = digest(value)
+        write_new(output, value)
+        return value
+
+
 def watchdog_state(ledger_path: Path, lease_id: str) -> dict[str, Any]:
     ledger = checked_bound_ledger(ledger_path)
     lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
@@ -1744,6 +1808,10 @@ def main(argv: list[str] | None = None) -> int:
     training_probe = commands.add_parser("training-preflight")
     training_probe.add_argument("--hardware-profile", required=True)
     training_probe.add_argument("--output", type=Path, required=True)
+    evaluation_probe = commands.add_parser("evaluation-preflight")
+    evaluation_probe.add_argument("--hardware-profile", required=True)
+    evaluation_probe.add_argument("--provider-receipt", type=Path, required=True)
+    evaluation_probe.add_argument("--output", type=Path, required=True)
     trainer = commands.add_parser("training-lease")
     trainer.add_argument("--ledger", type=Path, required=True)
     trainer.add_argument("--lease-id", required=True)
@@ -1751,6 +1819,12 @@ def main(argv: list[str] | None = None) -> int:
     trainer.add_argument("--output", type=Path, required=True)
     trainer.add_argument("--hours", type=float, required=True)
     trainer.add_argument("--kind", choices=["fit", "smoke"], default="fit")
+    evaluator = commands.add_parser("evaluation-lease")
+    evaluator.add_argument("--ledger", type=Path, required=True)
+    evaluator.add_argument("--lease-id", required=True)
+    evaluator.add_argument("--preflight", type=Path, required=True)
+    evaluator.add_argument("--output", type=Path, required=True)
+    evaluator.add_argument("--seconds", type=float, required=True)
     state = commands.add_parser("watchdog-state")
     state.add_argument("--ledger", type=Path, required=True)
     state.add_argument("--lease-id", required=True)
@@ -1860,8 +1934,13 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "training-preflight":
         value = training_preflight(args.hardware_profile)
         write_new(args.output, value)
+    elif args.command == "evaluation-preflight":
+        value = evaluation_preflight(args.hardware_profile, args.provider_receipt)
+        write_new(args.output, value)
     elif args.command == "training-lease":
         value = training_lease(args.ledger, args.lease_id, args.preflight, args.output, args.hours, args.kind)
+    elif args.command == "evaluation-lease":
+        value = evaluation_lease(args.ledger, args.lease_id, args.preflight, args.output, args.seconds)
     elif args.command == "watchdog-state":
         value = watchdog_state(args.ledger, args.lease_id)
         atomic_json(args.output, value)
@@ -1897,11 +1976,16 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("Lease not active within setup window")
             if smoke.get("hardwareProfileHash") != lease["quote"]["hardwareProfileHash"]:
                 raise ValueError("Smoke hardware identity differs from the funded profile")
-            required = ({"pinnedModels", "driver", "actorStopped", "cudaTraining", "export", "watchdogRecovery"}
-                        if smoke.get("purpose") == "predictor_training" else
-                        {"pinnedModels", "pinnedImages", "driver", "concurrentModels", "toolParsing", "telemetry", "export", "watchdogRecovery"})
+            if smoke.get("purpose") == "predictor_evaluation":
+                if smoke.get("instanceId") != lease["instanceId"]:
+                    raise ValueError("Evaluation readiness must identify the current instance")
+                required = {"pinnedModels", "pinnedImages", "driver", "actorStopped", "cudaInference", "export", "watchdogRecovery"}
+            elif smoke.get("purpose") == "predictor_training":
+                required = {"pinnedModels", "driver", "actorStopped", "cudaTraining", "export", "watchdogRecovery"}
+            else:
+                required = {"pinnedModels", "pinnedImages", "driver", "concurrentModels", "toolParsing", "telemetry", "export", "watchdogRecovery"}
             if not required <= set(smoke.get("checks", {})) or any(smoke["checks"][name] is not True for name in required):
-                raise ValueError("Actual smoke checks required for the declared serving or training purpose")
+                raise ValueError("Actual readiness checks required for the declared purpose")
             lease["ready"] = True
             lease["smokeReceiptSha256"] = sha256(args.smoke_receipt)
             atomic_json(args.ledger, value)

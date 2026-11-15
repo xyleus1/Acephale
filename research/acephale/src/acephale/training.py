@@ -92,6 +92,46 @@ def validate_training_lease(path: Path, *, now: float | None = None) -> dict[str
     return lease
 
 
+def validate_execution_lease(path: Path, *, action: str, now: float | None = None) -> dict[str, Any]:
+    """Separate current export/evaluation authority from historical optimizer leases."""
+    if action not in {"diagnostic", "export", "evaluate", "train", "smoke", "profile"}:
+        raise ValueError("Declared model action required; supported actions only")
+    lease = json.loads(path.read_text(encoding="utf-8"))
+    if lease.get("profile") != "acephale-evaluation-lease-v1":
+        return validate_training_lease(path, now=now)
+    from acephale.training_data import DIGEST
+
+    now = time.time() if now is None else now
+    expected_hash = hashlib.sha256(json.dumps({key: value for key, value in lease.items() if key != "contentHash"},
+        sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    if (type(lease.get("version")) is not int or lease["version"] != 1
+            or lease.get("contentHash") != expected_hash or lease.get("phase") != "predictor_evaluation"
+            or lease.get("status") != "active" or lease.get("actorStopped") is not True
+            or lease.get("allowedActions") != ["diagnostic", "export", "evaluate"]
+            or action not in lease["allowedActions"] or lease.get("optimizerAllowed") is not False
+            or lease.get("newFinancialReservation") is not False or lease.get("trainingWindowCreated") is not False):
+        raise ValueError("Evaluation authorization permits diagnostic, export and evaluate only")
+    started, deadline = lease.get("startedAt"), lease.get("deadline")
+    reserved, provider_deadline = lease.get("providerReservedAt"), lease.get("providerDeadline")
+    if (any(type(value) not in (int, float) or not math.isfinite(value) for value in (started, deadline, reserved, provider_deadline, now))
+            or not reserved <= started <= now < deadline <= provider_deadline - 300
+            or not 0 < deadline - started <= 28800 or not 0 < provider_deadline - reserved <= 28800):
+        raise ValueError("Evaluation authorization exceeds the existing bounded provider window")
+    policy = json.loads((Path(__file__).resolve().parents[4] / "src/lib/acephale/contracts/budget-policy-v3.json").read_text())
+    reservation = lease.get("studyReservation", {})
+    if (lease.get("hardwareProfile") != "a100-40gb-v1" or not lease.get("leaseId") or not lease.get("instanceId")
+            or lease.get("budgetPolicy") != policy or hash_v1(lease["budgetPolicy"]) != hash_v1(policy)
+            or lease.get("budgetPolicyHash") != hash_v1(policy)
+            or not str(reservation.get("reservationId", "")).startswith("lambda-infra:")
+            or type(reservation.get("maximumMicrodollars")) is not int
+            or not 0 < reservation["maximumMicrodollars"] <= policy["allocationsMicrodollars"]["infrastructure"]
+            or any(not DIGEST.fullmatch(str(lease.get(key, ""))) for key in
+                   ("studyBindingHash", "providerLeaseHash", "preflightHash", "budgetAmendmentHash"))
+            or re.fullmatch(r"[a-f0-9]{40}", str(lease.get("executingSourceCommit", ""))) is None):
+        raise ValueError("Evaluation authorization lacks current source and original funded provider identity")
+    return lease
+
+
 def tokenizer_identity(directory: Path) -> tuple[str, str]:
     files = [row for row in file_inventory(directory) if row["path"] in TOKENIZER_FILES]
     if not any(row["path"] == "tokenizer_config.json" for row in files) or not any(row["path"] == "tokenizer.json" for row in files):
@@ -425,7 +465,7 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
     manifest = verify_dataset(dataset)
     if not manifest["calibrationFamilies"]:
         raise ValueError("Export requires declared independent calibration families")
-    validate_training_lease(lease_path)
+    lease = validate_execution_lease(lease_path, action="export")
     verify_base(model_path)
     training_versions()
     receipt = verify_hashed(json.loads((run / "receipt.json").read_text(encoding="utf-8")))
@@ -455,7 +495,8 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
     torch.testing.assert_close(merged_logits, reloaded, rtol=0.03, atol=0.06)
     if merged_logits.argmax(-1).tolist() != reloaded.argmax(-1).tolist():
         raise ValueError("Merged predictor changed probe top-token decisions")
-    validate_training_lease(lease_path)
+    if validate_execution_lease(lease_path, action="export") != lease:
+        raise ValueError("Export authorization changed during execution")
     output.mkdir(parents=True, exist_ok=False)
     merged_dir = output / "model"
     merged.save_pretrained(merged_dir, safe_serialization=True)
@@ -473,7 +514,7 @@ def export_model(dataset: Path, model_path: Path, run: Path, output: Path, lease
     write_new(output / "training-manifest.json", specification)
     write_new(output / "dataset-manifest.json", manifest)
     write_new(output / "training-receipt.json", receipt)
-    write_new(output / "verification.json", hashed({"artifactHash": artifact["contentHash"],
+    write_new(output / "verification.json", hashed({"artifactHash": artifact["contentHash"], "executionLeaseHash": hash_v1(lease),
         "receiptHash": receipt["contentHash"], "mergedFiles": merged_files, "adapterFiles": receipt["adapterFiles"],
         "probeContext": dict(PROBE_CONTEXT),
         "reloadMaximumLogitError": (reloaded - probe["logits"]).abs().max().item(),
@@ -562,7 +603,7 @@ def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *,
              predictor_export: Path | None = None) -> dict[str, Any]:
     """Offline teacher-forced loss diagnostic, never a native task-success score."""
     manifest = verify_dataset(dataset)
-    lease = validate_training_lease(lease_path)
+    lease = validate_execution_lease(lease_path, action="evaluate")
     if partition not in {"calibration", "development", "test"}:
         raise ValueError("Evaluation requires a non-fitting partition")
     training_versions()
@@ -577,7 +618,7 @@ def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *,
     precision = torch.autocast(device_type="cuda", dtype=torch.bfloat16) if unmerged else nullcontext()
     with torch.inference_mode(), precision:
         for row in rows:
-            if validate_training_lease(lease_path) != lease:
+            if validate_execution_lease(lease_path, action="evaluate") != lease:
                 raise ValueError("Evaluation lease changed during execution")
             tokenized = tokenize_example(row, tokenizer)
             batch = {key: torch.tensor([value], device="cuda") for key, value in tokenized.items()}
@@ -588,7 +629,7 @@ def evaluate(dataset: Path, model_path: Path, output: Path, lease_path: Path, *,
             measured.append({"id": row["id"], "familyId": row["familyId"], "task": row["task"],
                              "completionLoss": result.loss.item(), "completionTokens": mask.sum().item(),
                              "correctTokens": ((predictions == targets) & mask).sum().item()})
-    if validate_training_lease(lease_path) != lease:
+    if validate_execution_lease(lease_path, action="evaluate") != lease:
         raise ValueError("Evaluation lease changed before publication")
     output.mkdir(parents=True, exist_ok=False)
     write_new(output / "evaluation.json", hashed({"kind": "acephale-teacher-forced-training-diagnostic",

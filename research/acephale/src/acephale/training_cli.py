@@ -48,6 +48,10 @@ def main(argv: list[str] | None = None) -> None:
         evaluate.add_argument(f"--{name}", type=Path, required=True)
     evaluate.add_argument("--predictor-export", type=Path, help="Verified unmerged adapter export; --model remains its exact base snapshot")
     evaluate.add_argument("--partition", choices=["calibration", "development", "test"], default="development")
+    diagnostic = commands.add_parser("diagnostic", help="Read-only reload diagnosis of completed weights; no optimizer or export acceptance")
+    for name in ("dataset", "model", "run", "output", "lease"):
+        diagnostic.add_argument(f"--{name}", type=Path, required=True)
+    diagnostic.add_argument("--maximum-seconds", type=int, default=600)
     args = parser.parse_args(argv)
     if args.command == "prepare":
         supplied = [args.review_pilot, args.reviews, args.annotations]
@@ -84,6 +88,10 @@ def main(argv: list[str] | None = None) -> None:
             result = export_unmerged(args.dataset, args.model, args.run, args.output, args.lease)
         else:
             result = export_model(args.dataset, args.model, args.run, args.output, args.lease)
+    elif args.command == "diagnostic":
+        from acephale.reload_diagnostic import diagnose
+
+        result = diagnose(args.model, args.run, args.output, args.lease, maximum_seconds=args.maximum_seconds)
     elif args.command == "smoke":
         import gc
 

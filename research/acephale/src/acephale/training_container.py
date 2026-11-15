@@ -13,7 +13,7 @@ from pathlib import Path
 
 from acephale.contracts_v1 import hash_v1
 from acephale.storage import file_hash
-from acephale.training import validate_training_lease
+from acephale.training import validate_execution_lease
 from acephale.training_data import hashed, training_recipe, verify_hashed, write_new
 
 DOCKERFILE = "infra/acephale-infra-v1/trainer.Dockerfile"
@@ -111,18 +111,22 @@ def run(args) -> dict:
         raise ValueError("A predictor export is an evaluation-only input")
     maximum_seconds = args.maximum_seconds
     if maximum_seconds is None:
-        maximum_seconds = 600 if args.action == "profile" else 3600
+        maximum_seconds = 600 if args.action in {"profile", "diagnostic"} else 3600
     if args.action == "profile" and (type(maximum_seconds) is not int or not 1 <= maximum_seconds <= 1200):
         raise ValueError("Batch profiling must be bounded to at most 1,200 seconds")
+    if args.action == "diagnostic" and (type(maximum_seconds) is not int or not 1 <= maximum_seconds <= 600):
+        raise ValueError("Read-only reload diagnosis is bounded to at most 600 seconds")
     recipe = training_recipe(micro_batch=getattr(args, "micro_batch", 1),
                              gradient_accumulation=getattr(args, "gradient_accumulation", 16))
     if os.name != "posix" or os.getuid() == 0:
         raise ValueError("Run the trainer as the ordinary Linux host operator")
     if not re.fullmatch(r"[a-f0-9]{64}", args.actor_container):
         raise ValueError("Actual full actor container identity required")
-    lease = validate_training_lease(args.lease)
+    lease = validate_execution_lease(args.lease, action=args.action)
     receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
     image_id = verify_image(receipt, json.loads(checked(["docker", "image", "inspect", receipt["imageId"]]))[0])
+    if lease.get("profile") == "acephale-evaluation-lease-v1" and receipt.get("sourceCommit") != lease["executingSourceCommit"]:
+        raise ValueError("Evaluation image must contain the exact authorized execution source")
     actor = json.loads(checked(["docker", "container", "inspect", args.actor_container]))[0]
     if actor.get("Id") != args.actor_container or actor.get("State", {}).get("Running") is not False:
         raise ValueError("Actor container must actually be stopped before training")
@@ -154,6 +158,10 @@ def run(args) -> dict:
         command.extend(["--micro-batch", str(recipe["microBatch"]), "--gradient-accumulation", str(recipe["gradientAccumulation"])])
     if args.action == "profile":
         command.extend(["--maximum-seconds", str(maximum_seconds)])
+    if args.action == "diagnostic":
+        if not args.training_run:
+            raise ValueError("Diagnosis needs the unchanged completed --training-run directory")
+        command.extend(["--run", "/training-run", "--maximum-seconds", str(maximum_seconds)])
     if args.action == "smoke":
         command.extend(["--artifact-mode", artifact_mode])
     if args.action == "export":
@@ -173,7 +181,7 @@ def run(args) -> dict:
         with (output / "container.log").open("x", encoding="utf-8") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
             while process.poll() is None:
-                if validate_training_lease(args.lease) != lease:
+                if validate_execution_lease(args.lease, action=args.action) != lease:
                     raise ValueError("Host training lease changed")
                 if time.monotonic() >= next_actor_check:
                     actor = json.loads(checked(["docker", "container", "inspect", args.actor_container], timeout=5))[0]
@@ -203,7 +211,7 @@ def main():
     for name in ("receipt", "dataset", "model", "lease", "output"):
         launch.add_argument(f"--{name}", type=Path, required=True)
     launch.add_argument("--actor-container", required=True)
-    launch.add_argument("--action", choices=["smoke", "profile", "train", "export", "evaluate"], required=True)
+    launch.add_argument("--action", choices=["smoke", "profile", "train", "export", "evaluate", "diagnostic"], required=True)
     launch.add_argument("--training-run", type=Path)
     launch.add_argument("--artifact-mode", choices=["merged", "unmerged_lora"], default="merged")
     launch.add_argument("--predictor-export", type=Path)

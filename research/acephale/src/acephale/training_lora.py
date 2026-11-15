@@ -177,13 +177,13 @@ def export_unmerged(dataset: Path, model_path: Path, run: Path, output: Path, le
         _verify_probe_context,
         tokenizer_identity,
         training_versions,
-        validate_training_lease,
+        validate_execution_lease,
         verify_base,
     )
     from acephale.training_data import verify_dataset
 
     manifest = verify_dataset(dataset)
-    lease = validate_training_lease(lease_path)
+    lease = validate_execution_lease(lease_path, action="export")
     base_receipt = verify_base(model_path)
     training_versions()
     receipt = verify_hashed(_read(run / "receipt.json"))
@@ -237,7 +237,7 @@ def export_unmerged(dataset: Path, model_path: Path, run: Path, output: Path, le
     artifact["servedModel"] = "acephale-predictor-" + artifact["servingWeightsHash"][:12]
     artifact = validate_lora_artifact(hashed(artifact))
     validate_serving_probe(serving_probe, artifact)
-    if validate_training_lease(lease_path) != lease:
+    if validate_execution_lease(lease_path, action="export") != lease:
         raise ValueError("Training lease changed during export")
     output.mkdir(parents=True, exist_ok=False)
     shutil.copytree(run / "adapter", output / "adapter")
@@ -246,6 +246,7 @@ def export_unmerged(dataset: Path, model_path: Path, run: Path, output: Path, le
     documents = {"predictor.json": artifact, "training-manifest.json": specification, "dataset-manifest.json": manifest,
         "training-receipt.json": receipt, "base-receipt.json": base_receipt, "serving-probe.json": serving_probe,
         "verification.json": hashed({"artifactHash": artifact["contentHash"], "receiptHash": receipt["contentHash"],
+            "executionLeaseHash": hash_v1(lease),
             "adapterFiles": receipt["adapterFiles"], "adapterTensors": tensors, "probeContext": PROBE_CONTEXT,
             "reloadMaximumLogitError": (reloaded - probe["logits"]).abs().max().item(),
             "reload": {"atol": 0.03, "rtol": 0.02, "referenceMaximumAbsolute": probe["logits"].abs().max().item(), "allClose": True},
