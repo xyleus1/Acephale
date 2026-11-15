@@ -100,8 +100,16 @@ def temporary_flag(owner, name, value):
 
 
 def diagnose(model_path: Path, run: Path, output: Path, lease_path: Path, *, maximum_seconds: int = 600) -> dict:
-    from acephale.training import (PROBE_CONTEXT, _load_model, _parameter_hash, _probe_logits,
-                                  _verify_probe_context, training_versions, validate_execution_lease, verify_base)
+    from acephale.training import (
+        PROBE_CONTEXT,
+        _load_model,
+        _parameter_hash,
+        _probe_logits,
+        _verify_probe_context,
+        training_versions,
+        validate_execution_lease,
+        verify_base,
+    )
     from acephale.training_precision import require_training_precision
 
     if type(maximum_seconds) is not int or not 1 <= maximum_seconds <= 600:
