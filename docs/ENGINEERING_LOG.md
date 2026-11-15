@@ -13,6 +13,11 @@ the local test interpreter has no PyTorch. The actual seed 17 input gate passed.
 GPU results and a confirmed causal correction are pending.
 Passive capture also retains selected FLA/Triton autotune configurations and
 exact kernel source hashes, without clearing caches or choosing configurations.
+An optional separate warmup diagnostic reconstructs a first fitting batch from
+the frozen dataset and seed, without claiming the unavailable historical sampler
+state. It runs one eval-mode forward before comparing the original probe twice.
+Optimizer and scheduler must remain absent. Five focused offline tests passed;
+this control is held until the cold-load comparisons are inspected.
 
 ## 2026-11-15: Admit one declared fitting window before provisioning
 
