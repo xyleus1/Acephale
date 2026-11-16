@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-16: use bounded SDK retries for heartbeat transport
+
+Use the prepared S3 client's standard retry policy with three total attempts
+and three-second connect/read timeouts. Retry the same idempotent request before
+returning to the existing publisher policy. Keep authentication rejection,
+current authority checks, host deadlines and the independent watchdog intact.
+Request/socket limits are not a guarantee of total wall-clock duration.
+
 ## 2026-11-16: bound startup acknowledgement separately
 
 Require the first child heartbeat to be flushed and observed within the original

@@ -1,5 +1,20 @@
 # Evaluation operator repairs
 
+## Prepared S3 transport retries
+
+[`20261116-heartbeat-sdk-retry.patch`](20261116-heartbeat-sdk-retry.patch) changes
+one Config call to [standard SDK retries](https://docs.aws.amazon.com/boto3/latest/guide/retries.html)
+with three total attempts. Connect/read timeouts remain three seconds. The public
+publisher, outer retry policy, ownership checks and watchdog are unchanged.
+
+Thirteen cases use the actual owner SDK, signing and transport-retry code with
+intercepted HTTP responses. They cover both controllers, GET recovery, identical
+PUT bodies after uncertain commits, exhaustion, authentication errors and
+authority/deadline rejection. These tests do not claim live retry execution or
+repair of every streaming-body failure. The
+[byte verification manifest](20261116-sdk-retry.json) records the original and
+repaired helper hashes; applying the patch reproduced the reviewed bytes exactly.
+
 ## Serving file argument and heartbeat acknowledgement
 
 [`20261116-serving-path.patch`](20261116-serving-path.patch) converts the module

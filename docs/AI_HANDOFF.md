@@ -1,5 +1,20 @@
 # Working on Acephale
 
+## Retry an individual S3 transport request, 2026-11-16
+
+E19's actual startup handoff passed in 15.42 seconds after release, within the old
+90-second window. Foundation and image preparation passed. A subsequent
+`ConnectionClosedError` ended the heartbeat publisher after its outer retry
+allowance was consumed; the SDK itself permitted one attempt. Cleanup and
+independent closure are verified, with no model or native stage dispatched.
+
+E20 changes only the prepared client's SDK Config to standard mode with three
+total attempts, preserving three-second sockets, the public outer retry policy
+and every original authority/deadline check. Thirteen real-SDK local regressions
+pass. The [published patch](experiments/operator-patches/20261116-heartbeat-sdk-retry.patch)
+reproduces the reviewed helper bytes. Do not infer a live retry or scientific
+result from these tests. Completed predictor weights remain unchanged.
+
 ## Separate heartbeat arrival from acknowledgement, 2026-11-16
 
 E18 failed before study handoff. Its first child heartbeat log appeared about

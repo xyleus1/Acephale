@@ -1,5 +1,17 @@
 # Acephale engineering log
 
+## Prepared S3 client retries, 2026-11-16
+
+E19 passed startup, foundation and image preparation but lost its heartbeat
+publisher to a connection-closed transport error. The first attempt had consumed
+the public 20-second retry allowance, and the prepared SDK client disabled its
+own retry. E20 uses standard SDK retries with three total attempts and the same
+socket timeouts. Thirteen cases execute the real SDK and public publisher with
+isolated HTTP responses, including identical PUT replay after uncertain commit.
+The initial fake server needed aws-chunked framing support; only that fixture
+changed before all cases passed. The public operator and scientific code remain
+unchanged, and the exact private helper patch is published.
+
 ## Heartbeat acknowledgement phase, 2026-11-16
 
 E18's first child publication arrived within the 90-second window, but the

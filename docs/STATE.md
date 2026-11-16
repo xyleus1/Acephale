@@ -7,6 +7,20 @@ evaluation with unchanged weights and tolerances. Each seed reproduced all
 replay and paired native evaluation remain pending. Training and reload completion
 are not benchmark results.
 
+E19 subsequently passed startup and the foundation/image stages, then stopped
+before diagnostics when its heartbeat process hit `ConnectionClosedError`.
+The error was classified retryable, but the first publication attempt had
+already exceeded the outer retry allowance of 20 seconds. Its prepared SDK
+client allowed only one request attempt. The failed S3 operation was not retained.
+Provider absence, task closure and unchanged financial state are verified.
+
+E20 changes only the prepared S3 client's retry configuration to standard mode
+with three total attempts and unchanged three-second socket timeouts. Thirteen
+tests use the actual SDK transport/retry machinery and public publisher with
+intercepted HTTP responses. They cover GET and identical uncertain-PUT recovery,
+exhaustion, authentication rejection and original authority/deadline checks.
+This does not extend the watchdog, cache authority or establish a benchmark gain.
+
 E17 retained and verified 165 files. On the 112 neutral-ranking development
 examples, seed 17 scored 2,037/2,084 completion tokens correctly (97.7447%,
 token-weighted cross-entropy 0.0579381); seed 29 scored 2,027/2,084 (97.2649%,
