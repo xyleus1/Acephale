@@ -42,7 +42,7 @@ function writeInfrastructureFunding(journal: string, slicePath: string, authoriz
   let owner: DurableBudget | undefined;
   try {
     writeFileSync(lock, String(process.pid)); fsyncSync(lock);
-    owner = new DurableBudget(path, { recoveryCheckpoint: false });
+    owner = new DurableBudget(path, { writeRecoveryCheckpoint: false });
     const base = owner.policy, value = JSON.parse(readFileSync(slice, "utf8"));
     const plan = value.plan, leases = value.leases as FundingRow[];
     const overheads = (value.overheads ?? []) as FundingRow[], windows = (value.trainingWindows ?? []) as FundingRow[];

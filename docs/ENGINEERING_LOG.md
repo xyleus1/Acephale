@@ -27,6 +27,11 @@ holds, optimizer denial and the frozen execution reader. TypeScript tests cover
 the appended contract, writer and reader; type checking passes. Real activation,
 frozen API headroom and actual scheduled startup remain separate evidence gates.
 
+Added a separate checkpoint-write option for the funding writer. Its normal
+authenticated recovery still checks the existing prefix and tail, but neither
+constructor nor close rewrites checkpoints. Focused tests cover valid prefix,
+tail replay and corrupted checkpoints with this option. The default is unchanged.
+
 ## 2026-11-16: Measure the full heartbeat after bounded hash reuse
 
 The unchanged controller's closed-lease heartbeat took 61.031 seconds wall time

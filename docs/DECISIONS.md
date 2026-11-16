@@ -11,6 +11,10 @@ Do not change the frozen API reader or scientific sources. Authenticate each
 historical GPU parent using its retained financial epoch, then check the current
 lease against current funding and cumulative hours. No optimizer is authorized.
 
+Separate checkpoint recovery from checkpoint persistence for authority creation.
+Use the existing authenticated reader with writes disabled, retaining all checks
+and original files, instead of repeating a full raw replay solely to avoid writes.
+
 ## 2026-11-16: Verification must preserve archived evidence
 
 Execute a hash-checked archived Python helper directly from its source without

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
@@ -76,4 +76,53 @@ test("exclusive ownership fences checkpoint generation and orphan files do not b
     writeFileSync(`${f.path}.checkpoint-pointer.json`, JSON.stringify(p));
     assert.throws(() => new DurableBudget(f.path), /pointer/);
   } finally { f.close(); }
+});
+
+function retainedFiles(directory: string) {
+  return Object.fromEntries(readdirSync(directory).sort().map(name => {
+    const path = join(directory, name);
+    return [name, { sha256: createHash("sha256").update(readFileSync(path)).digest("hex"), mtimeMs: statSync(path).mtimeMs }];
+  }));
+}
+
+test("read-only checkpoint recovery verifies the full prefix without changing any file or pointer", () => {
+  const f = fixture(); try {
+    seed(f.path); const before = retainedFiles(f.directory);
+    const owner = new DurableBudget(f.path, { writeRecoveryCheckpoint: false });
+    assert.equal(owner.recovery.checkpointUsed, true);
+    assert.equal(owner.recovery.verifiedPrefixBytes, readFileSync(f.path).length);
+    assert.equal(owner.recovery.replayedRecords, 0);
+    assert.equal(owner.ledger.snapshot().find(row => row.id === "request")!.actual, 12);
+    owner.close(); assert.deepEqual(retainedFiles(f.directory), before);
+  } finally { f.close(); }
+});
+
+test("read-only checkpoint recovery replays a real tail without replacing the retained checkpoint", () => {
+  const f = fixture(); try {
+    seed(f.path);
+    const writer = new DurableBudget(f.path, { recoveryCheckpoint: false });
+    writer.ledger.reserve("retained-unknown", "replay", 10); writer.close();
+    const before = retainedFiles(f.directory);
+    const owner = new DurableBudget(f.path, { writeRecoveryCheckpoint: false });
+    assert.equal(owner.recovery.checkpointUsed, true);
+    assert.equal(owner.recovery.replayedRecords, 1);
+    assert.equal(owner.ledger.snapshot().find(row => row.id === "retained-unknown")!.actual, undefined);
+    owner.close(); assert.deepEqual(retainedFiles(f.directory), before);
+  } finally { f.close(); }
+});
+
+test("read-only checkpoint recovery rejects corrupt prefixes, checkpoints, pointers and tails", () => {
+  for (const defect of ["prefix", "sidecar", "pointer", "tail"]) {
+    const f = fixture(); try {
+      seed(f.path);
+      if (defect === "prefix") { const bytes = readFileSync(f.path); bytes[10] ^= 1; writeFileSync(f.path, bytes); }
+      if (defect === "sidecar") appendFileSync(join(f.directory, pointer(f.path).checkpointFile), "x");
+      if (defect === "pointer") writeFileSync(`${f.path}.checkpoint-pointer.json`, '{"version":2}');
+      if (defect === "tail") appendFileSync(f.path, '{"partial":');
+      const before = retainedFiles(f.directory);
+      assert.throws(() => new DurableBudget(f.path, { writeRecoveryCheckpoint: false }), /checkpoint|Truncated/);
+      assert.deepEqual(retainedFiles(f.directory), before);
+      assert.equal(existsSync(`${f.path}.lock`), false);
+    } finally { f.close(); }
+  }
 });

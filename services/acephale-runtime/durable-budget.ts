@@ -110,7 +110,7 @@ export class DurableBudget {
   private journalDigest = createHash("sha256");
   private journalBytes = 0;
   readonly recovery: { checkpointUsed: boolean; verifiedPrefixBytes: number; replayedRecords: number } = { checkpointUsed: false, verifiedPrefixBytes: 0, replayedRecords: 0 };
-  constructor(private path: string, private options: { recoveryCheckpoint?: boolean; infrastructureOwner?: boolean } = {}) {
+  constructor(private path: string, private options: { recoveryCheckpoint?: boolean; writeRecoveryCheckpoint?: boolean; infrastructureOwner?: boolean } = {}) {
     mkdirSync(dirname(path), { recursive: true });
     this.lockDescriptor = openSync(`${path}.lock`, "wx", 0o600);
     try {
@@ -168,7 +168,7 @@ export class DurableBudget {
       const allocations = this.infrastructureFunding ? { ...this.policy!.policy.allocationsMicrodollars,
         infrastructure: this.infrastructureFunding.policy.effectiveInfrastructureMicrodollars } : this.policy?.policy.allocationsMicrodollars;
       this.ledger = new BudgetLedger(next => this.append(next), entries, allocations);
-      if (this.options.recoveryCheckpoint !== false) this.checkpoint();
+      if (this.options.recoveryCheckpoint !== false && this.options.writeRecoveryCheckpoint !== false) this.checkpoint();
     } catch (error) {
       if (this.descriptor >= 0) closeSync(this.descriptor);
       closeSync(this.lockDescriptor);
@@ -225,7 +225,7 @@ export class DurableBudget {
   close() {
     if (this.closed) return;
     this.closed = true;
-    try { if (this.options.recoveryCheckpoint !== false) this.checkpoint(); }
+    try { if (this.options.recoveryCheckpoint !== false && this.options.writeRecoveryCheckpoint !== false) this.checkpoint(); }
     finally {
       closeSync(this.descriptor);
       closeSync(this.lockDescriptor);

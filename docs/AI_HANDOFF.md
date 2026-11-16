@@ -18,6 +18,10 @@ count authorities. Both append-only receipts require separate activation and
 actual frozen-reader compatibility verification. Neither implementation nor
 activation is a benchmark result or permission to repeat optimizer work.
 
+The funding writer uses verified checkpoint recovery with checkpoint writes
+disabled. The separate option retains normal prefix and tail validation while
+preserving every original checkpoint byte; default readers remain unchanged.
+
 ## Scientific execution status
 
 E13 closed before model work because a creation-time relative duration was
