@@ -1,5 +1,21 @@
 # Acephale engineering log
 
+## 2026-11-16: Derive the worker duration when it starts
+
+E13's worker exited before its preparation log opened. Its launch configuration
+contained the remaining lease duration measured earlier; the wrapper added that
+duration to its later start time and rejected the resulting deadline. The original
+failure and verified provider/process closure are retained. The prospective wrapper
+uses the smaller of the configured duration and the time remaining until the
+original deadline, rejects expired or malformed bounds, and preserves the native
+publisher's absolute deadline checks. Fifteen focused Windows cases passed.
+
+The export path also retains all three GPU-capacity receipts and both relevant
+funding receipts. It checks current and historical funding separately, preserving
+the existing descriptor shape and scientific formulas. Thirty-seven focused
+capacity/export tests passed. These checks do not establish native benchmark
+performance; serving qualification and paired trials remain required.
+
 ## 2026-11-16: Append bounded evaluation completion capacity
 
 Added funding v4 with one eight-hour evaluation lease and a $30 infrastructure

@@ -6,6 +6,14 @@ GPU export with unchanged weights and tolerances. Separate vLLM serving
 qualification, trained replay and the paired native evaluation remain pending.
 Training and reload completion are not benchmark results.
 
+E13 failed during scheduled-worker startup, before foundation or model execution.
+Its GPU termination, provider absence and local process closure were verified.
+The worker had compared a duration calculated at configuration creation with its
+later start time, incorrectly rejecting an otherwise valid absolute deadline.
+The prospective wrapper derives its remaining duration at startup and retains
+the original absolute deadline. Delayed-payload tests pass; E14's actual startup
+and scientific execution remain pending. Existing failures and costs are retained.
+
 Each seed's first probe, repeated probe and repeatability check matched all
 248,320 reference logits with zero error after restoring its recorded native
 Triton cache. Both teacher-forced development evaluations completed on 112

@@ -1,3 +1,5 @@
+# Working on Acephale
+
 ## Bounded evaluation completion allowance, 2026-11-16
 
 Funding v4 appends a $30 infrastructure allowance, split into $20 compute and
@@ -16,7 +18,14 @@ count authorities. Both append-only receipts require separate activation and
 actual frozen-reader compatibility verification. Neither implementation nor
 activation is a benchmark result or permission to repeat optimizer work.
 
-# Working on Acephale
+## Scientific execution status
+
+E13 closed before model work because a creation-time relative duration was
+checked against the later scheduled start time. The repaired Windows wrapper
+derives the remaining duration from the unchanged absolute deadline. Tests
+exercise delayed active payloads separately from genuine closed-lease scheduled
+publication. E14 retains the same models, checkpoints and frozen tasks. Never
+repeat either completed optimizer or substitute startup tests for live scores.
 
 E7 completed strict GPU export for both seeds. Each first/repeat/repeatability
 comparison matched all 248,320 original logits exactly, and both 112-example
