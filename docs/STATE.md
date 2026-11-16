@@ -11,8 +11,23 @@ Its GPU termination, provider absence and local process closure were verified.
 The worker had compared a duration calculated at configuration creation with its
 later start time, incorrectly rejecting an otherwise valid absolute deadline.
 The prospective wrapper derives its remaining duration at startup and retains
-the original absolute deadline. Delayed-payload tests pass; E14's actual startup
-and scientific execution remain pending. Existing failures and costs are retained.
+the original absolute deadline. Delayed-payload tests pass; E14 subsequently
+passed the repaired launch gate but failed the preparation handoff.
+Existing failures and costs are retained.
+
+E14's first dispatch check rejected a predecessor observation that had expired
+during other admission work. The same undispatched reservation was then reused
+with a fresh final observation, and the provider created the instance. Worker
+preparation finished 170 seconds into a 180-second startup window; the final
+parent publication finished at 233 seconds, after that window. Provider absence,
+termination and local process closure were subsequently verified. No model or
+native trial ran on this host.
+
+The prospective E15 preparation window is 600 seconds, clamped to the original
+setup and lease deadlines. The 90-second handoff and 120-second watchdog remain
+unchanged. Tests reproduce the observed timing through the real parent and child
+functions. Current data, trained weights and benchmark scoring are unchanged;
+E15 serving qualification and paired evaluation remain pending.
 
 Each seed's first probe, repeated probe and repeatability check matched all
 248,320 reference logits with zero error after restoring its recorded native

@@ -1,5 +1,21 @@
 # Working on Acephale
 
+## Finite evaluation dispatch capacity, 2026-11-16
+
+The prospective count-v3 supplement permits up to sixteen total evaluation
+leases under the unchanged funding-v4 authority. Monetary ceilings, cumulative
+GPU hours, per-lease rate and duration limits, optimizer denial and the original
+API journal remain unchanged. Compact hashes bind the retained operational
+prefix and closed resource identities, avoiding another full history copy.
+New leases bind this count authority explicitly. This does not authorize
+unreserved dispatch or release any earlier hold.
+
+The GPU-v3 validator passes its already authenticated current funding to the
+historical GPU-v2 parent. That parent still checks its original funding-v3 chain;
+current entrypoints still validate the complete current count and financial
+history. Actual activation, frozen API headroom and execution remain separate
+from the code and CPU test evidence. No new benchmark outcome is claimed.
+
 ## Bounded evaluation completion allowance, 2026-11-16
 
 Funding v4 appends a $30 infrastructure allowance, split into $20 compute and
@@ -28,8 +44,13 @@ E13 closed before model work because a creation-time relative duration was
 checked against the later scheduled start time. The repaired Windows wrapper
 derives the remaining duration from the unchanged absolute deadline. Tests
 exercise delayed active payloads separately from genuine closed-lease scheduled
-publication. E14 retains the same models, checkpoints and frozen tasks. Never
-repeat either completed optimizer or substitute startup tests for live scores.
+publication. E14 subsequently passed provider dispatch but failed the preparation
+handoff before model work; termination and absence were verified. E15 uses a
+600-second preparation window, still bounded by the original setup and lease
+deadlines, plus the same 90-second handoff and 120-second watchdog. Its launch
+gate collects a fresh predecessor observation after costly admission work.
+Models, checkpoints and frozen tasks remain unchanged. Never repeat either
+completed optimizer or substitute startup tests for live scores.
 
 E7 completed strict GPU export for both seeds. Each first/repeat/repeatability
 comparison matched all 248,320 original logits exactly, and both 112-example

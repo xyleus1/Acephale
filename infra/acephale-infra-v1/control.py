@@ -1327,12 +1327,15 @@ def read_gpu_hour_capacity(path: Path) -> dict:
     return read_json(path)
 
 
-def _validate_gpu_hour_extension(ledger: dict, amendment: dict | None, value: dict) -> dict:
+def _validate_gpu_hour_extension(ledger: dict, amendment: dict | None, value: dict,
+                                 *, current_funding: dict | None = None) -> dict:
     """Validate v1 against the retained baseline, then admit only the new v2 suffix."""
     ledger_path = Path(ledger["plan"]["infrastructureLedgerPath"])
     parent_path = gpu_hour_capacity_path(ledger_path)
     parent = read_gpu_hour_capacity(parent_path)
-    funding = infrastructure_funding(ledger)
+    # Only the authenticated historical parent call supplies current funding.
+    # Ordinary current-ledger entrypoints retain their complete authority check.
+    funding = infrastructure_funding(ledger) if current_funding is None else current_funding
     if funding is not None and funding["version"] == 4:
         # Funding v4 retains the entire v3-era ledger as its authenticated parent.
         # A v2 GPU receipt still binds v3 and cannot absorb any v4-funded suffix.
@@ -1398,7 +1401,10 @@ def _validate_gpu_hour_extension(ledger: dict, amendment: dict | None, value: di
            or finite_number(row.get("reservedAt"), "capacity-bound reservation timestamp") < recorded for row in extra):
         raise ValueError("New provider lease must bind the GPU-hour extension")
     hours = ledger["priorGpuHours"] + sum(row["reservedHours"] for row in ledger["leases"])
-    caps, totals = infrastructure_caps(ledger), _infrastructure_reserved_totals(ledger)
+    caps = (infrastructure_caps(ledger) if current_funding is None else tuple(
+        current_funding["policy"][key] / 1_000_000 for key in
+        ("effectiveInfrastructureMicrodollars", "effectiveComputeMicrodollars", "effectiveAssociatedMicrodollars")))
+    totals = _infrastructure_reserved_totals(ledger)
     if hours > 160 or any(totals[key] > cap for key, cap in zip(
             ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
         raise ValueError("GPU-hour extension cannot exceed effective financial authority")
@@ -1494,7 +1500,7 @@ def _validate_gpu_hour_completion(ledger: dict, amendment: dict | None, value: d
         raise ValueError("GPU-hour extension operational history is inconsistent")
     # The authenticated 33-row-era baseline must still satisfy the complete v3
     # funding/count chain and the original v2/v1 GPU authorities.
-    _validate_gpu_hour_extension(baseline, amendment, parent)
+    _validate_gpu_hour_extension(baseline, amendment, parent, current_funding=funding)
     current, retained = _infrastructure_reservations(ledger), _infrastructure_reservations(baseline)
     if any(current[key][:len(retained[key])] != retained[key] for key in current):
         raise ValueError("GPU-hour extension cannot release or rewrite prior reservations")

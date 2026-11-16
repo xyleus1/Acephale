@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-16: Use finite reusable dispatch capacity without more dollar increments
+
+Permit sixteen evaluation dispatch slots within existing funding-v4 and GPU-v3
+ceilings instead of appending a single slot after each operational failure.
+Every actual reservation must still fit retained costs, hours and protected API
+headroom. Bind compact immutable historical-prefix hashes, keep old authorities
+and unknown holds, and preserve the one-active-resource lifecycle. Scientific
+weights, data, scoring and optimizer denial remain unchanged.
+
 ## 2026-11-16: Bound the next evaluation through parent-linked authorities
 
 Use one append-only funding-v4 allowance and one GPU-hour-v3 allowance for the

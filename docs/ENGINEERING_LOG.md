@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## 2026-11-16: Separate dispatch count from unchanged money and GPU limits
+
+Added a compact, creation-only count supplement for funding v4, with a finite
+sixteen-lease ceiling. Tests retain original holds, deadlines and closed
+identities, reject count-authority tampering and missing authority, and exercise
+the actual funding/GPU reader composition and optimizer denial. Initial tests
+caught current count validation being applied to an authenticated historical
+GPU parent; the repaired internal funding pass-through preserves all current
+entrypoint checks. Original failure evidence remains in operator artifacts.
+
 ## 2026-11-16: Derive the worker duration when it starts
 
 E13's worker exited before its preparation log opened. Its launch configuration
