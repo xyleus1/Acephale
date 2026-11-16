@@ -19,9 +19,14 @@ is an additional defense. Actual-archive tests reproduce the old failure, pass
 repeated normal and isolated verification, and reject changed archived bytecode.
 E8 subsequently stopped before provider dispatch when its controller publication
 exceeded the heartbeat window. Its local reservation is now closed with explicit
-no-dispatch/no-provider-termination evidence; all financial holds remain. E9 is
-being prepared with the same scientific contracts. Read the private operator
-handoff for current execution status; do not retrain.
+no-dispatch/no-provider-termination evidence; all financial holds remain.
+E9 passed real pre-dispatch freshness and allocated its GPU, then hit the
+50-second scheduled-heartbeat startup timeout before scientific dispatch.
+Cleanup and independent provider absence are verified. The later heartbeat
+exception followed cleanup and is not assumed to be the initial trigger.
+Preserve the failed attempt. Require actual scheduled-wrapper startup
+qualification without a GPU before E10. Read the private operator handoff for
+current execution status; do not retrain.
 
 ## Operator validation and publication, 2026-11-16
 

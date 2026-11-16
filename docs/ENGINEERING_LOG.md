@@ -1,5 +1,24 @@
 # Acephale engineering log
 
+## 2026-11-16: Reproduce the scheduled-startup failure
+
+E9 passed the final real pre-dispatch check and allocated its exact GPU instance.
+The budget inspection took 6.732 seconds; both controller states were 12.182
+seconds old, with 63.288 seconds left on the unchanged predecessor fence.
+The launcher then exhausted its 50-second wait for the scheduled heartbeat.
+Cleanup started at 11:55:13 UTC; the wrapper reported an error at 11:55:38.
+The later exception is therefore not assumed to explain the initial timeout.
+Provider termination and subsequent exact absence were verified. No scientific
+owner or model evaluation ran, and all original financial holds remain.
+
+Three offline reproductions exercised the actual PowerShell wrapper and public
+publisher. Native stderr under PowerShell's terminating error policy could lose
+the safe diagnostic and a successful child result. The publisher's new helper
+also bypassed the companion's cloned state-read override. Both defects require
+repair, with full scheduled startup measured against a closed lease before
+another GPU allocation. Earlier direct-loop qualification did not test that
+startup path. Models, saved weights, data and scoring rules remain unchanged.
+
 ## 2026-11-16: Close the undispatched attempt and qualify publication
 
 E8 stopped before its provider request when the published heartbeat was already

@@ -25,7 +25,19 @@ E8 stopped before provider dispatch because its controller publication exceeded
 the heartbeat freshness window. No GPU instance was created. Its unused local
 reservation is closed with explicit `cancelled_before_provider_dispatch`
 evidence; no provider termination is claimed and all financial holds remain.
-E9 is being prepared against the same scientific contracts and saved weights.
+E9 subsequently allocated a GPU and passed the real final pre-dispatch check:
+both controller states were 12.182 seconds old after a 6.732-second budget
+inspection. It then timed out waiting for the scheduled heartbeat process.
+Cleanup began before that process reported its own error. Exact provider
+termination and subsequent absence were verified; no scientific owner, model
+evaluation or paired trial ran. All financial holds remain.
+
+The launcher allowed 50 seconds for scheduled startup, including the wrapper's
+preflight. Separate offline reproductions found that PowerShell could discard
+native retry diagnostics and that a publisher refactor bypassed one injected
+read-retry path. Neither later error is treated as the proved initial trigger.
+The next attempt requires a complete scheduled-startup canary against a closed
+lease, with no GPU allocation, before another evaluation run.
 
 The operator repair caches only pure canonical digests within one operation;
 all authority files are still read and validated. Three actual publication cycles
