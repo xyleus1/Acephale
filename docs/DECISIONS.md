@@ -14,6 +14,15 @@ pipeline after the repair rather than inventing cross-lease success receipts.
 Neither completed optimizer may repeat. Serving qualification and paired trials
 remain separate required gates.
 
+## 2026-11-16: Extend engineering hours through an immutable evaluation chain
+
+The user's instruction to continue necessary work permits a bounded 160-hour
+engineering allowance after retained reservations approach 128 hours. Preserve
+the old sidecar and all uncertain charges. Require the existing evaluation-only
+funding and its independent financial limits; no extra money or optimizer window
+is created. New provider receipts report current capacity separately from the
+unchanged 64-hour base policy and historical 128-hour receipts.
+
 ## 2026-11-16: Restore recorded native tuning state before qualification
 
 E6 showed that repeating a successful fitting-batch warmup did not reproduce its

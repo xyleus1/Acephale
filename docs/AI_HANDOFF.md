@@ -19,6 +19,15 @@ is an additional defense. Actual-archive tests reproduce the old failure, pass
 repeated normal and isolated verification, and reject changed archived bytecode.
 Read the private operator handoff for current execution status; do not retrain.
 
+## Evaluation engineering capacity, 2026-11-16
+
+Prospective operator capacity v2 adds a creation-only 160-hour engineering
+allowance over the retained 128-hour v1 sidecar. It requires the existing v3
+evaluation-only funding, preserves every financial hold and training window,
+and does not authorize optimizer work or provider dispatch. Follow
+`infra/acephale-infra-v1/GPU_HOUR_CAPACITY.md`; activation, source binding and
+the complete next run still require their actual private review receipts.
+
 E6 passed strict input admission but failed seed 17's inference preparation:
 18,971/248,320 reference-logit mismatches, maximum absolute error 0.19140625.
 Its repeated probe was self-identical; weights and original probes were unchanged.
