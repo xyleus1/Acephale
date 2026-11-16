@@ -19,8 +19,24 @@ terminated; independent provider and local-owner closure checks passed. A
 one-expression fix passed seven local tests using the actual retained archive
 and verifier. They cover the original failure, first serving entry, all three
 later seed switches and changed-pin rejection. Remote effects are intercepted;
-these tests do not establish serving qualification. E18 retains the completed
-weights and all failed-attempt evidence for the next serving and evaluation run.
+these tests do not establish serving qualification.
+
+E18 subsequently allocated a host but failed its heartbeat handoff before any
+scientific stage. The child's first heartbeat was stamped 76.57 seconds after
+release and its log appeared at 79.00 seconds, leaving about 11 seconds in the
+shared 90-second window for controller readback and acknowledgement. The exact
+readback duration was not recorded. Provider absence, disabled tasks and local
+drain are independently verified.
+
+E19 keeps the 90-second first-publication window and separates acknowledgement:
+both sides require it before the child's heartbeat is 60 seconds old, clamped
+to the original setup and hard deadlines. Seventeen local cases pass through
+the actual parent, child, controller verifier and publisher with isolated SDK
+and clock ports. They include the delayed acknowledgement and rejection cases;
+they are not live startup or benchmark results. The private launcher also uses
+the existing content-keyed digest scope to avoid repeated canonical hashing,
+while retaining every file read and authority check. The exact
+[operator patches](experiments/operator-patches/README.md) are published.
 
 E16 completed startup, environment preparation, image verification and CUDA
 diagnostics. Its strict export stage stopped before either model was dispatched:

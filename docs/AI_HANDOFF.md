@@ -1,5 +1,22 @@
 # Working on Acephale
 
+## Separate heartbeat arrival from acknowledgement, 2026-11-16
+
+E18 failed before study handoff. Its first child heartbeat log appeared about
+79 seconds into the original 90-second window; no acknowledgement completed.
+Exact provider absence and local closure are verified. E19 keeps that original
+arrival window and gives verification its own deadline derived from the actual
+child heartbeat, at most 60 seconds old and within the original host deadlines.
+Seventeen actual-entry cases pass through isolated clock/SDK ports. Readback
+latency in those tests is simulated; the old run did not retain operation timing.
+
+The private launcher wraps only `operator.launch()` in the existing
+`control.budget_digest_scope()`. Its memo stores pure canonical hashes keyed by
+current content; files and authorities are still read and checked. Operator
+source, scientific inputs and completed weights remain unchanged. Both the
+serving Path fix and acknowledgement repair have
+[reproducible patches](experiments/operator-patches/README.md).
+
 ## Strict export complete; serving entry repaired, 2026-11-16
 
 E17 completed strict two-seed GPU export with 165 verified files. Both probes

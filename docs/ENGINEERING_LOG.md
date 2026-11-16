@@ -1,5 +1,17 @@
 # Acephale engineering log
 
+## Heartbeat acknowledgement phase, 2026-11-16
+
+E18's first child publication arrived within the 90-second window, but the
+parent did not finish acknowledgement before it closed. No scientific phase
+started; termination, provider absence and local drain are verified. E19 binds
+the acknowledgement deadline to that timely child's actual heartbeat plus
+60 seconds, clamped to the original host deadlines. Seventeen cases pass using
+real entrypoints and isolated SDK/clock ports. The first test run retained one
+fixture expectation error, an omitted 250-millisecond sleep in the old loop;
+correcting it changed no production code. Exact repair patches reproduce the
+reviewed bytes when applied to their recorded originals.
+
 ## Strict export and serving argument repair, 2026-11-16
 
 E17 passed the live local-clock probe checks and completed strict export for

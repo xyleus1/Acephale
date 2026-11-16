@@ -1,4 +1,28 @@
-# Evaluation operator repair
+# Evaluation operator repairs
+
+## Serving file argument and heartbeat acknowledgement
+
+[`20261116-serving-path.patch`](20261116-serving-path.patch) converts the module
+filename to `Path` before passing it to the existing strict file hasher. The
+original code failed before serving SSH or model execution. Seven local cases
+exercise the actual preparer and transport entry against the retained export,
+with remote effects intercepted.
+
+[`20261116-heartbeat-ack.patch`](20261116-heartbeat-ack.patch) separates a timely
+child heartbeat's arrival from its subsequent verification. Arrival remains
+bounded by the original 90 seconds. Both parent and child derive acknowledgement
+expiry from the child's heartbeat plus 60 seconds, clamped to original host
+deadlines. The patch retains actual two-controller readbacks and all record,
+ownership and cancellation checks. Seventeen cases pass; operation timing is
+simulated from the retained arrival/cancellation scenario, not measured S3 latency.
+
+The [verification manifest](20261116-repairs.json) records original and repaired
+file hashes. Both patches were applied to fresh copies with
+`git -c core.autocrlf=false apply`; every resulting byte hash matches the reviewed
+file. These operational fixes do not change model weights, scoring or numerical
+tolerances, and their tests are not benchmark results.
+
+## Dataset envelope
 
 [`20261116-dataset-envelope.patch`](20261116-dataset-envelope.patch) is the exact
 change to the study's `prepare_evaluated_main_v2.py` helper. It is published as an

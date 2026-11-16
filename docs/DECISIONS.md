@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-16: bound startup acknowledgement separately
+
+Require the first child heartbeat to be flushed and observed within the original
+90-second release window. Then bound controller readback and acknowledgement by
+that heartbeat's 60-second freshness limit and the original setup and hard
+deadlines. A late first publication cannot earn an extension. Keep exact record,
+process, ownership, cancellation and controller-state checks; the 120-second
+watchdog remains unchanged.
+
 ## 2026-11-16: measure remote-probe freshness locally
 
 Do not subtract a remote host timestamp from a local clock to establish freshness.

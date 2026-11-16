@@ -1,0 +1,37 @@
+{
+  "kind": "acephale-public-operator-patch-verification-v1",
+  "verified": true,
+  "modelCalls": 0,
+  "providerCalls": 0,
+  "patches": [
+    {
+      "patch": "20261116-serving-path.patch",
+      "sha256": "7f550c7e5d3d9308bd694c55902850ca86d8eb7a5a9f69320c4a017c05ca4f7d",
+      "appliedBytesMatch": true,
+      "files": [
+        {
+          "name": "run_serving_v3.py",
+          "beforeSha256": "aa6bd3e70a4e0c5c1c033c4497c1d6a907515d8ff6bdfeed73a1d8ead4c822fb",
+          "afterSha256": "3ad632974c80d0fdaad082ce6688e5a55682305d65f256f1077402b65e6fc043"
+        }
+      ]
+    },
+    {
+      "patch": "20261116-heartbeat-ack.patch",
+      "sha256": "0e95b0692b9aa5a31d05d998a0a0c1ed3c5fc1c311a5e8c8a32017df94415ea2",
+      "appliedBytesMatch": true,
+      "files": [
+        {
+          "name": "heartbeat_startup_v2.py",
+          "beforeSha256": "d6b7d11a9399a66acc09c31ae2914ae8f7c1874c67a74a131f093ce154025212",
+          "afterSha256": "6413a1b24854086c96cc5126ceeaf4b83be5195ba0da887bab6f276e1ed617cc"
+        },
+        {
+          "name": "heartbeat_companion_v2.py",
+          "beforeSha256": "6dd796da3a37f82a49c652cf644cc9e4df8f2ef179770c70e9e32284118cf3a4",
+          "afterSha256": "01237987c123aba96690cf373f42689fafa825d02f185148a93c51e2986ebb3b"
+        }
+      ]
+    }
+  ]
+}
