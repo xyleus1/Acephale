@@ -743,3 +743,15 @@ when the fifth retained attempt consumes its slot. It retains the original v1
 count authority and every historical row. Monetary and GPU-hour limits, frozen
 API allocations and the optimizer prohibition remain independently enforced.
 Creating or validating this count authority does not itself dispatch a host.
+
+## 2026-11-16: Separate worker preparation from publication ownership
+
+Keep the parent as the only publisher until the scheduled worker has completed
+real preflight and SDK preparation. Transfer ownership only after a final fresh
+publication and both authenticated readbacks. The released worker waits for the
+parent's first-publication acknowledgement, then survives the launcher's normal
+exit. Preparation has its own bounded wait; it does not consume the 90-second
+handoff interval or establish scientific readiness. Preserve the 120-second
+watchdog and original active-lease deadlines. A terminated-lease timing fixture
+may use an explicitly declared local bound after fresh provider-absence proof;
+that exception cannot admit an active lease.

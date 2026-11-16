@@ -77,6 +77,19 @@ check remains; the cache is discarded between heartbeat attempts. These are one
 operational sample per implementation under variable workstation load, not live
 benchmark gains. The next run still requires actual scheduled-start qualification.
 
+The next closed-lease startup still failed before handoff: Task Scheduler and
+wrapper startup consumed about 67 seconds before the worker began its checks.
+A versioned handshake now lets the parent keep publishing real observations
+while the worker prepares. After a fresh publication and both readbacks, the
+parent releases the prepared worker and performs no further writes. Three actual
+scheduled checks passed in 20.233, 35.701 and 39.342 seconds after release. Total
+preparation through verification took 101.053, 111.591 and 119.618 seconds.
+All tasks and processes drained; no GPU was allocated for these checks.
+The 90-second released-work limit and 120-second watchdog remain unchanged.
+This establishes startup behavior under the observed conditions, not trained
+replay, task accuracy or live-agent latency. The qualified files and failed
+attempts remain preserved while the next execution context is prepared.
+
 The operator repair caches only pure canonical digests within one operation;
 all authority files are still read and validated. Three actual publication cycles
 with both remote readbacks passed, with observed publication intervals of 44.430

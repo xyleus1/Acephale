@@ -497,3 +497,14 @@ when the fifth retained attempt consumes its slot. It retains the original v1
 count authority and every historical row. Monetary and GPU-hour limits, frozen
 API allocations and the optimizer prohibition remain independently enforced.
 Creating or validating this count authority does not itself dispatch a host.
+
+## 2026-11-16: Qualified scheduled handoff, evaluation still pending
+
+The prepared-worker handshake passed three real scheduled checks, including
+exact process/task drain. Keep the preceding failed startup and the complete
+qualified source graph. A new execution namespace is being prepared to give
+the study a genuinely authenticated run window; no replacement GPU or trained
+paired result exists at this checkpoint. The latest repository CI passed 304
+Node tests, 642 research tests, two Docker cases and 499 infrastructure cases
+plus 123 subtests; skips were 2/30/28 respectively. These are validation counts,
+not benchmark outcomes. Both completed 204-update adapters remain immutable.

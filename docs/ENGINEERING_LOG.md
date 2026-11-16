@@ -1163,3 +1163,22 @@ when the fifth retained attempt consumes its slot. It retains the original v1
 count authority and every historical row. Monetary and GPU-hour limits, frozen
 API allocations and the optimizer prohibition remain independently enforced.
 Creating or validating this count authority does not itself dispatch a host.
+
+## 2026-11-16: Prepare the publisher before transferring ownership
+
+The next real scheduled check failed despite the faster publication loop.
+Its wrapper started about 67 seconds after bootstrap. Moving SDK preparation
+into a resident worker lets the parent maintain genuine observations during
+that delay. A nonce, source/configuration hashes, exact lease and process creation
+identity bind preparation, release and acknowledgement. Preparation does not
+mark the GPU ready. Cancellation is checked at the actual publication boundary.
+
+Sixteen protocol cases and twenty actual Windows wrapper cases passed. Eleven
+independent runtime/interface cases passed against the current launcher. The
+versioned interface fixture corrects an older copied test that still selected
+the preceding launcher. Three real scheduled checks then passed: post-release
+20.233/35.701/39.342 seconds; whole preparation 101.053/111.591/119.618 seconds.
+Each parent published three times before release, never after it. Every child
+and task drained, financial bytes stayed identical, and no model or GPU ran.
+The qualification result SHA-256 is
+`43490917fc11fe7d1667dc3704cd55a6f9192e299c8cfcb366bf17ecf60e6dfd`.
