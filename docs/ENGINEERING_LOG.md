@@ -1,5 +1,13 @@
 # Acephale engineering log
 
+## 2026-11-16: Keep publication unit tests independent of cloud packages
+
+The state-reader tests replace S3 transport but initially still imported the
+optional cloud SDK's configuration class. Two cases failed in the standard
+research environment, where that SDK is absent. The tests now replace that
+boundary too and assert the exact timeout/retry options. Production code and
+the separately frozen operator source are unchanged.
+
 ## 2026-11-16: Reproduce the scheduled-startup failure
 
 E9 passed the final real pre-dispatch check and allocated its exact GPU instance.
