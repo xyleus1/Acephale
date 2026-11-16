@@ -1,5 +1,27 @@
 # Acephale engineering log
 
+## 2026-11-16: Complete local evaluation readiness
+
+The next configuration passed actual keyless validation twice and its task was
+registered disabled. Verification included 36 owner cases, 36 provider cases,
+18 actual source/controller integration cases, 60 export cases, eight archive
+closure cases and 24 downstream/report cases. These counts describe separate
+suites, not additional benchmark trials. One failed local preseal incorrectly
+listed the separately pinned operator source as a private helper; its three
+outputs were archived unchanged before the corrected sealer passed.
+
+The append-only $20 funding supplement was activated without changing the
+original journal, policies or retained reservations. An actual frozen-source API
+reader then loaded that journal; an in-memory projection of $11.94 compute plus
+$3.582 associated allowance still admitted the full $65 development and $238
+held-out parent/child reservation, settlement and closure flows. This check wrote
+no real reservations. The remaining launch prerequisite is an authentication
+session covering the full lease. No trained benchmark result is asserted.
+
+The [published operator patch](experiments/operator-patches/README.md) reproduces
+the repaired helper's exact bytes when applied with automatic CRLF conversion
+disabled.
+
 ## 2026-11-16: Bind the complete extracted dataset
 
 E5 passed the concrete callback and entered strict export, but its input validator

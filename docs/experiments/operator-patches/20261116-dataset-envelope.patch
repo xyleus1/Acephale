@@ -1,0 +1,50 @@
+--- a/prepare_evaluated_main_v2.py
++++ b/prepare_evaluated_main_v2.py
+@@ -1,6 +1,7 @@
+ """Create a reviewable export-only configuration from actual closed E1 inputs."""
+ import argparse
+ import copy
++import importlib.util
+ import json
+ from pathlib import Path, PurePosixPath
+ import time
+@@ -14,6 +15,24 @@
+     with Path(path).open('x', encoding='utf-8') as stream:
+         json.dump(value, stream, indent=2, allow_nan=False)
+         stream.write('\n')
++
++
++def verified_dataset_inventory():
++    """Read the exact envelope already extracted beside the five dataset files."""
++    approved = contract.read(ROOT / 'evaluation-inputs-approved-02.json')
++    helper = ROOT / 'stage_completed_inputs_v2.py'
++    contract.require(approved.get('independentReviewPassed') is True
++        and approved.get('executionSourceCommit') == contract.EXECUTION_SOURCE
++        and contract.sha(helper) == approved['stagingHelperSha256'],
++        'Previously approved dataset archive and staging verifier required')
++    spec = importlib.util.spec_from_file_location('main_dataset_staging_verifier', helper)
++    staging = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(staging)
++    _, inventory = staging.archive_checked(approved['datasetArchive'],
++        approved['datasetInventory']['sha256'], weights=False)
++    local = staging.pinned(approved['datasetInventory'])
++    contract.require(contract.read(local) == inventory, 'Local inventory differs from the approved archive envelope')
++    return local, inventory
+ 
+ 
+ def prepare(value, output):
+@@ -56,6 +75,14 @@
+     contract.require(inventory['sha256'] == contract.INPUT_INVENTORY_SHA, 'Exact reviewed Linux-produced completed input inventory required')
+     bind('baseReceipt', value['baseReceiptPath'], '/srv/acephale/models/predictor/acephale-model.receipt.json', upload=False)
+     bind('datasetManifest', value['datasetManifestPath'], '/srv/acephale/evaluation-01/dataset/manifest.json', upload=False)
++    dataset_inventory, dataset = verified_dataset_inventory()
++    dataset_root = PurePosixPath('/srv/acephale/evaluation-01/dataset')
++    envelope = bind('datasetInventory', dataset_inventory, dataset_root / 'inventory.json', upload=False)
++    expected_dataset = {(str(dataset_root / row['path']), row['sha256']) for row in dataset['files']}
++    expected_dataset.add((str(dataset_root / 'inventory.json'), envelope['sha256']))
++    actual_dataset = {(row['path'], row['sha256']) for row in frozen.values()
++        if PurePosixPath(row['path']).is_relative_to(dataset_root)}
++    contract.require(actual_dataset == expected_dataset, 'Complete staged dataset closure must match the approved archive')
+     producer = bind('producer', ROOT / 'evaluated_main_host_v2.py', remote + '/evaluated_main_host_v2.py', upload=True)
+     contract_row = bind('contract', ROOT / 'evaluated_main_contract_v2.py', remote + '/evaluated_main_contract_v2.py', upload=True)
+     for name, (filename, expected) in contract.PREPARATION_FILES.items():

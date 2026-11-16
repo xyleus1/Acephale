@@ -36,6 +36,15 @@ reproduce the original failure, accept the complete six-file binding and reject
 tampering. Saved-weight export and the paired scientific results remain pending.
 Neither trained adapter nor any scoring rule changed.
 
+The next evaluation configuration is sealed and passes actual keyless validation.
+Its scheduled task is registered but disabled until authentication covers the
+complete provider lease. A separate $20 infrastructure supplement permits one
+evaluation-only lease of at most six hours. The frozen native/API reader passed
+an in-memory compatibility check reserving the full $303 development/held-out
+allowance after projected infrastructure costs; no benchmark calls occurred in
+that check. The exact [dataset repair patch](experiments/operator-patches/README.md)
+is published with its input and output hashes.
+
 ## Training and continuation
 
 The fifth continuation completed seed 29's 204 updates, three epochs and 204
