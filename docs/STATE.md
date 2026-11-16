@@ -6,6 +6,22 @@ GPU export with unchanged weights and tolerances. Separate vLLM serving
 qualification, trained replay and the paired native evaluation remain pending.
 Training and reload completion are not benchmark results.
 
+E16 completed startup, environment preparation, image verification and CUDA
+diagnostics. Its strict export stage stopped before either model was dispatched:
+the host-observation check rejected a negative age calculated across two clocks.
+Both retained remote timestamps are about 0.175 seconds ahead of their local
+file times; replaying the actual validator at those times reproduces rejection.
+The precise check instant was not logged. Provider absence, task closure and
+local drain were independently verified. No trained replay or native trial ran.
+
+The E17 operational repair brackets new authenticated SSH probes with local
+monotonic time and retains the original remote timestamp and bytes. It covers
+export and serving, keeps their existing time limits, and uses the local request
+start for later freshness checks. Thirty-two focused cases pass. Actual serving
+and native entry checks also pass after correcting a stale helper pin. The next
+attempt has fresh output directories; weights, tasks, scoring and numerical
+acceptance tolerances remain unchanged.
+
 E13 failed during scheduled-worker startup, before foundation or model execution.
 Its GPU termination, provider absence and local process closure were verified.
 The worker had compared a duration calculated at configuration creation with its
@@ -31,13 +47,12 @@ request returned no usable response. The provider had created the instance;
 exact-name recovery identified and terminated it. Independent checks confirmed
 provider absence and local owner closure. No model or native trial ran.
 
-The next attempt retains that startup repair and adds bounded recovery of an
+E16 retained that startup repair and added bounded recovery of an
 uncertain launch response. It inventories existing instances before one launch
 request, then requires a unique new instance with the reserved name and matching
 list/detail identity. It never repeats the launch POST automatically. Actual
-controller refreshes preserve the watchdog while recovery runs. Current data,
-trained weights and benchmark scoring are unchanged. Serving qualification,
-trained replay and paired native evaluation remain pending.
+controller refreshes preserve the watchdog while recovery runs. E16 received a
+normal successful POST response, so the recovery branch was not exercised live.
 
 Each seed's first probe, repeated probe and repeatability check matched all
 248,320 reference logits with zero error after restoring its recorded native

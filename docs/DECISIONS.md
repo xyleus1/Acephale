@@ -1,5 +1,12 @@
 # Acephale decisions
 
+## 2026-11-16: measure remote-probe freshness locally
+
+Do not subtract a remote host timestamp from a local clock to establish freshness.
+Bracket each new authenticated probe with local monotonic time, retain its raw
+timestamp and bytes, and use the conservative local request start for subsequent
+age checks. Existing transport limits, ownership checks and deadlines still apply.
+
 ## 2026-11-16: declare the native financial port separately
 
 Use an explicit source-pinned financial module port for funding v5. Keep the

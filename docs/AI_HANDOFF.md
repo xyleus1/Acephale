@@ -1,5 +1,14 @@
 # Working on Acephale
 
+## Local timing for remote probes, 2026-11-16
+
+E16 reached CUDA diagnostics but stopped before strict export dispatch. Exact
+provider absence and owner closure are verified. The E17 operational wrappers
+measure fresh SSH requests locally, preserving raw remote timestamps and hashes.
+Both export and serving callers passed focused tests; current serving/native
+helper entry checks pass. Keep fresh output paths and the original saved weights.
+Serving qualification, trained replay and paired native scores are still pending.
+
 ## Recovering one uncertain provider launch, 2026-11-16
 
 E15 reached the real provider POST after a valid fresh fence and heartbeat. The

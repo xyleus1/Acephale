@@ -1,5 +1,19 @@
 # Acephale engineering log
 
+## Remote probe clock mismatch, 2026-11-16
+
+E16 passed setup and diagnostic execution, then failed before strict export
+dispatch. Its clean remote probes were about 0.175 seconds ahead of local file
+times; the original validator rejected their negative apparent age. The exact
+check instant was not captured. The failed attempt and verified cleanup remain.
+
+The private export and serving wrappers now time fresh authenticated requests
+locally and preserve the raw remote evidence. Thirty-two focused cases cover
+clock offsets, request limits, stale later reads, cancellation, original deadlines
+and identity changes. A separate audit caught and fixed a stale serving-helper
+pin and an occupied diagnostic output path. Actual serving/native entry checks
+pass; these operational checks are not benchmark results.
+
 ## Infrastructure-aware evaluation accounting, 2026-11-16
 
 Funding v5 is a prospective $100 infrastructure supplement, split into $80 compute
