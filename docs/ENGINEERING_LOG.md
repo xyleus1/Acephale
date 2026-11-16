@@ -1,5 +1,23 @@
 # Acephale engineering log
 
+## 2026-11-16: Audit dataset units and family isolation
+
+Read-only verification traced the original 60 episodes plus 12 development
+episodes into 746 prefixes, then checked every compiled example's checkpoint and
+family against the frozen partition. The importer's 30-family `train` grouping
+contains separate 24-family fitting and six-family calibration subsets. Fitting,
+calibration, development and held-out family sets are disjoint; memory contains
+only fitting runs. The 1,074 fitting examples form 358 complete triplets. The
+117 calibration and 112 development examples contain neutral-ranking targets
+only. The configured teacher-forced export stage evaluates development only;
+141-prefix calibration goal agreement is a separate assessment.
+
+The reporter groups only observed task rows and the renderer iterates those
+groups, so absent goal/conditional diagnostics are not assigned invented zeros.
+No frozen artifact or selection rule changed. Audit receipt SHA-256:
+`6a2b2bfa7aa182ab28a0823d171c0c4959aa817de7672cc2df87b74b73918421`.
+The complete count table and source manifest hashes are in [methods](METHODS.md#frozen-study-dataset).
+
 ## 2026-11-16: Verify the image and repair evaluation ownership
 
 The full local image build at execution source `4438b56c` passed with 65 exact

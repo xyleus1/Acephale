@@ -16,6 +16,12 @@ Execution source `4438b56c` changes only the Dockerfile's signed APT snapshot
 sources; training/native source remains `5a36a8b3`. Keep original diagnostic,
 operator and current execution provenance separate.
 
+Use the [frozen dataset table](METHODS.md#frozen-study-dataset) for denominators:
+72 collected episodes, 746 replay prefixes and 1,074 fitting examples are
+different units. The 117/112 calibration/development examples are neutral-ranking
+only; configured teacher-forced evaluation uses the 112 development examples.
+Goal agreement has its own 141-prefix calibration plan.
+
 Both main seeds completed 204 optimizer updates and 204 gradient checks. Do not
 repeat training. Separate CPU recovery preserves each original serialization
 failure and verifies its final checkpoint, adapter and probe. The R5 provider

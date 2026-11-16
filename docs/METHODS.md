@@ -62,6 +62,51 @@ data and independent outcomes. Families are assigned to training, development an
 test before annotation or mining. Requested-goal annotations see only the public
 checkpoint. Native state, user simulation and reward evaluation stay in Python.
 
+### Frozen study dataset
+
+These counts come from the approved family partition, collected outcomes, replay
+declaration and compiled training rows, not from model scores. Each partition is
+balanced between airline and retail families.
+
+| Artifact and counting unit | Weight fitting | Calibration | Development | Held-out |
+| --- | ---: | ---: | ---: | ---: |
+| Approved task families | 24 | 6 | 6 | 8 |
+| Original collection: episodes | 48 | 12 | 0 | 0 |
+| Separate development collection: episodes | 0 | 0 | 12 | 0 |
+| Combined imported episodes | 48 | 12 | 12 | 0 |
+| Frozen replay prefixes | 469 | 141 | 136 | 0 |
+| Compiled predictor examples | 1,074 | 117 | 112 | 0 |
+| Distinct source checkpoints in compiled examples | 358 | 117 | 112 | 0 |
+
+The original 60-episode collection and separate 12-episode development collection
+each used the base actor, seed 17, one trial per task and two task variants per
+family. Together they supply 72 episodes and 746 prefixes. These collection
+trials are distinct from the later three-arm paired native evaluation.
+
+The importer's coarse `train` label covers 30 families: 24 fitting and six
+calibration. The explicit approved partition controls fitting and memory; its
+four family sets are disjoint. Actual calibration/development checkpoints and
+families do not enter the fitting examples. Memory selects the 48 fitting runs
+and retains 37 eligible runs from 23 fitting families, with 333 fragments and
+67 transitions. It contains no calibration, development or held-out runs.
+
+The 1,074 fitting examples are 358 complete triplets: one goal target, one neutral
+ranking target and one goal-conditioned ranking target per checkpoint. Fourteen
+of 372 selected checkpoints did not produce a complete triplet. The 117
+calibration and 112 development examples are **neutral-ranking targets only**.
+The saved-weight teacher-forced evaluation is configured to score only those 112
+development examples per seed. Its token loss/accuracy measures neither goal
+agreement nor free-running task success. Calibration goal agreement instead uses
+a separate 141-prefix annotation/grading plan. No held-out episode, prefix or
+training example is present in these preparation artifacts.
+
+SHA-256 identities: approved partition
+`702539697691946223eb8877d9dad646d4fda227c79af85ff141f28c82a3a4d3`;
+combined import manifest
+`b1b997e89a1eef14127e1814d08c0f1860bc91168730df8a74f8920bec9251ef`;
+compiled training manifest
+`6eff58cc745e457da26a9f4e16a6a45ae16ddbf497e22110ecc1c792bf448f9b`.
+
 Goal probabilities describe mutually exclusive interpretations of the complete
 requested outcome. Each interpretation includes all concurrent explicit user
 objectives; subgoals and execution prerequisites are not competing hypotheses.
