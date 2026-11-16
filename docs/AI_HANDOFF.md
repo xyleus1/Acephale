@@ -1,5 +1,14 @@
 # Working on Acephale
 
+E5 crossed the repaired callback but failed the strict host's dataset input check
+before model export: the extractor retained `inventory.json` alongside five
+payloads, while the producer froze only the five payloads. Automatic cleanup and
+exact provider termination passed. The prospective producer now binds the approved
+inventory too; eight independent actual-archive regressions passed. Keep the
+consumer, dataset and weights unchanged. E6 preparation also requires a separate
+bounded infrastructure funding supplement and a genuine AWS session horizon.
+No trained native benchmark score exists yet.
+
 E4 reached the cold diagnostic, then failed before strict export because the real
 successor hook wrapper omitted `preflight`. Cleanup and exact provider termination
 were verified. E5 exports that callback and checks the full required interface

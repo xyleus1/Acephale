@@ -23,14 +23,18 @@ hook wrapper did not export the required `preflight` callback. Automatic cleanup
 completed and provider termination was independently confirmed. No trained
 serving, replay or paired native trial ran in that attempt.
 
-The fifth evaluation-only continuation imports that callback explicitly and
-checks all five required hook methods before provisioning. A concrete regression
-reproduces the old failure and executes the repaired wrapper against retained
-configuration and export-binding validators, intercepting only external authority
-effects. Independent owner/context verification passed 37 cases; downstream and
-report verification passed 24 cases. The complete current configuration also
-passes actual validation. Saved-weight export and the paired scientific results
-remain pending. Neither trained adapter nor any scoring rule changed.
+The fifth evaluation-only continuation passed the repaired callback and reached
+the strict export process. Its input check rejected an unbound `inventory.json`:
+staging extracted five dataset payloads plus this inventory, while preparation
+froze only the payloads. No strict model export or paired benchmark ran. The owner
+drained its work, confirmed provider termination and closed the failed attempt.
+
+The prospective repair binds the exact inventory from the approved dataset
+archive. It leaves all data and the strict consumer unchanged. Eight independent
+regressions use the actual archive, extractor, producer and consumer loop; they
+reproduce the original failure, accept the complete six-file binding and reject
+tampering. Saved-weight export and the paired scientific results remain pending.
+Neither trained adapter nor any scoring rule changed.
 
 ## Training and continuation
 

@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-16: Freeze archive metadata with the payload
+
+If an extractor retains an inventory beside dataset payloads, bind that inventory
+to its approved archive hash before export. Validate the exact extracted file set
+instead of assuming the archive's payload list describes every staged file. Fix
+the producer's omission; retain the consumer's full-file integrity check and all
+original dataset bytes.
+
 ## 2026-11-16: Exercise the concrete hook wrapper before provisioning
 
 Require every callback used by the sequence at configuration admission. Tests

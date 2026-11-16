@@ -1,5 +1,22 @@
 # Acephale engineering log
 
+## 2026-11-16: Bind the complete extracted dataset
+
+E5 passed the concrete callback and entered strict export, but its input validator
+rejected a missing inventory binding before any export model call. The approved
+archive contains five payloads plus a 954-byte `inventory.json`; staging correctly
+extracts all six. Diagnostic preparation had frozen only the payloads. All five
+payload hashes matched. Cleanup and exact provider termination were verified.
+
+The prospective producer verifies the existing approved archive and its inventory,
+binds the inventory's exact remote path and hash, and requires the complete dataset
+binding before writing preparation output. It does not upload or modify the data.
+The strict host is unchanged. Eight independent regressions exercise the actual
+retained archive, extractor and producer and the exact consumer check, including
+the original failure and six tampering cases. Inventory SHA-256:
+`cb3b015151bc74ac7e52a4c621d452306aa0d87ebc7e6d73c47217bb01a656cb`.
+This repairs packaging provenance; it establishes no model improvement.
+
 ## 2026-11-16: Validate the concrete continuation interface
 
 E4 completed setup and cold diagnostics, but the real wrapper omitted `preflight`
