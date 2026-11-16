@@ -833,3 +833,13 @@ checks remain unchanged. Focused tests cover both reads, default behavior,
 Private startup qualification must include the real scheduled wrapper and
 preflight; direct loop timing alone is insufficient. No scientific result or
 model change follows from this operator repair.
+
+## 2026-11-16: Preserve historical capacity validation
+
+The count-only sidecar was created once; its first full validation then rejected
+an authenticated older GPU-capacity snapshot as though it were today's ledger.
+Keep that original failure and authority unchanged. Historical parent validation
+now receives the monetary ceilings already validated against the complete current
+ledger. Current count, retained-history, reservation and deadline checks remain
+mandatory. A separate post-creation receipt must bind the original creator and
+new validating source; this repair does not create another authority or host.

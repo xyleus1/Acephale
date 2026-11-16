@@ -1236,7 +1236,8 @@ def gpu_hour_capacity_history(ledger: dict, slice_sha256: str) -> dict:
     return {**body, "contentHash": digest(body)}
 
 
-def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dict) -> dict:
+def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dict, *,
+                                financial_caps: tuple[float, float, float] | None = None) -> dict:
     policy_path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".policy-v3.json")
     history = value.get("operationalHistory", {})
     if (amendment is None or amendment["version"] != 3 or amendment["policy"]["maxGpuHours"] != 64
@@ -1286,7 +1287,7 @@ def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dic
         raise ValueError("New provider lease must bind the GPU-hour capacity addendum")
     hours = finite_number(ledger["priorGpuHours"], "prior GPU hours") + sum(
         finite_number(row["reservedHours"], "retained GPU hours") for row in ledger["leases"])
-    caps = infrastructure_caps(ledger)
+    caps = infrastructure_caps(ledger) if financial_caps is None else financial_caps
     totals = _infrastructure_reserved_totals(ledger)
     if hours > 128 or any(totals[key] > cap for key, cap in zip(
             ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
@@ -1364,7 +1365,12 @@ def _validate_gpu_hour_extension(ledger: dict, amendment: dict | None, value: di
     baseline = {**ledger, **{key: history[key] for key in ("leases", "overheads", "trainingWindows")}}
     if gpu_hour_capacity_history(baseline, value["originalSliceSha256"]) != history:
         raise ValueError("GPU-hour extension operational history is inconsistent")
-    _validate_gpu_hour_capacity(baseline, amendment, parent)
+    # This authenticated historical parent predates later lease-count authority.
+    # Reuse the full current ledger's already validated monetary ceilings; do not
+    # reinterpret its historical row prefix as the current operational ledger.
+    _validate_gpu_hour_capacity(baseline, amendment, parent, financial_caps=tuple(
+        funding["policy"][key] / 1_000_000 for key in
+        ("effectiveInfrastructureMicrodollars", "effectiveComputeMicrodollars", "effectiveAssociatedMicrodollars")))
     current, retained = _infrastructure_reservations(ledger), _infrastructure_reservations(baseline)
     if any(current[key][:len(retained[key])] != retained[key] for key in current):
         raise ValueError("GPU-hour extension cannot release or rewrite prior reservations")

@@ -347,3 +347,13 @@ $1,000 policy and must retain the same $303 API projection. The new authority
 permits one additional evaluation-only lease, at most six hours and $1.99/hour.
 Optimizer authorization is rejected. An actual invoice is still required to
 release prior reservations; termination alone does not reconcile money.
+
+## 2026-11-16: Preserve historical capacity validation
+
+The count-only sidecar was created once; its first full validation then rejected
+an authenticated older GPU-capacity snapshot as though it were today's ledger.
+Keep that original failure and authority unchanged. Historical parent validation
+now receives the monetary ceilings already validated against the complete current
+ledger. Current count, retained-history, reservation and deadline checks remain
+mandatory. A separate post-creation receipt must bind the original creator and
+new validating source; this repair does not create another authority or host.
