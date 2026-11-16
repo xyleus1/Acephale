@@ -1,5 +1,22 @@
 # Acephale engineering log
 
+## 2026-11-16: Preserve evidence during repeated export verification
+
+E7 restored each seed's recorded native cache and reproduced all 248,320 saved
+logits exactly in first, repeated and repeatability checks. Both strict GPU
+exports and both 112-example teacher-forced neutral-ranking evaluations completed.
+No optimizer ran and original weights, probes and numerical gates stayed fixed.
+
+Local verification then imported a retained helper and rewrote its archived
+bytecode on Windows. The next hash check correctly failed. The compressed
+160-file archive was intact; a fresh extraction passed the unchanged verifier
+repeatedly with bytecode writes disabled. The failed owner was not relabeled.
+E8 loads the checked helper source through `runpy.run_path` and also suppresses
+bytecode at process startup. Actual-archive regressions cover normal and isolated
+Python with bytecode otherwise enabled, repeated checks and tampered-bytecode
+rejection. E8 serving and paired benchmarks remain pending. See the
+[follow-up observation](experiments/native-tuning-cache-2026-11-16.md#gpu-follow-up-and-local-verification-failure).
+
 ## 2026-11-16: Remove a startup-test timing assumption
 
 The Windows research suite exposed a test that expected process construction to

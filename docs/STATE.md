@@ -1,9 +1,25 @@
 # Current state
 
 Updated November 16, 2026 (UTC). Both predictor seeds completed their 204 optimizer
-updates. The saved adapters are intact. Strict reload qualification and the
-paired native evaluation remain incomplete; training completion is not a
-benchmark result.
+updates. E7 then reproduced both original probes exactly and completed strict
+GPU export with unchanged weights and tolerances. Separate vLLM serving
+qualification, trained replay and the paired native evaluation remain pending.
+Training and reload completion are not benchmark results.
+
+Each seed's first probe, repeated probe and repeatability check matched all
+248,320 reference logits with zero error after restoring its recorded native
+Triton cache. Both teacher-forced development evaluations completed on 112
+neutral-ranking examples each. These diagnostics do not measure free-running
+tool accuracy, goal agreement or native task success.
+
+The E7 local owner subsequently failed: importing an archived helper on Windows
+rewrote one archived Python bytecode file, so the next integrity check rejected
+the changed extraction. The original 160-file compressed archive remained intact.
+A fresh CPU-only extraction passed the unchanged strict verifier repeatedly with
+bytecode writing disabled; all archived files remained unchanged. The failed owner
+and original extraction are preserved. E8 is pending, with checked-source loading
+that does not read or write adjacent bytecode and process-startup suppression as
+an additional defense. Neither optimizer will be repeated.
 
 The sixth evaluation-only attempt passed strict input admission, then failed
 seed 17's inference-only warmup check: 18,971 of 248,320 original-reference
@@ -13,11 +29,12 @@ reference. Weights and probe bytes were unchanged. Its 39-file archive was
 verified; managed drain, cleanup and provider termination completed. No trained
 replay, teacher-forced development score or paired native result followed.
 
-The prospective repair restores the successful diagnostic's original Triton
+The repair restores the successful diagnostic's original Triton
 timing files, separately for each seed, before the same warmup. All 41 focused
 CPU tests passed, and the actual installed image restored all 22 native files
-without runtime-boundary mocks. Fresh GPU recovery remains unverified. The
-earlier warmup success alone did not establish portability. See the
+without runtime-boundary mocks. E7 subsequently reproduced both original probes
+and passed strict export on the GPU. The earlier warmup success alone did not
+establish portability. See the
 [failure analysis and repair](experiments/native-tuning-cache-2026-11-16.md).
 
 The second evaluation-only continuation failed during trainer-image setup when
@@ -49,7 +66,8 @@ archive. It leaves all data and the strict consumer unchanged. Eight independent
 regressions use the actual archive, extractor, producer and consumer loop; they
 reproduce the original failure, accept the complete six-file binding and reject
 tampering. The actual strict input gate subsequently passed. Saved-weight export
-and the paired scientific results remain pending.
+subsequently passed in E7; serving qualification and paired scientific results
+remain pending.
 Neither trained adapter nor any scoring rule changed.
 
 The sixth attempt used a separate $20 infrastructure supplement for one

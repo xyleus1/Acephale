@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-16: Verification must preserve archived evidence
+
+Execute a hash-checked archived Python helper directly from its source without
+reading or writing adjacent bytecode. Process-wide bytecode suppression is useful
+defense, but isolated Python ignores environment variables. Keep complete archive
+hash checks, including existing bytecode; do not omit the file that exposed the
+mutation. Preserve the failed extraction and validate a separate recovery copy.
+
+E7's GPU exports succeeded, but its managed local owner failed this integrity
+check. Preserve those distinct outcomes. Use the existing full E8 inference/export
+pipeline after the repair rather than inventing cross-lease success receipts.
+Neither completed optimizer may repeat. Serving qualification and paired trials
+remain separate required gates.
+
 ## 2026-11-16: Restore recorded native tuning state before qualification
 
 E6 showed that repeating a successful fitting-batch warmup did not reproduce its

@@ -1,5 +1,24 @@
 # Working on Acephale
 
+E7 completed strict GPU export for both seeds. Each first/repeat/repeatability
+comparison matched all 248,320 original logits exactly, and both 112-example
+teacher-forced neutral-ranking evaluations completed. Weights, probes and
+tolerances were unchanged; neither optimizer was repeated. vLLM qualification,
+trained replay and paired native scores remain pending.
+
+Its local owner then failed because importing the retained helper regenerated
+an archived Python bytecode file on Windows. The original compressed archive is
+intact. A fresh CPU-only extraction passed the unchanged verifier repeatedly with
+bytecode writes disabled and all 160 members unchanged. Preserve the failed
+owner, original extraction and successful recovery as distinct evidence.
+
+E8 retains the full evaluation pipeline. The prospective verifier runs the
+hash-checked helper source through `runpy.run_path`; direct source execution
+avoids adjacent bytecode even under isolated Python. Startup bytecode suppression
+is an additional defense. Actual-archive tests reproduce the old failure, pass
+repeated normal and isolated verification, and reject changed archived bytecode.
+Read the private operator handoff for current execution status; do not retrain.
+
 E6 passed strict input admission but failed seed 17's inference preparation:
 18,971/248,320 reference-logit mismatches, maximum absolute error 0.19140625.
 Its repeated probe was self-identical; weights and original probes were unchanged.
@@ -10,7 +29,7 @@ The prospective repair restores each seed's exact eleven native Triton timing
 files from the successful E1 diagnostic before importing the model/FLA/autotuner.
 It preserves the same warmup, original probes and strict export/serving gates.
 All 41 focused CPU tests and the installed-image restoration of all 22 files
-passed; fresh GPU recovery remains pending. Preserve both seed profiles and
+passed before E7's successful GPU recovery. Preserve both seed profiles and
 every failed attempt. Do not repeat training, construct new tuning profiles,
 replace references or relax tolerances. Read the
 [numerical portability note](experiments/native-tuning-cache-2026-11-16.md)
