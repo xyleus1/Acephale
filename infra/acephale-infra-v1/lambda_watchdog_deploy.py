@@ -236,28 +236,31 @@ def heartbeat(receipt_path, ledger, lease_id, *, publish_fn=publish, state_fn=wa
     while True:
         attempt_started = clock()
         for attempt in range(3):
-            state = state_fn(ledger, lease_id)
-            current = tuple(state.get(key) for key in ("leaseId", "instanceId", "expectedName", "planHash", "setupDeadline", "deadline"))
-            if state.get("leaseId") != lease_id or identity is not None and current != identity:
-                raise ValueError("Heartbeat lease identity or original deadlines changed")
-            identity = current
-            effective_deadline = state["deadline"] if state.get("ready") is True else state["setupDeadline"]
-            if state["status"] != "terminated" and clock() >= effective_deadline:
-                raise ValueError("Original effective heartbeat lease deadline reached")
-            try:
-                result = publish_fn(receipt_path, ledger, lease_id, bounded_requests=True)
-            except Exception as error:
-                details = heartbeat_error(error)
-                retry = details["retryable"] and attempt < 2 and clock() - attempt_started < 20
-                emit({"ok": False, "leaseId": lease_id, "heartbeatPublished": False,
-                      "observedAt": clock(), "attempt": attempt + 1, "retrying": retry, **details})
-                if not retry:
-                    raise
-                sleeper(2 * (attempt + 1))
-                continue
-            emit(result)
-            if state_fn(ledger, lease_id)["status"] == "terminated":
-                return result
+            # Share only pure content hashes across this attempt's actual reads.
+            # The context closes before the next attempt or steady-state sleep.
+            with budget_digest_scope():
+                state = state_fn(ledger, lease_id)
+                current = tuple(state.get(key) for key in ("leaseId", "instanceId", "expectedName", "planHash", "setupDeadline", "deadline"))
+                if state.get("leaseId") != lease_id or identity is not None and current != identity:
+                    raise ValueError("Heartbeat lease identity or original deadlines changed")
+                identity = current
+                effective_deadline = state["deadline"] if state.get("ready") is True else state["setupDeadline"]
+                if state["status"] != "terminated" and clock() >= effective_deadline:
+                    raise ValueError("Original effective heartbeat lease deadline reached")
+                try:
+                    result = publish_fn(receipt_path, ledger, lease_id, bounded_requests=True)
+                except Exception as error:
+                    details = heartbeat_error(error)
+                    retry = details["retryable"] and attempt < 2 and clock() - attempt_started < 20
+                    emit({"ok": False, "leaseId": lease_id, "heartbeatPublished": False,
+                          "observedAt": clock(), "attempt": attempt + 1, "retrying": retry, **details})
+                    if not retry:
+                        raise
+                    sleeper(2 * (attempt + 1))
+                    continue
+                emit(result)
+                if state_fn(ledger, lease_id)["status"] == "terminated":
+                    return result
             sleeper(20)
             break
 

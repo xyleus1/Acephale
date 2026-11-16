@@ -1129,3 +1129,22 @@ now receives the monetary ceilings already validated against the complete curren
 ledger. Current count, retained-history, reservation and deadline checks remain
 mandatory. A separate post-creation receipt must bind the original creator and
 new validating source; this repair does not create another authority or host.
+
+## 2026-11-16: Bound heartbeat digest memory per attempt
+
+Actual startup missed its handoff deadline even though three closed-lease starts
+had passed. Keep that failed attempt and all reservations. Profiling found two
+large authority keys repeatedly excluded by the raw-key cache size bound. Memo
+keys now retain a 32-byte SHA256 fingerprint of the same type-preserving marshal
+serialization. RFC8785 remains the miss validator; all files and authorities are
+still reread. One heartbeat attempt shares those pure hashes across its four
+observations, then discards the scope before the next attempt or normal sleep.
+The 128-entry bound, watchdog timeout, original deadlines and publication checks
+are unchanged. Qualification must measure the real scheduled path again; unit
+tests and operator timings establish no model, task-success or live-agent gain.
+
+A separate parent-bound lease-count extension permits one sixth evaluation lease
+when the fifth retained attempt consumes its slot. It retains the original v1
+count authority and every historical row. Monetary and GPU-hour limits, frozen
+API allocations and the optimizer prohibition remain independently enforced.
+Creating or validating this count authority does not itself dispatch a host.
