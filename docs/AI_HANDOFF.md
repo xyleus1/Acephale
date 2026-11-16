@@ -1,13 +1,28 @@
 # Working on Acephale
 
+E6 passed strict input admission but failed seed 17's inference preparation:
+18,971/248,320 reference-logit mismatches, maximum absolute error 0.19140625.
+Its repeated probe was self-identical; weights and original probes were unchanged.
+The 39-file failed archive, managed drain, cleanup and provider termination are
+verified. No trained benchmark or teacher-forced development score followed.
+
+The prospective repair restores each seed's exact eleven native Triton timing
+files from the successful E1 diagnostic before importing the model/FLA/autotuner.
+It preserves the same warmup, original probes and strict export/serving gates.
+All 41 focused CPU tests and the installed-image restoration of all 22 files
+passed; fresh GPU recovery remains pending. Preserve both seed profiles and
+every failed attempt. Do not repeat training, construct new tuning profiles,
+replace references or relax tolerances. Read the
+[numerical portability note](experiments/native-tuning-cache-2026-11-16.md)
+and current private operator handoff before any execution.
+
 E5 crossed the repaired callback but failed the strict host's dataset input check
 before model export: the extractor retained `inventory.json` alongside five
 payloads, while the producer froze only the five payloads. Automatic cleanup and
 exact provider termination passed. The prospective producer now binds the approved
-inventory too; eight independent actual-archive regressions passed. Keep the
-consumer, dataset and weights unchanged. E6 preparation also requires a separate
-bounded infrastructure funding supplement and a genuine AWS session horizon.
-No trained native benchmark score exists yet.
+inventory too; eight independent actual-archive regressions passed, and E6's real
+strict input gate accepted the complete binding. Keep the consumer, dataset and
+weights unchanged. No trained native benchmark score exists yet.
 
 E4 reached the cold diagnostic, then failed before strict export because the real
 successor hook wrapper omitted `preflight`. Cleanup and exact provider termination
@@ -50,10 +65,11 @@ instructions to retrain these completed seeds.
 
 The evaluation-only GPU diagnostic is closed and verified. Cold reloads failed
 for both seeds despite exact parameter hashes. The same inference-only first
-fitting-batch warmup reproduced each original probe exactly, twice. Do not rerun
-training or replace references. Apply preparation inside the prospective export
-process and require both unchanged strict export and vLLM qualification before
-benchmarks. Details are in `experiments/reload-preparation-2026-11-15.md`.
+fitting-batch warmup reproduced each original probe exactly, twice, in E1. E6
+showed that warmup alone was insufficient on the new process. The prospective
+native-cache restoration must still pass both unchanged strict export and vLLM
+qualification before benchmarks. Historical details remain in
+`experiments/reload-preparation-2026-11-15.md`.
 
 `python -m acephale.reload_diagnostic` investigates a retained 204-update
 checkpoint's reload failure. It requires the separate evaluation-only admission

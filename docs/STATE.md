@@ -5,6 +5,21 @@ updates. The saved adapters are intact. Strict reload qualification and the
 paired native evaluation remain incomplete; training completion is not a
 benchmark result.
 
+The sixth evaluation-only attempt passed strict input admission, then failed
+seed 17's inference-only warmup check: 18,971 of 248,320 original-reference
+logits exceeded the unchanged tolerance, with maximum absolute error 0.19140625.
+The repeated probe was identical to the first, but both differed from the saved
+reference. Weights and probe bytes were unchanged. Its 39-file archive was
+verified; managed drain, cleanup and provider termination completed. No trained
+replay, teacher-forced development score or paired native result followed.
+
+The prospective repair restores the successful diagnostic's original Triton
+timing files, separately for each seed, before the same warmup. All 41 focused
+CPU tests passed, and the actual installed image restored all 22 native files
+without runtime-boundary mocks. Fresh GPU recovery remains unverified. The
+earlier warmup success alone did not establish portability. See the
+[failure analysis and repair](experiments/native-tuning-cache-2026-11-16.md).
+
 The second evaluation-only continuation failed during trainer-image setup when
 Debian's live security index stopped offering the pinned
 `linux-libc-dev=6.1.190-1`. No export, replay or paired native comparison ran in
@@ -29,17 +44,16 @@ staging extracted five dataset payloads plus this inventory, while preparation
 froze only the payloads. No strict model export or paired benchmark ran. The owner
 drained its work, confirmed provider termination and closed the failed attempt.
 
-The prospective repair binds the exact inventory from the approved dataset
+The sixth attempt's producer bound the exact inventory from the approved dataset
 archive. It leaves all data and the strict consumer unchanged. Eight independent
 regressions use the actual archive, extractor, producer and consumer loop; they
 reproduce the original failure, accept the complete six-file binding and reject
-tampering. Saved-weight export and the paired scientific results remain pending.
+tampering. The actual strict input gate subsequently passed. Saved-weight export
+and the paired scientific results remain pending.
 Neither trained adapter nor any scoring rule changed.
 
-The next evaluation configuration is sealed and passes actual keyless validation.
-Its scheduled task is registered but disabled until authentication covers the
-complete provider lease. A separate $20 infrastructure supplement permits one
-evaluation-only lease of at most six hours. The frozen native/API reader passed
+The sixth attempt used a separate $20 infrastructure supplement for one
+evaluation-only lease of at most six hours. Its frozen native/API reader passed
 an in-memory compatibility check reserving the full $303 development/held-out
 allowance after projected infrastructure costs; no benchmark calls occurred in
 that check. The exact [dataset repair patch](experiments/operator-patches/README.md)
@@ -64,10 +78,13 @@ The evaluation-only continuation uses the completed weights. Its authorization
 allows diagnostic, export and evaluation actions and forbids optimizer work.
 The cold diagnostic reproduced failures for both seeds despite exact loaded
 parameter hashes. One common inference-only fitting-batch warmup then reproduced
-all 248,320 original reference logits bit-for-bit for both seeds, including a
-repeat probe. Kernel selections changed. This supports a tuning-history effect
-without isolating a single causal kernel. Strict export and vLLM qualification
-remain separate requirements. See the [GPU diagnostic](experiments/reload-preparation-2026-11-15.md).
+all 248,320 original reference logits bit-for-bit for both seeds in the first
+evaluation-only diagnostic, including a repeat probe. Kernel selections changed.
+The sixth attempt did not reproduce that success; its selected profiles differed
+despite matching reconstructed inputs and recorded package versions. Strict
+export and vLLM qualification remain separate requirements. See the
+[original GPU diagnostic](experiments/reload-preparation-2026-11-15.md) and the
+[portability failure](experiments/native-tuning-cache-2026-11-16.md).
 
 The fourth continuation had failed before profiling or seed 29 because the two
 earlier fitting windows exhausted their cumulative allowance. A prospective
@@ -175,7 +192,8 @@ the same 20 selected cases and unchanged acceptance thresholds. Its actual
 audit must pass before training; the original human-reviewed study remains
 pending. This protocol amendment is not a measured accuracy improvement.
 
-1. Complete and export both full training seeds, strict reloads and diagnostics.
+1. Reproduce the original probes and strictly export both completed adapters;
+   do not repeat either optimizer.
 2. Qualify each actual adapter in vLLM with unchanged complete-prompt numerical
    checks; run all three frozen replay conditions and fresh calibration.
 3. Measure native read/prefetch opportunities and run the original 36 paired

@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-16: Restore recorded native tuning state before qualification
+
+E6 showed that repeating a successful fitting-batch warmup did not reproduce its
+kernel choices or original logits on a new process. Prospectively restore the
+successful diagnostic's exact per-seed Triton timing files through the native
+disk-cache reader. Preserve archive, reader, typed-key and profile identities;
+do not construct substitute configurations or search for a new passing profile.
+Keep the warmup, original probes, tolerances and separate strict export/serving
+checks. CPU restoration establishes file integrity, not fresh GPU reproduction.
+Preserve E1 success and E6 failure as separate evidence. See the
+[numerical portability note](experiments/native-tuning-cache-2026-11-16.md).
+
 ## 2026-11-16: Freeze archive metadata with the payload
 
 If an extractor retains an inventory beside dataset payloads, bind that inventory

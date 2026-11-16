@@ -1,5 +1,25 @@
 # Acephale engineering log
 
+## 2026-11-16: Preserve kernel choices across evaluation processes
+
+E6 passed strict input checks, then seed 17's original-reference comparison
+failed after warmup: 18,971/248,320 mismatches, maximum absolute error 0.19140625.
+Both current probes were bitwise identical to each other. Original weights and
+probe bytes were unchanged, as were the reconstructed batch and recorded package
+versions. Three kernel selections differed from successful E1 after warmup and
+four after probes. This supports an autotuning-history hypothesis, not proof of
+one causal kernel. The 39-file failed archive was verified and cleanup completed.
+
+The prospective helper restores the original per-seed native cache files before
+FLA/autotuner imports and verifies the installed Triton 3.7.1 reader. One shared
+verifier checks exact original payloads, selected profiles, batch and probe
+results for both runtime and exported evidence. Runtime verification additionally
+checks the physical cache, environment and symlinks. All 41 focused CPU tests
+passed; an actual installed-image check restored all 22 files without runtime
+mocks. Fresh GPU recovery remains pending. Neither optimizer, threshold nor
+benchmark selection changed. See the
+[experiment note](experiments/native-tuning-cache-2026-11-16.md).
+
 ## 2026-11-16: Complete local evaluation readiness
 
 The next configuration passed actual keyless validation twice and its task was

@@ -326,6 +326,16 @@ row/family, prompt and input-token hashes accompany the probe. The internal
 probes retain their original meaning and receipts. No file is
 silently cast or relabeled to bypass the failed merged export.
 
+Saved-weight inference preparation is an explicit, versioned numerical step.
+The prospective procedure restores each seed's exact native Triton 3.7.1 timing
+files from the successful diagnostic before model/FLA/autotuner imports, then
+runs the unchanged reconstructed fitting-batch warmup and original probes.
+It verifies the native reader, cache bytes, selected profiles, batch and weights;
+it does not fit weights or substitute references. Kernel-cache restoration is
+still an unqualified hypothesis after warmup alone failed on a later process.
+Historical sampler state remains unknown. See the
+[observations and native-cache procedure](experiments/native-tuning-cache-2026-11-16.md).
+
 The v2 server must return the exact top token and a conditional binary probability
 within 0.01 of PyTorch for the same recorded input token IDs. This predeclared
 one-token gate tests loading and approximate numerical compatibility, not full
