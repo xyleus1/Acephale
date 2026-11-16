@@ -1,5 +1,26 @@
 # Acephale engineering log
 
+## 2026-11-16: Retain the active-startup timeout
+
+E11's final provider-dispatch check passed: heartbeat age 4.18 seconds, budget
+inspection 6.23 seconds and 88.3 seconds left on the predecessor fence. The
+scheduled heartbeat then missed its 90-second startup deadline. The retained
+timeline separates 12.067 seconds before wrapper start, 17.144 seconds to its
+preflight timestamp and 71.894 seconds from there to the first child timestamp.
+The latter was 11.105 seconds late. There was no heartbeat stderr failure.
+
+Automatic cleanup and independent provider absence checks completed. The local
+wrapper and children exited; no foundation or scientific phase was dispatched.
+All original holds and deadlines remain. Three prior closed-lease canaries had
+passed, so their maximum cannot be treated as an active-startup guarantee.
+
+Read-only profiling found repeated canonical serialization when large raw memo
+keys filled the 16 MiB cap. Fixed-size content-hash keys eliminated those repeated
+misses and reduced retained key bytes, but the observed paired read improvement
+was only 3.5% wall time. Local memory pressure was also substantial. Complete
+publication profiling remains necessary before attributing the delay or claiming
+a sufficient repair. Scientific models, data and scoring are unchanged.
+
 ## 2026-11-16: Exercise the complete managed authority path
 
 Three real scheduled startup canaries passed against a closed lease, with no

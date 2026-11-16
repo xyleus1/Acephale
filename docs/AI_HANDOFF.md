@@ -37,6 +37,15 @@ is the sole steady publisher. The additional count-only evaluation slot remains
 separate from financial authority and provider launch. Read the private operator
 handoff for current execution status; do not repeat either optimizer.
 
+E11 is now closed with a startup timeout. Its first successful child heartbeat
+was 11.105 seconds beyond the 90-second handoff limit; no foundation or scientific
+phase started. Provider absence and local process closure were independently
+verified. Keep its holds, original deadlines and failure. The three closed-lease
+startup canaries passed but did not bound this active startup. Prospective work
+must measure the complete publication path and preserve the 120-second watchdog;
+neither memory-pressure observations nor a small pure-cache timing gain establish
+that the next startup will pass.
+
 ## Scheduled heartbeat handoff, 2026-11-16
 
 An optional count-only sidecar permits one fifth evaluation lease after the four

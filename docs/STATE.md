@@ -55,6 +55,20 @@ scheduled companion remains the sole steady publisher. An additional evaluation
 slot can be authorized separately without altering monetary ceilings, old holds,
 GPU-hour limits, models or scoring. E11 has not yet produced scientific results.
 
+E11 subsequently allocated its exact GPU, but the first scheduled child heartbeat
+arrived 11.105 seconds after the 90-second startup limit. The launcher terminated
+the instance before foundation or scientific dispatch. Independent checks confirmed
+provider absence and local task/process closure; every financial hold remains.
+Its three preceding closed-lease canaries passed in 80.263, 40.014 and 68.880
+seconds. Those observations did not establish a bound for active startup.
+
+Postmortem measurements found severe local memory pressure and repeated canonical
+hashing after a 16 MiB cache filled with large keys. These are measured conditions,
+not proof of the entire delay's cause. An offline compact-key comparison removed
+the repeated misses but improved paired read time only 3.5% in that sample. The
+complete SDK/publication path must be measured before another startup repair is
+treated as qualified. No trained replay or paired native result followed E11.
+
 The operator repair caches only pure canonical digests within one operation;
 all authority files are still read and validated. Three actual publication cycles
 with both remote readbacks passed, with observed publication intervals of 44.430
