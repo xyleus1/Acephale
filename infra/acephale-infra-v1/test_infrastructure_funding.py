@@ -142,3 +142,92 @@ def test_training_receipt_retains_v3_with_separate_provider_funding(funded, tmp_
     assert actual["version"] == 3 and actual["budgetPolicy"] == amendment["policy"]
     assert actual["studyReservation"]["infrastructureFundingSupplementHash"] == funding["contentHash"]
     assert training.validate_training_lease(target, now=NOW) == actual
+
+
+@pytest.fixture
+def extended(funded):
+    path, ledger, amendment, capacity, target, parent = funded
+    old = control.reserve_lease(ledger, quote(), 6, 3.582, NOW)
+    old.update(status="terminated", instanceId="previous-funded-instance", name="previous-funded-name")
+    ledger["leases"].append(old)
+    control.atomic_json(path, ledger)
+    policy = control.read_json(control.ROOT / "src/lib/acephale/contracts/infrastructure-funding-v2.json")
+    body = {**copy.deepcopy(parent), "version": 2, "profile": "acephale-infrastructure-funding-v2",
+            "policy": policy, "policyHash": control._budget_digest(policy),
+            "parentFundingHash": parent["contentHash"], "parentFundingSha256": control.sha256(target),
+            "baselineLeases": copy.deepcopy(ledger["leases"])}
+    body.pop("contentHash")
+    extension = {**body, "contentHash": control._budget_digest(body)}
+    extension_path = Path(str(target).replace("-v1.json", "-v2.json"))
+    control.write_new(extension_path, extension)
+    return path, ledger, parent, target, extension, extension_path
+
+
+def test_extension_retains_parent_and_reserves_exactly_one_six_hour_evaluation(extended):
+    path, ledger, parent, target, extension, _ = extended
+    before = target.read_bytes(), path.read_bytes()
+    assert control.infrastructure_caps(ledger) == (320, 240, 80)
+    assert control.infrastructure_funding(ledger) == extension
+    with pytest.raises(ValueError, match="six hours"):
+        control.reserve_lease(ledger, quote(), 6.01, 3.582, NOW)
+    with pytest.raises(ValueError, match="approved rate"):
+        control.reserve_lease(ledger, {**quote(), "hourlyUsd": 2.0}, 6, 3.582, NOW)
+    lease = control.reserve_lease(ledger, quote(), 6, 3.582, NOW)
+    assert lease["infrastructureFundingSupplementHash"] == extension["contentHash"]
+    lease.update(status="terminated", instanceId="new-instance", name="new-name")
+    ledger["leases"].append(lease)
+    assert control.infrastructure_funding(ledger) == extension
+    with pytest.raises(ValueError, match="only one"):
+        control.reserve_lease(ledger, quote(), 1, 1, NOW)
+    assert (target.read_bytes(), path.read_bytes()) == before
+
+
+@pytest.mark.parametrize("change", [
+    lambda value: value.update(parentFundingHash="f" * 64),
+    lambda value: value.update(parentFundingSha256="f" * 64),
+    lambda value: value["baselineLeases"][-1].update(infrastructureFundingSupplementHash="f" * 64),
+    lambda value: value["baselineLeases"][0].update(reservedUsd=0),
+    lambda value: value["policy"].update(effectiveComputeMicrodollars=241000000),
+])
+def test_extension_rejects_resealed_parent_history_or_cap_changes(extended, change):
+    path, ledger, _, _, extension, target = extended
+    change(extension)
+    extension["contentHash"] = control._budget_digest({k:v for k,v in extension.items() if k != "contentHash"})
+    control.atomic_json(target, extension)
+    with pytest.raises(ValueError):
+        control.infrastructure_funding(ledger)
+
+
+def test_extension_cannot_authorize_optimizer_or_hide_parent(extended, tmp_path):
+    path, ledger, _, parent_path, _, _ = extended
+    with pytest.raises(ValueError, match="does not authorize optimizer"):
+        control.training_lease(path, "unused", tmp_path/"unused-preflight", tmp_path/"unused-output", 1)
+    parent_path.unlink()
+    with pytest.raises(ValueError, match="missing|parent"):
+        control.infrastructure_funding(ledger)
+
+
+def test_extended_funding_emits_unchanged_evaluation_contract(extended, tmp_path):
+    from acephale.training import validate_execution_lease
+    path, ledger, _, _, funding, _ = extended
+    lease = control.reserve_lease(ledger, quote(), 6, 3.582, NOW)
+    lease.update(status="active", instanceId="evaluation-instance", name="evaluation-name",
+        studyReservation={"reservationId":"lambda-infra:"+lease["id"],
+            "maximumMicrodollars":lease["reservedMicrodollars"],"infrastructureFundingSupplementHash":funding["contentHash"]})
+    ledger["leases"].append(lease)
+    control.atomic_json(path, ledger)
+    preflight, output = tmp_path/"preflight.json", tmp_path/"evaluation.json"
+    control.write_new(preflight,{"profile":"acephale-evaluation-preflight-v1","leaseId":lease["id"],
+        "instanceId":lease["instanceId"],"studyBindingHash":ledger["planHash"],"machineIdSha256":"d"*64,
+        "providerReceiptSha256":"e"*64,"actorStopped":True,"gpuProcesses":0,"observedAt":NOW,
+        "hardwareProfile":"a100-40gb-v1","hardwareProfileHash":quote()["hardwareProfileHash"]})
+    before=path.read_bytes()
+    with patch.object(control.time,"time",return_value=NOW):
+        receipt=control.evaluation_lease(path,lease["id"],preflight,output,3600,source_probe=lambda _:"b"*40)
+    assert path.read_bytes()==before
+    assert receipt["optimizerAllowed"] is False
+    assert receipt["newFinancialReservation"] is False
+    for action in ("diagnostic","export","evaluate"):
+        assert validate_execution_lease(output,action=action,now=NOW+1)==receipt
+    with pytest.raises(ValueError):
+        validate_execution_lease(output,action="train",now=NOW+1)

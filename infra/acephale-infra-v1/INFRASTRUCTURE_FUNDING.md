@@ -73,3 +73,22 @@ invoice-confirmed final charge. Keep all holds until a separate audited
 reconciliation uses actual invoice evidence. See the primary
 [billing overview](https://docs.lambda.com/public-cloud/billing/) and
 [invoice history instructions](https://docs.lambda.com/public-cloud/manage-billing/).
+
+
+## Bounded evaluation infrastructure extension
+
+A second append-only funding sidecar adds $15 compute and $5 associated charges.
+It retains the first funding authority, all reservations and unknown outcomes,
+and the frozen v3 API policy and $65 contingency. The infrastructure reader sees
+$320 ($240 compute, $80 associated); the frozen API reader still sees its original
+$1,000 policy and must retain the same $303 API projection. The new authority
+permits one additional evaluation-only lease, at most six hours and $1.99/hour.
+Optimizer authorization is rejected. An actual invoice is still required to
+release prior reservations; termination alone does not reconcile money.
+
+Use the existing funding writer with request `version: 2` after the original
+authority is present and all identified work is closed. This creates
+`budget.jsonl.infrastructure-funding-v2.json` with parent content/file hashes; it
+does not edit either ledger or either earlier policy/funding file. Provider
+launch still requires independent source, auth, capacity, price, and shutdown
+checks. A new closed-run baseline cannot authorize a second new lease.
