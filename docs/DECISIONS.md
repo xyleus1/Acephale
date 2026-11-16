@@ -1,5 +1,25 @@
 # Acephale decisions
 
+## 2026-11-16: declare the native financial port separately
+
+Use an explicit source-pinned financial module port for funding v5. Keep the
+frozen native implementation and original journal untouched, retain each API
+allocation and trial limit, and change only recognition of separately approved
+infrastructure capacity. The original aggregate ceiling remains documented.
+No runtime model, data split, scorer, prompt or optimizer behavior changes.
+
+## One POST with exact-instance reconciliation, 2026-11-16
+
+An uncertain launch response is not evidence that no host exists. Keep the
+single durable launching transition and one POST; never retry that POST. An
+explicit recovery port may adopt only a unique new exact-name instance after
+matching authoritative list/detail identity and all observable requested
+attributes. Preserve the original uncertainty category, historical holds and
+deadlines. Use real synchronous two-controller publications during bounded GET
+reconciliation and preserve the original 120-second heartbeat timeout. The
+provider does not document name uniqueness or an idempotency token, so pre-POST
+absence and the complete prior ID set are required temporal ownership evidence.
+
 ## 2026-11-16: Use finite reusable dispatch capacity without more dollar increments
 
 Permit sixteen evaluation dispatch slots within existing funding-v4 and GPU-v3

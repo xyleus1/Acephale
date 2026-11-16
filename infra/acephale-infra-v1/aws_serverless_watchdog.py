@@ -25,7 +25,7 @@ from aws_control import (
 
 POLL_OFFSETS = (0, 30, 60)
 HERE = Path(__file__).resolve().parent
-CODE_FILES = {"aws_serverless_watchdog.py", "aws_control.py", "aws_readiness.py", "control.py", "evaluation_lease_capacity.py", "versions.json"}
+CODE_FILES = {"aws_serverless_watchdog.py", "aws_control.py", "aws_readiness.py", "control.py", "evaluation_lease_capacity.py", "provider_launch_recovery.py", "versions.json"}
 
 
 def normalize(value):

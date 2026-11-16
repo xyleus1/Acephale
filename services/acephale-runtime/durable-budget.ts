@@ -110,7 +110,7 @@ export class DurableBudget {
   private journalDigest = createHash("sha256");
   private journalBytes = 0;
   readonly recovery: { checkpointUsed: boolean; verifiedPrefixBytes: number; replayedRecords: number } = { checkpointUsed: false, verifiedPrefixBytes: 0, replayedRecords: 0 };
-  constructor(private path: string, private options: { recoveryCheckpoint?: boolean; writeRecoveryCheckpoint?: boolean; infrastructureOwner?: boolean } = {}) {
+  constructor(private path: string, private options: { recoveryCheckpoint?: boolean; writeRecoveryCheckpoint?: boolean; infrastructureOwner?: boolean; nativeFundingOwner?: boolean } = {}) {
     mkdirSync(dirname(path), { recursive: true });
     this.lockDescriptor = openSync(`${path}.lock`, "wx", 0o600);
     try {
@@ -162,9 +162,13 @@ export class DurableBudget {
         try { fsyncSync(directory); } finally { closeSync(directory); }
       }
       this.policy = readBudgetPolicy(path, entries);
-      // Model/native owners keep the frozen base ceiling. Only the infrastructure
-      // owner and its report explicitly consume the separate financial authority.
-      this.infrastructureFunding = this.options.infrastructureOwner ? readInfrastructureFunding(path, entries, this.policy) : undefined;
+      // Default consumers keep the base ceiling. An explicit, source-bound native
+      // financial port may consume v5 without changing model/API allocations.
+      this.infrastructureFunding = (this.options.infrastructureOwner || this.options.nativeFundingOwner) ? readInfrastructureFunding(path, entries, this.policy) : undefined;
+      if (this.options.nativeFundingOwner && (this.infrastructureFunding?.version !== 5
+        || this.infrastructureFunding.policy.nativeBudgetPort !== "acephale-infrastructure-aware-native-budget-v1")) {
+        throw new Error("Native financial port requires exact funding v5 authority");
+      }
       const allocations = this.infrastructureFunding ? { ...this.policy!.policy.allocationsMicrodollars,
         infrastructure: this.infrastructureFunding.policy.effectiveInfrastructureMicrodollars } : this.policy?.policy.allocationsMicrodollars;
       this.ledger = new BudgetLedger(next => this.append(next), entries, allocations);

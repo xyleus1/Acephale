@@ -1,5 +1,25 @@
 # Acephale research runbook
 
+## Explicit native financial compatibility
+
+After funding-v5 activation and independent review of the current operator,
+create a new immutable port manifest from the clean committed sources:
+
+```powershell
+node --import tsx scripts/acephale-native-budget-manifest.ts <frozen-5a-root> <frozen-c8-analysis-root> <new-port-manifest.json>
+```
+
+Bind its exact SHA and the loader/adapter source closure in the execution
+manifest. Pass `ACEPHALE_NATIVE_BUDGET_PORT`,
+`ACEPHALE_NATIVE_BUDGET_PORT_SHA256` and the returned `NODE_OPTIONS` to the owned
+Python/Node native-analysis descendants. This must include checkpoint, cohort
+reservation and native-service invocations. Do not change the frozen manifest's
+original budget-policy hashes or overwrite its source. An absent port retains
+the old ceiling and may reject new infrastructure commitments. The private
+execution configuration records both original and operational source identities.
+The loader rejects a changed target, source file or manifest hash before the
+native module executes; the adapter requires exact funding-v5 authority.
+
 Follow [methods](METHODS.md) and [current state](STATE.md) before execution. Run
 Node commands at repository root. Python commands require the research package on
 `PYTHONPATH`; native commands also require the separate pinned benchmark

@@ -1,3 +1,4 @@
+import approvedV5 from "../../src/lib/acephale/contracts/infrastructure-funding-v5.json";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -13,14 +14,15 @@ export const INFRASTRUCTURE_FUNDING_V1 = approved;
 export const INFRASTRUCTURE_FUNDING_V2 = approvedV2;
 export const INFRASTRUCTURE_FUNDING_V3 = approvedV3;
 export const INFRASTRUCTURE_FUNDING_V4 = approvedV4;
-export type FundingVersion = 1 | 2 | 3 | 4;
+export const INFRASTRUCTURE_FUNDING_V5 = approvedV5;
+export type FundingVersion = 1 | 2 | 3 | 4 | 5;
 export const infrastructureFundingPath = (journal: string, version: FundingVersion = 1) => `${resolve(journal)}.infrastructure-funding-v${version}.json`;
 export type FundingRow = Record<string, unknown>;
 export interface InfrastructureFunding {
   version: FundingVersion; profile: `acephale-infrastructure-funding-v${FundingVersion}`;
   parentFundingHash?: string; parentFundingSha256?: string;
   policy: typeof approved & Partial<Pick<typeof approvedV4,
-    "maximumNewLeases" | "maximumSessionHours" | "evaluationOnly" | "maximumHourlyUsd">>;
+    "maximumNewLeases" | "maximumSessionHours" | "evaluationOnly" | "maximumHourlyUsd">> & { nativeBudgetPort?: string };
   policyHash: string; contentHash: string;
   baseBudgetPolicyHash: string; baseBudgetAmendmentHash: string; baseBudgetAmendmentSha256: string;
   studyLedgerPathHash: string; infrastructureLedgerPathHash: string;
@@ -40,7 +42,7 @@ export function checkedFundingFile(path: string) {
 
 export function readInfrastructureFunding(journal: string, entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding | undefined {
   let latest: InfrastructureFunding | undefined;
-  for (const version of [1, 2, 3, 4] as const) {
+  for (const version of [1, 2, 3, 4, 5] as const) {
     const path = infrastructureFundingPath(journal, version);
     if (!existsSync(path)) continue;
     if (version > 1 && latest?.version !== version - 1) throw new Error("Infrastructure funding extension requires its original parent");
@@ -52,9 +54,9 @@ export function readInfrastructureFunding(journal: string, entries: [string, Res
 export function validateInfrastructureFunding(value: InfrastructureFunding, journal: string,
   entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding {
   const { contentHash, ...body } = value;
-  const expected = value.version === 4 ? approvedV4 : value.version === 3 ? approvedV3 : value.version === 2 ? approvedV2 : approved;
+  const expected = value.version === 5 ? approvedV5 : value.version === 4 ? approvedV4 : value.version === 3 ? approvedV3 : value.version === 2 ? approvedV2 : approved;
   const date = Date.parse(value.authorizedAt), digest = /^[a-f0-9]{64}$/;
-  if (base?.version !== 3 || ![1, 2, 3, 4].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
+  if (base?.version !== 3 || ![1, 2, 3, 4, 5].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
     || contentHash !== hash(body) || value.policyHash !== hash(expected) || hash(value.policy) !== hash(expected)
     || value.baseBudgetPolicyHash !== base.policyHash || value.baseBudgetAmendmentHash !== base.contentHash
     || value.baseBudgetAmendmentSha256 !== createHash("sha256").update(checkedFundingFile(budgetPolicyPath(journal, 3))).digest("hex")
@@ -86,7 +88,7 @@ export function validateInfrastructureFunding(value: InfrastructureFunding, jour
   return value;
 }
 
-/** A frozen consumer still dispatches under v3, including its $935 non-contingency limit. */
+/** Versions 1-4 preserve the original ceiling. V5 declares the explicit native financial port. */
 export function frozenApiProjection(entries: (Reservation & { id: string })[], additionalInfrastructure: number,
   base: BudgetAmendment, funding: InfrastructureFunding) {
   if (!Number.isSafeInteger(additionalInfrastructure) || additionalInfrastructure < 0) throw new Error("Invalid infrastructure projection");
@@ -102,11 +104,13 @@ export function frozenApiProjection(entries: (Reservation & { id: string })[], a
     }
   }
   const projected = nonContingency + additionalInfrastructure + headroom;
-  const ceiling = base.policy.totalMicrodollars - base.policy.allocationsMicrodollars.contingency;
-  if (projected > ceiling || committed + additionalInfrastructure + headroom > base.policy.totalMicrodollars) {
+  const total = funding.version === 5 ? funding.policy.effectiveTotalMicrodollars : base.policy.totalMicrodollars;
+  const ceiling = total - base.policy.allocationsMicrodollars.contingency;
+  if (projected > ceiling || committed + additionalInfrastructure + headroom > total) {
     throw new Error("Infrastructure reservation would exhaust protected frozen API headroom");
   }
   return { frozenApiHeadroomMicrodollars: headroom, frozenProjectedNonContingencyMicrodollars: projected,
-    frozenNonContingencyCeilingMicrodollars: ceiling, frozenTotalCeilingMicrodollars: base.policy.totalMicrodollars,
+    frozenNonContingencyCeilingMicrodollars: ceiling, frozenTotalCeilingMicrodollars: total,
+    ...(funding.version === 5 ? { nativeBudgetPort: approvedV5.nativeBudgetPort, originalFrozenTotalCeilingMicrodollars: base.policy.totalMicrodollars } : {}),
     frozenApiPlanHash: hash(funding.policy.frozenApiPlanMicrodollars) };
 }

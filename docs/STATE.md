@@ -23,11 +23,21 @@ parent publication finished at 233 seconds, after that window. Provider absence,
 termination and local process closure were subsequently verified. No model or
 native trial ran on this host.
 
-The prospective E15 preparation window is 600 seconds, clamped to the original
+The E15 preparation window was 600 seconds, clamped to the original
 setup and lease deadlines. The 90-second handoff and 120-second watchdog remain
 unchanged. Tests reproduce the observed timing through the real parent and child
-functions. Current data, trained weights and benchmark scoring are unchanged;
-E15 serving qualification and paired evaluation remain pending.
+functions. E15 passed its final freshness check, but its single provider launch
+request returned no usable response. The provider had created the instance;
+exact-name recovery identified and terminated it. Independent checks confirmed
+provider absence and local owner closure. No model or native trial ran.
+
+The next attempt retains that startup repair and adds bounded recovery of an
+uncertain launch response. It inventories existing instances before one launch
+request, then requires a unique new instance with the reserved name and matching
+list/detail identity. It never repeats the launch POST automatically. Actual
+controller refreshes preserve the watchdog while recovery runs. Current data,
+trained weights and benchmark scoring are unchanged. Serving qualification,
+trained replay and paired native evaluation remain pending.
 
 Each seed's first probe, repeated probe and repeatability check matched all
 248,320 reference logits with zero error after restoring its recorded native

@@ -490,12 +490,17 @@ def evaluation_lease(ledger_path: Path, lease_id: str, preflight_path: Path, out
 def watchdog_state(ledger_path: Path, lease_id: str) -> dict[str, Any]:
     ledger = checked_bound_ledger(ledger_path)
     lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
+    return watchdog_payload(ledger, lease, time.time())
+
+
+def watchdog_payload(ledger: dict, lease: dict, observed_at: float) -> dict:
+    """Pure serialization shared by real reads and reconciliation proof checks."""
     if lease["status"] not in {"reserved", "launching", "launch_unknown", "active", "termination_requested", "terminated"}:
         raise ValueError("Lease funding has not completed")
-    return {"version": 1, "profile": PROFILE, "planHash": ledger["planHash"], "leaseId": lease_id,
+    return {"version": 1, "profile": PROFILE, "planHash": ledger["planHash"], "leaseId": lease["id"],
             "expectedName": lease["name"], "instanceId": lease["instanceId"], "status": lease["status"],
             "reservedAt": lease["reservedAt"], "deadline": lease["deadline"], "setupDeadline": lease["setupDeadline"],
-            "ready": lease["ready"], "ownerHeartbeatAt": time.time(), "ownerHeartbeatTimeoutSeconds": 120,
+            "ready": lease["ready"], "ownerHeartbeatAt": observed_at, "ownerHeartbeatTimeoutSeconds": 120,
             "purpose": lease.get("purpose", "research"), "recoveryControllerId": lease.get("recoveryControllerId")}
 
 
@@ -569,6 +574,8 @@ class LambdaClient:
         self._last_request = 0.0
 
     def request(self, method: str, path: str, payload: Any = None) -> Any:
+        from provider_launch_recovery import UncertainProviderResponse
+
         if not path.startswith("/") or "://" in path:
             raise ValueError("Invalid provider endpoint")
         # Respect the provider's one request/second general API limit.
@@ -593,10 +600,15 @@ class LambdaClient:
             except (OSError, ValueError, AttributeError):
                 pass
             raise ProviderRequestError(error.code, code) from None
-        except (OSError, ValueError):
-            raise RuntimeError("Lambda response uncertain; reservation must remain") from None
-        if "data" not in value:
-            raise RuntimeError("Malformed provider response; reservation must remain")
+        except (OSError, ValueError) as error:
+            category = ("TimeoutError" if isinstance(error, TimeoutError) else
+                        "URLError" if isinstance(error, urllib.error.URLError) else
+                        "JSONDecodeError" if isinstance(error, json.JSONDecodeError) else
+                        "UnicodeDecodeError" if isinstance(error, UnicodeDecodeError) else
+                        "OSError" if isinstance(error, OSError) else "ValueError")
+            raise UncertainProviderResponse(category) from None
+        if type(value) is not dict or "data" not in value:
+            raise UncertainProviderResponse("MalformedResponse")
         return value["data"]
 
 
@@ -1042,7 +1054,7 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
 def infrastructure_funding(ledger: dict) -> dict | None:
     """Validate each append-only authority against its retained history."""
     journal = ledger.get("plan", {}).get("studyLedgerPath")
-    version = next((v for v in (4, 3, 2) if journal and
+    version = next((v for v in (5, 4, 3, 2) if journal and
                     Path(str(Path(journal).resolve()) + f".infrastructure-funding-v{v}.json").exists()), 1)
     return _validate_infrastructure_funding_chain(ledger, version)
 
@@ -1220,7 +1232,7 @@ def record_infrastructure_suballocation(ledger_path: Path, reason: str, *, sourc
 
 
 def gpu_hour_capacity_path(ledger_path: Path, version: int = 1) -> Path:
-    if type(version) is not int or version not in (1, 2, 3):
+    if type(version) is not int or version not in (1, 2, 3, 4):
         raise ValueError("Supported GPU-hour capacity version required")
     return ledger_path.with_name(ledger_path.name + f".gpu-hour-capacity-v{version}.json")
 
@@ -1305,6 +1317,10 @@ def effective_gpu_hour_capacity(ledger: dict) -> tuple[float, dict | None]:
     path = gpu_hour_capacity_path(Path(ledger_path)) if ledger_path else None
     extension = gpu_hour_capacity_path(Path(ledger_path), 2) if ledger_path else None
     completion = gpu_hour_capacity_path(Path(ledger_path), 3) if ledger_path else None
+    continued = gpu_hour_capacity_path(Path(ledger_path), 4) if ledger_path else None
+    if continued is not None and continued.exists():
+        value = _validate_gpu_hour_continuation(ledger, amendment, read_gpu_hour_capacity(continued))
+        return value["engineeringMaximumGpuHours"], value
     if completion is not None and completion.exists():
         value = _validate_gpu_hour_completion(ledger, amendment, read_gpu_hour_capacity(completion))
         return value["engineeringMaximumGpuHours"], value
@@ -1336,7 +1352,7 @@ def _validate_gpu_hour_extension(ledger: dict, amendment: dict | None, value: di
     # Only the authenticated historical parent call supplies current funding.
     # Ordinary current-ledger entrypoints retain their complete authority check.
     funding = infrastructure_funding(ledger) if current_funding is None else current_funding
-    if funding is not None and funding["version"] == 4:
+    if funding is not None and funding["version"] >= 4:
         # Funding v4 retains the entire v3-era ledger as its authenticated parent.
         # A v2 GPU receipt still binds v3 and cannot absorb any v4-funded suffix.
         funding = _validate_infrastructure_funding_chain(ledger, 3)
@@ -1455,12 +1471,15 @@ def record_gpu_hour_capacity_extension(ledger_path: Path, authorization_reason: 
         return value
 
 
-def _validate_gpu_hour_completion(ledger: dict, amendment: dict | None, value: dict) -> dict:
+def _validate_gpu_hour_completion(ledger: dict, amendment: dict | None, value: dict,
+                                  *, current_funding: dict | None = None) -> dict:
     """Validate retained v2 and v1, then admit the single funding-v4 completion lease."""
     ledger_path = Path(ledger["plan"]["infrastructureLedgerPath"])
     parent_path = gpu_hour_capacity_path(ledger_path, 2)
     parent = read_gpu_hour_capacity(parent_path)
-    funding = infrastructure_funding(ledger)
+    funding = infrastructure_funding(ledger) if current_funding is None else current_funding
+    if funding is not None and funding["version"] == 5:
+        funding = _validate_infrastructure_funding_chain(ledger, 4)
     policy_path = Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json")
     funding_path = Path(ledger["plan"]["studyLedgerPath"] + ".infrastructure-funding-v4.json")
     history = value.get("operationalHistory", {})
@@ -1519,7 +1538,10 @@ def _validate_gpu_hour_completion(ledger: dict, amendment: dict | None, value: d
            or finite_number(row.get("reservedAt"), "capacity-bound reservation timestamp") < recorded for row in extra):
         raise ValueError("New provider lease must bind the GPU-hour extension")
     hours = ledger["priorGpuHours"] + sum(row["reservedHours"] for row in ledger["leases"])
-    caps, totals = infrastructure_caps(ledger), _infrastructure_reserved_totals(ledger)
+    caps = infrastructure_caps(ledger) if current_funding is None else tuple(
+        current_funding["policy"][key] / 1_000_000 for key in
+        ("effectiveInfrastructureMicrodollars", "effectiveComputeMicrodollars", "effectiveAssociatedMicrodollars"))
+    totals = _infrastructure_reserved_totals(ledger)
     if hours > 168 or any(totals[key] > cap for key, cap in zip(
             ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
         raise ValueError("GPU-hour extension cannot exceed effective financial authority")
@@ -1564,6 +1586,121 @@ def record_gpu_hour_capacity_completion(ledger_path: Path, authorization_reason:
                 "originalJournalEvidence": journal, "financialPolicyChanged": False,
                 "existingReservationsChanged": False, "existingDeadlinesChanged": False, "modelContractsChanged": False}
         value = _validate_gpu_hour_completion(ledger, amendment, {**body, "contentHash": digest(body)})
+        if any(sha256(path) != expected for path, expected in bindings.items()):
+            raise ValueError("Original authority changed during capacity authorization")
+        write_new(output, value)
+        return value
+
+
+def _validate_gpu_hour_continuation(ledger: dict, amendment: dict | None, value: dict) -> dict:
+    """Validate retained v2 and v1, then admit the funding-v5 evaluation allowance."""
+    ledger_path = Path(ledger["plan"]["infrastructureLedgerPath"])
+    parent_path = gpu_hour_capacity_path(ledger_path, 3)
+    parent = read_gpu_hour_capacity(parent_path)
+    funding = infrastructure_funding(ledger)
+    policy_path = Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json")
+    funding_path = Path(ledger["plan"]["studyLedgerPath"] + ".infrastructure-funding-v5.json")
+    history = value.get("operationalHistory", {})
+    if (amendment is None or amendment["version"] != 3 or funding is None or funding["version"] != 5
+            or type(value.get("version")) is not int or value["version"] != 4
+            or value.get("profile") != "acephale-gpu-hour-capacity-v4"
+            or value.get("contentHash") != digest({key: item for key, item in value.items() if key != "contentHash"})
+            or value.get("parentCapacityHash") != parent.get("contentHash")
+            or value.get("parentCapacitySha256") != sha256(parent_path)
+            or value.get("budgetAmendmentHash") != amendment["contentHash"]
+            or value.get("budgetAmendmentSha256") != sha256(policy_path)
+            or value.get("budgetPolicyHash") != amendment["policyHash"]
+            or value.get("fundingHash") != funding["contentHash"]
+            or value.get("fundingSha256") != sha256(funding_path)
+            or value.get("planHash") != ledger["planHash"]
+            or value.get("financialBindingHash") != _financial_binding_hash(ledger)
+            or value.get("basePolicyMaximumGpuHours") != 64
+            or value.get("parentEngineeringMaximumGpuHours") != 168
+            or value.get("engineeringMaximumGpuHours") != 200
+            or value.get("evaluationOnly") is not True or value.get("optimizerPermitted") is not False
+            or any(value.get(key) is not False for key in
+                   ("financialPolicyChanged", "existingReservationsChanged", "existingDeadlinesChanged", "modelContractsChanged"))
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str) or not value["authorizationReason"].strip()
+            or len(value["authorizationReason"]) > 1024
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("operationalHistorySha256", ""))
+            or history.get("contentHash") != digest({key: item for key, item in history.items() if key != "contentHash"})
+            or history.get("profile") != "acephale-gpu-hour-operational-history-v1" or history.get("version") != 1
+            or any(history.get(key) != value.get(key) for key in ("planHash", "financialBindingHash", "originalSliceSha256"))):
+        raise ValueError("GPU-hour extension requires the exact parent, evaluation funding and retained identities")
+    recorded = finite_number(value.get("recordedAt"), "GPU-hour extension timestamp")
+    if recorded < max(parent["recordedAt"], _budget_authorized_at(funding)):
+        raise ValueError("GPU-hour extension cannot predate its parent or financial authority")
+    baseline = {**ledger, **{key: history[key] for key in ("leases", "overheads", "trainingWindows")}}
+    if gpu_hour_capacity_history(baseline, value["originalSliceSha256"]) != history:
+        raise ValueError("GPU-hour extension operational history is inconsistent")
+    # The authenticated retained baseline must still satisfy the complete v3
+    # funding/count chain and the original v2/v1 GPU authorities.
+    _validate_gpu_hour_completion(baseline, amendment, parent, current_funding=funding)
+    current, retained = _infrastructure_reservations(ledger), _infrastructure_reservations(baseline)
+    if any(current[key][:len(retained[key])] != retained[key] for key in current):
+        raise ValueError("GPU-hour extension cannot release or rewrite prior reservations")
+    if ledger.get("trainingWindows", []) != history["trainingWindows"]:
+        raise ValueError("GPU-hour extension does not authorize optimizer windows")
+    for old, row in zip(history["leases"], ledger["leases"], strict=False):
+        if (old.get("status") not in {"terminated", "launch_unknown"}
+                or (old["status"] == "launch_unknown" and old.get("instanceId") is not None)
+                or any(row.get(key) != old.get(key) for key in
+                       ("id", "name", "reservedAt", "deadline", "setupDeadline", "quote", "studyReservation"))
+                or (old["status"] == "terminated" and
+                    (row.get("status") != "terminated" or row.get("instanceId") != old.get("instanceId")))):
+            raise ValueError("GPU-hour extension requires closed work or retained unknown launches")
+    extra = ledger["leases"][len(history["leases"]):]
+    if any(row.get("gpuHourCapacityAddendumHash") != value["contentHash"]
+           or finite_number(row.get("reservedAt"), "capacity-bound reservation timestamp") < recorded for row in extra):
+        raise ValueError("New provider lease must bind the GPU-hour extension")
+    hours = ledger["priorGpuHours"] + sum(row["reservedHours"] for row in ledger["leases"])
+    caps, totals = infrastructure_caps(ledger), _infrastructure_reserved_totals(ledger)
+    if hours > 200 or any(totals[key] > cap for key, cap in zip(
+            ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
+        raise ValueError("GPU-hour extension cannot exceed effective financial authority")
+    return value
+
+
+def record_gpu_hour_capacity_continuation(ledger_path: Path, authorization_reason: str, operational_history: Path,
+                                      *, source_probe=None, budget=study_budget) -> dict:
+    """Append the bounded completion capacity after funding v5, retaining all three GPU parents."""
+    source_probe = source_probe or committed_source
+    with ledger_lock(ledger_path):
+        output = gpu_hour_capacity_path(ledger_path, 4)
+        if output.exists():
+            raise ValueError("GPU-hour capacity extension cannot be overwritten")
+        ledger = checked_bound_ledger(ledger_path)
+        amendment, funding = effective_budget_policy(ledger), infrastructure_funding(ledger)
+        maximum, parent = effective_gpu_hour_capacity(ledger)
+        if (maximum != 168 or parent is None or parent["version"] != 3 or funding is None or funding["version"] != 5
+                or not isinstance(authorization_reason, str) or not authorization_reason.strip()
+                or len(authorization_reason) > 1024):
+            raise ValueError("Existing v3 capacity, v5 evaluation funding and explicit authority required")
+        history = read_gpu_hour_capacity(operational_history)
+        before = sha256(ledger_path)
+        if history != gpu_hour_capacity_history(ledger, before):
+            raise ValueError("Operational history must exactly snapshot the current original slice")
+        parent_path = gpu_hour_capacity_path(ledger_path, 3)
+        policy_path = Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json")
+        funding_path = Path(ledger["plan"]["studyLedgerPath"] + ".infrastructure-funding-v5.json")
+        bindings = {path: sha256(path) for path in (ledger_path, parent_path, policy_path, funding_path, operational_history)}
+        journal = budget(ledger["plan"], "inspect")
+        body = {"version": 4, "profile": "acephale-gpu-hour-capacity-v4", "planHash": ledger["planHash"],
+                "financialBindingHash": _financial_binding_hash(ledger), "originalSliceSha256": before,
+                "parentCapacityHash": parent["contentHash"], "parentCapacitySha256": bindings[parent_path],
+                "budgetAmendmentHash": amendment["contentHash"], "budgetAmendmentSha256": bindings[policy_path],
+                "budgetPolicyHash": amendment["policyHash"], "basePolicyMaximumGpuHours": 64,
+                "parentEngineeringMaximumGpuHours": 168, "engineeringMaximumGpuHours": 200,
+                "fundingHash": funding["contentHash"], "fundingSha256": bindings[funding_path],
+                "evaluationOnly": True, "optimizerPermitted": False, "authorizationSource": "explicit_user_instruction",
+                "authorizationReason": authorization_reason.strip(), "recordedAt": time.time(),
+                "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+                "operationalHistory": history, "operationalHistorySha256": bindings[operational_history],
+                "originalJournalEvidence": journal, "financialPolicyChanged": False,
+                "existingReservationsChanged": False, "existingDeadlinesChanged": False, "modelContractsChanged": False}
+        value = _validate_gpu_hour_continuation(ledger, amendment, {**body, "contentHash": digest(body)})
         if any(sha256(path) != expected for path, expected in bindings.items()):
             raise ValueError("Original authority changed during capacity authorization")
         write_new(output, value)
@@ -1928,12 +2065,14 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
         lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current,
                               unresolved_fence=fence, setup_seconds=setup_seconds)
         funding = infrastructure_funding(ledger)
-        if funding and (inspection.get("infrastructureFundingSupplementHash") != funding["contentHash"]
+        api_ceiling = funding["policy"]["effectiveTotalMicrodollars"] - 65_000_000 if funding and funding["version"] == 5 else 935_000_000
+        if funding and ((funding["version"] == 5 and inspection.get("nativeBudgetPort") != funding["policy"]["nativeBudgetPort"])
+                        or inspection.get("infrastructureFundingSupplementHash") != funding["contentHash"]
                         or inspection.get("frozenApiHeadroomMicrodollars") != funding["policy"]["frozenApiHeadroomMicrodollars"]
                         or inspection.get("frozenApiPlanHash") != _budget_digest(funding["policy"]["frozenApiPlanMicrodollars"])
-                        or inspection.get("frozenNonContingencyCeilingMicrodollars") != 935_000_000
+                        or inspection.get("frozenNonContingencyCeilingMicrodollars") != api_ceiling
                         or type(inspection.get("frozenProjectedNonContingencyMicrodollars")) is not int
-                        or inspection["frozenProjectedNonContingencyMicrodollars"] + lease["reservedMicrodollars"] > 935_000_000):
+                        or inspection["frozenProjectedNonContingencyMicrodollars"] + lease["reservedMicrodollars"] > api_ceiling):
             raise ValueError("New GPU reservation requires verified frozen API headroom")
         lease["name"] = "acephale-infra-" + lease["id"]
         lease["purpose"] = purpose
@@ -2013,7 +2152,8 @@ def observe_termination(client: Any, ledger_path: Path, lease_id: str) -> dict:
 
 
 def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path,
-           *, now: float | None = None, budget=study_budget, unresolved_fence: Path | None = None) -> dict[str, Any]:
+           *, now: float | None = None, budget=study_budget, unresolved_fence: Path | None = None,
+           reconciliation_heartbeat=None, cancelled=None) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
     current = time.time() if now is None else now
@@ -2052,21 +2192,45 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         if any(current_quote[key] != lease["quote"][key] for key in ("region", "instanceType", "imageId", "hardwareProfileHash")) or current_quote["hourlyUsd"] > lease["quote"]["hourlyUsd"]:
             raise ValueError("Provider quote changed after reservation; no launch attempted")
         validate_firewall(client, access["firewallRulesetId"], region)
+        recovery = None
+        if reconciliation_heartbeat is not None:
+            if not callable(reconciliation_heartbeat) or (cancelled is not None and not callable(cancelled)):
+                raise ValueError("Explicit reconciliation heartbeat and cancellation ports required")
+            import provider_launch_recovery as recovery
+            baseline = recovery.prepare(client, lease, cancelled)
         budget(plan, "inspect")
+        pulse = None
+        if recovery:
+            def refresh(current_lease, phase, *, not_after):
+                unchanged = sha256(ledger_path)
+                value = reconciliation_heartbeat(current_lease, phase, not_after=not_after,
+                    state=watchdog_payload(ledger, current_lease, 0), ledger_sha256=unchanged)
+                if sha256(ledger_path) != unchanged:
+                    raise ValueError("Heartbeat port changed the retained provider ledger")
+                return value
+
+            expected_state = lambda row, stamp: watchdog_payload(ledger, row, stamp)
+            pulse = recovery.pulse(refresh, lease, "before_post", enrollments, expected_state,
+                                   digest, cancelled)
         lease["watchdogs"] = enrollments
         if fence is not None:
             lease["unresolvedPredecessor"].update(launchFence=fence, launchReceiptSha256=sha256(unresolved_fence))
         lease["status"] = "launching"
         atomic_json(ledger_path, ledger)
+        payload = {"region_name": region, "instance_type_name": current_quote["instanceType"],
+                   "ssh_key_names": [access["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
+                   "firewall_rulesets": [{"id": access["firewallRulesetId"]}]}
         try:
-            result = client.request("POST", "/instance-operations/launch", {
-                "region_name": region, "instance_type_name": current_quote["instanceType"],
-                "ssh_key_names": [access["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
-                "firewall_rulesets": [{"id": access["firewallRulesetId"]}]})
-            ids = result.get("instance_ids", [])
-            if len(ids) != 1:
-                raise RuntimeError("Ambiguous launch response")
+            if recovery:
+                recovery.heartbeat_fresh(pulse, lease, cancelled)
+            result = client.request("POST", "/instance-operations/launch", payload)
+            ids = result.get("instance_ids", []) if type(result) is dict else []
+            if type(ids) is not list or len(ids) != 1 or not isinstance(ids[0], str) or not ids[0]:
+                from provider_launch_recovery import UncertainProviderResponse
+                raise UncertainProviderResponse("AmbiguousLaunchResponse")
             lease["instanceId"] = ids[0]
+            if recovery:
+                recovery.heartbeat_fresh(pulse, lease, cancelled)
             lease["status"] = "active"
         except Exception as error:
             lease["status"] = "launch_unknown"
@@ -2074,8 +2238,21 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
                                       "httpStatus": getattr(error, "http_status", None),
                                       "providerCode": getattr(error, "provider_code", None),
                                       "responseBodyRetained": False, "reservationReleased": False}
+            category = getattr(error, "uncertainty_category", None)
+            if category is not None:
+                lease["launchFailure"]["uncertaintyCategory"] = category
             atomic_json(ledger_path, ledger)
-            raise
+            if not recovery or not isinstance(error, recovery.UncertainProviderResponse):
+                raise
+            try:
+                recovered_id, proof = recovery.reconcile(client, lease, payload, baseline, refresh,
+                    enrollments, expected_state, digest, cancelled, pulse)
+            except BaseException as recovery_error:
+                lease["launchRecoveryFailure"] = {"errorType": type(recovery_error).__name__,
+                    "observedAt": time.time(), "responseBodyRetained": False, "reservationReleased": False}
+                atomic_json(ledger_path, ledger)
+                raise
+            lease.update(instanceId=recovered_id, status="active", launchRecovery=proof)
         atomic_json(ledger_path, ledger)
         return lease.copy()
 
@@ -2223,6 +2400,10 @@ def main(argv: list[str] | None = None) -> int:
     capacity_completion.add_argument("--ledger", type=Path, required=True)
     capacity_completion.add_argument("--authorization-reason", required=True)
     capacity_completion.add_argument("--operational-history", type=Path, required=True)
+    capacity_continuation = commands.add_parser("record-gpu-hour-capacity-continuation")
+    capacity_continuation.add_argument("--ledger", type=Path, required=True)
+    capacity_continuation.add_argument("--authorization-reason", required=True)
+    capacity_continuation.add_argument("--operational-history", type=Path, required=True)
     training_capacity = commands.add_parser("record-training-window-capacity-addendum")
     training_capacity.add_argument("--ledger", type=Path, required=True)
     training_capacity.add_argument("--authorization-reason", required=True)
@@ -2327,6 +2508,8 @@ def main(argv: list[str] | None = None) -> int:
         value = record_gpu_hour_capacity_extension(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "record-gpu-hour-capacity-completion":
         value = record_gpu_hour_capacity_completion(args.ledger, args.authorization_reason, args.operational_history)
+    elif args.command == "record-gpu-hour-capacity-continuation":
+        value = record_gpu_hour_capacity_continuation(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "record-training-window-capacity-addendum":
         value = record_training_window_capacity_addendum(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "training-window-headroom":

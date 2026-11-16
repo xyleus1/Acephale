@@ -1,5 +1,62 @@
 # Working on Acephale
 
+## Recovering one uncertain provider launch, 2026-11-16
+
+E15 reached the real provider POST after a valid fresh fence and heartbeat. The
+response failed inside the transport's combined OSError/JSON-error handler. A
+host existed, and the original automatic cleanup terminated it; independent
+observation confirmed exact absence and local drain. No startup or scientific
+phase ran. The retained evidence cannot identify the original low-level cause.
+
+The prospective operator preserves a fixed, sanitized uncertainty category and
+can reconcile the same launch through an explicit heartbeat port. It records a
+complete pre-POST inventory before the final budget/freshness callback, sends
+exactly one POST, and uses only bounded GETs afterward. Adoption requires one
+new exact-name instance, list/detail ID agreement, the requested region, type
+and SSH key, and matching image/firewall when those optional fields are present.
+Missing optional fields remain explicitly unverified. Ambiguous, expired,
+cancelled, unrelated or unhealthy instances cannot be adopted. Original failure
+metadata and all reservation/deadline fields survive successful reconciliation.
+
+Recovery uses at most 60 seconds of GET/poll time inside a 300-second total
+bound, additionally clamped to the original setup/hard deadlines. The reviewed
+private adapter synchronously publishes the exact locked transaction to both
+existing controllers, checks prior ownership and per-controller timing before
+each bounded PUT, then reads both states back. It rechecks exact authority/source
+bytes and current ledger bytes; it does not cache authority across operations.
+The existing 120-second watchdog and ordinary 600-second active preparation
+barrier remain. A successful normal POST does not enter recovery. Optional public
+ports preserve the old fail-closed behavior when absent.
+
+## Infrastructure-aware evaluation accounting, 2026-11-16
+
+Funding v5 is a prospective $100 infrastructure supplement, split into $80 compute
+and $20 associated costs. The operator selected this bound under the user's
+instruction to continue with necessary resources. It admits at most sixteen new
+evaluation leases, each at most eight hours and $1.99 per hour, with no optimizer
+work. Effective ceilings are $1,350 total, $550 infrastructure, $415 compute and
+$135 associated. GPU-hour capacity v4 separately raises the engineering limit
+from 168 to 200, retaining all three earlier GPU authorities and all funding parents.
+Every old reservation, unresolved hold and deadline remains unchanged.
+
+The original native financial reader has a $935 non-contingency ceiling. A
+larger infrastructure sidecar alone does not make it compatible. The explicit
+`acephale-infrastructure-aware-native-budget-v1` port uses Node22's synchronous
+resolution hook to redirect only the two exact hash-bound runtime/analysis `durable-budget.ts`
+modules to the current financial adapter. Actor, predictor, tool and scoring
+modules remain frozen. The adapter validates funding v5 and its full parent
+chain, retains the original API allocations and trial accounting, and denies
+native infrastructure reservations. The $303 API plan and $65 contingency stay
+protected. Reports must identify this operational port rather than claim that
+the old financial implementation accepted the new aggregate ceiling.
+
+The local integration test runs the actual frozen native service and hosted
+workers with synthetic local observations. It checks original model identities,
+output caps, zero retries, per-trial reservations, settlement and retained unknown
+charges. Separate tests retain all funding/GPU parents and exercise the original
+execution-lease reader. These checks establish accounting compatibility, not
+benchmark performance or activated financial authority.
+
 ## Finite evaluation dispatch capacity, 2026-11-16
 
 The prospective count-v3 supplement permits up to sixteen total evaluation

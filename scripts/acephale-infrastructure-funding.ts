@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { budgetPolicyPath } from "../services/acephale-runtime/budget-policy";
-import { checkedFundingFile, frozenApiProjection, INFRASTRUCTURE_FUNDING_V1, INFRASTRUCTURE_FUNDING_V2, INFRASTRUCTURE_FUNDING_V3, INFRASTRUCTURE_FUNDING_V4, infrastructureFundingPath, readInfrastructureFunding,
+import { checkedFundingFile, frozenApiProjection, INFRASTRUCTURE_FUNDING_V1, INFRASTRUCTURE_FUNDING_V2, INFRASTRUCTURE_FUNDING_V3, INFRASTRUCTURE_FUNDING_V4, INFRASTRUCTURE_FUNDING_V5, infrastructureFundingPath, readInfrastructureFunding,
   validateInfrastructureFunding, type FundingRow, type FundingVersion, type InfrastructureFunding } from "../services/acephale-runtime/infrastructure-funding";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 
@@ -30,6 +30,10 @@ export function continueEvaluationFunding(journal: string, slicePath: string, au
 
 export function completeEvaluationFunding(journal: string, slicePath: string, authorizedAt: string, reason: string, sourceProbe = source) {
   return writeInfrastructureFunding(journal, slicePath, authorizedAt, reason, 4, sourceProbe);
+}
+
+export function fundEvaluationOperations(journal: string, slicePath: string, authorizedAt: string, reason: string, sourceProbe = source) {
+  return writeInfrastructureFunding(journal, slicePath, authorizedAt, reason, 5, sourceProbe);
 }
 
 function writeInfrastructureFunding(journal: string, slicePath: string, authorizedAt: string, reason: string, version: FundingVersion, sourceProbe: () => string) {
@@ -57,7 +61,7 @@ function writeInfrastructureFunding(journal: string, slicePath: string, authoriz
     if (version > 1 && parent?.version !== version - 1) throw new Error(version === 2
       ? "Funding extension requires exactly the original funding authority"
       : "Funding extension requires exactly the preceding funding authority");
-    const policy = version === 4 ? INFRASTRUCTURE_FUNDING_V4 : version === 3 ? INFRASTRUCTURE_FUNDING_V3 : version === 2 ? INFRASTRUCTURE_FUNDING_V2 : INFRASTRUCTURE_FUNDING_V1;
+    const policy = version === 5 ? INFRASTRUCTURE_FUNDING_V5 : version === 4 ? INFRASTRUCTURE_FUNDING_V4 : version === 3 ? INFRASTRUCTURE_FUNDING_V3 : version === 2 ? INFRASTRUCTURE_FUNDING_V2 : INFRASTRUCTURE_FUNDING_V1;
     const body = { version, profile: `acephale-infrastructure-funding-v${version}` as const,
       ...(parent ? {parentFundingHash: parent.contentHash,
         parentFundingSha256: createHash("sha256").update(checkedFundingFile(infrastructureFundingPath(path, parent.version))).digest("hex")} : {}),
@@ -87,8 +91,8 @@ function writeInfrastructureFunding(journal: string, slicePath: string, authoriz
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const request = JSON.parse(readFileSync(process.argv[2], "utf8")) as { ledgerPath: string; slicePath: string; authorizedAt: string; reason: string; version?: FundingVersion };
-  if (request.version !== undefined && ![1, 2, 3, 4].includes(request.version)) throw new Error("Unsupported funding version");
-  const result = (request.version === 4 ? completeEvaluationFunding : request.version === 3 ? continueEvaluationFunding : request.version === 2 ? extendInfrastructureFunding : addInfrastructureFunding)(request.ledgerPath, request.slicePath, request.authorizedAt, request.reason);
+  if (request.version !== undefined && ![1, 2, 3, 4, 5].includes(request.version)) throw new Error("Unsupported funding version");
+  const result = (request.version === 5 ? fundEvaluationOperations : request.version === 4 ? completeEvaluationFunding : request.version === 3 ? continueEvaluationFunding : request.version === 2 ? extendInfrastructureFunding : addInfrastructureFunding)(request.ledgerPath, request.slicePath, request.authorizedAt, request.reason);
   console.log(JSON.stringify({ contentHash: result.contentHash, fundingPolicyHash: result.policyHash,
     baseBudgetPolicyHash: result.baseBudgetPolicyHash, effectiveFinancialCeilingsChanged: true }));
 }

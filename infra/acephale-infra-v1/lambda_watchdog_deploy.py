@@ -153,13 +153,15 @@ def checked_receipt(path):
     return value
 
 
-def publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn=None):
+def publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn=None, session_fn=None):
     with budget_digest_scope():
-        return _publish(receipt_path, ledger, lease_id, bounded_requests=bounded_requests, state_fn=state_fn)
+        return _publish(receipt_path, ledger, lease_id, bounded_requests=bounded_requests,
+                        state_fn=state_fn, session_fn=session_fn)
 
 
-def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn=None):
+def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn=None, session_fn=None):
     read_state = watchdog_state if state_fn is None else state_fn
+    read_session = session if session_fn is None else session_fn
     options = {}
     if bounded_requests:
         from botocore.config import Config
@@ -168,7 +170,7 @@ def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn
     initial = read_state(ledger, lease_id)
     targets = []
     for row in receipt["controllers"]:
-        s3 = session(receipt["config"], row["region"]).client("s3", **options)
+        s3 = read_session(receipt["config"], row["region"]).client("s3", **options)
         try:
             previous = json.loads(s3.get_object(Bucket=row["bucket"], Key="state.json")["Body"].read())
         except s3.exceptions.NoSuchKey:
