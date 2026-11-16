@@ -695,3 +695,10 @@ Earlier holds remain reserved until independently reconciled. All science, model
 identities, evaluation tolerances, frozen API allocations and scoring remain
 unchanged. The supplement neither extends existing leases nor overrides the
 independent cumulative GPU-hour limit.
+## 2026-11-16: use an explicit heartbeat observation port
+
+Pass a state reader through the public publisher instead of cloning Python
+function globals. The port covers both current-lease checks and preserves the
+original validator by default. A scheduled owner's startup includes registration,
+preflight, publication and both authenticated state readbacks; its qualification
+must exercise that full path without extending the watchdog or lease deadlines.

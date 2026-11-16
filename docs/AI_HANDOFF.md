@@ -28,6 +28,16 @@ Preserve the failed attempt. Require actual scheduled-wrapper startup
 qualification without a GPU before E10. Read the private operator handoff for
 current execution status; do not retrain.
 
+## Scheduled heartbeat handoff, 2026-11-16
+
+The public publisher exposes a state-reader port for both its initial and final
+lease observations. Its default remains the original validator; a private
+companion can use `functools.partial` to supply bounded transient-read handling
+without copying function internals. Identity, deadlines, actual fresh timestamps
+and the 120-second watchdog remain unchanged. Qualify the complete scheduled
+wrapper startup and authenticated handoff, including preflight, before dispatch;
+a successful direct heartbeat loop does not cover that startup path.
+
 ## Operator validation and publication, 2026-11-16
 
 The operator now memoizes only pure RFC 8785 digests within one operation, using
