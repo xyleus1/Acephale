@@ -1,10 +1,26 @@
 # Current state
 
 Updated November 16, 2026 (UTC). Both predictor seeds completed their 204 optimizer
-updates. E7 then reproduced both original probes exactly and completed strict
-GPU export with unchanged weights and tolerances. Separate vLLM serving
-qualification, trained replay and the paired native evaluation remain pending.
-Training and reload completion are not benchmark results.
+updates. E17 independently completed strict GPU export and teacher-forced
+evaluation with unchanged weights and tolerances. Each seed reproduced all
+248,320 reference logits exactly. Separate vLLM serving qualification, trained
+replay and paired native evaluation remain pending. Training and reload completion
+are not benchmark results.
+
+E17 retained and verified 165 files. On the 112 neutral-ranking development
+examples, seed 17 scored 2,037/2,084 completion tokens correctly (97.7447%,
+token-weighted cross-entropy 0.0579381); seed 29 scored 2,027/2,084 (97.2649%,
+0.0656446). These are teacher-forced diagnostics, not goal agreement, tool-call
+accuracy or native task success. Neither optimizer will be repeated.
+
+The first serving entry then failed before SSH or model dispatch: a strict file
+hasher received a module filename string instead of a `Path`. The failed host is
+terminated; independent provider and local-owner closure checks passed. A
+one-expression fix passed seven local tests using the actual retained archive
+and verifier. They cover the original failure, first serving entry, all three
+later seed switches and changed-pin rejection. Remote effects are intercepted;
+these tests do not establish serving qualification. E18 retains the completed
+weights and all failed-attempt evidence for the next serving and evaluation run.
 
 E16 completed startup, environment preparation, image verification and CUDA
 diagnostics. Its strict export stage stopped before either model was dispatched:

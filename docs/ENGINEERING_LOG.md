@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## Strict export and serving argument repair, 2026-11-16
+
+E17 passed the live local-clock probe checks and completed strict export for
+both saved predictor seeds. The 165-file archive and teacher-forced results are
+retained. Both reference probes match exactly; numerical tolerances and weights
+were unchanged.
+
+The next local serving entry passed a module filename string to the strict
+controller file hasher, which requires `Path`. It failed before any serving SSH
+or model work. Cleanup and independent provider absence checks completed. E18
+wraps that one argument in the already imported `Path`. Seven actual local-entry
+tests pass against the retained archive, including all four occurrences and
+bad-pin rejection; transport effects are intercepted. The fix has independent
+review. No serving, trained replay or native comparison result is inferred.
+
 ## Remote probe clock mismatch, 2026-11-16
 
 E16 passed setup and diagnostic execution, then failed before strict export

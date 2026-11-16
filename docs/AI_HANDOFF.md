@@ -1,5 +1,21 @@
 # Working on Acephale
 
+## Strict export complete; serving entry repaired, 2026-11-16
+
+E17 completed strict two-seed GPU export with 165 verified files. Both probes
+match all 248,320 reference logits exactly, and both teacher-forced development
+evaluations completed. The subsequent first serving entry failed before remote
+dispatch because the strict controller hasher received a string instead of a
+`Path`. Exact provider absence and local-owner closure are verified.
+
+E18 changes that one argument. Seven tests run the real local preparation and
+transport entry against the retained main archive, covering all four serving
+occurrences and changed-pin rejection. Only external transport is intercepted;
+later prior-serving fixtures are explicitly synthetic. The fix has independent
+code review. Preserve the completed weights, original thresholds and frozen
+scientific sources. Serving qualification, trained replay and paired native
+scores remain pending. Do not repeat either 204-update optimizer.
+
 ## Local timing for remote probes, 2026-11-16
 
 E16 reached CUDA diagnostics but stopped before strict export dispatch. Exact
