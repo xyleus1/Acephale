@@ -1,5 +1,14 @@
 # Acephale engineering log
 
+## 2026-11-16: Remove a startup-test timing assumption
+
+The Windows research suite exposed a test that expected process construction to
+finish inside its 50 ms startup allowance. The real guard correctly rejected the
+expired deadline before the test's first assertion. The test now uses the existing
+injectable clock and a real child that withholds READY, then advances exactly to
+the deadline and verifies timeout and child drain. All 23 focused lifecycle tests
+passed. Production code, timeout values and frozen execution sources are unchanged.
+
 ## 2026-11-16: Preserve kernel choices across evaluation processes
 
 E6 passed strict input checks, then seed 17's original-reference comparison

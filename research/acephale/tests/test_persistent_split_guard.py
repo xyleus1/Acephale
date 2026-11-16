@@ -61,7 +61,8 @@ def test_owner_pre_cancel_does_not_launch_probe(tmp_path, monkeypatch):
     assert value["reason"] == "guard_stopped" and not value["healthy"]
 
 
-def responder(config, provenance, *, behavior="normal", startup=0, delay=0, startup_seconds=2):
+def responder(config, provenance, *, behavior="normal", startup=0, delay=0, startup_seconds=2,
+              monotonic=time.monotonic):
     remote, local = responses(provenance)
     if provenance.get("provider") == "lambda":
         remote.update({key: provenance[key] for key in ("hostKeySha256", "machineIdSha256")})
@@ -69,6 +70,9 @@ def responder(config, provenance, *, behavior="normal", startup=0, delay=0, star
         remote["actor"] = {"data": [{"id": "wrong-model"}]}
     code = '''import json,sys,time
 remote=json.loads(sys.argv[1]); behavior=sys.argv[2]
+if behavior=="no_ready":
+    sys.stdin.read()
+    sys.exit(0)
 time.sleep(float(sys.argv[3]))
 print(json.dumps({"protocol":True if behavior=="ready_bool" else 1,"type":"ready"}),flush=True)
 for line in sys.stdin:
@@ -87,7 +91,8 @@ for line in sys.stdin:
     def popen(command, **kwargs):
         launches.append(command)
         return subprocess.Popen([sys.executable, "-u", "-c", code, json.dumps(remote), behavior, str(startup), str(delay)], **kwargs)
-    session = PersistentProbeSession(config, provenance, popen=popen, startup_seconds=startup_seconds)
+    session = PersistentProbeSession(config, provenance, popen=popen, startup_seconds=startup_seconds,
+                                     monotonic=monotonic)
     def opener(url, **_):
         return io.BytesIO(json.dumps(local["actor" if ":18000/" in url else "predictor"]).encode())
     return session, opener, launches
@@ -154,15 +159,18 @@ def test_boolean_ready_protocol_is_rejected(tmp_path):
 
 def test_startup_has_its_own_deadline_and_never_reports_health(tmp_path):
     config, provenance = fixture(tmp_path)
-    session, _, _ = responder(config, provenance, startup=0.3, startup_seconds=0.05)
+    now = [100.0]
+    session, _, _ = responder(config, provenance, behavior="no_ready", startup_seconds=0.05,
+                              monotonic=lambda: now[0])
     try:
         assert session.ready() is False
-        time.sleep(0.06)
+        now[0] = session.startup_deadline
         with pytest.raises(TimeoutError, match="startup"):
             session.ready()
         assert not session.ready_received
     finally:
         session.close()
+    assert session.process.poll() is not None and not session.reader.is_alive()
 
 
 def test_timeout_late_output_is_discarded_before_new_connection(tmp_path):
