@@ -8,7 +8,7 @@ import { budgetPolicyPath } from "../services/acephale-runtime/budget-policy";
 import { frozenApiProjection, infrastructureFundingPath } from "../services/acephale-runtime/infrastructure-funding";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 import { amendBudgetPolicy } from "./acephale-budget-policy";
-import { addInfrastructureFunding } from "./acephale-infrastructure-funding";
+import { addInfrastructureFunding, extendInfrastructureFunding } from "./acephale-infrastructure-funding";
 import { awsBudget } from "./acephale-aws-budget";
 
 function fixture() {
@@ -135,5 +135,52 @@ test("remaining-stage projection fits the observed retained balances without rel
     assert.equal(result.frozenApiHeadroomMicrodollars,303_000_000);
     assert.equal(canonical(entries),before);
     assert.deepEqual(funding.policy.frozenApiPlanMicrodollars,{preparation:0,training:0,development:65_000_000,heldout:238_000_000,replay:0});
+  } finally {f.close();}
+});
+
+const extend = (f: ReturnType<typeof fixture>) => extendInfrastructureFunding(f.ledger,f.slice,"2026-11-16T07:00:00Z",
+  "Explicit continuation: one evaluation-only lease, up to six hours; retain all unknown holds.",()=>"c".repeat(40));
+
+test("second funding is append-only and protects the frozen API reader",()=>{
+  const f=fixture(); try {
+    const parent=authorize(f);
+    const originals=[f.ledger,f.slice,budgetPolicyPath(f.ledger,3),infrastructureFundingPath(f.ledger)].map(path=>[path,readFileSync(path)] as const);
+    const extension=extend(f);
+    assert.equal(extension.version,2); assert.equal(extension.parentFundingHash,parent.contentHash);
+    for(const [path,bytes] of originals) assert.deepEqual(readFileSync(path),bytes);
+    assert.throws(()=>extend(f),/EEXIST/);
+    const infra=new DurableBudget(f.ledger,{infrastructureOwner:true});
+    assert.equal(infra.ledger.totalCeilingMicrodollars,1_120_000_000);
+    assert.equal(infra.ledger.allocations.infrastructure,320_000_000);
+    assert.equal(infra.ledger.allocations.contingency,65_000_000);
+    assert.equal(infra.infrastructureFunding?.contentHash,extension.contentHash);
+    assert.deepEqual({...infra.ledger.allocations,infrastructure:200_000_000},f.base.policy.allocationsMicrodollars);
+    const projection=frozenApiProjection(infra.ledger.snapshot(),15_522_000,f.base,extension);
+    assert.equal(projection.frozenApiHeadroomMicrodollars,303_000_000); infra.close();
+    const frozen=new DurableBudget(f.ledger);
+    assert.equal(frozen.ledger.totalCeilingMicrodollars,1_000_000_000);
+    assert.equal(frozen.ledger.allocations.infrastructure,200_000_000);
+    assert.equal(frozen.ledger.snapshot().find(row=>row.id==="retained-gpu-unknown")?.actual,undefined); frozen.close();
+  } finally {f.close();}
+});
+
+test("second funding rejects missing parent, active leases, changed ancestry and revised caps",()=>{
+  const f=fixture(); try {
+    assert.throws(()=>extend(f),/original funding/);
+    authorize(f);
+    f.value.leases[1].status="active"; writeFileSync(f.slice,canonical(f.value));
+    assert.throws(()=>extend(f),/closed or retained unknown/);
+    f.value.leases[1].status="launch_unknown"; writeFileSync(f.slice,canonical(f.value));
+    const extension=extend(f);
+    for(const change of [
+      {parentFundingHash:"f".repeat(64)}, {parentFundingSha256:"f".repeat(64)},
+      {authorizedAt:"2026-11-14T00:00:00Z"},
+      {policy:{...extension.policy,effectiveInfrastructureMicrodollars:321_000_000}},
+      {baselineEntries:extension.baselineEntries.filter(row=>row.id!=="retained-gpu-unknown")},
+    ]) {
+      const {contentHash:_,...body}={...extension,...change};
+      writeFileSync(infrastructureFundingPath(f.ledger,2),canonical({...body,contentHash:hash(body)}));
+      assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/funding/i);
+    }
   } finally {f.close();}
 });

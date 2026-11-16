@@ -578,3 +578,15 @@ independent heartbeat expiry and hard deadline; do not extend them to conceal an
 authentication failure. Retry only short transport/throttling failures, preserve
 redacted SDK operation/code/status evidence, and retain interrupted optimizer
 attempts separately from subsequent authorized attempts.
+
+
+## Bounded evaluation infrastructure extension
+
+A second append-only funding sidecar adds $15 compute and $5 associated charges.
+It retains the first funding authority, all reservations and unknown outcomes,
+and the frozen v3 API policy and $65 contingency. The infrastructure reader sees
+$320 ($240 compute, $80 associated); the frozen API reader still sees its original
+$1,000 policy and must retain the same $303 API projection. The new authority
+permits one additional evaluation-only lease, at most six hours and $1.99/hour.
+Optimizer authorization is rejected. An actual invoice is still required to
+release prior reservations; termination alone does not reconcile money.

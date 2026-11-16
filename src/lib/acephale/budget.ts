@@ -1,4 +1,5 @@
 import approvedV3 from "./contracts/budget-policy-v3.json";
+import infrastructureFundingV2 from "./contracts/infrastructure-funding-v2.json";
 import infrastructureFunding from "./contracts/infrastructure-funding-v1.json";
 
 export const ALLOCATIONS = {
@@ -19,8 +20,8 @@ export class BudgetLedger {
     allocations: AllocationCaps = ALLOCATIONS) {
     const total = Object.values(allocations).reduce((sum, value) => sum + value, 0);
     const approvedExpansion = Object.keys(ALLOCATIONS).every(key => allocations[key as Allocation] === approvedV3.allocationsMicrodollars[key as Allocation]);
-    const infrastructureOnlyExpansion = Object.keys(ALLOCATIONS).every(key => allocations[key as Allocation] ===
-      (key === "infrastructure" ? infrastructureFunding.effectiveInfrastructureMicrodollars : approvedV3.allocationsMicrodollars[key as Allocation]));
+    const infrastructureOnlyExpansion = [infrastructureFunding, infrastructureFundingV2].some(funding => Object.keys(ALLOCATIONS).every(key => allocations[key as Allocation] ===
+      (key === "infrastructure" ? funding.effectiveInfrastructureMicrodollars : approvedV3.allocationsMicrodollars[key as Allocation])));
     if (Object.keys(allocations).length !== Object.keys(ALLOCATIONS).length
       || Object.keys(ALLOCATIONS).some(key => !Number.isSafeInteger(allocations[key as Allocation]) || allocations[key as Allocation] < 0)
       || total !== 500_000_000 && !approvedExpansion && !infrastructureOnlyExpansion

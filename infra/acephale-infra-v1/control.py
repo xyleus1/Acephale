@@ -340,6 +340,9 @@ def training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outpu
 def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, output: Path, hours: float,
                     kind: str = "fit") -> dict[str, Any]:
     ledger = checked_bound_ledger(ledger_path)
+    funding = infrastructure_funding(ledger)
+    if funding and funding["version"] == 2:
+        raise ValueError("Evaluation-only funding does not authorize optimizer training")
     amendment = effective_budget_policy(ledger)
     policy = amendment["policy"] if amendment else None
     lease = next(row for row in ledger["leases"] if row["id"] == lease_id)
@@ -986,11 +989,34 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
 
 
 def infrastructure_funding(ledger: dict) -> dict | None:
+    """Validate each append-only authority against its retained history."""
+    journal = ledger.get("plan", {}).get("studyLedgerPath")
+    extension = Path(str(Path(journal).resolve()) + ".infrastructure-funding-v2.json") if journal else None
+    if extension is None or not extension.exists():
+        return _read_infrastructure_funding(ledger, 1)
+    value = _read_infrastructure_funding(ledger, 2)
+    baseline = {**ledger, "leases": value["baselineLeases"], "overheads": value["baselineOverheads"],
+                "trainingWindows": value["baselineTrainingWindows"]}
+    parent = _read_infrastructure_funding(baseline, 1)
+    parent_path = Path(str(Path(journal).resolve()) + ".infrastructure-funding-v1.json")
+    if (parent is None or value.get("parentFundingHash") != parent["contentHash"]
+            or value.get("parentFundingSha256") != sha256(parent_path)
+            or _budget_authorized_at(value) < _budget_authorized_at(parent)):
+        raise ValueError("Infrastructure funding extension must bind its unchanged parent")
+    if len(ledger["leases"]) - len(value["baselineLeases"]) > value["policy"]["maximumNewLeases"]:
+        raise ValueError("Evaluation funding permits only one new lease")
+    for row in ledger["leases"][len(value["baselineLeases"]):]:
+        if finite_number(row.get("reservedHours"), "funded session hours") > value["policy"]["maximumSessionHours"]:
+            raise ValueError("Evaluation funding permits at most six hours")
+    return value
+
+
+def _read_infrastructure_funding(ledger: dict, version: int) -> dict | None:
     """Separate prospective funding; the frozen v3 model/API policy stays intact."""
     journal = ledger.get("plan", {}).get("studyLedgerPath")
     if not journal:
         return None
-    path = Path(str(Path(journal).resolve()) + ".infrastructure-funding-v1.json")
+    path = Path(str(Path(journal).resolve()) + f".infrastructure-funding-v{version}.json")
     if not path.exists():
         if any("infrastructureFundingSupplementHash" in row for row in ledger.get("leases", [])):
             raise ValueError("Infrastructure funding authority is missing")
@@ -998,9 +1024,9 @@ def infrastructure_funding(ledger: dict) -> dict | None:
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
         raise ValueError("Invalid infrastructure funding file")
     value, amendment = read_json(path), effective_budget_policy(ledger)
-    approved = read_json(ROOT / "src/lib/acephale/contracts/infrastructure-funding-v1.json")
-    if (amendment is None or amendment["version"] != 3 or type(value.get("version")) is not int or value.get("version") != 1
-            or value.get("profile") != "acephale-infrastructure-funding-v1"
+    approved = read_json(ROOT / f"src/lib/acephale/contracts/infrastructure-funding-v{version}.json")
+    if (amendment is None or amendment["version"] != 3 or type(value.get("version")) is not int or value.get("version") != version
+            or value.get("profile") != f"acephale-infrastructure-funding-v{version}"
             or value.get("contentHash") != _budget_digest({key: item for key, item in value.items() if key != "contentHash"})
             or _budget_digest(value.get("policy")) != _budget_digest(approved) or value.get("policyHash") != _budget_digest(approved)
             or value.get("baseBudgetPolicyHash") != amendment["policyHash"]
@@ -1465,6 +1491,11 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     funding = infrastructure_funding(ledger)
     if funding and now < _budget_authorized_at(funding):
         raise ValueError("Provider reservation cannot predate its financial authority")
+    if funding and funding["version"] == 2:
+        if len(leases) - len(funding["baselineLeases"]) >= funding["policy"]["maximumNewLeases"]:
+            raise ValueError("Evaluation funding permits only one new lease")
+        if hours > funding["policy"]["maximumSessionHours"] or rate > funding["policy"]["maximumHourlyUsd"]:
+            raise ValueError("Evaluation funding permits at most six hours at the approved rate")
     maximum_gpu_hours, capacity = effective_gpu_hour_capacity(ledger)
     if capacity and now < capacity["recordedAt"]:
         raise ValueError("Provider reservation cannot predate its capacity authorization")

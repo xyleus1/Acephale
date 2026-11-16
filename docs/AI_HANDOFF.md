@@ -276,3 +276,15 @@ Prior operator history remains in the
 ## Explicit provider region routing
 
 `control.py record-region-route` creates a new sidecar for capacity in another declared US region, with the same hardware, an at-most-$1.99 hourly quote, an exact regional image and a restricted regional SSH firewall. Pass it with `prepare-lease --routing-amendment`. The original financial plan, journal, access receipt and prior reservations are preserved. Routing alone never permits bypassing an unresolved lease. Actual replacement admission needs independent predecessor fencing and separate controllers.
+
+
+## Bounded evaluation infrastructure extension
+
+A second append-only funding sidecar adds $15 compute and $5 associated charges.
+It retains the first funding authority, all reservations and unknown outcomes,
+and the frozen v3 API policy and $65 contingency. The infrastructure reader sees
+$320 ($240 compute, $80 associated); the frozen API reader still sees its original
+$1,000 policy and must retain the same $303 API projection. The new authority
+permits one additional evaluation-only lease, at most six hours and $1.99/hour.
+Optimizer authorization is rejected. An actual invoice is still required to
+release prior reservations; termination alone does not reconcile money.

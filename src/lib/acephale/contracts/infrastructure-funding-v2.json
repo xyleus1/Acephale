@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "profile": "acephale-infrastructure-funding-policy-v2",
+  "additionalInfrastructureMicrodollars": 20000000,
+  "effectiveTotalMicrodollars": 1120000000,
+  "effectiveInfrastructureMicrodollars": 320000000,
+  "effectiveComputeMicrodollars": 240000000,
+  "effectiveAssociatedMicrodollars": 80000000,
+  "frozenApiHeadroomMicrodollars": 303000000,
+  "frozenApiPlanMicrodollars": {
+    "preparation": 0,
+    "training": 0,
+    "development": 65000000,
+    "heldout": 238000000,
+    "replay": 0
+  },
+  "maximumNewLeases": 1,
+  "maximumSessionHours": 6,
+  "evaluationOnly": true,
+  "maximumHourlyUsd": 1.99
+}

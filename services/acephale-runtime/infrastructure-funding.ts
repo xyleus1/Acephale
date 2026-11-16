@@ -1,16 +1,19 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import approvedV2 from "../../src/lib/acephale/contracts/infrastructure-funding-v2.json";
 import approved from "../../src/lib/acephale/contracts/infrastructure-funding-v1.json";
 import { type Reservation } from "../../src/lib/acephale/budget";
 import { hash } from "../../src/lib/acephale/canonical";
 import { type BudgetAmendment, budgetPolicyPath } from "./budget-policy";
 
 export const INFRASTRUCTURE_FUNDING_V1 = approved;
-export const infrastructureFundingPath = (journal: string) => `${resolve(journal)}.infrastructure-funding-v1.json`;
+export const INFRASTRUCTURE_FUNDING_V2 = approvedV2;
+export const infrastructureFundingPath = (journal: string, version: 1 | 2 = 1) => `${resolve(journal)}.infrastructure-funding-v${version}.json`;
 export type FundingRow = Record<string, unknown>;
 export interface InfrastructureFunding {
-  version: 1; profile: "acephale-infrastructure-funding-v1";
+  version: 1 | 2; profile: "acephale-infrastructure-funding-v1" | "acephale-infrastructure-funding-v2";
+  parentFundingHash?: string; parentFundingSha256?: string;
   policy: typeof approved; policyHash: string; contentHash: string;
   baseBudgetPolicyHash: string; baseBudgetAmendmentHash: string; baseBudgetAmendmentSha256: string;
   studyLedgerPathHash: string; infrastructureLedgerPathHash: string;
@@ -30,16 +33,22 @@ export function checkedFundingFile(path: string) {
 
 export function readInfrastructureFunding(journal: string, entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding | undefined {
   const path = infrastructureFundingPath(journal);
-  if (!existsSync(path)) return;
-  return validateInfrastructureFunding(JSON.parse(checkedFundingFile(path).toString("utf8")), journal, entries, base);
+  const extension = infrastructureFundingPath(journal, 2);
+  if (!existsSync(path)) {
+    if (existsSync(extension)) throw new Error("Infrastructure funding extension requires its original parent");
+    return;
+  }
+  const parent = validateInfrastructureFunding(JSON.parse(checkedFundingFile(path).toString("utf8")), journal, entries, base);
+  return existsSync(extension) ? validateInfrastructureFunding(JSON.parse(checkedFundingFile(extension).toString("utf8")), journal, entries, base) : parent;
 }
 
 export function validateInfrastructureFunding(value: InfrastructureFunding, journal: string,
   entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding {
   const { contentHash, ...body } = value;
+  const expected = value.version === 2 ? approvedV2 : approved;
   const date = Date.parse(value.authorizedAt), digest = /^[a-f0-9]{64}$/;
-  if (base?.version !== 3 || value.version !== 1 || value.profile !== "acephale-infrastructure-funding-v1"
-    || contentHash !== hash(body) || value.policyHash !== hash(approved) || hash(value.policy) !== hash(approved)
+  if (base?.version !== 3 || ![1, 2].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
+    || contentHash !== hash(body) || value.policyHash !== hash(expected) || hash(value.policy) !== hash(expected)
     || value.baseBudgetPolicyHash !== base.policyHash || value.baseBudgetAmendmentHash !== base.contentHash
     || value.baseBudgetAmendmentSha256 !== createHash("sha256").update(checkedFundingFile(budgetPolicyPath(journal, 3))).digest("hex")
     || value.studyLedgerPathHash !== hash(resolve(journal)) || !digest.test(value.infrastructureLedgerPathHash)
@@ -58,6 +67,14 @@ export function validateInfrastructureFunding(value: InfrastructureFunding, jour
     if (seen.has(prior.id) || !row || row.allocation !== prior.allocation || row.maximum !== prior.maximum
       || row.parentId !== prior.parentId || (prior.actual !== undefined && row.actual !== prior.actual)) throw new Error("Infrastructure funding retained journal history changed");
     seen.add(prior.id);
+  }
+  if (value.version === 2) {
+    const parentPath = infrastructureFundingPath(journal), parentBytes = checkedFundingFile(parentPath);
+    const parent = JSON.parse(parentBytes.toString("utf8")) as InfrastructureFunding;
+    if (parent.version !== 1 || value.parentFundingHash !== parent.contentHash
+      || value.parentFundingSha256 !== createHash("sha256").update(parentBytes).digest("hex")
+      || date < Date.parse(parent.authorizedAt)) throw new Error("Infrastructure funding extension must bind its unchanged parent");
+    validateInfrastructureFunding(parent, journal, value.baselineEntries.map(({id, ...row}) => [id, row]), base);
   }
   return value;
 }
