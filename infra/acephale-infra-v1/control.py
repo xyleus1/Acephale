@@ -1061,7 +1061,9 @@ def _validate_infrastructure_funding_chain(ledger: dict, version: int) -> dict |
             or value.get("parentFundingSha256") != sha256(parent_path)
             or _budget_authorized_at(value) < _budget_authorized_at(parent)):
         raise ValueError("Infrastructure funding extension must bind its unchanged parent")
-    if len(ledger["leases"]) - len(value["baselineLeases"]) > value["policy"]["maximumNewLeases"]:
+    from evaluation_lease_capacity import effective_limit
+    maximum_leases, _ = effective_limit(ledger, value, canonical_digest=_budget_digest)
+    if len(ledger["leases"]) - len(value["baselineLeases"]) > maximum_leases:
         raise ValueError("Evaluation funding permits only one new lease" if version == 2 else "Evaluation funding lease count exceeded")
     for row in ledger["leases"][len(value["baselineLeases"]):]:
         if finite_number(row.get("reservedHours"), "funded session hours") > value["policy"]["maximumSessionHours"]:
@@ -1564,7 +1566,7 @@ def committed_source(initial_commit: str) -> str:
 
 def controller_source_files() -> list[dict]:
     return [{"path": name, "sha256": sha256(HERE / name)} for name in
-            ("control.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json", "training-window-capacity-v1.json")]
+            ("control.py", "evaluation_lease_capacity.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json", "training-window-capacity-v1.json")]
 
 
 def record_source_amendment(ledger_path: Path, output: Path, reason: str, readiness_evidence: Path,
@@ -1676,9 +1678,14 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     funding = infrastructure_funding(ledger)
     if funding and now < _budget_authorized_at(funding):
         raise ValueError("Provider reservation cannot predate its financial authority")
+    lease_capacity = None
     if funding and funding["policy"].get("evaluationOnly") is True:
-        if len(leases) - len(funding["baselineLeases"]) >= funding["policy"]["maximumNewLeases"]:
+        from evaluation_lease_capacity import effective_limit
+        maximum_leases, lease_capacity = effective_limit(ledger, funding, canonical_digest=_budget_digest)
+        if len(leases) - len(funding["baselineLeases"]) >= maximum_leases:
             raise ValueError("Evaluation funding permits only one new lease" if funding["version"] == 2 else "Evaluation funding lease count exceeded")
+        if lease_capacity and now < lease_capacity["recordedAt"]:
+            raise ValueError("Provider reservation cannot predate its lease-count authorization")
         if hours > funding["policy"]["maximumSessionHours"] or rate > funding["policy"]["maximumHourlyUsd"]:
             raise ValueError("Evaluation funding permits at most six hours at the approved rate" if funding["version"] == 2
                              else "Evaluation funding permits at most eight hours at the approved rate")
@@ -1695,6 +1702,7 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
             "reservedUsd": cost, "reservedComputeUsd": round(rate * hours, 6),
             "reservedMicrodollars": math.ceil(cost * 1_000_000), "instanceId": None, "ready": False,
             **({"gpuHourCapacityAddendumHash": capacity["contentHash"]} if capacity else {}),
+            **({"evaluationLeaseCapacityHash": lease_capacity["contentHash"]} if lease_capacity else {}),
             **({"infrastructureFundingSupplementHash": funding["contentHash"]} if funding else {})}
 
 

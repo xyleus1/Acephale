@@ -184,8 +184,12 @@ def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn
     # Prior-controller checks can be expensive. Revalidate the current authority
     # after those checks and timestamp that actual fresh observation, before puts.
     state = read_state(ledger, lease_id)
-    if {key: value for key, value in state.items() if key != "ownerHeartbeatAt"} != {
-            key: value for key, value in initial.items() if key != "ownerHeartbeatAt"}:
+    original_authority = {key: value for key, value in initial.items() if key != "ownerHeartbeatAt"}
+    current_authority = {key: value for key, value in state.items() if key != "ownerHeartbeatAt"}
+    became_ready = (initial.get("status") == "active" and initial.get("ready") is False
+                    and state.get("ready") is True
+                    and current_authority == {**original_authority, "ready": True})
+    if current_authority != original_authority and not became_ready:
         raise ValueError("Lease identity or authority changed before heartbeat publication")
     effective_deadline = state["deadline"] if state["ready"] else state["setupDeadline"]
     if state["status"] != "terminated" and time.time() >= effective_deadline:

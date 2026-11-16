@@ -811,6 +811,20 @@ denied. Tests cover parent tampering, exhausted lease count, rate/lifetime limit
 frozen execution-lease validation and unchanged native budget behavior.
 ## 2026-11-16: preserve the heartbeat state port across delegation
 
+A separate evaluation lease-count sidecar admits one additional lease beyond
+the four existing v3 slots. It changes no monetary ceiling, GPU-hour allowance,
+training permission or previous reservation. Both funding validation and new
+reservation admission enforce the same effective count and prospective sidecar
+binding. Canonical hashes use the existing operation-scoped pure memo; authority
+files and retained history are still reread and validated.
+
+The subsequent readiness repair accepts only the monotonic false-to-true result
+of the existing server-owned readiness operation between publication reads.
+It preserves every other identity, status, policy and deadline comparison.
+Integration cases call the original readiness command and retain its smoke and
+setup-deadline rejections; negative cases reject rollback and conflicting fields.
+This is operator correctness evidence, not a scientific benchmark result.
+
 Expose an explicit state-reader argument through `publish` and `_publish` so a
 companion's bounded observation handling reaches both actual lease reads after
 the pure-digest optimization. Default validation and all identity/deadline
