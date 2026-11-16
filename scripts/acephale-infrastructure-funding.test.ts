@@ -8,7 +8,7 @@ import { budgetPolicyPath } from "../services/acephale-runtime/budget-policy";
 import { frozenApiProjection, infrastructureFundingPath } from "../services/acephale-runtime/infrastructure-funding";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 import { amendBudgetPolicy } from "./acephale-budget-policy";
-import { addInfrastructureFunding, extendInfrastructureFunding } from "./acephale-infrastructure-funding";
+import { addInfrastructureFunding, extendInfrastructureFunding, continueEvaluationFunding } from "./acephale-infrastructure-funding";
 import { awsBudget } from "./acephale-aws-budget";
 
 function fixture() {
@@ -182,5 +182,49 @@ test("second funding rejects missing parent, active leases, changed ancestry and
       writeFileSync(infrastructureFundingPath(f.ledger,2),canonical({...body,contentHash:hash(body)}));
       assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/funding/i);
     }
+  } finally {f.close();}
+});
+
+
+const continueFunding = (f: ReturnType<typeof fixture>) => continueEvaluationFunding(f.ledger,f.slice,"2026-11-16T09:00:00Z",
+  "User authorized necessary continuation without a budget constraint; bounded evaluation-only capacity retains all holds.",()=>"d".repeat(40));
+
+test("third funding retains both parents and changes only prospective infrastructure caps",()=>{
+  const f=fixture(); try {
+    authorize(f); const parent=extend(f);
+    const paths=[f.ledger,f.slice,budgetPolicyPath(f.ledger,2),budgetPolicyPath(f.ledger,3),infrastructureFundingPath(f.ledger),infrastructureFundingPath(f.ledger,2)];
+    const before=paths.map(path=>[path,readFileSync(path)] as const);
+    const funding=continueFunding(f);
+    assert.equal(funding.version,3); assert.equal(funding.parentFundingHash,parent.contentHash);
+    for(const [path,bytes] of before) assert.deepEqual(readFileSync(path),bytes);
+    assert.throws(()=>continueFunding(f),/EEXIST/);
+    const infra=new DurableBudget(f.ledger,{infrastructureOwner:true});
+    assert.equal(infra.ledger.totalCeilingMicrodollars,1_220_000_000);
+    assert.equal(infra.ledger.allocations.infrastructure,420_000_000);
+    assert.equal(infra.ledger.allocations.contingency,65_000_000);
+    assert.equal(infra.infrastructureFunding?.contentHash,funding.contentHash);
+    assert.deepEqual({...infra.ledger.allocations,infrastructure:200_000_000},f.base.policy.allocationsMicrodollars);
+    const projection=frozenApiProjection(infra.ledger.snapshot(),100_000_000,f.base,funding);
+    assert.equal(projection.frozenApiHeadroomMicrodollars,303_000_000); infra.close();
+    const frozen=new DurableBudget(f.ledger);
+    assert.equal(frozen.ledger.totalCeilingMicrodollars,1_000_000_000);
+    assert.equal(frozen.ledger.allocations.infrastructure,200_000_000);
+    assert.equal(frozen.ledger.snapshot().find(row=>row.id==='retained-gpu-unknown')?.actual,undefined); frozen.close();
+  } finally {f.close();}
+});
+
+test("third funding cannot skip, replace or hide either parent",()=>{
+  const f=fixture(); try {
+    authorize(f); assert.throws(()=>continueFunding(f),/preceding/);
+    extend(f); const funding=continueFunding(f);
+    for(const change of [{parentFundingHash:'f'.repeat(64)},{parentFundingSha256:'f'.repeat(64)},
+      {policy:{...funding.policy,effectiveInfrastructureMicrodollars:421_000_000}}]) {
+      const {contentHash:_,...body}={...funding,...change};
+      writeFileSync(infrastructureFundingPath(f.ledger,3),canonical({...body,contentHash:hash(body)}));
+      assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/funding/i);
+    }
+    writeFileSync(infrastructureFundingPath(f.ledger,3),canonical(funding));
+    rmSync(infrastructureFundingPath(f.ledger,2));
+    assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/parent/);
   } finally {f.close();}
 });

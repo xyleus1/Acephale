@@ -341,7 +341,7 @@ def _training_lease(ledger_path: Path, lease_id: str, preflight_path: Path, outp
                     kind: str = "fit") -> dict[str, Any]:
     ledger = checked_bound_ledger(ledger_path)
     funding = infrastructure_funding(ledger)
-    if funding and funding["version"] == 2:
+    if funding and funding["policy"].get("evaluationOnly") is True:
         raise ValueError("Evaluation-only funding does not authorize optimizer training")
     amendment = effective_budget_policy(ledger)
     policy = amendment["policy"] if amendment else None
@@ -991,23 +991,31 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
 def infrastructure_funding(ledger: dict) -> dict | None:
     """Validate each append-only authority against its retained history."""
     journal = ledger.get("plan", {}).get("studyLedgerPath")
-    extension = Path(str(Path(journal).resolve()) + ".infrastructure-funding-v2.json") if journal else None
-    if extension is None or not extension.exists():
-        return _read_infrastructure_funding(ledger, 1)
-    value = _read_infrastructure_funding(ledger, 2)
+    version = next((v for v in (3, 2) if journal and
+                    Path(str(Path(journal).resolve()) + f".infrastructure-funding-v{v}.json").exists()), 1)
+    return _validate_infrastructure_funding_chain(ledger, version)
+
+
+def _validate_infrastructure_funding_chain(ledger: dict, version: int) -> dict | None:
+    value = _read_infrastructure_funding(ledger, version)
+    if version == 1:
+        return value
+    if value is None:
+        raise ValueError("Infrastructure funding extension is missing its parent")
     baseline = {**ledger, "leases": value["baselineLeases"], "overheads": value["baselineOverheads"],
                 "trainingWindows": value["baselineTrainingWindows"]}
-    parent = _read_infrastructure_funding(baseline, 1)
-    parent_path = Path(str(Path(journal).resolve()) + ".infrastructure-funding-v1.json")
+    parent = _validate_infrastructure_funding_chain(baseline, version - 1)
+    journal = ledger["plan"]["studyLedgerPath"]
+    parent_path = Path(str(Path(journal).resolve()) + f".infrastructure-funding-v{version - 1}.json")
     if (parent is None or value.get("parentFundingHash") != parent["contentHash"]
             or value.get("parentFundingSha256") != sha256(parent_path)
             or _budget_authorized_at(value) < _budget_authorized_at(parent)):
         raise ValueError("Infrastructure funding extension must bind its unchanged parent")
     if len(ledger["leases"]) - len(value["baselineLeases"]) > value["policy"]["maximumNewLeases"]:
-        raise ValueError("Evaluation funding permits only one new lease")
+        raise ValueError("Evaluation funding permits only one new lease" if version == 2 else "Evaluation funding lease count exceeded")
     for row in ledger["leases"][len(value["baselineLeases"]):]:
         if finite_number(row.get("reservedHours"), "funded session hours") > value["policy"]["maximumSessionHours"]:
-            raise ValueError("Evaluation funding permits at most six hours")
+            raise ValueError("Evaluation funding permits at most six hours" if version == 2 else "Evaluation funding permits at most eight hours")
     return value
 
 
@@ -1491,11 +1499,12 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     funding = infrastructure_funding(ledger)
     if funding and now < _budget_authorized_at(funding):
         raise ValueError("Provider reservation cannot predate its financial authority")
-    if funding and funding["version"] == 2:
+    if funding and funding["policy"].get("evaluationOnly") is True:
         if len(leases) - len(funding["baselineLeases"]) >= funding["policy"]["maximumNewLeases"]:
-            raise ValueError("Evaluation funding permits only one new lease")
+            raise ValueError("Evaluation funding permits only one new lease" if funding["version"] == 2 else "Evaluation funding lease count exceeded")
         if hours > funding["policy"]["maximumSessionHours"] or rate > funding["policy"]["maximumHourlyUsd"]:
-            raise ValueError("Evaluation funding permits at most six hours at the approved rate")
+            raise ValueError("Evaluation funding permits at most six hours at the approved rate" if funding["version"] == 2
+                             else "Evaluation funding permits at most eight hours at the approved rate")
     maximum_gpu_hours, capacity = effective_gpu_hour_capacity(ledger)
     if capacity and now < capacity["recordedAt"]:
         raise ValueError("Provider reservation cannot predate its capacity authorization")

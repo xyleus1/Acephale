@@ -951,3 +951,14 @@ $1,000 policy and must retain the same $303 API projection. The new authority
 permits one additional evaluation-only lease, at most six hours and $1.99/hour.
 Optimizer authorization is rejected. An actual invoice is still required to
 release prior reservations; termination alone does not reconcile money.
+
+## 2026-11-16: Chained evaluation funding
+
+Added a third creation-only funding sidecar with exact parent hashes and retained
+lease, overhead, training-window and journal history. Python validates every
+parent against the child's original baseline; TypeScript retains the same original
+journal and frozen API projection. The new $420 infrastructure allocation splits
+into $315 compute and $105 associated costs. Independent lifetime, cumulative
+GPU-hour and API limits remain effective, and optimizer authorization remains
+denied. Tests cover parent tampering, exhausted lease count, rate/lifetime limits,
+frozen execution-lease validation and unchanged native budget behavior.
