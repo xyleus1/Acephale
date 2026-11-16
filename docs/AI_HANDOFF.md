@@ -459,3 +459,13 @@ all original reservations, unresolved outcomes, the frozen API policy, $303 API
 headroom and $65 contingency. The existing cumulative GPU-hour cap still applies.
 No optimizer training or scientific contract change is authorized by this funding.
 Creating the authority does not launch a provider instance.
+
+## 2026-11-16: Preserve historical capacity validation
+
+The count-only sidecar was created once; its first full validation then rejected
+an authenticated older GPU-capacity snapshot as though it were today's ledger.
+Keep that original failure and authority unchanged. Historical parent validation
+now receives the monetary ceilings already validated against the complete current
+ledger. Current count, retained-history, reservation and deadline checks remain
+mandatory. A separate post-creation receipt must bind the original creator and
+new validating source; this repair does not create another authority or host.

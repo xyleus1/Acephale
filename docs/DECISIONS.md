@@ -714,3 +714,13 @@ function globals. The port covers both current-lease checks and preserves the
 original validator by default. A scheduled owner's startup includes registration,
 preflight, publication and both authenticated state readbacks; its qualification
 must exercise that full path without extending the watchdog or lease deadlines.
+
+## 2026-11-16: Preserve historical capacity validation
+
+The count-only sidecar was created once; its first full validation then rejected
+an authenticated older GPU-capacity snapshot as though it were today's ledger.
+Keep that original failure and authority unchanged. Historical parent validation
+now receives the monetary ceilings already validated against the complete current
+ledger. Current count, retained-history, reservation and deadline checks remain
+mandatory. A separate post-creation receipt must bind the original creator and
+new validating source; this repair does not create another authority or host.
