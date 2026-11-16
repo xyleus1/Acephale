@@ -153,18 +153,19 @@ def checked_receipt(path):
     return value
 
 
-def publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
+def publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn=None):
     with budget_digest_scope():
-        return _publish(receipt_path, ledger, lease_id, bounded_requests=bounded_requests)
+        return _publish(receipt_path, ledger, lease_id, bounded_requests=bounded_requests, state_fn=state_fn)
 
 
-def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
+def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False, state_fn=None):
+    read_state = watchdog_state if state_fn is None else state_fn
     options = {}
     if bounded_requests:
         from botocore.config import Config
         options["config"] = Config(connect_timeout=3, read_timeout=3, retries={"total_max_attempts": 1})
     receipt = checked_receipt(receipt_path)
-    initial = watchdog_state(ledger, lease_id)
+    initial = read_state(ledger, lease_id)
     targets = []
     for row in receipt["controllers"]:
         s3 = session(receipt["config"], row["region"]).client("s3", **options)
@@ -182,7 +183,7 @@ def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
         targets.append((row, s3))
     # Prior-controller checks can be expensive. Revalidate the current authority
     # after those checks and timestamp that actual fresh observation, before puts.
-    state = watchdog_state(ledger, lease_id)
+    state = read_state(ledger, lease_id)
     if {key: value for key, value in state.items() if key != "ownerHeartbeatAt"} != {
             key: value for key, value in initial.items() if key != "ownerHeartbeatAt"}:
         raise ValueError("Lease identity or authority changed before heartbeat publication")

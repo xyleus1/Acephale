@@ -809,3 +809,13 @@ into $315 compute and $105 associated costs. Independent lifetime, cumulative
 GPU-hour and API limits remain effective, and optimizer authorization remains
 denied. Tests cover parent tampering, exhausted lease count, rate/lifetime limits,
 frozen execution-lease validation and unchanged native budget behavior.
+## 2026-11-16: preserve the heartbeat state port across delegation
+
+Expose an explicit state-reader argument through `publish` and `_publish` so a
+companion's bounded observation handling reaches both actual lease reads after
+the pure-digest optimization. Default validation and all identity/deadline
+checks remain unchanged. Focused tests cover both reads, default behavior,
+`functools.partial`, changed identity, rejected observations and expiry.
+Private startup qualification must include the real scheduled wrapper and
+preflight; direct loop timing alone is insufficient. No scientific result or
+model change follows from this operator repair.
