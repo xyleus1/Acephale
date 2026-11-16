@@ -1,13 +1,3 @@
-## Evaluation funding continuation, 2026-11-16
-
-A third append-only infrastructure authority adds $100 ($75 compute and $25
-associated costs), allowing at most four evaluation-only leases of at most eight
-hours at $1.99/hour. It validates both retained parent authorities and preserves
-all original reservations, unresolved outcomes, the frozen API policy, $303 API
-headroom and $65 contingency. The existing cumulative GPU-hour cap still applies.
-No optimizer training or scientific contract change is authorized by this funding.
-Creating the authority does not launch a provider instance.
-
 # Working on Acephale
 
 E6 passed strict input admission but failed seed 17's inference preparation:
@@ -370,3 +360,13 @@ $1,000 policy and must retain the same $303 API projection. The new authority
 permits one additional evaluation-only lease, at most six hours and $1.99/hour.
 Optimizer authorization is rejected. An actual invoice is still required to
 release prior reservations; termination alone does not reconcile money.
+
+## Evaluation funding continuation, 2026-11-16
+
+A third append-only infrastructure authority adds $100 ($75 compute and $25
+associated costs), allowing at most four evaluation-only leases of at most eight
+hours at $1.99/hour. It validates both retained parent authorities and preserves
+all original reservations, unresolved outcomes, the frozen API policy, $303 API
+headroom and $65 contingency. The existing cumulative GPU-hour cap still applies.
+No optimizer training or scientific contract change is authorized by this funding.
+Creating the authority does not launch a provider instance.
