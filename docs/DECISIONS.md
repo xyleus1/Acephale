@@ -697,6 +697,18 @@ unchanged. The supplement neither extends existing leases nor overrides the
 independent cumulative GPU-hour limit.
 ## 2026-11-16: use an explicit heartbeat observation port
 
+Separate lease count from monetary funding. When money and GPU hours remain but
+the four-lease count is exhausted, a creation-only parent-bound sidecar can admit
+exactly one fifth evaluation lease. It retains closed attempts, unknown costs,
+all original deadlines and the optimizer prohibition. Do not amend the original
+funding policy, release old holds or represent this count change as new money.
+
+Treat a verified readiness promotion as a permitted monotonic state transition,
+with unchanged active lease identity and original deadlines. Do not broaden this
+exception to lifecycle status changes, readiness reversal or arbitrary policy
+changes. Retain the original failing execution and separately verify prospective
+managed-owner integration before a new host is admitted.
+
 Pass a state reader through the public publisher instead of cloning Python
 function globals. The port covers both current-lease checks and preserves the
 original validator by default. A scheduled owner's startup includes registration,

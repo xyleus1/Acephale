@@ -30,6 +30,20 @@ current execution status; do not retrain.
 
 ## Scheduled heartbeat handoff, 2026-11-16
 
+An optional count-only sidecar permits one fifth evaluation lease after the four
+v3 slots are exhausted. It preserves the original monetary policy, GPU-hour cap,
+closed histories, unknown holds and training denial. The fifth lease must bind
+the new sidecar hash; no later lease is admitted. Creation is separate from
+provider dispatch and requires a clean committed operator and retained parent
+authority. Financial inspection and every existing admission check still apply.
+
+Publication may observe the successful server-owned readiness check between its
+two lease reads. Only `ready: false` to `true` is accepted, with both observations
+active and every other authority field identical. Reversal, changed identity,
+status, plan or deadline still fails. Exercise the actual readiness command and
+the complete managed-owner authority path before dispatch; a launcher test alone
+does not cover the functions imported by downstream stage owners.
+
 The public publisher exposes a state-reader port for both its initial and final
 lease observations. Its default remains the original validator; a private
 companion can use `functools.partial` to supply bounded transient-read handling
