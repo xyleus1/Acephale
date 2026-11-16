@@ -1,5 +1,16 @@
 # Acephale decisions
 
+## 2026-11-16: Bind the execution source and controller explicitly
+
+Keep training, operator and execution-image commits distinct. The public
+evaluation-lease source-probe hook must inspect the actual clean execution checkout,
+verify ancestry to the original plan and match its reviewed build inputs before
+authorization. The operator's own commit is not the image's source identity.
+Bind the exact reviewed controller before legacy modules load, and reject an
+incompatible module already in the process cache. Preserve all existing ledger,
+amendment, deadline and ownership checks, including on cleanup paths. Retain the
+failed E3 attempt; local integration tests do not replace fresh GPU qualification.
+
 ## 2026-11-15: Freeze signed APT metadata without upgrading packages
 
 A version pin cannot be rebuilt when a moving package index removes it. Use

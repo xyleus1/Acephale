@@ -1,5 +1,31 @@
 # Acephale engineering log
 
+## 2026-11-16: Verify the image and repair evaluation ownership
+
+The full local image build at execution source `4438b56c` passed with 65 exact
+Git inputs, all 32 unchanged system package pins and two actual Docker permission
+tests. Base packages were neither upgraded nor removed. Independent verification
+of the build proof passed; its SHA-256 is
+`d8a5e07eeea4720dcb2e5097803f761a634d3915ba0d4fc4908398bafe4d428f`.
+CI for public commit `4f6bfd0` also passed every configured job.
+
+E3 completed image setup on its GPU host. Its public authorization producer then
+defaulted to operator source `8185b861`, while the diagnostic required execution
+source `4438b56c`. Admission failed before model calls. A legacy transport import
+also cached an older controller and broke the automatic cleanup path's amendment
+reader. The exact host was subsequently terminated and verified using the reviewed
+controller. Both failures and original deadlines remain retained.
+
+E4 uses the existing source-probe hook with a clean-checkout, ancestry and exact
+input-byte verification. All three owner entrypoints bind the reviewed controller
+before importing legacy transport; an incompatible cached module fails closed.
+The Windows installer now persists its creation-only registration receipt after
+successful registration, disabling and XML export. Independent checks passed 45
+distinct cases: 10 source-authorization, 8 real entrypoint/import-order, 10 Windows
+task and 17 owner-unit tests. External effects were blocked or replaced with test
+fixtures. The actual scientific sequence remains pending; no new weights, gates,
+benchmark scores or claims of improvement follow from these engineering tests.
+
 ## 2026-11-15: Preserve compiler pins with signed Debian snapshots
 
 E2 image setup failed before model execution because the live security index

@@ -1,14 +1,20 @@
 # Working on Acephale
 
-The second evaluation-only run stopped at image setup because the live Debian
-index removed the exact pinned Linux headers. Preserve that failed attempt.
-The next execution checkout is `4438b56c`, a Dockerfile-only descendant of
-`8185b861`; training/native source remains `5a36a8b3`. Its APT sources use the
-signed `20261114T000000Z` Debian and Debian-security snapshots, with the same
-32 package pins and the original signature keyring. All packages were downloaded
-and authenticated locally. The full CPU image build and fresh E3 GPU execution
-are still pending; do not report them as passed or change weights to bypass setup.
-Keep the E1 diagnostic's original source identity separate from E3 provenance.
+The full local CPU image build passed for execution source `4438b56c`, including
+all 65 Git build inputs, 32 unchanged Debian package pins and both real Docker
+permission tests. E3 then completed image setup on the actual GPU host, but its
+evaluation authorization reported operator source `8185b861` instead of execution
+source `4438b56c`. The diagnostic gate rejected it before model calls. Cleanup
+also exposed a legacy controller import-order error; exact termination was later
+verified with the correct controller. Preserve both failures.
+
+E4 binds the exact reviewed controller before legacy transport loads, explicitly
+probes the clean execution checkout through the existing authorization hook, and
+persists the task registration receipt. Independent integration checks passed;
+scientific results remain pending. Do not rerun either completed optimizer.
+Execution source `4438b56c` changes only the Dockerfile's signed APT snapshot
+sources; training/native source remains `5a36a8b3`. Keep original diagnostic,
+operator and current execution provenance separate.
 
 Both main seeds completed 204 optimizer updates and 204 gradient checks. Do not
 repeat training. Separate CPU recovery preserves each original serialization

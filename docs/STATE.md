@@ -1,6 +1,6 @@
 # Current state
 
-Updated November 15, 2026. Both predictor seeds completed their 204 optimizer
+Updated November 16, 2026 (UTC). Both predictor seeds completed their 204 optimizer
 updates. The saved adapters are intact. Strict reload qualification and the
 paired native evaluation remain incomplete; training completion is not a
 benchmark result.
@@ -11,9 +11,19 @@ Debian's live security index stopped offering the pinned
 that attempt. The failure is retained. Prospective execution source
 `4438b56c3053f0ee4a354d0e89ad31de82a766f7` changes only the Dockerfile's APT
 sources to the signed November 14 snapshot. All 32 package versions are unchanged.
-Their authenticated downloads and an isolated dependency-resolution check passed;
-the complete local Docker build and the third evaluation-only run remain pending.
-This setup correction does not change either trained adapter or any scoring rule.
+The full local Docker build passed, including all 65 exact Git inputs, the 32
+package versions and two actual Docker permission cases. No base package was
+upgraded or removed. The third evaluation-only run completed GPU image setup,
+then failed diagnostic admission because authorization named the operator checkout
+instead of the execution image's source. No model or benchmark call ran there.
+
+The fourth continuation fixes source authorization through the existing public
+probe hook and binds the exact controller before loading legacy transport. The
+controller fix also preserves cleanup's existing ledger and ownership checks.
+Independent integration verification passed 45 distinct tests, including actual
+Windows entrypoints and registration behavior with external effects blocked.
+The run is sealed; saved-weight export and the paired scientific results are
+still pending. Neither trained adapter nor any scoring rule changed.
 
 ## Training and continuation
 
