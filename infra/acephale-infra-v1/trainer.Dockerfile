@@ -4,7 +4,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_NO_CACHE=1 \
     PATH=/app/research/acephale/training/.venv/bin:$PATH
 COPY infra/acephale-infra-v1/trainer-system-packages.txt /tmp/acephale-trainer-packages.txt
 # TRL's fused LM head invokes Triton's C driver build even with torch_compile=False.
-RUN apt-get update \
+# Snapshot signed metadata so compiler/header pins remain available on rebuild.
+RUN sed -i \
+        -e 's|^URIs: http://deb.debian.org/debian$|URIs: https://snapshot.debian.org/archive/debian/20261114T000000Z/|' \
+        -e 's|^URIs: http://deb.debian.org/debian-security$|URIs: https://snapshot.debian.org/archive/debian-security/20261114T000000Z/|' \
+        -e '/^Signed-By: /a Check-Valid-Until: no' \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && xargs -r apt-get install -y --no-install-recommends < /tmp/acephale-trainer-packages.txt \
     && dpkg-query -W > /usr/local/share/acephale-trainer-packages.tsv \
     && gcc --version \
