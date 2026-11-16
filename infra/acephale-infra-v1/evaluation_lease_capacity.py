@@ -13,10 +13,14 @@ import rfc8785
 PROFILE = "acephale-evaluation-lease-capacity-v1"
 BASE_LIMIT = 4
 EFFECTIVE_LIMIT = 5
+EXTENSION_PROFILE = "acephale-evaluation-lease-capacity-v2"
+EXTENDED_LIMIT = 6
 
 
-def capacity_path(ledger_path: Path) -> Path:
-    return Path(str(ledger_path.resolve()) + ".evaluation-lease-capacity-v1.json")
+def capacity_path(ledger_path: Path, *, version: int = 1) -> Path:
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError("Unknown evaluation lease-count capacity version")
+    return Path(str(ledger_path.resolve()) + f".evaluation-lease-capacity-v{version}.json")
 
 
 def digest(value: dict) -> str:
@@ -105,6 +109,10 @@ def effective_limit(ledger: dict, funding: dict, *, canonical_digest=digest) -> 
     if funding["version"] != 3:
         return original, None
     path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]))
+    extension = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=2)
+    if extension.exists():
+        return EXTENDED_LIMIT, validate_extension(read(extension), ledger, funding,
+                                                  canonical_digest=canonical_digest)
     if not path.exists():
         if any("evaluationLeaseCapacityHash" in row for row in ledger["leases"]):
             raise ValueError("Evaluation lease-count authority is missing")
@@ -151,5 +159,121 @@ def record_capacity(ledger_path: Path, reason: str, *, controller=None, source_p
                          canonical_digest=controller._budget_digest)
         if protected_files() != set(before) or any(sha(path) != expected for path, expected in before.items()):
             raise ValueError("Existing financial authority or journal changed during count authorization")
+        controller.write_new(output, value)
+        return value
+
+
+def validate_extension(value: dict, ledger: dict, funding: dict, *, canonical_digest=digest) -> dict:
+    """Keep v1's exact fifth slot, then admit one separately bound sixth slot."""
+    parent_path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]))
+    parent = read(parent_path)
+    body = {key: item for key, item in value.items() if key != "contentHash"}
+    if (funding.get("version") != 3 or funding["policy"].get("maximumNewLeases") != BASE_LIMIT
+            or type(value.get("version")) is not int or value["version"] != 2
+            or value.get("profile") != EXTENSION_PROFILE or value.get("contentHash") != canonical_digest(body)
+            or value.get("parentCapacityHash") != parent.get("contentHash")
+            or value.get("parentCapacitySha256") != sha(parent_path)
+            or value.get("parentSourceCommit") != parent.get("sourceCommit")
+            or any(value.get(key) != parent.get(key) for key in
+                ("fundingHash", "fundingSha256", "fundingPolicyHash", "planHash", "infrastructureBindingHash",
+                 "infrastructureLedgerPathHash", "studyLedgerPathHash"))
+            or type(value.get("baseMaximumNewLeases")) is not int or value["baseMaximumNewLeases"] != EFFECTIVE_LIMIT
+            or type(value.get("effectiveMaximumNewLeases")) is not int or value["effectiveMaximumNewLeases"] != EXTENDED_LIMIT
+            or type(value.get("additionalLeases")) is not int or value["additionalLeases"] != 1
+            or value.get("evaluationOnly") is not True or value.get("optimizerPermitted") is not False
+            or value.get("leaseCountAuthorityChanged") is not True
+            or any(value.get(key) is not False for key in ("financialCeilingsChanged", "gpuHoursChanged",
+                "existingReservationsChanged", "existingDeadlinesChanged", "modelContractsChanged"))
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str)
+            or not value["authorizationReason"].strip() or len(value["authorizationReason"]) > 1024
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("originalSliceSha256", ""))):
+        raise ValueError("Count extension requires the exact v1 parent and one unchanged-finance slot")
+    recorded = value.get("recordedAt")
+    if (type(recorded) not in (int, float) or not math.isfinite(recorded)
+            or recorded < parent["recordedAt"]):
+        raise ValueError("Count extension cannot predate its parent")
+    historical = dict(ledger)
+    for field in ("leases", "overheads", "trainingWindows"):
+        baseline = value.get("baseline" + field[0].upper() + field[1:])
+        if not isinstance(baseline, list) or len(ledger.get(field, [])) < len(baseline):
+            raise ValueError("Count extension requires retained operational history")
+        if field != "leases" and ledger.get(field, [])[:len(baseline)] != baseline:
+            raise ValueError("Count extension cannot rewrite overhead or training history")
+        historical[field] = baseline
+    baseline = historical["leases"]
+    if len(baseline) != len(funding["baselineLeases"]) + EFFECTIVE_LIMIT:
+        raise ValueError("Count extension requires all five previous slots")
+    # Only the pure parent validator receives this authenticated snapshot. Full
+    # funding/GPU validation always receives the actual current ledger.
+    validate(parent, historical, funding, canonical_digest=canonical_digest)
+    if baseline[-1].get("status") != "terminated":
+        raise ValueError("The original fifth lease must be terminated before count extension")
+    if ledger.get("trainingWindows", []) != historical["trainingWindows"]:
+        raise ValueError("Evaluation count extension does not authorize new training windows")
+    for old, current in zip(baseline, ledger["leases"], strict=False):
+        if ((old.get("status") == "terminated" and
+                (current.get("status") != "terminated" or current.get("instanceId") != old.get("instanceId")))
+                or any(old.get(key) != current.get(key) for key in
+                    ("id", "name", "reservedAt", "deadline", "setupDeadline", "quote", "studyReservation",
+                     "reservedUsd", "reservedComputeUsd", "reservedHours", "reservedMicrodollars",
+                     "infrastructureFundingSupplementHash", "evaluationLeaseCapacityHash",
+                     "gpuHourCapacityAddendumHash", "routingAmendment", "purpose"))):
+            raise ValueError("Count extension must retain old holds, tags, ownership and deadlines")
+    suffix = ledger["leases"][len(baseline):]
+    if len(suffix) > 1:
+        raise ValueError("Count extension permits only one sixth lease")
+    for lease in suffix:
+        at = lease.get("reservedAt")
+        if (lease.get("evaluationLeaseCapacityHash") != value["contentHash"]
+                or lease.get("infrastructureFundingSupplementHash") != funding["contentHash"]
+                or type(at) not in (int, float) or not math.isfinite(at) or at < recorded):
+            raise ValueError("Sixth lease must bind the count extension prospectively")
+    return value
+
+
+def record_extension(ledger_path: Path, reason: str, *, controller=None, source_probe=None) -> dict:
+    """Append v2 only; preserve every original authority and monetary reservation."""
+    if controller is None:
+        import control as controller
+    source_probe = source_probe or controller.committed_source
+    ledger_path = ledger_path.resolve()
+    with controller.ledger_lock(ledger_path):
+        output = capacity_path(ledger_path, version=2)
+        if output.exists():
+            raise ValueError("Evaluation count extension cannot be overwritten")
+        ledger = controller.checked_bound_ledger(ledger_path)
+        funding = controller.infrastructure_funding(ledger)
+        if funding is None or funding["version"] != 3:
+            raise ValueError("Exact existing v3 financial authority required")
+        parent_path = capacity_path(ledger_path)
+        parent = validate(read(parent_path), ledger, funding, canonical_digest=controller._budget_digest)
+        journal = Path(ledger["plan"]["studyLedgerPath"]).resolve()
+
+        def protected_files():
+            existing = {ledger_path, journal, funding_path(ledger), parent_path}
+            existing.update(path for path in journal.parent.glob(journal.name + ".*.json") if path.is_file())
+            existing.update(path for path in ledger_path.parent.glob(ledger_path.name + ".*.json") if path.is_file())
+            return existing
+
+        before = {path: sha(path) for path in protected_files()}
+        body = {key: parent[key] for key in
+                ("fundingHash", "fundingSha256", "fundingPolicyHash", "planHash", "infrastructureBindingHash",
+                 "infrastructureLedgerPathHash", "studyLedgerPathHash")}
+        body.update(version=2, profile=EXTENSION_PROFILE, parentCapacityHash=parent["contentHash"],
+            parentCapacitySha256=before[parent_path], parentSourceCommit=parent["sourceCommit"],
+            originalSliceSha256=before[ledger_path], baseMaximumNewLeases=EFFECTIVE_LIMIT,
+            effectiveMaximumNewLeases=EXTENDED_LIMIT, additionalLeases=1,
+            baselineLeases=ledger["leases"], baselineOverheads=ledger.get("overheads", []),
+            baselineTrainingWindows=ledger.get("trainingWindows", []), recordedAt=controller.time.time(),
+            sourceCommit=source_probe(ledger["plan"]["sourceCommit"]), authorizationSource="explicit_user_instruction",
+            authorizationReason=reason.strip(), evaluationOnly=True, optimizerPermitted=False,
+            leaseCountAuthorityChanged=True, financialCeilingsChanged=False, gpuHoursChanged=False,
+            existingReservationsChanged=False, existingDeadlinesChanged=False, modelContractsChanged=False)
+        value = validate_extension({**body, "contentHash": controller._budget_digest(body)}, ledger, funding,
+                                   canonical_digest=controller._budget_digest)
+        if protected_files() != set(before) or any(sha(path) != expected for path, expected in before.items()):
+            raise ValueError("Existing financial authority or journal changed during count extension")
         controller.write_new(output, value)
         return value

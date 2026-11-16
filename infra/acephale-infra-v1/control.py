@@ -65,8 +65,9 @@ def _canonical_memo_key(value):
         # Version 2 has no shared-object references. Keys distinguish int/float/
         # bool, string/non-string dictionary keys, tuple/list and Unicode bytes.
         # marshal.dumps rejects custom objects without calling reduction hooks.
+        # Retain only the content fingerprint, not megabytes of authority JSON.
         # Nothing is unmarshalled, persisted, or used as an authorization result.
-        return marshal.dumps(value, 2)
+        return hashlib.sha256(marshal.dumps(value, 2)).digest()
     except (ValueError, TypeError, RecursionError):
         return None
 
