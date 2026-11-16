@@ -1,5 +1,6 @@
 """A chained engineering allowance cannot change money, old work or model gates."""
 import copy
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -225,7 +226,9 @@ def test_actual_evaluation_reader_inventory_and_frozen_watchdog_accept_v2(evalua
     with pytest.raises(ValueError, match='does not authorize optimizer'):
         control.training_lease(path, lease['id'], preflight, tmp_path / 'forbidden.json', 1)
     assert control.sha256(Path(watchdog.__file__)) == '5a389fe895b4b136469b07370fb525145d8a049d88f4daad600700d1b463bf97'
-    assert control.sha256(Path(collect_inventory.__file__)) == '97ff350d272be815a045d6d7d9337a9fc4365803ac5400aa6bbc343c93cc86ee'
+    # Git checkouts may use CRLF; preserve every other source byte in this pin.
+    inventory_source = Path(collect_inventory.__file__).read_bytes().replace(b'\r\n', b'\n')
+    assert hashlib.sha256(inventory_source).hexdigest() == '89ca400798caf620f57c3dbb7f881ebb8d09485c868e565de2a4fb23ce15b186'
     assert watchdog.tick(state, Provider(state), NOW + 1)['terminationRequested'] is False
     assert watchdog.tick(state, Provider(state), state['deadline'])['reason'] == 'lease_deadline'
     with pytest.raises(ValueError):
