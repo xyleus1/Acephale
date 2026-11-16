@@ -17,6 +17,7 @@ from pathlib import Path
 
 from control import (
     atomic_json,
+    budget_digest_scope,
     checked_bound_ledger,
     deployment_source,
     digest,
@@ -153,13 +154,18 @@ def checked_receipt(path):
 
 
 def publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
+    with budget_digest_scope():
+        return _publish(receipt_path, ledger, lease_id, bounded_requests=bounded_requests)
+
+
+def _publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
     options = {}
     if bounded_requests:
         from botocore.config import Config
         options["config"] = Config(connect_timeout=3, read_timeout=3, retries={"total_max_attempts": 1})
     receipt = checked_receipt(receipt_path)
-    state = watchdog_state(ledger, lease_id)
-    data = json.dumps(state, sort_keys=True, separators=(",", ":")).encode()
+    initial = watchdog_state(ledger, lease_id)
+    targets = []
     for row in receipt["controllers"]:
         s3 = session(receipt["config"], row["region"]).client("s3", **options)
         try:
@@ -173,6 +179,18 @@ def publish(receipt_path, ledger, lease_id, *, bounded_requests=False):
             existing = select_instance(previous, Provider(os.environ.get("LAMBDA_API_KEY", "")).request("GET", "/instances")["data"])
             if existing and existing.get("status") != "terminated":
                 raise ValueError("Cannot replace a live controller lease")
+        targets.append((row, s3))
+    # Prior-controller checks can be expensive. Revalidate the current authority
+    # after those checks and timestamp that actual fresh observation, before puts.
+    state = watchdog_state(ledger, lease_id)
+    if {key: value for key, value in state.items() if key != "ownerHeartbeatAt"} != {
+            key: value for key, value in initial.items() if key != "ownerHeartbeatAt"}:
+        raise ValueError("Lease identity or authority changed before heartbeat publication")
+    effective_deadline = state["deadline"] if state["ready"] else state["setupDeadline"]
+    if state["status"] != "terminated" and time.time() >= effective_deadline:
+        raise ValueError("Original effective heartbeat deadline reached before publication")
+    data = json.dumps(state, sort_keys=True, separators=(",", ":")).encode()
+    for row, s3 in targets:
         s3.put_object(Bucket=row["bucket"], Key="state.json", Body=data,
             ContentType="application/json", ServerSideEncryption="AES256", ExpectedBucketOwner=row["account"])
     return {"leaseId": lease_id, "stateHash": digest(state), "ownerHeartbeatAt": state["ownerHeartbeatAt"]}

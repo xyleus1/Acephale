@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+from contextvars import ContextVar
+from functools import wraps
 import hashlib
 import importlib.metadata
 import ipaddress
 import json
 import math
+import marshal
 import os
 import platform
 import re
@@ -32,6 +35,40 @@ API = "https://cloud.lambda.com/api/v1"
 PROFILE = "acephale-infra-v1"
 ROOT = HERE.parent.parent
 USER_AGENT = "Acephale-Research-Lifecycle/1.0"
+_BUDGET_DIGEST_CACHE = ContextVar("acephale_budget_digest_cache", default=None)
+
+
+@contextlib.contextmanager
+def budget_digest_scope():
+    """Reuse pure canonical hashes within one operation, never authority checks."""
+    if _BUDGET_DIGEST_CACHE.get() is not None:
+        yield
+        return
+    token = _BUDGET_DIGEST_CACHE.set({"values": {}, "bytes": 0})
+    try:
+        yield
+    finally:
+        _BUDGET_DIGEST_CACHE.reset(token)
+
+
+def _digest_operation(function):
+    @wraps(function)
+    def scoped(*args, **kwargs):
+        with budget_digest_scope():
+            return function(*args, **kwargs)
+    return scoped
+
+
+def _canonical_memo_key(value):
+    """Use a type-preserving, process-local key; RFC8785 still validates each miss."""
+    try:
+        # Version 2 has no shared-object references. Keys distinguish int/float/
+        # bool, string/non-string dictionary keys, tuple/list and Unicode bytes.
+        # marshal.dumps rejects custom objects without calling reduction hooks.
+        # Nothing is unmarshalled, persisted, or used as an authorization result.
+        return marshal.dumps(value, 2)
+    except (ValueError, TypeError, RecursionError):
+        return None
 
 
 def digest(value: Any) -> str:
@@ -594,7 +631,8 @@ def ledger_lock(path: Path):
         stream.write(str(os.getpid()))
         stream.flush()
     try:
-        yield
+        with budget_digest_scope():
+            yield
     finally:
         lock.unlink()
 
@@ -720,6 +758,7 @@ def _financial_binding_hash(ledger: dict) -> str:
     return digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads", "trainingWindows"}})
 
 
+@_digest_operation
 def effective_budget_policy(ledger: dict) -> dict | None:
     """Validate an explicit amendment while preserving all prior funded work."""
     current = _read_budget_amendment(ledger, 3)
@@ -958,13 +997,23 @@ def training_window_headroom(ledger_path: Path, request: dict) -> dict:
 def _budget_digest(value: Any) -> str:
     # The amendment is written by TypeScript. Use the same RFC 8785 wire hash.
     import rfc8785
-    return hashlib.sha256(rfc8785.dumps(value)).hexdigest()
+    cache = _BUDGET_DIGEST_CACHE.get()
+    key = _canonical_memo_key(value) if cache is not None else None
+    if key is not None and key in cache["values"]:
+        return cache["values"][key]
+    result = hashlib.sha256(rfc8785.dumps(value)).hexdigest()
+    if (key is not None and len(cache["values"]) < 128
+            and cache["bytes"] + len(key) <= 16 * 1024 * 1024):
+        cache["values"][key] = result
+        cache["bytes"] += len(key)
+    return result
 
 
 def _budget_binding_hash(ledger: dict) -> str:
     return _budget_digest({key: value for key, value in ledger.items() if key not in {"leases", "overheads", "trainingWindows"}})
 
 
+@_digest_operation
 def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
     amendment = effective_budget_policy(ledger)
     original_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
@@ -988,6 +1037,7 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
     return policy["allocationsMicrodollars"]["infrastructure"] / 1_000_000, policy["infrastructureComputeUsd"], policy["infrastructureAssociatedUsd"]
 
 
+@_digest_operation
 def infrastructure_funding(ledger: dict) -> dict | None:
     """Validate each append-only authority against its retained history."""
     journal = ledger.get("plan", {}).get("studyLedgerPath")
@@ -1242,6 +1292,7 @@ def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dic
     return value
 
 
+@_digest_operation
 def effective_gpu_hour_capacity(ledger: dict) -> tuple[float, dict | None]:
     """Layer an explicit engineering limit over the unchanged financial policy."""
     amendment = effective_budget_policy(ledger)
@@ -1450,6 +1501,7 @@ def effective_versions_metadata(ledger_path: Path, ledger: dict) -> dict:
             "amendmentHash": value["contentHash"]}
 
 
+@_digest_operation
 def checked_bound_ledger(path: Path) -> dict[str, Any]:
     value = _checked_bound_ledger_identity(path)
     effective_versions_metadata(path, value)

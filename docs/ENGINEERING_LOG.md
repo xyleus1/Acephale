@@ -17,6 +17,22 @@ Python with bytecode otherwise enabled, repeated checks and tampered-bytecode
 rejection. E8 serving and paired benchmarks remain pending. See the
 [follow-up observation](experiments/native-tuning-cache-2026-11-16.md#gpu-follow-up-and-local-verification-failure).
 
+## 2026-11-16: Keep validation work within the owner heartbeat window
+
+Profiling the retained ledger found repeated RFC 8785 serialization dominated
+validation. An operation-local memo now reuses only canonical hash results, with
+type-preserving keys from the standard library. Every authority read and check
+still runs; changed nested values cannot reuse a digest. An initial Python key
+scanner was slower and was discarded. Matched unprofiled local observations were
+8.922 seconds before and 3.688 seconds after, one observation each, with all 133
+JSON reads and the same validated ledger digest. These are operator timings,
+not model or benchmark latency results.
+
+Publication now timestamps a real revalidation after all prior-controller
+checks. A separate guarded cancellation module can close a never-dispatched
+reservation without releasing any financial hold or claiming provider
+termination. Real network publication qualification remains a separate gate.
+
 ## 2026-11-16: Chain evaluation engineering capacity without changing budgets
 
 Added a creation-only GPU-hour capacity v2 sidecar with a 160-hour cumulative
