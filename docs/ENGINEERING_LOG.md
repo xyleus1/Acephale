@@ -1,5 +1,21 @@
 # Acephale engineering log
 
+## 2026-11-16: Close the undispatched attempt and qualify publication
+
+E8 stopped before its provider request when the published heartbeat was already
+too old. Exact stopped-process, durable-state and provider-absence evidence
+established that no instance had been created. Guarded cancellation closed only
+that local reservation; independent verification found all 99 financial files
+unchanged and reconstructed the entire prior ledger by restoring that one row.
+Provider termination is explicitly false and every financial hold remains.
+
+The repaired publisher completed three real cycles with both remote readbacks.
+Observed publication intervals were 44.430 and 42.182 seconds; the watchdog
+timeout remains 120 seconds. Public integration checks passed 41 tests with one
+Windows symlink-permission skip. An initial local run hit a pytest temporary-
+directory permission error; a new explicit test directory resolved that setup
+failure. These checks do not establish trained benchmark accuracy or latency.
+
 ## 2026-11-16: Preserve evidence during repeated export verification
 
 E7 restored each seed's recorded native cache and reproduced all 248,320 saved

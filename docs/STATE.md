@@ -17,9 +17,22 @@ rewrote one archived Python bytecode file, so the next integrity check rejected
 the changed extraction. The original 160-file compressed archive remained intact.
 A fresh CPU-only extraction passed the unchanged strict verifier repeatedly with
 bytecode writing disabled; all archived files remained unchanged. The failed owner
-and original extraction are preserved. E8 is pending, with checked-source loading
+and original extraction are preserved. E8 used checked-source loading
 that does not read or write adjacent bytecode and process-startup suppression as
 an additional defense. Neither optimizer will be repeated.
+
+E8 stopped before provider dispatch because its controller publication exceeded
+the heartbeat freshness window. No GPU instance was created. Its unused local
+reservation is closed with explicit `cancelled_before_provider_dispatch`
+evidence; no provider termination is claimed and all financial holds remain.
+E9 is being prepared against the same scientific contracts and saved weights.
+
+The operator repair caches only pure canonical digests within one operation;
+all authority files are still read and validated. Three actual publication cycles
+with both remote readbacks passed, with observed publication intervals of 44.430
+and 42.182 seconds against the unchanged 120-second watchdog timeout. This is
+infrastructure qualification, not benchmark latency. Provider dispatch must also
+check freshness after its budget inspection.
 
 The sixth evaluation-only attempt passed strict input admission, then failed
 seed 17's inference-only warmup check: 18,971 of 248,320 original-reference

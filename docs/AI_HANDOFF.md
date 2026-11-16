@@ -17,7 +17,11 @@ hash-checked helper source through `runpy.run_path`; direct source execution
 avoids adjacent bytecode even under isolated Python. Startup bytecode suppression
 is an additional defense. Actual-archive tests reproduce the old failure, pass
 repeated normal and isolated verification, and reject changed archived bytecode.
-Read the private operator handoff for current execution status; do not retrain.
+E8 subsequently stopped before provider dispatch when its controller publication
+exceeded the heartbeat window. Its local reservation is now closed with explicit
+no-dispatch/no-provider-termination evidence; all financial holds remain. E9 is
+being prepared with the same scientific contracts. Read the private operator
+handoff for current execution status; do not retrain.
 
 ## Operator validation and publication, 2026-11-16
 
@@ -26,7 +30,10 @@ type-preserving process-local keys. It still reads and validates every authority
 file. Publication completes prior-controller checks, revalidates the actual
 current lease, and only then publishes its fresh heartbeat timestamp. The
 120-second watchdog limit and original lease deadlines are unchanged. Validate
-actual publication and heartbeat timing before another provider dispatch.
+actual publication and heartbeat timing before another provider dispatch. Three
+actual publication cycles with both remote readbacks have passed. The remaining
+pre-dispatch budget-inspection gap requires a fresh publication and validity
+check before the original controller can record `launching` and send its POST.
 
 `cancel_unlaunched.py` separately closes an exactly proved undispatched local
 reservation. Its compatible terminal lifecycle status does not mean a provider

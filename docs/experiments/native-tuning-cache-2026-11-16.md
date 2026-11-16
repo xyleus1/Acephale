@@ -96,7 +96,10 @@ repeatedly with bytecode enabled under normal and isolated Python, and reject
 deliberately changed archived bytecode. This is sequential source loading, not a
 sandbox or a general thread-safe execution facility.
 
-E8 remains pending. It may repeat inference and export through the existing
+E8 stopped before provider dispatch because controller publication exceeded its
+heartbeat freshness window. No GPU instance was created; the unused local
+reservation is closed while its financial holds and original failure remain.
+E9 is being prepared. It may repeat inference and export through the existing
 pipeline, but not optimizer updates. Separate vLLM qualification, free-running
 prediction, goal agreement and paired custom tau-compatible trials are still
 required before reporting trained tool accuracy, task success or live latency.
