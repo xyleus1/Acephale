@@ -6,7 +6,13 @@ from unittest.mock import patch
 import collect_inventory
 import lambda_gpu_watchdog as watchdog
 import pytest
-from test_gpu_hour_capacity import NOW, amended, capacity_base, control, quote  # noqa: F401
+from test_gpu_hour_capacity import (  # noqa: F401
+    NOW,
+    amended,
+    capacity_base,
+    control,
+    quote,
+)
 from test_infrastructure_funding import continued, extended, funded
 from test_lambda_gpu_watchdog import Provider
 
@@ -124,7 +130,7 @@ def test_extension_rechecks_parent_bytes_and_rejects_creation_race(evaluation_ca
     assert not control.gpu_hour_capacity_path(path, 2).exists()
 
 
-def test_unknown_hold_is_retained_and_still_requires_a_real_fence(capacity_base):
+def test_unknown_hold_is_retained_and_still_requires_a_real_fence(capacity_base):  # noqa: F811 - imported pytest fixture
     path, ledger, _ = capacity_base
     ledger['leases'][-2].update(status='launch_unknown', instanceId=None)
     control.atomic_json(path, ledger)
