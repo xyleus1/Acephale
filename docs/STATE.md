@@ -69,6 +69,14 @@ the repeated misses but improved paired read time only 3.5% in that sample. The
 complete SDK/publication path must be measured before another startup repair is
 treated as qualified. No trained replay or paired native result followed E11.
 
+A subsequent complete closed-lease measurement took 61.031 seconds, including
+four state reads. Compact hash keys plus one pure memo scope across those reads
+reduced the next observed sample to 29.843 seconds. The wrapper-equivalent
+preflight took 3.172 seconds versus 9.812 previously. Every file read and authority
+check remains; the cache is discarded between heartbeat attempts. These are one
+operational sample per implementation under variable workstation load, not live
+benchmark gains. The next run still requires actual scheduled-start qualification.
+
 The operator repair caches only pure canonical digests within one operation;
 all authority files are still read and validated. Three actual publication cycles
 with both remote readbacks passed, with observed publication intervals of 44.430

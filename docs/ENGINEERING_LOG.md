@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## 2026-11-16: Measure the full heartbeat after bounded hash reuse
+
+The unchanged controller's closed-lease heartbeat took 61.031 seconds wall time
+and 40.516 seconds CPU. The repaired controller took 29.843 and 20.500 seconds,
+respectively. Wrapper-equivalent preflight observations were 9.812 and 3.172
+seconds; final authenticated readbacks were 6.407 and 2.297 seconds. Both used
+real S3 operations and the same terminated lease, with original financial bytes
+unchanged and no provider, model or reservation dispatch.
+
+Each implementation has one such sample, under variable local load. These
+measurements support proceeding to scheduled-start qualification; they do not
+establish a startup bound, native task latency gain or predictor improvement.
+The implementation changes only pure memo keys and the scope spanning one
+heartbeat attempt. Current files, identities and deadlines are still checked.
+
 ## 2026-11-16: Retain the active-startup timeout
 
 E11's final provider-dispatch check passed: heartbeat age 4.18 seconds, budget
