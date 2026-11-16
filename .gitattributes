@@ -6,3 +6,5 @@
 /infra/acephale-infra-v1/lambda-operator/* text eol=lf
 /research/acephale/src/acephale/custom_native_tasks.py text eol=lf
 /research/acephale/src/acephale/native_study.py text eol=lf
+# Published operator patches must retain their verified byte representation.
+/docs/experiments/operator-patches/*.patch text eol=lf
