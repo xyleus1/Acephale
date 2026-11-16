@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-16: Reduce validation cost without caching authority
+
+Use bounded, operation-local memoization of pure canonical digests. Do not cache
+file reads, financial verdicts, authorization or freshness. Complete predecessor
+checks before taking the heartbeat's actual observation timestamp, then
+revalidate current identity and deadlines. Preserve the 120-second watchdog
+policy. A proved pre-dispatch cancellation retains every financial reservation
+and reports provider termination as false, even though the existing terminal
+lifecycle enum is used for compatibility.
+
 ## 2026-11-16: Extend engineering hours through an immutable evaluation chain
 
 The user's instruction to continue necessary work permits a bounded 160-hour

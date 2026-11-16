@@ -1,3 +1,19 @@
+## Operator validation and publication, 2026-11-16
+
+The operator now memoizes only pure RFC 8785 digests within one operation, using
+type-preserving process-local keys. It still reads and validates every authority
+file. Publication completes prior-controller checks, revalidates the actual
+current lease, and only then publishes its fresh heartbeat timestamp. The
+120-second watchdog limit and original lease deadlines are unchanged. Validate
+actual publication and heartbeat timing before another provider dispatch.
+
+`cancel_unlaunched.py` separately closes an exactly proved undispatched local
+reservation. Its compatible terminal lifecycle status does not mean a provider
+instance was terminated: the receipt explicitly records no provider dispatch
+and no provider termination. All compute/tax holds, financial records, deadlines
+and unresolved launches remain. It requires stopped owner/task proof, exact
+source-order evidence and fresh provider absence; it has no automatic CLI.
+
 ## Evaluation engineering capacity, 2026-11-16
 
 Prospective operator capacity v2 adds a creation-only 160-hour engineering
