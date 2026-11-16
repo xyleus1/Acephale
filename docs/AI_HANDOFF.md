@@ -24,9 +24,18 @@ E9 passed real pre-dispatch freshness and allocated its GPU, then hit the
 50-second scheduled-heartbeat startup timeout before scientific dispatch.
 Cleanup and independent provider absence are verified. The later heartbeat
 exception followed cleanup and is not assumed to be the initial trigger.
-Preserve the failed attempt. Require actual scheduled-wrapper startup
-qualification without a GPU before E10. Read the private operator handoff for
-current execution status; do not retrain.
+Three actual scheduled-wrapper startup canaries passed without a GPU, with
+71.431, 50.176 and 71.521 seconds to authenticated handoff. E10 then passed
+startup but its foundation owner failed before model execution: the launcher
+omitted `fresh_record` and `matches_owned_state`, which the managed authority
+check imports. Provider termination and absence are verified. Keep the original
+failed stage's drain flags and the separate stopped-process observation distinct.
+
+E11 restores both exports, exercises the actual authority implementation and
+waits for publication of the current readiness state. The scheduled companion
+is the sole steady publisher. The additional count-only evaluation slot remains
+separate from financial authority and provider launch. Read the private operator
+handoff for current execution status; do not repeat either optimizer.
 
 ## Scheduled heartbeat handoff, 2026-11-16
 

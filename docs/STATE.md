@@ -36,8 +36,24 @@ The launcher allowed 50 seconds for scheduled startup, including the wrapper's
 preflight. Separate offline reproductions found that PowerShell could discard
 native retry diagnostics and that a publisher refactor bypassed one injected
 read-retry path. Neither later error is treated as the proved initial trigger.
-The next attempt requires a complete scheduled-startup canary against a closed
-lease, with no GPU allocation, before another evaluation run.
+Three subsequent real scheduled-startup canaries against the closed lease passed
+without allocating a GPU. Startup through authenticated child handoff took
+71.431, 50.176 and 71.521 seconds. These are infrastructure timings, not measured
+task latency. Each task drained and the financial files remained unchanged.
+
+E10 then passed startup and handed off to its managed owner. Foundation failed
+before model execution because the launcher no longer exported two heartbeat
+helpers used by the downstream authority check. The owner exited with failure;
+provider termination and subsequent absence were independently verified. The
+failed stage's unconfirmed drain flags remain unchanged. A separate observation
+confirmed that its exact local task and processes had stopped.
+
+The E11 repair restores those exports and tests the actual managed authority
+path, including the transition to ready. Publication now accepts only an active
+lease becoming ready while every other authority field stays identical. The
+scheduled companion remains the sole steady publisher. An additional evaluation
+slot can be authorized separately without altering monetary ceilings, old holds,
+GPU-hour limits, models or scoring. E11 has not yet produced scientific results.
 
 The operator repair caches only pure canonical digests within one operation;
 all authority files are still read and validated. Three actual publication cycles

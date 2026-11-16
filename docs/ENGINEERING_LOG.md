@@ -1,5 +1,22 @@
 # Acephale engineering log
 
+## 2026-11-16: Exercise the complete managed authority path
+
+Three real scheduled startup canaries passed against a closed lease, with no
+GPU allocation or financial-file changes. Their authenticated handoffs took
+71.431, 50.176 and 71.521 seconds. E10 subsequently passed startup, but foundation
+failed because its launcher omitted two helpers used by `Runtime.authority`.
+The failed stage remains failed. Provider termination and exact absence were
+verified; separate local observations found its tasks and owned processes stopped.
+
+E11 restores the exports and tests the actual authority calls, including stale
+readiness, setup deadlines and foreign instances. It removes the redundant parent
+publication after `mark-ready`. The public publisher accepts only the monotonic
+active readiness transition, preserving all other identity and deadline checks.
+A separately reviewed count-only sidecar permits one further evaluation lease;
+it preserves financial ceilings, retained holds, training denial and GPU hours.
+No trained native benchmark score follows from these infrastructure checks.
+
 ## 2026-11-16: Keep publication unit tests independent of cloud packages
 
 The state-reader tests replace S3 transport but initially still imported the
