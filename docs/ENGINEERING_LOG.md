@@ -1,5 +1,31 @@
 # Acephale engineering log
 
+## 2026-11-15: Preserve compiler pins with signed Debian snapshots
+
+E2 image setup failed before model execution because the live security index
+no longer exposed `linux-libc-dev=6.1.190-1`. The prospective Dockerfile changes
+only its APT source URLs to `20261114T000000Z` for bookworm, bookworm-updates
+and bookworm-security. Source-scoped historical expiry handling leaves GPG
+signature verification enabled. The existing package installation and installed
+package inventory commands remain unchanged.
+
+Local verification extracted the keyring and dpkg status from the exact pinned
+Python base-image layers, verified three signed InRelease files and their
+Packages hashes, and downloaded all 32 unchanged packages (50,766,168 bytes).
+An isolated Ubuntu APT solver using that Debian status required 32 new packages,
+zero upgrades and zero removals. This is not a completed container build. The
+full local Docker build and E3 execution are pending. The verification manifest
+SHA-256 is `69a9b29ae04b93d921afe31be70f6d67da06b4c858c7e8c151439f37c0b5baad`.
+
+The prospective export helpers retain original training source `5a36a8b3`,
+historical diagnostic source `8185b861` and new execution source `4438b56c`
+separately. Their focused checks passed 60 distinct cases; independent reporting,
+current-context and finalization review passed 19 cases. No models or providers
+were called by these checks. CI for the earlier public commit `508d94c` passed
+all configured jobs; that result does not validate this later Dockerfile change.
+Public container regressions passed 16 tests; two opt-in Docker permission tests
+were skipped in the Windows interpreter. The full Linux build is separate.
+
 ## 2026-11-15: Reproduce both saved probes with inference-only preparation
 
 Cold diagnostics failed the unchanged gate for both seeds with exact original

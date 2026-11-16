@@ -1,5 +1,15 @@
 # Working on Acephale
 
+The second evaluation-only run stopped at image setup because the live Debian
+index removed the exact pinned Linux headers. Preserve that failed attempt.
+The next execution checkout is `4438b56c`, a Dockerfile-only descendant of
+`8185b861`; training/native source remains `5a36a8b3`. Its APT sources use the
+signed `20261114T000000Z` Debian and Debian-security snapshots, with the same
+32 package pins and the original signature keyring. All packages were downloaded
+and authenticated locally. The full CPU image build and fresh E3 GPU execution
+are still pending; do not report them as passed or change weights to bypass setup.
+Keep the E1 diagnostic's original source identity separate from E3 provenance.
+
 Both main seeds completed 204 optimizer updates and 204 gradient checks. Do not
 repeat training. Separate CPU recovery preserves each original serialization
 failure and verifies its final checkpoint, adapter and probe. The R5 provider

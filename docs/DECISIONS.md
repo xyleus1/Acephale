@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-15: Freeze signed APT metadata without upgrading packages
+
+A version pin cannot be rebuilt when a moving package index removes it. Use
+[Debian's historical snapshot archive](https://snapshot.debian.org/) at
+`20261114T000000Z` for the trainer's three existing suites. Preserve the exact
+base image, all 32 package pins, Signed-By keyring, package inventory and Python
+lockfile. Disable Valid-Until only on those historical sources; keep signature
+and package-hash verification. Retain the failed live-index attempt separately.
+Require a complete local CPU image build before another GPU setup. Snapshot
+availability and dependency resolution alone do not establish image readiness.
+This is packaging recovery, not a change to model weights or scientific gates.
+
 ## 2026-11-15: Use one declared inference preparation for both saved seeds
 
 Both original probes were reproduced bit-for-bit after the same fitting-batch

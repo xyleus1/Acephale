@@ -5,6 +5,16 @@ updates. The saved adapters are intact. Strict reload qualification and the
 paired native evaluation remain incomplete; training completion is not a
 benchmark result.
 
+The second evaluation-only continuation failed during trainer-image setup when
+Debian's live security index stopped offering the pinned
+`linux-libc-dev=6.1.190-1`. No export, replay or paired native comparison ran in
+that attempt. The failure is retained. Prospective execution source
+`4438b56c3053f0ee4a354d0e89ad31de82a766f7` changes only the Dockerfile's APT
+sources to the signed November 14 snapshot. All 32 package versions are unchanged.
+Their authenticated downloads and an isolated dependency-resolution check passed;
+the complete local Docker build and the third evaluation-only run remain pending.
+This setup correction does not change either trained adapter or any scoring rule.
+
 ## Training and continuation
 
 The fifth continuation completed seed 29's 204 updates, three epochs and 204
