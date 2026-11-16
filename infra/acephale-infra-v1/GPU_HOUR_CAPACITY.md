@@ -1,5 +1,32 @@
 # Prospective GPU-hour capacity
 
+## Evaluation continuation: v2
+
+When retained reservations approach 128 hours, a separately authorized v2
+sidecar can raise the cumulative engineering allowance to 160 hours. It requires
+the existing v1 sidecar and v3 evaluation-only infrastructure funding. It binds
+their exact hashes and a fresh snapshot of every lease, overhead and training
+window. The original v1 file and all prior holds remain unchanged. The allowance
+does not add money, authorize an optimizer, increase the four-lease funding limit,
+or extend an existing deadline.
+
+```text
+python infra/acephale-infra-v1/control.py record-gpu-hour-capacity-extension \
+  --ledger ORIGINAL_SLICE \
+  --authorization-reason "The user's explicit instruction authorizing necessary continuation" \
+  --operational-history PRIVATE_HISTORY_JSON
+```
+
+The command creates `ORIGINAL_SLICE.gpu-hour-capacity-v2.json` once, without
+provider dispatch or journal writes. The v1 validator checks the v2 baseline;
+new leases must bind the v2 hash. Provider receipts identify the current v2 file,
+its 160-hour allowance, and the unchanged base-policy allowance of 64. Historical
+receipts keep their original 128-hour metadata. Consumers must verify the current
+sidecar and its retained v1 parent explicitly. Frozen model, native and watchdog
+contracts keep their original fields and acceptance rules.
+
+## Original engineering allowance: v1
+
 This operator addendum changes one engineering reservation allowance from 64 to
 128 cumulative GPU hours. The approved v3 financial policy stays byte-identical:
 $1,000 total, $200 infrastructure, $150 compute, $50 associated charges, eight

@@ -1,3 +1,12 @@
+## Evaluation engineering capacity, 2026-11-16
+
+Prospective operator capacity v2 adds a creation-only 160-hour engineering
+allowance over the retained 128-hour v1 sidecar. It requires the existing v3
+evaluation-only funding, preserves every financial hold and training window,
+and does not authorize optimizer work or provider dispatch. Follow
+`infra/acephale-infra-v1/GPU_HOUR_CAPACITY.md`; activation, source binding and
+the complete next run still require their actual private review receipts.
+
 ## Evaluation funding continuation, 2026-11-16
 
 A third append-only infrastructure authority adds $100 ($75 compute and $25

@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## 2026-11-16: Chain evaluation engineering capacity without changing budgets
+
+Added a creation-only GPU-hour capacity v2 sidecar with a 160-hour cumulative
+allowance. The controller validates the original 128-hour v1 against the retained
+baseline, then validates each new lease against the v2 hash. Current funding,
+source, history and parent file identities are mandatory. Existing financial
+holds, deadlines, unknown launches, model contracts and training windows remain.
+The command inspects the original journal and never provisions a resource.
+Activation and live execution are separate operator actions.
+
 ## 2026-11-15: Diagnose retained checkpoint reload without training
 
 Added an evaluation-only diagnostic for a completed 204-update checkpoint.
