@@ -1,5 +1,16 @@
 # Acephale decisions
 
+## 2026-11-16: Bound the next evaluation through parent-linked authorities
+
+Use one append-only funding-v4 allowance and one GPU-hour-v3 allowance for the
+next evaluation-only lease. Preserve every earlier unknown hold and closed
+identity instead of reclaiming unverified costs. The new monetary ceiling is
+capacity, not a reservation: before dispatch, reserve the actual bounded lease
+and verify its worst-case cost alongside the protected frozen API allocation.
+Do not change the frozen API reader or scientific sources. Authenticate each
+historical GPU parent using its retained financial epoch, then check the current
+lease against current funding and cumulative hours. No optimizer is authorized.
+
 ## 2026-11-16: Verification must preserve archived evidence
 
 Execute a hash-checked archived Python helper directly from its source without

@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## 2026-11-16: Append bounded evaluation completion capacity
+
+Added funding v4 with one eight-hour evaluation lease and a $30 infrastructure
+increment, plus a parent-bound GPU-hour v3 allowance of 168 cumulative hours.
+Current financial validation remains separate from authenticated historical GPU
+parents. No original journal, policy, reservation, model or deadline is rewritten.
+Focused Python tests cover the complete retained chain, altered parents and
+holds, optimizer denial and the frozen execution reader. TypeScript tests cover
+the appended contract, writer and reader; type checking passes. Real activation,
+frozen API headroom and actual scheduled startup remain separate evidence gates.
+
 ## 2026-11-16: Measure the full heartbeat after bounded hash reuse
 
 The unchanged controller's closed-lease heartbeat took 61.031 seconds wall time

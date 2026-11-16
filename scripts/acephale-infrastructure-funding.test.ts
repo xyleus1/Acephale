@@ -8,7 +8,7 @@ import { budgetPolicyPath } from "../services/acephale-runtime/budget-policy";
 import { frozenApiProjection, infrastructureFundingPath } from "../services/acephale-runtime/infrastructure-funding";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 import { amendBudgetPolicy } from "./acephale-budget-policy";
-import { addInfrastructureFunding, extendInfrastructureFunding, continueEvaluationFunding } from "./acephale-infrastructure-funding";
+import { addInfrastructureFunding, extendInfrastructureFunding, continueEvaluationFunding, completeEvaluationFunding } from "./acephale-infrastructure-funding";
 import { awsBudget } from "./acephale-aws-budget";
 
 function fixture() {
@@ -226,5 +226,80 @@ test("third funding cannot skip, replace or hide either parent",()=>{
     writeFileSync(infrastructureFundingPath(f.ledger,3),canonical(funding));
     rmSync(infrastructureFundingPath(f.ledger,2));
     assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/parent/);
+  } finally {f.close();}
+});
+
+const completeFunding = (f: ReturnType<typeof fixture>) => completeEvaluationFunding(f.ledger,f.slice,"2026-11-16T17:00:00Z",
+  "User authorized necessary completion; one additional evaluation-only lease retains every prior hold.",()=>"e".repeat(40));
+
+test("fourth funding adds only the approved completion capacity and preserves all earlier bytes",()=>{
+  const f=fixture(); try {
+    authorize(f); extend(f); const parent=continueFunding(f);
+    const paths=[f.ledger,f.slice,budgetPolicyPath(f.ledger,2),budgetPolicyPath(f.ledger,3),
+      ...([1,2,3] as const).map(version=>infrastructureFundingPath(f.ledger,version))];
+    const before=paths.map(path=>[path,readFileSync(path)] as const);
+    const funding=completeFunding(f);
+    assert.equal(funding.version,4); assert.equal(funding.parentFundingHash,parent.contentHash);
+    assert.equal(funding.policy.additionalInfrastructureMicrodollars,30_000_000);
+    assert.equal(funding.policy.effectiveComputeMicrodollars,335_000_000);
+    assert.equal(funding.policy.effectiveAssociatedMicrodollars,115_000_000);
+    assert.equal(funding.policy.maximumNewLeases,1);
+    assert.equal(funding.policy.maximumSessionHours,8);
+    assert.equal(funding.policy.maximumHourlyUsd,1.99);
+    assert.equal(funding.policy.evaluationOnly,true);
+    for(const [path,bytes] of before) assert.deepEqual(readFileSync(path),bytes);
+    assert.throws(()=>completeFunding(f),/EEXIST/);
+    const infra=new DurableBudget(f.ledger,{infrastructureOwner:true});
+    assert.equal(infra.ledger.totalCeilingMicrodollars,1_250_000_000);
+    assert.equal(infra.ledger.allocations.infrastructure,450_000_000);
+    assert.deepEqual({...infra.ledger.allocations,infrastructure:200_000_000},f.base.policy.allocationsMicrodollars);
+    assert.equal(infra.infrastructureFunding?.contentHash,funding.contentHash);
+    assert.equal(frozenApiProjection(infra.ledger.snapshot(),30_000_000,f.base,funding).frozenApiHeadroomMicrodollars,303_000_000);
+    infra.close();
+  } finally {f.close();}
+});
+
+test("fourth funding rejects missing or changed parents, hidden holds, active work and broader policies",()=>{
+  const f=fixture(); try {
+    authorize(f); extend(f); assert.throws(()=>completeFunding(f),/preceding/);
+    continueFunding(f);
+    f.value.leases[1].status="active"; writeFileSync(f.slice,canonical(f.value));
+    assert.throws(()=>completeFunding(f),/closed or retained unknown/);
+    f.value.leases[1].status="launch_unknown"; writeFileSync(f.slice,canonical(f.value));
+    const funding=completeFunding(f);
+    const changes=[{parentFundingHash:"f".repeat(64)},{parentFundingSha256:"f".repeat(64)},
+      {authorizedAt:"2026-11-16T08:59:59Z"},
+      {baselineEntries:funding.baselineEntries.filter(row=>row.id!=="retained-gpu-unknown")},
+      ...[{maximumNewLeases:2},{maximumSessionHours:9},{maximumHourlyUsd:2},
+        {evaluationOnly:false},{effectiveInfrastructureMicrodollars:451_000_000},
+        {frozenApiHeadroomMicrodollars:302_000_000}].map(policy=>({policy:{...funding.policy,...policy}}))];
+    for(const change of changes) {
+      const {contentHash:_,...body}={...funding,...change};
+      writeFileSync(infrastructureFundingPath(f.ledger,4),canonical({...body,contentHash:hash(body)}));
+      assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/funding/i);
+    }
+    writeFileSync(infrastructureFundingPath(f.ledger,4),canonical(funding));
+    rmSync(infrastructureFundingPath(f.ledger,3));
+    assert.throws(()=>new DurableBudget(f.ledger,{infrastructureOwner:true}),/parent/);
+  } finally {f.close();}
+});
+
+test("fourth funding permits infrastructure reservation while the API owner retains its frozen policy",()=>{
+  const f=fixture(); try {
+    authorize(f); extend(f); continueFunding(f); const funding=completeFunding(f);
+    const result=awsBudget({...f.request,operation:"reserve",reservationId:"lambda-infra:00000000-0000-0000-0000-000000000004",
+      maximumMicrodollars:20_696_000,requireNewReservation:true});
+    assert.equal(result.infrastructureFundingSupplementHash,funding.contentHash);
+    assert.equal(result.frozenApiHeadroomMicrodollars,303_000_000);
+    const frozen=new DurableBudget(f.ledger);
+    assert.equal(frozen.ledger.totalCeilingMicrodollars,1_000_000_000);
+    assert.equal(frozen.ledger.allocations.infrastructure,200_000_000);
+    assert.equal(frozen.ledger.allocations.contingency,65_000_000);
+    frozen.ledger.reserve("completion-development","development",1_000_000);
+    frozen.ledger.reserveChild("completion-development","completion-child",200);
+    frozen.ledger.settle("completion-child",50); frozen.ledger.finishParent("completion-development");
+    assert.equal(frozen.ledger.snapshot().find(row=>row.id==="retained-gpu-unknown")?.actual,undefined);
+    assert.throws(()=>frozen.ledger.reserve("extra-infra","infrastructure",1),/exhausted/);
+    frozen.close();
   } finally {f.close();}
 });

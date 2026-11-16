@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import approvedV4 from "../../src/lib/acephale/contracts/infrastructure-funding-v4.json";
 import approvedV3 from "../../src/lib/acephale/contracts/infrastructure-funding-v3.json";
 import approvedV2 from "../../src/lib/acephale/contracts/infrastructure-funding-v2.json";
 import approved from "../../src/lib/acephale/contracts/infrastructure-funding-v1.json";
@@ -11,13 +12,16 @@ import { type BudgetAmendment, budgetPolicyPath } from "./budget-policy";
 export const INFRASTRUCTURE_FUNDING_V1 = approved;
 export const INFRASTRUCTURE_FUNDING_V2 = approvedV2;
 export const INFRASTRUCTURE_FUNDING_V3 = approvedV3;
-export type FundingVersion = 1 | 2 | 3;
+export const INFRASTRUCTURE_FUNDING_V4 = approvedV4;
+export type FundingVersion = 1 | 2 | 3 | 4;
 export const infrastructureFundingPath = (journal: string, version: FundingVersion = 1) => `${resolve(journal)}.infrastructure-funding-v${version}.json`;
 export type FundingRow = Record<string, unknown>;
 export interface InfrastructureFunding {
   version: FundingVersion; profile: `acephale-infrastructure-funding-v${FundingVersion}`;
   parentFundingHash?: string; parentFundingSha256?: string;
-  policy: typeof approved; policyHash: string; contentHash: string;
+  policy: typeof approved & Partial<Pick<typeof approvedV4,
+    "maximumNewLeases" | "maximumSessionHours" | "evaluationOnly" | "maximumHourlyUsd">>;
+  policyHash: string; contentHash: string;
   baseBudgetPolicyHash: string; baseBudgetAmendmentHash: string; baseBudgetAmendmentSha256: string;
   studyLedgerPathHash: string; infrastructureLedgerPathHash: string;
   infrastructureBindingHash: string; infrastructurePlanHash: string;
@@ -36,7 +40,7 @@ export function checkedFundingFile(path: string) {
 
 export function readInfrastructureFunding(journal: string, entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding | undefined {
   let latest: InfrastructureFunding | undefined;
-  for (const version of [1, 2, 3] as const) {
+  for (const version of [1, 2, 3, 4] as const) {
     const path = infrastructureFundingPath(journal, version);
     if (!existsSync(path)) continue;
     if (version > 1 && latest?.version !== version - 1) throw new Error("Infrastructure funding extension requires its original parent");
@@ -48,9 +52,9 @@ export function readInfrastructureFunding(journal: string, entries: [string, Res
 export function validateInfrastructureFunding(value: InfrastructureFunding, journal: string,
   entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding {
   const { contentHash, ...body } = value;
-  const expected = value.version === 3 ? approvedV3 : value.version === 2 ? approvedV2 : approved;
+  const expected = value.version === 4 ? approvedV4 : value.version === 3 ? approvedV3 : value.version === 2 ? approvedV2 : approved;
   const date = Date.parse(value.authorizedAt), digest = /^[a-f0-9]{64}$/;
-  if (base?.version !== 3 || ![1, 2, 3].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
+  if (base?.version !== 3 || ![1, 2, 3, 4].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
     || contentHash !== hash(body) || value.policyHash !== hash(expected) || hash(value.policy) !== hash(expected)
     || value.baseBudgetPolicyHash !== base.policyHash || value.baseBudgetAmendmentHash !== base.contentHash
     || value.baseBudgetAmendmentSha256 !== createHash("sha256").update(checkedFundingFile(budgetPolicyPath(journal, 3))).digest("hex")

@@ -1,3 +1,21 @@
+## Bounded evaluation completion allowance, 2026-11-16
+
+Funding v4 appends a $30 infrastructure allowance, split into $20 compute and
+$10 associated costs, after the unchanged v3 authority. It admits one additional
+evaluation-only lease, at most eight hours at $1.99 per hour. Effective ceilings
+are $1,250 total, $450 infrastructure, $335 compute and $115 associated. The
+original $303 API allowance and all prior holds remain protected. These amounts
+are an operator-selected bound under the user's instruction to continue with
+necessary resources, not an amount quoted by the user.
+
+A separate GPU-hour v3 sidecar raises cumulative engineering capacity from 160
+to 168 hours. It retains the authenticated v2/v1 parents, original financial
+policy, lease identities and deadlines. Current v4 funding is checked against
+the full ledger; the historical GPU parent retains its original v3 funding and
+count authorities. Both append-only receipts require separate activation and
+actual frozen-reader compatibility verification. Neither implementation nor
+activation is a benchmark result or permission to repeat optimizer work.
+
 # Working on Acephale
 
 E7 completed strict GPU export for both seeds. Each first/repeat/repeatability
