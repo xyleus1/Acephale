@@ -590,3 +590,14 @@ $1,000 policy and must retain the same $303 API projection. The new authority
 permits one additional evaluation-only lease, at most six hours and $1.99/hour.
 Optimizer authorization is rejected. An actual invoice is still required to
 release prior reservations; termination alone does not reconcile money.
+
+## 2026-11-16: Bound continued infrastructure without rewriting research
+
+The user authorized necessary continuation without a budget constraint. Agents
+selected a prospective $100 infrastructure supplement and four evaluation-only
+leases, each capped at eight hours and $1.99/hour. This is an agent-selected bound
+under the broader instruction, not a claim that the user specified that amount.
+Earlier holds remain reserved until independently reconciled. All science, model
+identities, evaluation tolerances, frozen API allocations and scoring remain
+unchanged. The supplement neither extends existing leases nor overrides the
+independent cumulative GPU-hour limit.

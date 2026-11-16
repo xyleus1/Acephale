@@ -207,9 +207,10 @@ def test_extension_cannot_authorize_optimizer_or_hide_parent(extended, tmp_path)
         control.infrastructure_funding(ledger)
 
 
-def test_extended_funding_emits_unchanged_evaluation_contract(extended, tmp_path):
+@pytest.mark.parametrize("funding_fixture", ["extended", "continued"])
+def test_extended_funding_emits_unchanged_evaluation_contract(funding_fixture, request, tmp_path):
     from acephale.training import validate_execution_lease
-    path, ledger, _, _, funding, _ = extended
+    path, ledger, _, _, funding, _ = request.getfixturevalue(funding_fixture)
     lease = control.reserve_lease(ledger, quote(), 6, 3.582, NOW)
     lease.update(status="active", instanceId="evaluation-instance", name="evaluation-name",
         studyReservation={"reservationId":"lambda-infra:"+lease["id"],
@@ -231,3 +232,68 @@ def test_extended_funding_emits_unchanged_evaluation_contract(extended, tmp_path
         assert validate_execution_lease(output,action=action,now=NOW+1)==receipt
     with pytest.raises(ValueError):
         validate_execution_lease(output,action="train",now=NOW+1)
+
+
+@pytest.fixture
+def continued(extended):
+    path, ledger, _, _, parent, parent_path = extended
+    old = control.reserve_lease(ledger, quote(), 6, 3.582, NOW)
+    old.update(status="terminated", instanceId="v2-funded-instance", name="v2-funded-name")
+    ledger["leases"].append(old)
+    control.atomic_json(path, ledger)
+    policy = control.read_json(control.ROOT / "src/lib/acephale/contracts/infrastructure-funding-v3.json")
+    body = {**copy.deepcopy(parent), "version": 3, "profile": "acephale-infrastructure-funding-v3",
+            "policy": policy, "policyHash": control._budget_digest(policy),
+            "parentFundingHash": parent["contentHash"], "parentFundingSha256": control.sha256(parent_path),
+            "baselineLeases": copy.deepcopy(ledger["leases"])}
+    body.pop("contentHash")
+    funding = {**body, "contentHash": control._budget_digest(body)}
+    target = Path(str(parent_path).replace("-v2.json", "-v3.json"))
+    control.write_new(target, funding)
+    return path, ledger, parent, parent_path, funding, target
+
+
+def test_continuation_binds_parent_and_admits_four_bounded_evaluation_leases(continued):
+    path, ledger, _, parent_path, funding, _ = continued
+    before = path.read_bytes(), parent_path.read_bytes()
+    assert control.infrastructure_caps(ledger) == (420, 315, 105)
+    assert control.effective_gpu_hour_capacity(ledger)[0] == 128
+    assert control.infrastructure_funding(ledger) == funding
+    for hours, rate in ((8.01, 1.99), (8, 2)):
+        with pytest.raises(ValueError, match="eight hours|session"):
+            control.reserve_lease(ledger, {**quote(), "hourlyUsd": rate}, hours, 4.776, NOW)
+    for index in range(4):
+        hours = 8 if index == 0 else 1
+        lease = control.reserve_lease(ledger, quote(), hours, hours * 1.99 * .3, NOW)
+        assert lease["infrastructureFundingSupplementHash"] == funding["contentHash"]
+        lease.update(status="terminated", instanceId=f"new-{index}", name=f"new-{index}")
+        ledger["leases"].append(lease)
+        assert control.infrastructure_funding(ledger) == funding
+    with pytest.raises(ValueError, match="lease count"):
+        control.reserve_lease(ledger, quote(), 1, .597, NOW)
+    assert (path.read_bytes(), parent_path.read_bytes()) == before
+
+
+@pytest.mark.parametrize("change", [
+    lambda value: value.update(parentFundingHash="f" * 64),
+    lambda value: value.update(parentFundingSha256="f" * 64),
+    lambda value: value["baselineLeases"][-1].update(infrastructureFundingSupplementHash="f" * 64),
+    lambda value: value["baselineLeases"][0].update(reservedUsd=0),
+    lambda value: value["policy"].update(maximumNewLeases=5),
+])
+def test_continuation_rejects_resealed_parent_history_or_expanded_policy(continued, change):
+    _, ledger, _, _, funding, target = continued
+    change(funding)
+    funding["contentHash"] = control._budget_digest({k:v for k,v in funding.items() if k != "contentHash"})
+    control.atomic_json(target, funding)
+    with pytest.raises(ValueError):
+        control.infrastructure_funding(ledger)
+
+
+def test_continuation_cannot_authorize_optimizer_or_hide_parent(continued, tmp_path):
+    path, ledger, _, parent_path, _, _ = continued
+    with pytest.raises(ValueError, match="does not authorize optimizer"):
+        control.training_lease(path, "unused", tmp_path/"unused-preflight", tmp_path/"unused-output", 1)
+    parent_path.unlink()
+    with pytest.raises(ValueError, match="missing|parent"):
+        control.infrastructure_funding(ledger)
