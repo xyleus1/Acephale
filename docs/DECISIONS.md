@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-16: Exercise the concrete hook wrapper before provisioning
+
+Require every callback used by the sequence at configuration admission. Tests
+must import the real wrapper and reproduce the previous failing transition,
+including real local artifact validators. A fake object with the expected methods
+does not establish that the installed wrapper exports them. Keep external effects
+intercepted during local regression, then separately validate the actual frozen
+configuration. Preserve failed paid attempts and their cost records.
+
 ## 2026-11-16: Bind the execution source and controller explicitly
 
 Keep training, operator and execution-image commits distinct. The public

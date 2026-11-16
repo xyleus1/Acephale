@@ -1,5 +1,14 @@
 # Working on Acephale
 
+E4 reached the cold diagnostic, then failed before strict export because the real
+successor hook wrapper omitted `preflight`. Cleanup and exact provider termination
+were verified. E5 exports that callback and checks the full required interface
+before provisioning. Its concrete regression reproduces the old failure and runs
+the repaired wrapper's actual local validators; only external authority is
+intercepted. Independent owner/context tests passed 37 cases, downstream/report
+tests passed 24, and the actual sealed E5 configuration validates. Read the current
+private operator handoff for live progress. Never repeat either optimizer.
+
 The full local CPU image build passed for execution source `4438b56c`, including
 all 65 Git build inputs, 32 unchanged Debian package pins and both real Docker
 permission tests. E3 then completed image setup on the actual GPU host, but its
@@ -8,10 +17,10 @@ source `4438b56c`. The diagnostic gate rejected it before model calls. Cleanup
 also exposed a legacy controller import-order error; exact termination was later
 verified with the correct controller. Preserve both failures.
 
-E4 binds the exact reviewed controller before legacy transport loads, explicitly
-probes the clean execution checkout through the existing authorization hook, and
-persists the task registration receipt. Independent integration checks passed;
-scientific results remain pending. Do not rerun either completed optimizer.
+E4 introduced exact controller binding before legacy transport loads, an explicit
+execution-checkout probe through the existing authorization hook, and a persisted
+task registration receipt. E5 retains these changes. Do not rerun either completed
+optimizer.
 Execution source `4438b56c` changes only the Dockerfile's signed APT snapshot
 sources; training/native source remains `5a36a8b3`. Keep original diagnostic,
 operator and current execution provenance separate.

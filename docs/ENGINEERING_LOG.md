@@ -1,5 +1,21 @@
 # Acephale engineering log
 
+## 2026-11-16: Validate the concrete continuation interface
+
+E4 completed setup and cold diagnostics, but the real wrapper omitted `preflight`
+and stopped the sequence before strict export. Cleanup and provider termination
+were verified. E5 imports the callback and admits only a wrapper with callable
+`preflight`, `validate_configuration`, `execute_phase`, `verify_phase` and
+`finalize` methods. Failure records now include bounded traceback locations
+without exception text, source lines or local values.
+
+Independent verification passed 37 owner/context cases and 24 downstream/report
+cases. The concrete regression reproduces E4's failure and executes E5's wrapper
+with retained sealed inputs and real local validators; external authority effects
+are intercepted. A separate actual E5 configuration validation passed. The missing
+retained serving inventory was restored before sealing, with exact byte parity.
+These are orchestration checks, not model accuracy or latency results.
+
 ## 2026-11-16: Audit dataset units and family isolation
 
 Read-only verification traced the original 60 episodes plus 12 development

@@ -17,13 +17,20 @@ upgraded or removed. The third evaluation-only run completed GPU image setup,
 then failed diagnostic admission because authorization named the operator checkout
 instead of the execution image's source. No model or benchmark call ran there.
 
-The fourth continuation fixes source authorization through the existing public
-probe hook and binds the exact controller before loading legacy transport. The
-controller fix also preserves cleanup's existing ledger and ownership checks.
-Independent integration verification passed 45 distinct tests, including actual
-Windows entrypoints and registration behavior with external effects blocked.
-The run is sealed; saved-weight export and the paired scientific results are
-still pending. Neither trained adapter nor any scoring rule changed.
+The fourth evaluation-only continuation completed foundation, image setup and
+the cold diagnostic. It then stopped before strict export because the concrete
+hook wrapper did not export the required `preflight` callback. Automatic cleanup
+completed and provider termination was independently confirmed. No trained
+serving, replay or paired native trial ran in that attempt.
+
+The fifth evaluation-only continuation imports that callback explicitly and
+checks all five required hook methods before provisioning. A concrete regression
+reproduces the old failure and executes the repaired wrapper against retained
+configuration and export-binding validators, intercepting only external authority
+effects. Independent owner/context verification passed 37 cases; downstream and
+report verification passed 24 cases. The complete current configuration also
+passes actual validation. Saved-weight export and the paired scientific results
+remain pending. Neither trained adapter nor any scoring rule changed.
 
 ## Training and continuation
 
