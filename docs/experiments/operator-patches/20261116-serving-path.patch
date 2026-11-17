@@ -1,0 +1,11 @@
+--- a/run_serving_v3.py
++++ b/run_serving_v3.py
+@@ -99,7 +99,7 @@
+         or main['exportSha256'] != preparation['mainExportSha256']
+         or main['completionSha256'] != preparation['mainRecoveryCompletionSha256']
+         or main['infrastructureCapacityAuthorization'] != preparation['infrastructureCapacityAuthorization']
+-        or owner.control.sha256(recovered_main_contract.__file__) != preparation['recoveredMainContractSha256']):
++        or owner.control.sha256(Path(recovered_main_contract.__file__)) != preparation['recoveredMainContractSha256']):
+         raise ValueError('Exact recovered main closure and verifier required')
+     output = HERE / f'serving-{occurrence_id}-stage'
+     output.mkdir()

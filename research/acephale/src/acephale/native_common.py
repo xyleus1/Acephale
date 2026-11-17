@@ -310,18 +310,33 @@ class ServiceTelemetry:
         }
 
 
-def assess_official_reward(task, reward):
+def native_evaluation_type(value="ALL"):
+    """Only reward-basis-preserving pinned upstream modes are admitted."""
+    if value not in ("ALL", "ALL_WITH_NL_ASSERTIONS"):
+        raise ValueError("Unsupported native evaluation type")
+    return value
+
+
+def assess_official_reward(task, reward, *, evaluation_type="ALL"):
     """Preserve upstream reward while rejecting an incomplete required judge."""
+    evaluation_type = native_evaluation_type(evaluation_type)
     criteria = task.evaluation_criteria
     expected = criteria.nl_assertions or [] if criteria else []
     assertions = reward.nl_assertions or [] if reward else []
     coverage = Counter(item.nl_assertion for item in assertions) == Counter(expected)
     required = criteria is not None and "NL_ASSERTION" in criteria.reward_basis
     valid = not required or coverage
+    audit_requested = required or evaluation_type == "ALL_WITH_NL_ASSERTIONS"
+    audit_status = ("not_evaluated" if reward is None else "no_assertions" if not expected else
+                    "complete" if coverage else "incomplete" if audit_requested else "not_requested")
     return {
         "passed": bool(reward is not None and reward.reward == 1 and valid),
         "officialReward": reward.reward if reward is not None else None,
-        "constraintViolations": sum(not item.met for item in assertions) if assertions else None,
+        "constraintViolations": sum(not item.met for item in assertions) if expected and assertions and coverage else None,
+        "constraintAudit": {"evaluationType": evaluation_type, "status": audit_status,
+                            "scope": "configured_native_nl_assertions_only",
+                            "expectedAssertions": len(expected), "observedAssertions": len(assertions),
+                            "completeMultisetCoverage": coverage, "rewardBasisUnchanged": True},
         "judgeAssertionCoverage": coverage,
         "requiredJudgeAssertionCoverage": coverage if required else None,
         "evaluationValid": valid,

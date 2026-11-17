@@ -1,0 +1,20 @@
+{
+  "kind": "acephale-public-operator-patch-verification-v1",
+  "verified": true,
+  "modelCalls": 0,
+  "providerCalls": 0,
+  "patches": [
+    {
+      "patch": "20261116-heartbeat-sdk-retry.patch",
+      "sha256": "97b1074f3335f1e2ffdc34a1f52d67114128be99fe61634d7b211c2c4a67354c",
+      "appliedBytesMatch": true,
+      "files": [
+        {
+          "name": "heartbeat_companion_v2.py",
+          "beforeSha256": "01237987c123aba96690cf373f42689fafa825d02f185148a93c51e2986ebb3b",
+          "afterSha256": "02b849b685337819e5c77588ba65424f9af4a7a6007ac71501adb82c504ce392"
+        }
+      ]
+    }
+  ]
+}

@@ -16,17 +16,18 @@ import { infraCandidateCompilerHash } from "../services/acephale-runtime/infra-c
 import { infraOpportunityProfile, NATIVE_PROFILE_PROTOCOL } from "../services/acephale-runtime/infra-opportunity-profile";
 import { createInfraMemoryServices, loadFrozenEpisodeEmbeddings } from "../services/acephale-runtime/infra-memory-services";
 import { episodicRetrievalProfileHash } from "../src/lib/acephale/episodic-retrieval";
-import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH } from "../services/acephale-runtime/infra-predictors";
+import { InfraLocalPredictors, predictorContractHash } from "../services/acephale-runtime/infra-predictors";
 import { localActorDecision, localActorMessages } from "../services/acephale-runtime/local-actor";
 import type { PublicBoundary } from "../services/acephale-runtime/actor";
 import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { validateInfraLedgerCheckpoint } from "../services/acephale-runtime/infra-hosted-workers";
 import { nativeSplitGuard } from "../services/acephale-runtime/infra-split-guard";
-import { publicInfraFrame, selectInfraReplayRows } from "./acephale-infra-predict";
+import { publicInfraFrame } from "../services/acephale-runtime/infra-public-checkpoint";
+import { selectInfraReplayRows } from "./acephale-infra-predict";
 import { validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
 
 export interface NativeProfileConfig {
-  version: 1; datasetPath: string; cohortPath: string; memoryPath: string; manifestPath: string; ledgerCheckpointPath: string;
+  version: 1; datasetPath: string; cohortPath?: string; cohortPaths?: string[]; memoryPath: string; manifestPath: string; ledgerCheckpointPath: string;
   budgetDirectory: string; actorBaseUrl: string; predictorBaseUrl: string; limit: number; seed: number; maximumLifetimeSeconds: number;
   otlpBaseUrl?: string; splitGuardPath?: string; episodicEmbeddingsPath?: string; stream?: boolean;
 }
@@ -36,6 +37,26 @@ type Spans = Partial<Record<"actorLeadMs" | "predictionMs" | "toolMs" | "validat
 const json = async <T = any>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8"));
 const write = (file: string, value: unknown) => writeFile(file, canonical(value) + "\n", { flag: "wx", mode: 0o600 });
 export { NATIVE_PROFILE_PROTOCOL };
+
+export function nativeProfileCohorts(config: Pick<NativeProfileConfig, "cohortPath" | "cohortPaths">, base: string): string[] {
+  const single = config.cohortPath !== undefined, multiple = config.cohortPaths !== undefined;
+  if (single === multiple) throw new Error("Declare cohortPath or cohortPaths, exclusively");
+  const paths = single ? [config.cohortPath] : config.cohortPaths;
+  if (!Array.isArray(paths) || paths.length < (single ? 1 : 2)
+    || paths.some(path => typeof path !== "string" || !path.trim())) throw new Error("Original native cohort paths are required");
+  const resolved = paths.map(path => resolve(base, path!));
+  if (new Set(resolved).size !== resolved.length) throw new Error("Native cohort paths must be distinct");
+  return resolved;
+}
+
+export function validateNativePrefixSource(prefix: any, row: any, lineage: any): void {
+  const source = lineage.fresh_sources?.[row.episode_id];
+  const cohort = source?.cohort_id ?? lineage.cohort_receipt_hash;
+  if (!source || prefix.sourceRunSha256 !== source.raw_sha256 || prefix.sourceCohortId !== cohort
+    || prefix.checkpoint_id !== row.checkpoint_id || prefix.input_hash !== row.input_hash || prefix.verifiedPublicPrefix !== true
+    || prefix.boundaryHash !== hash(prefix.boundary) || hash(prefix.boundary.tools) !== row.runtime_tool_schema_hash
+    || prefix.boundary.policy !== row.input.policy) throw new Error("Native prefix gateway provenance mismatch");
+}
 
 /** Bind the original journal prefix while allowing later billed profiling entries. */
 export async function nativeProfileJournalPrefix(ledgerPath: string, bytes?: number) {
@@ -50,6 +71,7 @@ export async function nativeProfileJournalPrefix(ledgerPath: string, bytes?: num
 async function inputs(configurationPath: string) {
   const config = await json<NativeProfileConfig>(configurationPath), base = dirname(resolve(configurationPath));
   const path = (file: string) => resolve(base, file);
+  nativeProfileCohorts(config, base);
   if (config.version !== 1 || !Number.isSafeInteger(config.limit) || config.limit < 1 || config.limit > 100
     || !Number.isSafeInteger(config.seed) || config.seed < 0 || !Number.isSafeInteger(config.maximumLifetimeSeconds)
     || config.maximumLifetimeSeconds < 1 || config.maximumLifetimeSeconds > 28800
@@ -88,7 +110,7 @@ export async function prepareNativeProfile(configurationPath: string, output: st
   if (!metadata.isFile() || metadata.size === 0) throw new Error("Original nonempty budget journal required");
   const budget = new DurableBudget(ledgerPath);
   let budgetJournalPrefix: Awaited<ReturnType<typeof nativeProfileJournalPrefix>>;
-  try { validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath); budgetJournalPrefix = await nativeProfileJournalPrefix(ledgerPath); } finally { budget.close(); }
+  try { budget.validateManifestPolicy(manifest.budgets); validateInfraLedgerCheckpoint(checkpoint, budget.ledger, ledgerPath); budgetJournalPrefix = await nativeProfileJournalPrefix(ledgerPath); } finally { budget.close(); }
   const embeddings = config.episodicEmbeddingsPath ? await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory) : undefined;
   if (embeddings && !process.env.ACEPHALE_RESEARCH_DATABASE_URL) throw new Error("Episodic profiling requires the dedicated research database");
   // Never consult next-action labels to select prefixes or candidate IDs.
@@ -97,7 +119,7 @@ export async function prepareNativeProfile(configurationPath: string, output: st
   const body = { version: 2, kind: "native_component_profile", configuration: config, configurationHash: hash(config),
     profile: infraOpportunityProfile(manifest, "native", { stream: config.stream ?? true, retrievalHash: embeddings ? episodicRetrievalProfileHash(embeddings) : undefined }), budgetJournalPrefix,
     manifestHash: hash(manifest), sourceDatasetHash: dataset.manifest.bundle_hash, memoryHash: memory.contentHash,
-    candidateCompilerHash: infraCandidateCompilerHash("native"), predictorContractHash: INFRA_PREDICTOR_CONTRACT_HASH,
+    candidateCompilerHash: infraCandidateCompilerHash("native"), predictorContractHash: predictorContractHash(manifest.predictor),
     protocol: NATIVE_PROFILE_PROTOCOL, rowIds: selected.map(row => row.checkpoint_id), benchmarkClaim: false,
     rows: selected.map((row, ordinal) => ({ checkpoint_id: row.checkpoint_id, input_hash: row.input_hash,
       family_id: row.family_id, split: row.split, episode_id: row.episode_id, ordinal, baselineFirst: ordinal % 2 === 0,
@@ -185,9 +207,7 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
   if (contentHash !== hash(planBody) || plan.configurationHash !== hash(config) || plan.manifestHash !== hash(manifest)
     || plan.sourceDatasetHash !== dataset.manifest.bundle_hash || plan.candidateCompilerHash !== infraCandidateCompilerHash("native") || !row) throw new Error("Prepared native profile identity changed");
   const prefix = await json(join(output, `prefix-${ordinal}.json`));
-  if (prefix.checkpoint_id !== row.checkpoint_id || prefix.input_hash !== row.input_hash || prefix.verifiedPublicPrefix !== true
-    || prefix.boundaryHash !== hash(prefix.boundary) || hash(prefix.boundary.tools) !== row.runtime_tool_schema_hash
-    || prefix.boundary.policy !== row.input.policy) throw new Error("Native prefix gateway provenance mismatch");
+  validateNativePrefixSource(prefix, row, dataset.lineage);
   const { frame, policy, candidates } = poolFor(row, memory, dataset.expected);
   if (hash(candidates[0]) !== hash(declared.candidate)) throw new Error("Native candidate identity changed");
   const gateway = new NativeGateway(process.env.ACEPHALE_GATEWAY_URL ?? "", process.env.ACEPHALE_GATEWAY_TOKEN ?? "");
@@ -205,6 +225,7 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
     const metadata = await stat(ledgerPath);
     if (!metadata.isFile() || metadata.size === 0 || !plan.budgetJournalPrefix) throw new Error("Original nonempty budget journal and frozen prefix required");
     budget = new DurableBudget(ledgerPath);
+    budget.validateManifestPolicy(manifest.budgets);
     if (hash(await nativeProfileJournalPrefix(ledgerPath, plan.budgetJournalPrefix.bytes)) !== hash(plan.budgetJournalPrefix)) throw new Error("Original budget journal prefix changed since profiling was declared");
     const embeddings = await loadFrozenEpisodeEmbeddings(path(config.episodicEmbeddingsPath), memory);
     memoryServices = createInfraMemoryServices({ memory, embeddings, databaseUrl: process.env.ACEPHALE_RESEARCH_DATABASE_URL,
@@ -213,7 +234,7 @@ export async function measurePreparedNativePrefix(configurationPath: string, out
   }
   const retrieval = memoryServices?.perRun(`profile:${row.checkpoint_id}`, "neutral_memory_prefetch", row.family_id);
   if (hash(plan.profile) !== hash(infraOpportunityProfile(manifest, "native", { stream: config.stream ?? true, retrievalHash: retrieval?.profileHash }))) throw new Error("Measured deployment or actual retrieval profile changed");
-  const predictor = new InfraLocalPredictors(model, { memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
+  const predictor = new InfraLocalPredictors(model, { ...manifest.predictor, memory, allowedFamilies: dataset.expected, excludeFamilies: [row.family_id],
     ...(retrieval ? { retrieveMemory: retrieval.retrieve, retrievalProfileHash: retrieval.profileHash } : {}) });
   const guard = nativeSplitGuard(config, manifest, resolve(configurationPath)), interruption = new AbortController();
   const guardIdentity = guard?.();

@@ -12,10 +12,13 @@ catalog and task limits stay fixed across the primary comparison arms. Goal
 conditioning affects the predictor and scheduler. It does not train the actor
 or guarantee improvements in task accuracy, logical tool-call count or latency.
 
+- [Current results: trained checkpoints verified; paired benchmarks pending](docs/STATE.md)
+- [Earlier pilot: base benchmark and failed predictor export](docs/experiments/predictor-lora-pilot-2026-11-10.md)
 - [Methods and experimental controls](docs/METHODS.md)
 - [Collection, memory, calibration and evaluation commands](docs/RUNBOOK.md)
 - [Current verification, execution gates and limitations](docs/STATE.md)
 - [Research Python package](research/acephale/README.md)
+- [Scoped predictor LoRA training](research/acephale/training/README.md)
 - [Pinned serving and deployment configuration](infra/acephale-infra-v1/README.md)
 
 ## Local checks

@@ -39,7 +39,7 @@
     "predictor": {
       "image": "vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
       "profiles": ["gpu"], "gpus": "all", "shm_size": "1g",
-      "command": ["--model", "/models/predictor", "--served-model-name", "Qwen/Qwen3.5-0.8B", "--dtype", "bfloat16", "--max-model-len", "8192", "--max-num-seqs", "1", "--gpu-memory-utilization", "0.20", "--language-model-only", "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_xml", "--reasoning-parser", "qwen3", "--host", "0.0.0.0", "--port", "8000"],
+      "command": ["--model", "/models/predictor", "--served-model-name", "Qwen/Qwen3.5-0.8B", "--dtype", "bfloat16", "--max-model-len", "8192", "--logprobs-mode", "raw_logprobs", "--max-num-seqs", "1", "--gpu-memory-utilization", "0.20", "--language-model-only", "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_xml", "--reasoning-parser", "qwen3", "--host", "0.0.0.0", "--port", "8000"],
       "ports": ["127.0.0.1:8001:8000"], "volumes": ["${ACEPHALE_MODELS_DIR:-./models}:/models:ro"],
       "environment": {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "VLLM_NO_USAGE_STATS": "1", "DO_NOT_TRACK": "1"},
       "networks": ["research"], "mem_limit": "8g", "cpus": 2, "restart": "no"

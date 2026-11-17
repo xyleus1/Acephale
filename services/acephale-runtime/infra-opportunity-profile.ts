@@ -3,7 +3,7 @@ import { hash } from "../../src/lib/acephale/canonical";
 import type { InfraExperimentManifestV2 } from "../../src/lib/acephale/infra-manifest";
 import { LEXICAL_MEMORY_RETRIEVAL_HASH } from "../../src/lib/acephale/experience-memory";
 import { infraCandidateCompilerHash } from "./infra-compiler-identity";
-import { INFRA_PREDICTOR_CONTRACT_HASH } from "./infra-predictors";
+import { predictorContractHash } from "./infra-predictors";
 import { validateInfraOpportunityProfile } from "./infra-artifacts";
 
 export const NATIVE_PROFILE_PROTOCOL = "native-paired-component-profile-v2: same seeded actor input alone versus overlapping one neutral ranking request, then concurrently start background goal refresh and one authorized scheduler-managed native snapshot read with freshness refresh; predictionMs ends when the rank returns; goal refresh has a separate observed span and is fully drained, while concurrent actor duration measures contention; alternate pair order; actual monotonic gateway-inclusive spans; negative paired actor excess remains failed; no proposed actor calls executed; failures retained; not a benchmark or causal speedup estimate";
@@ -20,7 +20,7 @@ export function infraOpportunityProfile(manifest: InfraExperimentManifestV2, dom
       concurrency: { perRun: manifest.protocol.perRunConcurrency, global: manifest.protocol.globalConcurrency } }),
     modelHash: hash({ actor: manifest.actor, predictor: manifest.predictor }), memoryHash: manifest.data.memoryHash,
     compilerHash: infraCandidateCompilerHash(domain), retrievalHash: options.retrievalHash ?? LEXICAL_MEMORY_RETRIEVAL_HASH,
-    promptHash: INFRA_PREDICTOR_CONTRACT_HASH,
+    promptHash: predictorContractHash(manifest.predictor),
     protocolHash: hash(domain === "native" ? NATIVE_PROFILE_PROTOCOL : DOCUMENT_PROFILE_PROTOCOL),
   });
 }

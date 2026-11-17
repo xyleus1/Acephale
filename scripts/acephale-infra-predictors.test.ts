@@ -6,7 +6,7 @@ import { LocalChatModelPort } from "../src/lib/acephale/infra-model";
 import { buildMemoryArtifact, LEXICAL_MEMORY_RETRIEVAL_HASH, type MemoryEpisode, type MemoryRun } from "../src/lib/acephale/experience-memory";
 import { compileInfraWorkflows } from "../src/lib/acephale/infra-workflows";
 import { InfraLocalPredictors, INFRA_PREDICTOR_CONTRACT_HASH, validateInfraCalibration } from "../services/acephale-runtime/infra-predictors";
-import { prepareInfraPredictorInput, infraRelevantGoalEvidence } from "../services/acephale-runtime/infra-predictor-input";
+import { prepareInfraPredictorInput, infraRelevantGoalEvidence, assertSelectedGoalSources } from "../services/acephale-runtime/infra-predictor-input";
 import { InfraPredictorCoordinator } from "../services/acephale-runtime/infra-predictor-coordinator";
 import { INFRA_MODEL_PINS } from "../src/lib/acephale/infra-manifest";
 
@@ -140,6 +140,37 @@ test("predictor drops oversized old evidence and memory while preserving policy,
   assert.match(String(compiled.inputHash), /^[a-f0-9]{64}$/);
   assert.equal(INFRA_PREDICTOR_CONTRACT_HASH.length, 64);
   assert.equal(events.find(event => event.type === "infra_candidate_window")!.tokenizerCalls, 1);
+});
+
+test("both predictor roles retain one complete mandatory policy with usable source references", () => {
+  const current = frame();
+  current.sources.policy = current.policy;
+  const goals: GoalSet = { schemaVersion: 1, revisionHash: hash({}), unknown: 0, hypotheses: [{ id: "goal", objective: "Find delivery status", probability: 1,
+    sources: [{ sourceId: "requirement:1", path: [] }], constraints: [{ text: "Keep exact user constraints and authorization.", sources: [{ sourceId: "policy", path: [] }] }] }] };
+  for (const role of ["goal", "candidate"] as const) {
+    const input = prepareInfraPredictorInput(current, { role, instruction: "predict", candidates: [candidate()], goals });
+    const mandatory = JSON.parse(input.messages[1].content!);
+    assert.deepEqual(mandatory.policySource, { sourceId: "policy", path: [] });
+    assert.equal(Object.hasOwn(mandatory, "policy"), false);
+    assert.deepEqual(mandatory.sources.filter((source: { sourceId: string }) => source.sourceId === "policy"),
+      [{ sourceId: "policy", path: [], value: current.policy }]);
+    assert.equal(input.messages.map(message => message.content).join("\n").split("CURRENT_POLICY").length - 1, 1);
+    // This reference must survive even after every optional context unit is omitted.
+    assert.doesNotThrow(() => assertSelectedGoalSources(goals, input, [0, 1]));
+  }
+  current.sources.policy = "obsolete policy";
+  assert.throws(() => prepareInfraPredictorInput(current, { role: "goal", instruction: "predict" }), /Policy source differs/);
+});
+
+test("frames without a policy source keep policy text without inventing a citable source", () => {
+  const current = frame();
+  const input = prepareInfraPredictorInput(current, { role: "goal", instruction: "predict" });
+  const mandatory = JSON.parse(input.messages[1].content!);
+  assert.equal(mandatory.policy, current.policy);
+  assert.equal(Object.hasOwn(mandatory, "policySource"), false);
+  const unsupported: GoalSet = { schemaVersion: 1, revisionHash: hash({}), unknown: 0, hypotheses: [{ id: "goal", objective: "Follow policy", probability: 1,
+    sources: [{ sourceId: "policy", path: [] }], constraints: [] }] };
+  assert.throws(() => assertSelectedGoalSources(unsupported, input, [0, 1]), /omitted/);
 });
 
 test("goal references are checked against selected context, not merely historical frame visibility", async () => {

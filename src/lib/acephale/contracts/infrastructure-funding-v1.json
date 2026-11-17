@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "profile": "acephale-infrastructure-funding-policy-v1",
+  "additionalInfrastructureMicrodollars": 100000000,
+  "effectiveTotalMicrodollars": 1100000000,
+  "effectiveInfrastructureMicrodollars": 300000000,
+  "effectiveComputeMicrodollars": 225000000,
+  "effectiveAssociatedMicrodollars": 75000000,
+  "frozenApiHeadroomMicrodollars": 303000000,
+  "frozenApiPlanMicrodollars": {
+    "preparation": 0,
+    "training": 0,
+    "development": 65000000,
+    "heldout": 238000000,
+    "replay": 0
+  }
+}

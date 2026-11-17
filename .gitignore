@@ -17,3 +17,5 @@ models/
 .pytest-*/
 dist/
 .DS_Store
+infra/acephale-infra-v1/images.resolved*.json
+infra/acephale-infra-v1/compose.resolved*.json

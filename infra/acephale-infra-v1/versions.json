@@ -17,7 +17,9 @@
   "requiredVectorVersion": "0.8.7",
   "minimumDriverMajor": 580,
   "servingTorch": "2.13.0",
-  "servingCuda": "13.0.3",
+  "servingCuda": "13.0.2",
+  "servingCudaSource": "immutable_image_cuda_version",
+  "servingTorchCuda": "13.0",
   "downloadPackage": "huggingface_hub==2.4.0",
   "models": {
     "actor": {"repository": "Qwen/Qwen3.5-9B", "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a", "directory": "actor", "dtype": "bfloat16"},

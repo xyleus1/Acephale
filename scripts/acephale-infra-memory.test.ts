@@ -1,11 +1,12 @@
+import { freshSelectionFixture, multiCohortFixture } from "./test-fixtures/native-parent";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { canonical, hash } from "../src/lib/acephale/canonical";
-import { attachCausalInfraMemory, validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
-import { buildMemoryArtifact } from "../src/lib/acephale/experience-memory";
+import { attachCausalInfraMemory, bridgeFreshFitInfraMemory, bridgeFreshInfraMemory, validateFreshInfraMemoryBinding, verifyInfraPilotBundle } from "./acephale-infra-memory";
+import { buildMemoryArtifact, validateMemoryArtifact } from "../src/lib/acephale/experience-memory";
 
 function fixture() {
   const directory = resolve("research/acephale/runs", `infra-memory-test-${randomUUID()}`);
@@ -67,4 +68,55 @@ test("fresh profile binding accepts exactly the sealed causal derivation and rej
   assert.throws(() => validateFreshInfraMemoryBinding(unsealed, bundle), /derivation identity/);
   const changedDataset = buildMemoryArtifact({ ...base, sourceFiles: sourceFiles.map((file, index) => index === 0 ? { ...file, sha256: hash("changed manifest") } : file) }, { profile: "v5" });
   assert.throws(() => validateFreshInfraMemoryBinding(changedDataset, bundle), /source files/);
+});
+
+test("fit-only fresh bridge filters calibration before mining and retains the exact reviewed partition lineage", () => {
+  const { directory, partitionPath } = freshSelectionFixture();
+  const baseOutput = join(directory, "legacy"), fitOutput = join(directory, "fit-only");
+  bridgeFreshInfraMemory(directory, baseOutput);
+  const old = JSON.parse(readFileSync(join(baseOutput, "runtime/artifact.json"), "utf8"));
+  assert.deepEqual(old.runs.map((row: { familyId: string }) => row.familyId), ["fitting", "calibration"]);
+  const receipt = bridgeFreshFitInfraMemory(directory, partitionPath, fitOutput);
+  const artifact = validateMemoryArtifact(JSON.parse(readFileSync(join(fitOutput, "runtime/artifact.json"), "utf8")));
+  assert.deepEqual(artifact.runs.map(row => row.familyId), ["fitting"]);
+  assert.deepEqual(artifact.familySelection!.selectedRunIds, ["run-fitting"]);
+  assert.ok(artifact.episodes.length > 0 && artifact.transitions.length > 0);
+  assert.ok(!JSON.stringify({ episodes: artifact.episodes, transitions: artifact.transitions, confusions: artifact.confusions }).includes("CALIBRATION_TOOL_SENTINEL"));
+  assert.equal(receipt.declaredRuns, 2);
+  assert.deepEqual(receipt.exclusions, [{ runId: "run-calibration", reason: "outside_weight_fitting_partition" }]);
+  assert.equal(artifact.sourceFiles.length, 8);
+  assert.deepEqual(readFileSync(join(fitOutput, "weight-fit-partitions.json")), readFileSync(partitionPath));
+  assert.equal(validateFreshInfraMemoryBinding(artifact, verifyInfraPilotBundle(directory)).kind, "weight_fit");
+  assert.throws(() => buildMemoryArtifact({ ...old, familySelection: artifact.familySelection,
+    sourceFiles: artifact.sourceFiles, repositorySnapshotId: artifact.repositorySnapshotId }, { profile: "v5" }), /outside.*weight fitting/);
+});
+
+test("fit-only memory rejects changed reviewed family lists and changed review bytes", () => {
+  const first = freshSelectionFixture();
+  const reassigned = { ...first.approved, weightFitFamilies: ["calibration"], calibrationFamilies: ["fitting"] };
+  writeFileSync(first.partitionPath, canonical({ ...reassigned, contentHash: hash(reassigned) }));
+  assert.throws(() => bridgeFreshFitInfraMemory(first.directory, first.partitionPath, join(first.directory, "bad")), /source-reviewed partition/);
+  const second = freshSelectionFixture();
+  const path = join(second.directory, "source-design-review.json"), review = JSON.parse(readFileSync(path, "utf8"));
+  review.historicalAPIGenExcluded = false; writeFileSync(path, canonical(review));
+  assert.throws(() => bridgeFreshFitInfraMemory(second.directory, second.partitionPath, join(second.directory, "bad")), /review artifact hash/);
+});
+
+test("multi-cohort parent identity uses exact Python JSONL bytes and original line endings", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const fixture = multiCohortFixture(newline);
+    assert.equal(verifyInfraPilotBundle(fixture.directory).lineage.cohort_count, 2);
+  }
+});
+
+test("multi-cohort parent rejects reserialization, changed values and reordered source rows even after resealing", () => {
+  for (const change of ["reserialize", "value", "order"]) {
+    const fixture = multiCohortFixture();
+    const lines = [...fixture.lines];
+    if (change === "reserialize") lines[0] = canonical(JSON.parse(lines[0])) + "\n";
+    else if (change === "value") lines[0] = lines[0].replace("1e-07", "2e-07");
+    else [lines[0], lines[1]] = [lines[1], lines[0]];
+    fixture.put("public.jsonl", null, lines.join("")); fixture.seal();
+    assert.throws(() => verifyInfraPilotBundle(fixture.directory), /Original parent public prefixes or split changed/);
+  }
 });

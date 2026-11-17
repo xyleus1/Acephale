@@ -87,6 +87,76 @@ def reliability(root):
     return build_goal_reliability(root / "bundle", root / "predictions", root / "annotations.jsonl", root / "pilot.json", root / "reviews.jsonl", root / "grades.jsonl")
 
 
+def retain_goal_response(evidence):
+    root, _, predictions, *_ = evidence
+    directory = root / "predictions"
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    manifest.pop("contentHash")
+    manifest["responseRetentionVersion"] = 1
+    sealed(directory / "manifest.json", manifest)
+    body = {"version": 1, "requestId": "actual-goal-request", "inputHash": hash_v1("compiled input"),
+            "requestContractHash": hash_v1("goal contract"), "continuation": [{"role": "assistant", "content": "goal"}]}
+    body["responseHash"] = hash_v1(body["continuation"])
+    response = {**body, "contentHash": hash_v1(body)}
+    predictions[0]["audit"] = {"events": [{"type": "model_response_retained", **{
+        key: response[key] for key in ("requestId", "inputHash", "requestContractHash", "responseHash")},
+        "responsePayloadHash": response["contentHash"]}]}
+    lines(directory / "predictions.jsonl", predictions)
+    record = {"checkpoint_id": predictions[0]["checkpoint_id"], "publicInputHash": predictions[0]["input_hash"], "response": response}
+    lines(directory / "model-responses.jsonl", [record])
+    receipt = json.loads((directory / "receipt.json").read_text(encoding="utf-8"))
+    receipt["responsePayloads"] = {"version": 1, "file": "model-responses.jsonl", "count": 1,
+                                   "sha256": file_hash(directory / "model-responses.jsonl")}
+    write(directory / "receipt.json", receipt)
+    return directory, record, receipt
+
+
+def test_reliability_verifies_retained_responses_without_changing_agreement(evidence):
+    root = evidence[0]
+    expected, _, _ = reliability(root)
+    retain_goal_response(evidence)
+    actual, _, joined = reliability(root)
+    assert len(joined) == 20
+    assert actual["reliability"] == expected["reliability"]
+    assert actual["agreedCount"] == expected["agreedCount"]
+
+
+@pytest.mark.parametrize("defect", ["file_hash", "inner_hash", "checkpoint", "request", "missing_declaration"])
+def test_reliability_rejects_changed_retained_response(evidence, defect):
+    directory, record, receipt = retain_goal_response(evidence)
+    if defect == "inner_hash":
+        record["response"]["continuation"][0]["content"] = "changed"
+    elif defect == "checkpoint":
+        record["checkpoint_id"] = "fixture-1"
+    elif defect == "request":
+        body = record["response"]
+        body["requestId"] = "another-request"
+        body["contentHash"] = hash_v1({key: value for key, value in body.items() if key != "contentHash"})
+    elif defect == "missing_declaration":
+        del receipt["responsePayloads"]
+    else:
+        record["publicInputHash"] = hash_v1("changed")
+    lines(directory / "model-responses.jsonl", [record])
+    if defect not in {"file_hash", "missing_declaration"}:
+        receipt["responsePayloads"]["sha256"] = file_hash(directory / "model-responses.jsonl")
+    write(directory / "receipt.json", receipt)
+    with pytest.raises(ValueError, match="[Rr]etained"):
+        reliability(evidence[0])
+
+
+def test_reliability_rechecks_retained_file_after_aggregation(evidence, monkeypatch):
+    directory, _, _ = retain_goal_response(evidence)
+    original = wilson_lower
+
+    def changed_during_aggregation(agreed, count):
+        (directory / "model-responses.jsonl").write_text("changed", encoding="utf-8")
+        return original(agreed, count)
+
+    monkeypatch.setattr("acephale.infra_admission.wilson_lower", changed_during_aggregation)
+    with pytest.raises(ValueError, match="changed during aggregation"):
+        reliability(evidence[0])
+
+
 def test_opportunity_uses_lower_benefits_upper_costs_and_retains_source_hash(evidence):
     root, *_, timing = evidence
     artifact, report, observations = build_opportunity(root / "bundle", root / "measurements.json")

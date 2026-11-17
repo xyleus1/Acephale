@@ -18,7 +18,7 @@
       "required": ["imageDigest", "vllm", "torch", "cuda", "transformers", "node", "python", "dependencyLockHash", "packageInventoryHash", "toolParser"],
       "properties": {
         "imageDigest": { "$ref": "#/$defs/ImageDigest" },
-        "vllm": { "const": "0.32.0" }, "torch": { "const": "2.13.0" }, "cuda": { "const": "13.0.3" },
+        "vllm": { "const": "0.32.0" }, "torch": { "const": "2.13.0" }, "cuda": { "const": "13.0.2", "description": "Immutable serving image CUDA release declaration; installed toolkit and Torch compile CUDA remain separately observed in the bound inventory." },
         "transformers": { "type": "string", "minLength": 1 }, "node": { "const": "22.23.4" }, "python": { "type": "string", "minLength": 1 },
         "dependencyLockHash": { "$ref": "#/$defs/Sha256" }, "packageInventoryHash": { "$ref": "#/$defs/Sha256" }, "toolParser": { "const": "qwen3_xml" }
       }
@@ -47,15 +47,28 @@
       "type": "object", "additionalProperties": false,
       "required": ["totalCeilingMicrodollars", "trancheMicrodollars", "infrastructureMicrodollars", "protectedContingencyMicrodollars", "maximumGpuHours", "ledgerCheckpointHash"],
       "properties": {
-        "totalCeilingMicrodollars": { "const": 500000000 }, "trancheMicrodollars": { "type": "integer", "minimum": 0, "maximum": 150000000 },
-        "infrastructureMicrodollars": { "type": "integer", "minimum": 0, "maximum": 35000000 }, "protectedContingencyMicrodollars": { "const": 65000000 },
-        "maximumGpuHours": { "type": "number", "exclusiveMinimum": 0, "maximum": 24 }, "ledgerCheckpointHash": { "$ref": "#/$defs/Sha256" }
+        "totalCeilingMicrodollars": { "enum": [500000000, 1000000000] }, "trancheMicrodollars": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
+        "infrastructureMicrodollars": { "type": "integer", "minimum": 0, "maximum": 200000000 }, "protectedContingencyMicrodollars": { "const": 65000000 },
+        "maximumGpuHours": { "type": "number", "exclusiveMinimum": 0, "maximum": 64 }, "ledgerCheckpointHash": { "$ref": "#/$defs/Sha256" },
+        "budgetPolicyHash": { "$ref": "#/$defs/Sha256", "enum": ["2d57f84fe03041b077f965add5ac58c7f51f6a90f06e38a579731a3c740d41de", "c58230aaa05f76984f6b26a5acb509bfea89b67fef9f15db918594039d1e6354"] }, "budgetAmendmentHash": { "$ref": "#/$defs/Sha256" }
+      },
+      "dependentRequired": { "budgetPolicyHash": ["budgetAmendmentHash"], "budgetAmendmentHash": ["budgetPolicyHash"] },
+      "if": { "properties": { "budgetPolicyHash": { "const": "c58230aaa05f76984f6b26a5acb509bfea89b67fef9f15db918594039d1e6354" } }, "required": ["budgetPolicyHash"] },
+      "then": { "properties": { "totalCeilingMicrodollars": { "const": 1000000000 } } },
+      "else": {
+        "properties": {
+          "totalCeilingMicrodollars": { "const": 500000000 }, "trancheMicrodollars": { "type": "integer", "maximum": 150000000 },
+          "infrastructureMicrodollars": { "type": "integer", "maximum": 50000000 }, "maximumGpuHours": { "type": "number", "maximum": 24 }
+        },
+        "if": { "properties": { "budgetPolicyHash": {} }, "required": ["budgetPolicyHash"] },
+        "else": { "properties": { "infrastructureMicrodollars": { "type": "integer", "maximum": 35000000 } } }
       }
     },
     "protocol": {
       "type": "object", "additionalProperties": false,
       "required": ["actorContext", "exposeEvidence", "frozenMemory", "sameCandidatePool", "lookaheadHops", "rankedCandidates", "perRunConcurrency", "globalConcurrency", "startsPerRun", "deadlineMs", "cachePolicy", "scheduleHash"],
       "properties": {
+        "annotationReview": { "$ref": "#/$defs/AnnotationReview" },
         "actorContext": { "const": "none" }, "exposeEvidence": { "const": false }, "frozenMemory": { "const": true }, "sameCandidatePool": { "const": true },
         "lookaheadHops": { "const": 1 }, "rankedCandidates": { "const": 3 }, "perRunConcurrency": { "const": 2 }, "globalConcurrency": { "const": 4 },
         "startsPerRun": { "const": 12 }, "deadlineMs": { "const": 5000 }, "cachePolicy": { "type": "string", "minLength": 1 }, "scheduleHash": { "$ref": "#/$defs/Sha256" }
@@ -63,6 +76,31 @@
     }
   },
   "$defs": {
+    "AnnotationReview": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["reviewProtocol", "humanReviewCount", "machineReviewCount"],
+          "properties": {
+            "reviewProtocol": { "const": "human_reviewed" },
+            "humanReviewCount": { "type": "integer", "minimum": 20 },
+            "machineReviewCount": { "const": 0 }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["reviewProtocol", "humanReviewCount", "machineReviewCount", "machineAuditHash", "reviewerModel", "reviewIndependence"],
+          "properties": {
+            "reviewProtocol": { "const": "machine_audited_exploratory" },
+            "humanReviewCount": { "const": 0 },
+            "machineReviewCount": { "const": 20 },
+            "machineAuditHash": { "$ref": "#/$defs/Sha256" },
+            "reviewerModel": { "const": "gpt-5.4-2026-03-05" },
+            "reviewIndependence": { "const": "separate_request_and_prompt_same_model" }
+          }
+        }
+      ]
+    },
     "Sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "GitRevision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "ImageDigest": { "type": "string", "pattern": "^.+@sha256:[a-f0-9]{64}$" },
@@ -71,10 +109,149 @@
       "type": "object", "additionalProperties": false,
       "required": ["repository", "revision", "servedModel", "weightsHash", "tokenizerHash", "chatTemplateHash", "precision", "contextWindow", "inputBudget", "outputCap", "temperature", "topP", "thinking", "weightsFrozen"],
       "properties": {
+        "trainedPredictor": { "$ref": "#/$defs/TrainedPredictorArtifact" },
+        "predictionProtocol": { "enum": ["rank_marginals_v2", "rank_binary_v1"] },
+        "binaryTokenIds": { "$ref": "#/$defs/BinaryTokenIds" },
         "repository": { "type": "string", "minLength": 1 }, "revision": { "$ref": "#/$defs/GitRevision" }, "servedModel": { "type": "string", "minLength": 1 },
         "weightsHash": { "$ref": "#/$defs/Sha256" }, "tokenizerHash": { "$ref": "#/$defs/Sha256" }, "chatTemplateHash": { "$ref": "#/$defs/Sha256" },
         "precision": { "const": "bfloat16" }, "contextWindow": { "type": "integer", "minimum": 1 }, "inputBudget": { "type": "integer", "minimum": 1 },
         "outputCap": { "type": "integer", "minimum": 1 }, "temperature": { "const": 0 }, "topP": { "const": 1 }, "thinking": { "const": false }, "weightsFrozen": { "const": true }
+      }
+    }
+,
+    "BinaryTokenIds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zero",
+        "one"
+      ],
+      "properties": {
+        "zero": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "one": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+,
+    "TrainedPredictorArtifact": {
+      "oneOf": [
+        { "$ref": "#/$defs/MergedPredictorArtifact" },
+        { "$ref": "#/$defs/UnmergedLoraPredictorArtifact" }
+      ]
+    },
+    "UnmergedLoraPredictorArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "kind", "storageMode", "base", "baseReceiptHash", "baseWeightsHash",
+        "adapterHash", "adapterStorageDtype", "runtimeLoraDtype", "servingWeightsHash", "servingProbeHash",
+        "tokenizerHash", "chatTemplateHash", "trainingManifestHash", "weightFitFamilies", "calibrationFamilies",
+        "protocol", "binaryTokenIds", "servedModel", "contentHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "kind": { "const": "acephale-trained-predictor" },
+        "storageMode": { "const": "unmerged_lora" },
+        "base": { "$ref": "#/$defs/MergedPredictorArtifact/properties/base" },
+        "baseReceiptHash": { "$ref": "#/$defs/Sha256" },
+        "baseWeightsHash": { "$ref": "#/$defs/Sha256" },
+        "adapterHash": { "$ref": "#/$defs/Sha256" },
+        "adapterStorageDtype": { "const": "float32" },
+        "runtimeLoraDtype": { "const": "bfloat16" },
+        "servingWeightsHash": { "$ref": "#/$defs/Sha256" },
+        "servingProbeHash": { "$ref": "#/$defs/Sha256" },
+        "tokenizerHash": { "$ref": "#/$defs/Sha256" },
+        "chatTemplateHash": { "$ref": "#/$defs/Sha256" },
+        "trainingManifestHash": { "$ref": "#/$defs/Sha256" },
+        "weightFitFamilies": { "$ref": "#/$defs/Families" },
+        "calibrationFamilies": { "$ref": "#/$defs/Families" },
+        "protocol": { "const": "rank_binary_v1" },
+        "binaryTokenIds": { "$ref": "#/$defs/BinaryTokenIds" },
+        "servedModel": { "$ref": "#/$defs/MergedPredictorArtifact/properties/servedModel" },
+        "contentHash": { "$ref": "#/$defs/Sha256" }
+      }
+    },
+    "MergedPredictorArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "base",
+        "adapterHash",
+        "mergedWeightsHash",
+        "tokenizerHash",
+        "chatTemplateHash",
+        "trainingManifestHash",
+        "weightFitFamilies",
+        "calibrationFamilies",
+        "protocol",
+        "binaryTokenIds",
+        "servedModel",
+        "contentHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "acephale-trained-predictor"
+        },
+        "base": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "revision"
+          ],
+          "properties": {
+            "repository": {
+              "const": "Qwen/Qwen3.5-0.8B"
+            },
+            "revision": {
+              "const": "2fc06364715b967f1860aea9cf38778875588b17"
+            }
+          }
+        },
+        "adapterHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "mergedWeightsHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "tokenizerHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "chatTemplateHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "trainingManifestHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "weightFitFamilies": {
+          "$ref": "#/$defs/Families"
+        },
+        "calibrationFamilies": {
+          "$ref": "#/$defs/Families"
+        },
+        "protocol": {
+          "const": "rank_binary_v1"
+        },
+        "binaryTokenIds": {
+          "$ref": "#/$defs/BinaryTokenIds"
+        },
+        "servedModel": {
+          "type": "string",
+          "pattern": "^acephale-predictor-[a-f0-9]{12}$"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/Sha256"
+        }
       }
     }
   }

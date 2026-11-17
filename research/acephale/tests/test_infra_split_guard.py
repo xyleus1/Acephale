@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_split_guard import (
+    inventory_hash,
     load_guard,
     observe,
     probe_command,
@@ -50,6 +56,58 @@ def test_private_tunnels_use_verified_host_keys_and_exact_loopback_destinations(
         "127.0.0.1:18000:127.0.0.1:8000", "127.0.0.1:18001:127.0.0.1:8001", "127.0.0.1:14318:127.0.0.1:4318"}
     assert probe_command(config, provenance)[-2] == "ubuntu@trusted-gpu"
     assert provenance["manifestHash"] == hash_v1(json.loads((tmp_path / "manifest.json").read_text()))
+
+
+def test_explicit_ssh_identity_resolves_without_reading_or_recording_key(tmp_path, monkeypatch):
+    fixture(tmp_path)
+    key = tmp_path / "private key"
+    key.write_text("fixture key material must never enter provenance")
+    path = tmp_path / "guard.json"
+    value = json.loads(path.read_text())
+    value["identityFilePath"] = key.name
+    path.write_text(json.dumps(value))
+    original = Path.open
+
+    def open_without_key(self, *args, **kwargs):
+        if self == key:
+            pytest.fail("Guard must not read the private key")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_without_key)
+    config, provenance = load_guard(path)
+    for command in (tunnel_command(config), probe_command(config, provenance)):
+        assert command[command.index("-i") + 1] == str(key.resolve())
+        assert "IdentitiesOnly=yes" in command and "StrictHostKeyChecking=yes" in command
+    assert "identityFilePath" not in provenance
+    assert "fixture key material" not in json.dumps(provenance)
+    key.unlink()
+    with pytest.raises(ValueError, match="identityFilePath"):
+        tunnel_command(config)
+
+
+@pytest.mark.parametrize("value", [None, 1, True, [], "", "missing", ".", "private\nkey", "private\rkey", "private\x00key"])
+def test_invalid_identity_file_rejected_before_ssh(tmp_path, value):
+    fixture(tmp_path)
+    path = tmp_path / "guard.json"
+    config = json.loads(path.read_text())
+    config["identityFilePath"] = value
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError, match="identityFilePath"):
+        load_guard(path)
+
+
+def test_identity_symlink_is_rejected_before_resolution(tmp_path, monkeypatch):
+    fixture(tmp_path)
+    key = tmp_path / "key"
+    key.write_text("fixture")
+    path = tmp_path / "guard.json"
+    config = json.loads(path.read_text())
+    config["identityFilePath"] = key.name
+    path.write_text(json.dumps(config))
+    original = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda self: self == key or original(self))
+    with pytest.raises(ValueError, match="symlinks"):
+        load_guard(path)
 
 
 def test_mismatched_native_urls_wrong_remote_host_and_model_are_rejected(tmp_path):
@@ -100,3 +158,82 @@ def test_guard_rejects_ssh_option_or_shell_injection(tmp_path, value):
     path.write_text(json.dumps(config))
     with pytest.raises(ValueError, match="SSH"):
         load_guard(path)
+
+
+def lambda_fixture(tmp_path):
+    fixture(tmp_path)
+    guard = json.loads((tmp_path / "guard.json").read_text())
+    key = base64.b64encode(b"synthetic ssh fixture").decode()
+    fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(base64.b64decode(key)).digest()).decode().rstrip("=")
+    instance = {"id": "lambda-instance", "name": "acephale-infra-lease", "ip": "203.0.113.1", "status": "active",
+                "instance_type": {"name": "gpu_1x_a100_sxm4"}}
+    ssh = {"host": instance["ip"], "port": 22, "user": "ubuntu", "hostKeySha256": fingerprint, "machineIdSha256": "e" * 64}
+    body = {"version": 1, "profile": "acephale-infra-v1", "provider": "lambda", "leaseId": "lease",
+            "leaseName": instance["name"], "hardwareProfile": "a100-40gb-v1", "hardwareProfileHash": "d" * 64,
+            "instance": instance, "ssh": ssh, "providerResponseHash": inventory_hash(instance), "studyBindingHash": "c" * 64}
+    receipt = {**body, "contentHash": inventory_hash(body)}
+    inventory = json.loads((tmp_path / "inventory.json").read_text())
+    inventory["provider"] = {"name": "lambda", "instanceId": instance["id"], "identityReceipt": receipt}
+    deployment = json.loads((tmp_path / "deployment.json").read_text())
+    deployment["evidenceHash"] = inventory_hash(inventory)
+    guard.update(provider="lambda", expectedInstanceId=instance["id"], sshDestination="ubuntu@" + instance["ip"],
+                 expectedHostKeySha256=fingerprint, expectedMachineIdSha256=ssh["machineIdSha256"], knownHostsPath="known_hosts")
+    for name, value in (("guard.json", guard), ("inventory.json", inventory), ("deployment.json", deployment)):
+        (tmp_path / name).write_text(json.dumps(value))
+    (tmp_path / "known_hosts").write_text(instance["ip"] + " ssh-ed25519 " + key + "\n")
+    return load_guard(tmp_path / "guard.json")
+
+
+def test_lambda_pins_provider_association_ssh_key_and_machine_identity(tmp_path):
+    config, provenance = lambda_fixture(tmp_path)
+    command = tunnel_command(config)
+    assert "GlobalKnownHostsFile=none" in command and "HostKeyAlgorithms=ssh-ed25519" in command
+    remote, local = responses(provenance)
+    del remote["instanceId"]  # Lambda does not masquerade as an EC2 DMI instance.
+    remote.update({key: provenance[key] for key in ("hostKeySha256", "machineIdSha256")})
+    verify_observation(provenance, remote, local)
+    for key in ("hostKeySha256", "machineIdSha256"):
+        changed = {**remote, key: "substituted", "instanceId": provenance["expectedInstanceId"]}
+        with pytest.raises(ValueError, match="instance"):
+            verify_observation(provenance, changed, local)
+    assert provenance["identityMethod"] == "Lambda API IP + pinned SSH host key + local machine-id"
+
+
+@pytest.mark.parametrize("field,value", [("sshDestination", "ubuntu@203.0.113.2"), ("expectedHostKeySha256", "SHA256:" + "A" * 43),
+                                       ("expectedMachineIdSha256", "0" * 64), ("expectedInstanceId", "other-instance")])
+def test_lambda_guard_rejects_substituted_identity(tmp_path, field, value):
+    lambda_fixture(tmp_path)
+    path = tmp_path / "guard.json"
+    config = json.loads(path.read_text())
+    config[field] = value
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError):
+        load_guard(path)
+
+
+def test_lambda_guard_detects_known_hosts_changes_before_contacting_remote(tmp_path):
+    config, provenance = lambda_fixture(tmp_path)
+    with (tmp_path / "known_hosts").open("a") as stream:
+        stream.write("# changed after startup\n")
+    with pytest.raises(ValueError, match="changed"):
+        observe(config, provenance, runner=lambda *_args, **_kwargs: pytest.fail("Remote probe must not run"))
+
+
+@pytest.mark.parametrize("provider", ["aws", "lambda"])
+def test_actual_node_checker_accepts_python_guard_provenance(tmp_path, provider):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is required for the cross-language heartbeat check")
+    _, provenance = (lambda_fixture if provider == "lambda" else fixture)(tmp_path)
+    publish(tmp_path, 1, provenance, True, {"remoteInstanceId": provenance["expectedInstanceId"]})
+    script = """const fs=require('node:fs'); const path=require('node:path');
+const {nativeSplitGuard}=require('./services/acephale-runtime/infra-split-guard.ts');
+const directory=process.argv[1];
+const config=JSON.parse(fs.readFileSync(path.join(directory,'configuration.json'),'utf8'));
+const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));
+console.log(JSON.stringify(nativeSplitGuard(config,manifest,path.join(directory,'configuration.json'))()));"""
+    result = subprocess.run([node, "--import", "tsx", "-e", script, str(tmp_path)],
+                            cwd=Path(__file__).resolve().parents[3], capture_output=True, text=True, timeout=20,
+                            env={**os.environ, "ACEPHALE_HOST_STATUS_FILE": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["endpointProvenanceHash"] == hash_v1(provenance)

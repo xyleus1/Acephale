@@ -11,7 +11,8 @@ new output directory, after all observations pass.
 ## Prerequisites on the actual host
 
 Use the existing image/model startup procedure in [README.md](README.md).
-Both pinned model containers must already be resident on the same 48 GB GPU.
+Both pinned model containers must already be resident on the same GPU, matching
+the explicitly selected 48 GB A6000 or 40 GB A100 hardware profile.
 The collector verifies the exact current Compose command, image digest,
 read-only model mount, downloaded model receipts, process IDs and actual NVIDIA
 memory allocations. A running container without a resident allocation fails.
@@ -33,8 +34,10 @@ For AWS, copy the raw `DescribeInstances` evidence file emitted by
 links its path and hash. The collector selects the instance matching the local
 `/sys/devices/virtual/dmi/id/board_asset_tag` and reads its instance type and AMI.
 An arbitrary AWS account ID or manually typed instance type is insufficient.
-No AWS credential is needed on the GPU host for this step. This initial collector
-supports AWS identity; another provider requires an explicit identity adapter.
+No AWS credential is needed on the GPU host for this step. For Lambda, use the
+controller's actual `provider-receipt` output and pass
+`--hardware-profile a100-40gb-v1`. That adapter binds the live provider instance,
+operator-pinned SSH key and host machine-id. See [LAMBDA_CONTROL.md](LAMBDA_CONTROL.md).
 
 ## Split Windows orchestration and Linux GPU serving
 
@@ -159,14 +162,30 @@ precise inputs retained in `inventory-evidence.json`:
   inventories, the orchestrator platform and installed Node
   name/version/package-JSON hashes.
 
-The vLLM and Torch versions come from installed package metadata. The full CUDA
-version comes from `/usr/local/cuda/version.json`, falling back to
-`torch.version.cuda` only if it reports the complete pinned version. Driver CUDA
-capability reported by `nvidia-smi` is not the installed runtime version. A value
-such as `13.0` cannot be silently expanded to the `13.0.3` source pin. A Torch
-wheel's local build suffix is retained in evidence while its base release is
-used in the manifest's fixed `torch` field. Hardware GPU memory is the observed
-capacity of the single GPU, in bytes.
+The vLLM and Torch versions come from installed package metadata. `runtime.cuda`
+now records the immutable image's `CUDA_VERSION` declaration, exactly `13.0.2`.
+The collector reads only that named image environment entry, verifies the image
+digest, and requires the serving container's same entry to agree. Torch's
+separate compile CUDA value must be exactly `13.0`; it is retained with source
+`torch.version.cuda`. Neither value establishes the installed toolkit patch.
+Any actual `/usr/local/cuda/version.json` bytes and installed `dpkg-query` CUDA
+component records remain separate evidence. An installed `cuda-toolkit` meta
+package can identify a toolkit release; `cuda-cudart-13-0=13.0.96-1` cannot be
+converted into a guessed toolkit version. Missing toolkit evidence is `null`.
+
+This corrects the former `13.0.3` default taken from the upstream Dockerfile:
+the exact pinned linux/amd64 OCI image used a `13.0.2` build argument instead.
+The source correction requires the original ledger's append-only metadata
+amendment and does not replace the original financial binding. In the absence
+of an explicit `servingCudaSource` policy, the collector still requires an
+observed full toolkit release and fails closed when only Torch/image metadata
+exists. It never chooses whichever source happens to match an expected value.
+
+`validate_serving_packages` is shared by the early image-only probe and final
+resident-container inventory. The early probe needs no model files or GPU and
+does not prove kernel execution. Driver CUDA capability reported by
+`nvidia-smi` is not the installed runtime version. The Torch wheel build suffix
+remains in evidence while its base version occupies `runtime.torch`.
 
 Context limits, sampling settings, disabled thinking and frozen weights are the
 declared experiment policy. The server's context length, dtype, tool parser and

@@ -1,0 +1,14 @@
+--- a/heartbeat_companion_v2.py
++++ b/heartbeat_companion_v2.py
+@@ -21,7 +21,10 @@
+     sessions = {}
+     for row in receipt['controllers']:
+         session = public.session(receipt['config'], row['region'])
+-        settings = Config(connect_timeout=3, read_timeout=3, retries={'total_max_attempts': 1})
++        # Retry the same individual S3 request without repeating expensive
++        # authority validation. The public outer retry/deadline policy is unchanged.
++        settings = Config(connect_timeout=3, read_timeout=3,
++            retries={'mode': 'standard', 'total_max_attempts': 3})
+         client = session.client('s3', config=settings)
+         observed = json.loads(client.get_object(Bucket=row['bucket'], Key='state.json',
+             ExpectedBucketOwner=row['account'])['Body'].read())

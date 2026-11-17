@@ -2,12 +2,36 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { hash } from "../src/lib/acephale/canonical";
 import type { Candidate } from "../src/lib/acephale/contracts/generated";
 import type { PublicBoundary } from "../services/acephale-runtime/actor";
 import type { ReadExecutor } from "../src/lib/acephale/scheduler";
-import { measureNativePair, nativeProfileJournalPrefix } from "./acephale-infra-native-profile";
+import { measureNativePair, nativeProfileCohorts, nativeProfileJournalPrefix, validateNativePrefixSource } from "./acephale-infra-native-profile";
+
+test("native profile declares either one legacy cohort or distinct aggregate sources", () => {
+  const base = resolve("profile");
+  assert.deepEqual(nativeProfileCohorts({ cohortPath: "original" }, base), [resolve(base, "original")]);
+  assert.deepEqual(nativeProfileCohorts({ cohortPaths: ["original", "auxiliary"] }, base), [resolve(base, "original"), resolve(base, "auxiliary")]);
+  for (const config of [{}, { cohortPath: "original", cohortPaths: ["a", "b"] }, { cohortPath: "" },
+    { cohortPaths: ["only"] }, { cohortPaths: ["original", "./original"] }, { cohortPaths: ["original", null] }]) {
+    assert.throws(() => nativeProfileCohorts(config as any, base));
+  }
+});
+
+test("native prefix proof binds the source trace and its owning cohort", () => {
+  const boundary = { policy: "Read only", tools: [] };
+  const row = { checkpoint_id: "point", episode_id: "run", input_hash: "input", input: { policy: boundary.policy }, runtime_tool_schema_hash: hash([]) };
+  const proof = { checkpoint_id: "point", input_hash: "input", verifiedPublicPrefix: true, sourceRunSha256: "trace",
+    sourceCohortId: "original", boundary, boundaryHash: hash(boundary) };
+  const lineage = { cohort_receipt_hash: "aggregate", fresh_sources: { run: { raw_sha256: "trace", cohort_id: "original" } } };
+  validateNativePrefixSource(proof, row, lineage);
+  validateNativePrefixSource(proof, row, { cohort_receipt_hash: "original", fresh_sources: { run: { raw_sha256: "trace" } } });
+  for (const changed of [{ sourceCohortId: "other" }, { sourceRunSha256: "other" }, { input_hash: "other" }, { sourceCohortId: undefined }]) {
+    assert.throws(() => validateNativePrefixSource({ ...proof, ...changed }, row, lineage), /provenance/);
+  }
+  assert.throws(() => validateNativePrefixSource(proof, { ...row, episode_id: "absent" }, lineage), /provenance/);
+});
 
 test("native profiling preserves the original journal prefix across appended costs", async () => {
   const directory = await mkdtemp(join(tmpdir(), "acephale-profile-prefix-")), file = join(directory, "budget.jsonl");

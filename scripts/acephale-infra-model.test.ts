@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { LocalChatModelPort, type InfraChatMessage, type InfraModelEvent, type InfraFunctionTool } from "../src/lib/acephale/infra-model";
+import { LocalChatModelPort, type InfraChatMessage, type InfraModelEvent, type InfraFunctionTool, type LocalChatModelConfiguration, type InfraResponseRecord } from "../src/lib/acephale/infra-model";
 import { freezeInfraManifest, INFRA_MODEL_PINS, validateInfraManifest, type InfraExperimentManifestV2 } from "../src/lib/acephale/infra-manifest";
+import budgetPolicyV2 from "../src/lib/acephale/contracts/budget-policy-v2.json";
+import budgetPolicyV3 from "../src/lib/acephale/contracts/budget-policy-v3.json";
 import { localActorDecision, localActorMessages } from "../services/acephale-runtime/local-actor";
+import { hash } from "../src/lib/acephale/canonical";
 
 const tool: InfraFunctionTool = { type: "function", function: { name: "get_document", parameters: {
   type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false,
@@ -17,10 +20,10 @@ const tokenResponse = (count = 8) => Response.json({ count, max_model_len: 32768
 const completion = (overrides: Record<string, unknown> = {}) => ({ model: modelName,
   choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: [call] }, finish_reason: "tool_calls" }],
   usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }, ...overrides });
-function mockPort(value: unknown = completion(), options: { stream?: boolean; record?: (event: InfraModelEvent) => void } = {}) {
+function mockPort(value: unknown = completion(), options: Pick<LocalChatModelConfiguration, "stream" | "record" | "retainResponse"> = {}) {
   const bodies: { path: string; body: Record<string, unknown> }[] = [];
   const port = new LocalChatModelPort({ baseUrl: "http://localhost:8000/v1", model: modelName, stream: options.stream ?? false,
-    record: options.record, fetch: (async (input, init) => {
+    record: options.record, retainResponse: options.retainResponse, fetch: (async (input, init) => {
       const path = new URL(String(input)).pathname;
       bodies.push({ path, body: JSON.parse(String(init?.body)) });
       return path === "/tokenize" ? tokenResponse() : value instanceof Response ? value : Response.json(value);
@@ -62,6 +65,61 @@ test("candidate window measurement uses the real tokenizer without generating", 
   const controller = new AbortController(); controller.abort();
   await assert.rejects(port.measureInputTokens(messages, controller.signal));
   assert.equal(bodies.length, 1);
+});
+
+test("dispatch audit preserves actual model-independent inputs even when generation fails", async () => {
+  const events: InfraModelEvent[] = [];
+  const { port } = mockPort(new Response("unavailable", { status: 503 }), { record: event => events.push(event) });
+  await assert.rejects(port.complete(request), /HTTP 503/);
+  const dispatch = events.find(event => event.type === "model_dispatch")!;
+  assert.equal(dispatch.compiledMessagesHash, hash(messages));
+  assert.equal(dispatch.compiledTokenIdsHash, hash(Array(8).fill(1)));
+  assert.deepEqual(dispatch.selectedMessageIndexes, [0, 1]);
+  assert.deepEqual(dispatch.omittedGroups, []);
+  assert.equal(dispatch.inputTokens, 8);
+  assert.match(String(dispatch.requestContractHash), /^[a-f0-9]{64}$/);
+  assert.ok(events.some(event => event.type === "model_failed" && event.dispatched === true));
+  assert.ok(!events.some(event => event.type === "model_completed"));
+});
+
+test("replay retains the exact parsed response before structured output rejection", async () => {
+  const retained: InfraResponseRecord[] = [], events: InfraModelEvent[] = [];
+  const text = '{"wrong":true}';
+  const response = completion({ choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }] });
+  const { port } = mockPort(response, { record: event => events.push(event), retainResponse: async value => { retained.push(value); } });
+  await assert.rejects(port.complete({ ...request, tools: [], responseFormat: { name: "test", strict: true,
+    schema: { type: "object", additionalProperties: false, required: ["answer"], properties: { answer: { type: "string" } } } } }), /requested output schema/);
+  assert.equal(retained.length, 1);
+  assert.equal(retained[0].text, text);
+  assert.deepEqual(retained[0].continuation, { role: "assistant", content: text });
+  const { contentHash, ...body } = retained[0];
+  assert.equal(contentHash, hash(body));
+  const dispatch = events.find(event => event.type === "model_dispatch")!;
+  assert.equal(body.inputHash, dispatch.inputHash);
+  assert.equal(body.requestContractHash, dispatch.requestContractHash);
+  assert.equal(body.responseHash, hash(body.continuation));
+  assert.ok(events.findIndex(event => event.type === "model_response_retained") < events.findIndex(event => event.type === "model_failed"));
+  assert.ok(!events.some(event => event.type === "model_completed"));
+  assert.ok(!JSON.stringify(body).includes("local-no-secret"));
+});
+
+test("response retention failure fails closed instead of returning an unaudited success", async () => {
+  const { port } = mockPort(completion(), { retainResponse: async () => { throw new Error("disk unavailable"); } });
+  await assert.rejects(port.complete(request), /transport or protocol failed/);
+});
+
+test("prompt audit hashes stay identical across weight names while request identities remain distinct", async () => {
+  const events: InfraModelEvent[][] = [];
+  for (const model of ["base-fixture", "trained-fixture"]) {
+    const recorded: InfraModelEvent[] = []; events.push(recorded);
+    const port = new LocalChatModelPort({ baseUrl: "http://localhost:8000/v1", model, stream: false,
+      record: event => recorded.push(event), fetch: (async url => new URL(String(url)).pathname === "/tokenize"
+        ? tokenResponse() : Response.json({ ...completion(), model })) as typeof fetch });
+    await port.complete(request);
+  }
+  const [base, trained] = events.map(items => items.find(event => event.type === "model_dispatch")!);
+  assert.notEqual(base.inputHash, trained.inputHash);
+  for (const key of ["compiledMessagesHash", "compiledTokenIdsHash", "requestContractHash"]) assert.equal(base[key], trained[key]);
 });
 
 test("SDK retryable HTTP failures make exactly one physical generation attempt", async () => {
@@ -267,7 +325,7 @@ function manifest(): InfraExperimentManifestV2 {
     version: 2, profile: "acephale-infra-v1", experimentId: "fixture-only", createdAt: "2026-11-05T00:00:00Z", sourceCommit: "b".repeat(40),
     actor: { ...identity, ...INFRA_MODEL_PINS.actor, contextWindow: 32768, inputBudget: 28672, outputCap: 4096 },
     predictor: { ...identity, ...INFRA_MODEL_PINS.predictor, servedModel: "predictor", contextWindow: 8192, inputBudget: 7168, outputCap: 1024 },
-    runtime: { imageDigest: INFRA_MODEL_PINS.image, vllm: "0.32.0", torch: "2.13.0", cuda: "13.0.3", transformers: "5.16.1-fixture",
+    runtime: { imageDigest: INFRA_MODEL_PINS.image, vllm: "0.32.0", torch: "2.13.0", cuda: "13.0.2", transformers: "5.16.1-fixture",
       node: "22.23.4", python: "3.12.16", dependencyLockHash: sha, packageInventoryHash: sha, toolParser: "qwen3_xml" },
     hardware: { provider: "fixture", instanceType: "fixture", imageId: "fixture", gpu: "fixture", gpuCount: 1, gpuMemoryBytes: 48 * 1024 ** 3,
       driver: "580-fixture", cpu: "fixture", ramBytes: 100 * 1024 ** 3 },
@@ -290,6 +348,20 @@ test("v2 manifest freezes exact pins and artifact lineage without changing v1", 
   assert.equal(frozen.manifest.actor.servedModel, "actor");
 });
 
+test("machine annotation review is an explicit exploratory manifest protocol", () => {
+  const value = manifest();
+  value.protocol.annotationReview = { reviewProtocol: "machine_audited_exploratory", humanReviewCount: 0,
+    machineReviewCount: 20, machineAuditHash: hash("actual-review"), reviewerModel: "gpt-5.4-2026-03-05",
+    reviewIndependence: "separate_request_and_prompt_same_model" };
+  validateInfraManifest(value);
+  for (const change of [{ humanReviewCount: 20 }, { machineReviewCount: 19 }, { machineAuditHash: "missing" },
+    { reviewerModel: "unknown" }, { reviewIndependence: "independent_model_weights" }]) {
+    const changed = structuredClone(value);
+    Object.assign(changed.protocol.annotationReview!, change);
+    assert.throws(() => validateInfraManifest(changed));
+  }
+});
+
 test("v2 manifest rejects substitutions, contamination, invalid budgets and behavioral arms", () => {
   for (const mutate of [
     (m: InfraExperimentManifestV2) => { m.actor.revision = "f".repeat(40); },
@@ -299,4 +371,22 @@ test("v2 manifest rejects substitutions, contamination, invalid budgets and beha
     (m: InfraExperimentManifestV2) => { (m.protocol as unknown as Record<string, unknown>).exposeEvidence = true; },
     (m: InfraExperimentManifestV2) => { m.arms = ["demand-only", "demand-only", "goal-conditioned"]; },
   ]) { const value = manifest(); mutate(value); assert.throws(() => validateInfraManifest(value)); }
+});
+
+test("expanded budget requires the exact v3 policy and leaves previous limits unchanged", () => {
+  const approved = "c58230aaa05f76984f6b26a5acb509bfea89b67fef9f15db918594039d1e6354";
+  assert.equal(hash(budgetPolicyV3), approved);
+  const current = manifest();
+  current.budgets = { ...current.budgets, totalCeilingMicrodollars: 1000000000, trancheMicrodollars: 1000000000,
+    infrastructureMicrodollars: 200000000, maximumGpuHours: 64,
+    budgetPolicyHash: approved, budgetAmendmentHash: hash("explicit new authorization") };
+  assert.doesNotThrow(() => validateInfraManifest(current));
+  for (const policy of [undefined, hash(budgetPolicyV2), hash("unknown")]) {
+    const previous = structuredClone(current);
+    if (policy) (previous.budgets as unknown as Record<string, unknown>).budgetPolicyHash = policy;
+    else { delete previous.budgets.budgetPolicyHash; delete previous.budgets.budgetAmendmentHash; }
+    assert.throws(() => validateInfraManifest(previous));
+  }
+  current.budgets.totalCeilingMicrodollars = 500000000;
+  assert.throws(() => validateInfraManifest(current));
 });

@@ -1,5 +1,4 @@
 /** Bounded blind teacher annotation on the original shared research ledger. */
-import Ajv2020 from "ajv/dist/2020";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -13,7 +12,8 @@ import { DurableBudget } from "../services/acephale-runtime/durable-budget";
 import { assertResearchHostReady, maximumCost, researchClient, responseCost, TrialLedger } from "../services/acephale-runtime/provider";
 import { verifyInfraAnnotationSource } from "./acephale-infra-annotation-source";
 
-export const INFRA_ANNOTATION_VERSION = "acephale-infra-annotation-v1";
+import { INFRA_ANNOTATION_VERSION, bindTeacherDraft, teacherSchema, type InfraAnnotationInput } from "../services/acephale-runtime/infra-goal-annotation";
+export { INFRA_ANNOTATION_VERSION, bindTeacherDraft, teacherSchema, type InfraAnnotationInput } from "../services/acephale-runtime/infra-goal-annotation";
 const INPUT_LIMIT = 8192;
 const OUTPUT_LIMIT = 1024;
 const MAXIMUM_MICRODOLLARS = 5_000_000;
@@ -26,17 +26,6 @@ const INSTRUCTIONS = "Independently annotate the user's current requested goals 
   + "Every objective and constraint needs a supplied source ID and a JSON pointer into that source value; use an empty pointer for the complete source. "
   + "The server supplies identifiers and hashes. Missing or omitted evidence requires uncertainty. Return only the requested JSON.";
 
-interface Source { id: string; kind: string; value: unknown }
-export interface InfraAnnotationInput {
-  checkpoint_id: string; input_hash: string; request_revision: string;
-  input: { policy: string; tools: unknown[]; events: unknown[]; sources: Source[] };
-}
-interface DraftReference { source_id: string; pointer: string }
-interface DraftGoal {
-  action: string; object_type: string; objective: string; confidence: number;
-  sources: DraftReference[]; constraints: { text: string; sources: DraftReference[] }[];
-}
-interface Draft { goals: DraftGoal[]; unknown_probability: number }
 export type TeacherFactory = (ledger: BudgetLedger, record: (event: Record<string, unknown>) => void) => ModelPort;
 
 function assertPublic(value: unknown): void {
@@ -46,38 +35,6 @@ function assertPublic(value: unknown): void {
     assertPublic(child);
   }
 }
-function pointer(value: unknown, path: string): unknown {
-  if (path === "") return value;
-  if (!path.startsWith("/")) throw new Error("Invalid source pointer");
-  for (const raw of path.slice(1).split("/")) {
-    if (/~(?![01])/u.test(raw)) throw new Error("Invalid source pointer escape");
-    const key = raw.replaceAll("~1", "/").replaceAll("~0", "~");
-    if (Array.isArray(value)) {
-      if (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length) throw new Error("Source array index not visible");
-      value = value[Number(key)];
-    } else if (value && typeof value === "object" && Object.hasOwn(value, key)) value = (value as Record<string, unknown>)[key];
-    else throw new Error("Source pointer not visible");
-  }
-  return value;
-}
-export function teacherSchema(ids: string[]) {
-  const reference = { type: "object", additionalProperties: false, required: ["source_id", "pointer"], properties: {
-    source_id: { type: "string", enum: ids }, pointer: { type: "string", maxLength: 256 },
-  } };
-  const refs = { type: "array", minItems: 1, maxItems: 8, items: reference };
-  return { type: "object", additionalProperties: false, required: ["goals", "unknown_probability"], properties: {
-    unknown_probability: { type: "number", minimum: 0, maximum: 1 },
-    goals: { type: "array", maxItems: 3, items: { type: "object", additionalProperties: false,
-      required: ["action", "object_type", "objective", "confidence", "sources", "constraints"], properties: {
-        action: { type: "string", enum: ["retrieve", "compare", "explain", "diagnose", "modify", "transact", "communicate", "unknown"] },
-        object_type: { type: "string", minLength: 1, maxLength: 120 }, objective: { type: "string", minLength: 1, maxLength: 800 },
-        confidence: { type: "number", minimum: 0, maximum: 1 }, sources: refs,
-        constraints: { type: "array", maxItems: 8, items: { type: "object", additionalProperties: false,
-          required: ["text", "sources"], properties: { text: { type: "string", minLength: 1, maxLength: 320 }, sources: refs } } },
-      } } },
-  } };
-}
-
 export function compileTeacherInput(row: InfraAnnotationInput, requestId: string) {
   if (!row.checkpoint_id || !row.request_revision || row.input_hash !== hash(row.input)
     || !row.input || Object.keys(row.input).some(key => !["policy", "tools", "events", "sources"].includes(key))
@@ -93,14 +50,14 @@ export function compileTeacherInput(row: InfraAnnotationInput, requestId: string
   const mandatory = sources.filter(source => ["policy", "user", "system"].includes(source.kind)
     || source.id === latestAssistant || source.id === latestObservation);
   const selected = new Set(mandatory.map(source => source.id));
-  const requestFor = (chosen: Source[]) => {
+  const requestFor = (chosen: InfraAnnotationInput["input"]["sources"]) => {
     // Intent annotation does not make tool choices. Policy is already a source;
     // the tool catalog and duplicate event stream do not belong in this prompt.
     const payload = { sources: chosen };
     return { instructions: INSTRUCTIONS, input: [{ role: "user" as const, content: canonical(payload) }],
       responseFormat: { name: "infra_requested_goals", strict: true as const, schema: teacherSchema(chosen.map(source => source.id)) } };
   };
-  const tokensFor = (chosen: Source[]) => countTokens(canonical(requestFor(chosen))) + 128;
+  const tokensFor = (chosen: InfraAnnotationInput["input"]["sources"]) => countTokens(canonical(requestFor(chosen))) + 128;
   if (tokensFor(mandatory) > INPUT_LIMIT) throw new Error("Mandatory teacher context exceeds input budget");
   for (const source of [...sources].reverse()) {
     if (selected.has(source.id)) continue;
@@ -115,23 +72,6 @@ export function compileTeacherInput(row: InfraAnnotationInput, requestId: string
     omittedSourceIds: sources.filter(source => !selected.has(source.id)).map(source => source.id),
     omittedComponents: ["tool_schemas_not_needed_for_requested_intent", "duplicate_event_stream"],
     compilerVersion: INFRA_ANNOTATION_VERSION };
-}
-
-export function bindTeacherDraft(value: unknown, row: InfraAnnotationInput, selectedSourceIds: string[]) {
-  if (!new Ajv2020({ strict: false }).compile(teacherSchema(selectedSourceIds))(value)) throw new Error("Invalid teacher draft schema");
-  const draft = value as unknown as Draft;
-  if (Math.abs(draft.unknown_probability + draft.goals.reduce((sum, goal) => sum + goal.confidence, 0) - 1) > 1e-6) throw new Error("Invalid teacher goal probability distribution");
-  const sources = new Map(row.input.sources.map(source => [source.id, source.value]));
-  const bind = (ref: DraftReference) => {
-    if (!selectedSourceIds.includes(ref.source_id) || !sources.has(ref.source_id)) throw new Error("Teacher cited a non-visible source");
-    return { ...ref, value_hash: hash(pointer(sources.get(ref.source_id), ref.pointer)) };
-  };
-  return { checkpoint_id: row.checkpoint_id, input_hash: row.input_hash, request_revision: row.request_revision,
-    teacher_model: RESEARCH_MODELS.teacher, annotation_version: INFRA_ANNOTATION_VERSION,
-    unknown_probability: draft.unknown_probability,
-    goals: draft.goals.map(goal => ({ ...goal, sources: goal.sources.map(bind),
-      constraints: goal.constraints.map(constraint => ({ ...constraint, sources: constraint.sources.map(bind) })) })),
-  };
 }
 
 function liveTeacher(ledger: BudgetLedger, record: (event: Record<string, unknown>) => void): ModelPort {

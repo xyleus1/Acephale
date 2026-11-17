@@ -100,6 +100,14 @@ test("native hosted limits cannot spend contingency or cross phase allocations",
   assert.throws(() => validateInfraHosted(configuration, "heldout"), /allocation/);
 });
 
+test("native evaluator opt-in admits only reward-basis-preserving modes", () => {
+  assert.doesNotThrow(() => validateInfraHosted({ ...configuration, evaluationType: "ALL" }, "collection"));
+  assert.doesNotThrow(() => validateInfraHosted({ ...configuration, evaluationType: "ALL_WITH_NL_ASSERTIONS" }, "collection"));
+  for (const evaluationType of ["ALL_IGNORE_BASIS", "NL_ASSERTIONS", null, true, "all"]) {
+    assert.throws(() => validateInfraHosted({ ...configuration, evaluationType } as never, "collection"), /evaluation type/);
+  }
+});
+
 test("offline checkpoint binds original reservations and refuses replacement or stale journals", async () => {
   const directory = await mkdtemp(join(tmpdir(), "infra-ledger-checkpoint-"));
   try {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import secrets
@@ -20,7 +21,13 @@ from acephale.adapters.step_gateway import StepBroker, server
 from acephale.adapters.tau import PublicContext, _events
 from acephale.contracts_v1 import hash_v1
 from acephale.infra_data import _public_event, read_jsonl, verify_bundle
-from acephale.infra_import_fresh import _inventory
+from acephale.infra_import_fresh import (
+    LINEAGE_VERSION,
+    MULTI_COHORT_VERSION,
+    _inventory,
+    _read_fresh_cohort,
+    verify_cohort_compatibility,
+)
 from acephale.infra_native_runner import (
     NativeTauExecutor,
     validate_task_bundle,
@@ -100,20 +107,87 @@ def replay_public_tools(environment, messages: list[dict], make_call) -> list[di
 
 
 class PrefixFactory:
-    def __init__(self, cohort: Path, dataset: Path, upstream: Path):
-        receipt, inventory = _inventory(cohort)
-        self.cohort, self.inventory = cohort, inventory
+    def __init__(self, cohort: Path | list[Path], dataset: Path, upstream: Path):
+        cohorts = [cohort] if isinstance(cohort, Path) else cohort
+        if not cohorts or len({path.resolve() for path in cohorts}) != len(cohorts):
+            raise ValueError("Distinct original profile cohorts are required")
         self.dataset = verify_bundle(dataset)
         self.lineage = read(dataset / "lineage.json")
-        if (self.lineage.get("fresh_qwen_traces") is not True
-                or self.lineage["cohort_receipt_hash"] != hash_v1(receipt)
-                or self.lineage["cohort_receipt_sha256"] != file_hash(cohort / "cohort-receipt.json")
-                or self.lineage["cohort_files"] != inventory):
-            raise ValueError("Profile dataset does not derive from this closed native collection")
-        configuration, manifest, bundle = [read(cohort / name) for name in ("configuration.json", "manifest.json", "tasks.json")]
-        self.tasks = validate_task_bundle(configuration, manifest, bundle)
-        self.runs = {run["runId"]: run for run in configuration["runs"]}
-        self.executor = NativeTauExecutor(configuration, self.tasks, upstream)
+        receipt = read(dataset / "cohort-receipt.json")
+        if self.lineage.get("fresh_qwen_traces") is not True or self.lineage.get("cohort_receipt_hash") != hash_v1(receipt):
+            raise ValueError("Profile dataset has invalid native collection lineage")
+        sources = {}
+        for directory in cohorts:
+            part = _read_fresh_cohort(directory)
+            original = part["cohort-receipt.json"]
+            identity = hash_v1(original)
+            if identity in sources:
+                raise ValueError("Repeated original profile cohort")
+            configuration, manifest, bundle = [read(directory / name) for name in ("configuration.json", "manifest.json", "tasks.json")]
+            if _inventory(directory) != (original, part["lineage.json"]["cohort_files"]):
+                raise ValueError("Original profile cohort changed during verification")
+            sources[identity] = {"directory": directory, "receipt": original, "part": part,
+                                 "configuration": configuration, "manifest": manifest,
+                                 "tasks": validate_task_bundle(configuration, manifest, bundle), "executor": None}
+        self.upstream, self.sources = upstream, sources
+        if self.lineage.get("version") == LINEAGE_VERSION:
+            if len(sources) != 1 or hash_v1(receipt) not in sources:
+                raise ValueError("Single-cohort profile source differs from its dataset")
+            source = sources[hash_v1(receipt)]
+            if self.lineage != source["part"]["lineage.json"]:
+                raise ValueError("Original profile source lineage changed")
+            order = [hash_v1(receipt)]
+        elif self.lineage.get("version") == MULTI_COHORT_VERSION:
+            if (receipt.get("version") != 2 or receipt.get("kind") != "acephale-fresh-native-multicohort"
+                    or self.lineage.get("cohort_receipt_sha256") != file_hash(dataset / "cohort-receipt.json")
+                    or receipt.get("contentHash") != hash_v1({key: value for key, value in receipt.items() if key != "contentHash"})
+                    or receipt.get("closed") is not True or receipt.get("allDeclaredSlotsRetained") is not True
+                    or receipt.get("pairedComparisonSlotsReused") is not False or self.lineage.get("cohort_files") is not None):
+                raise ValueError("Invalid aggregate profile receipt")
+            order = [parent["cohortId"] for parent in receipt.get("cohorts", [])]
+            if (len(order) < 2 or len(set(order)) != len(order) or set(order) != set(sources)
+                    or self.lineage.get("cohort_count") != len(order)):
+                raise ValueError("Every original aggregate cohort must be supplied exactly once")
+            for parent in receipt["cohorts"]:
+                source = sources[parent["cohortId"]]
+                if (parent["receipt"] != source["receipt"] or parent["configuration"] != source["configuration"]
+                        or parent["manifest"] != source["manifest"]
+                        or parent["receiptText"] != (source["directory"] / "cohort-receipt.json").read_bytes().decode("utf-8")
+                        or parent["receiptSha256"] != file_hash(source["directory"] / "cohort-receipt.json")
+                        or parent["runIds"] != [run["runId"] for run in source["configuration"]["runs"]]):
+                    raise ValueError("Aggregate profile source differs from its original closed cohort")
+        else:
+            raise ValueError("Unsupported native profile lineage")
+        ordered = [sources[identity] for identity in order]
+        verify_cohort_compatibility([source["part"] for source in ordered],
+                                   [source["configuration"] for source in ordered],
+                                   [source["manifest"] for source in ordered])
+        self.runs, self.owners, expected_sources, expected_public = {}, {}, {}, []
+        for identity in order:
+            source = sources[identity]
+            for run in source["configuration"]["runs"]:
+                key = run["runId"]
+                if key in self.runs:
+                    raise ValueError("Repeated episode across profile cohorts")
+                self.runs[key], self.owners[key] = run, identity
+                original = source["part"]["lineage.json"]["fresh_sources"][key]
+                expected_sources[key] = {**original, "cohort_id": identity} if len(order) > 1 else original
+            expected_public.extend(source["part"]["public.jsonl"])
+        public = read_jsonl(dataset / "public.jsonl")
+        self.public = {row["checkpoint_id"]: row for row in public}
+        if (public != expected_public or len(self.public) != len(public)
+                or expected_sources != self.lineage.get("fresh_sources")
+                or len(order) > 1 and self.owners != receipt.get("episodeCohorts")):
+            raise ValueError("Profile public prefixes or episode ownership changed")
+
+    def source_for(self, row: dict):
+        if self.public.get(row.get("checkpoint_id")) != row:
+            raise ValueError("Profile checkpoint is not the unchanged declared public row")
+        run = self.runs[row["episode_id"]]
+        if row["split"] not in {"train", "development"} or run["familyId"] != row["family_id"] or run["domain"] != row["domain"]:
+            raise ValueError("Native profile family/domain mismatch or heldout prefix")
+        identity = self.owners[run["runId"]]
+        return run, identity, self.sources[identity]
 
     def build(self, row: dict):
         from tau2.data_model.message import ToolCall
@@ -121,16 +195,19 @@ class PrefixFactory:
 
         from acephale.adapters.tau_snapshot import NativeSnapshotEnvironment
 
-        run = self.runs[row["episode_id"]]
-        if row["split"] not in {"train", "development"} or run["familyId"] != row["family_id"] or run["domain"] != row["domain"]:
-            raise ValueError("Native profile family/domain mismatch or heldout prefix")
-        raw_path = self.cohort / f"{run['runId']}.json"
-        if file_hash(raw_path) != self.inventory[raw_path.name]:
+        run, identity, source = self.source_for(row)
+        raw_path = source["directory"] / f"{run['runId']}.json"
+        raw_bytes = raw_path.read_bytes()
+        raw_hash = hashlib.sha256(raw_bytes).hexdigest()
+        if raw_hash != source["part"]["lineage.json"]["cohort_files"][raw_path.name]:
             raise ValueError("Native source changed before reconstruction")
-        raw = read(raw_path)
+        raw = json.loads(raw_bytes)
         messages = public_prefix_messages(row, raw["simulation"]["messages"])
-        original = self.executor.registry.get_env_constructor(run["domain"])(solo_mode=False)
-        task = Task.model_validate(self.tasks[run["domain"], run["taskId"]]["task"])
+        if source["executor"] is None:
+            source["executor"] = NativeTauExecutor(source["configuration"], source["tasks"], self.upstream)
+        executor = source["executor"]
+        original = executor.registry.get_env_constructor(run["domain"])(solo_mode=False)
+        task = Task.model_validate(source["tasks"][run["domain"], run["taskId"]]["task"])
         initial = task.initial_state
         # Recreate native initialization, then replay each visible action exactly once.
         # Original task definitions remain in Python and never enter model inputs.
@@ -138,12 +215,12 @@ class PrefixFactory:
                            initialization_actions=initial.initialization_actions if initial else None, message_history=[])
         replay = replay_public_tools(original, messages, ToolCall.model_validate)
         environment = NativeSnapshotEnvironment(original, projection_snapshots=True)
-        context = self.executor.contexts[run["runId"]]
+        context = executor.contexts[run["runId"]]
         boundary = {"policy": context["policy"], "tools": context["tools"], "messages": messages}
         if row["input"]["policy"] != boundary["policy"] or row["runtime_tool_schema_hash"] != hash_v1(boundary["tools"]):
             raise ValueError("Native context/schema changed during reconstruction")
         proof = {"version": 1, "checkpoint_id": row["checkpoint_id"], "input_hash": row["input_hash"],
-                 "verifiedPublicPrefix": True, "sourceRunSha256": file_hash(raw_path), "boundary": boundary,
+                 "verifiedPublicPrefix": True, "sourceCohortId": identity, "sourceRunSha256": raw_hash, "boundary": boundary,
                  "boundaryHash": hash_v1(boundary), "replayedCalls": replay,
                  "stateHash": environment.get_db_hash(), "initialTaskHash": hash_v1(task.model_dump(mode="json"))}
         return environment, proof
@@ -244,7 +321,8 @@ def run_profile(configuration: Path, output: Path, upstream: Path):
     factory, public, setup_failure = None, {}, None
     try:
         public = {row["checkpoint_id"]: row for row in read_jsonl(path("datasetPath") / "public.jsonl")}
-        factory = PrefixFactory(path("cohortPath"), path("datasetPath"), upstream)
+        cohorts = [path("cohortPath")] if "cohortPath" in config else [(configuration.parent / value).resolve() for value in config["cohortPaths"]]
+        factory = PrefixFactory(cohorts, path("datasetPath"), upstream)
         if factory.dataset["bundle_hash"] != plan["sourceDatasetHash"]:
             raise ValueError("Native dataset changed after declaration")
     except Exception as error:

@@ -40,7 +40,7 @@
     "imageDigest": "vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
     "vllm": "0.32.0",
     "torch": "2.13.0",
-    "cuda": "13.0.3",
+    "cuda": "13.0.2",
     "transformers": "5.16.1-fixture",
     "node": "22.23.4",
     "python": "3.12.16",

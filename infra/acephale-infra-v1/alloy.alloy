@@ -44,6 +44,10 @@ otelcol.exporter.loki "runtime" {
 loki.source.file "runtime" {
   targets = [{__path__ = "/artifacts/**/logs/lifecycle.jsonl", job = "acephale"}]
   forward_to = [loki.write.runtime.receiver]
+  file_match {
+    enabled = true
+    sync_period = "10s"
+  }
 }
 
 loki.write "runtime" {

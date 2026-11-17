@@ -1,5 +1,9 @@
+import { validatePredictorModelIdentity, type PredictorModelIdentity } from "../../src/lib/acephale/predictor-artifact";
 import { copy, hash } from "../../src/lib/acephale/canonical";
 import { expectedInfraSaving, type InfraOpportunity } from "../../src/lib/acephale/infra-session";
+import type { InfraExperimentManifestV2 } from "../../src/lib/acephale/contracts/infra-manifest-v2.generated";
+
+export type AnnotationReview = NonNullable<InfraExperimentManifestV2["protocol"]["annotationReview"]>;
 
 export interface InfraOpportunityArtifact {
   version: 2; sourceDatasetHash: string; families: string[]; sampleCount: number;
@@ -20,13 +24,14 @@ export interface InfraGoalReliabilityArtifact {
   version: 1; sourceDatasetHash: string; families: string[]; annotationHash: string;
   auditedCount: number; acceptedCount: number; unsupportedBindings: number;
   gradedCount: number; agreedCount: number; reliability: number; contentHash: string;
-  provenance?: { model: { repository: string; revision: string }; memoryHash: string;
+  provenance?: { model: PredictorModelIdentity; memoryHash: string;
     predictorContractHash: string; candidateCompilerHash: string; retrievalHash: string; [key: string]: unknown };
 }
 export interface InfraArtifactScope {
   datasetHash: string; allowedFamilies: string[]; excludedFamilies?: string[];
   opportunityProfile?: InfraOpportunityProfile;
-  predictor?: { model: { repository: string; revision: string }; memoryHash: string;
+  annotationReview?: AnnotationReview;
+  predictor?: { model: PredictorModelIdentity; memoryHash: string;
     predictorContractHash: string; candidateCompilerHash: string; retrievalHash: string };
 }
 export function checkedArtifact<T extends { contentHash: string }>(value: T): T {
@@ -67,6 +72,33 @@ export function validateInfraGoalReliabilityArtifact(value: InfraGoalReliability
     || !Number.isSafeInteger(artifact.agreedCount) || artifact.agreedCount < 0 || artifact.agreedCount > artifact.gradedCount
     || !Number.isFinite(artifact.reliability) || Math.abs(artifact.reliability - wilsonLower(artifact.agreedCount, artifact.gradedCount)) > 1e-12) {
     throw new Error("Goal reliability lacks a valid independent audit/calibration");
+  }
+  const provenance = artifact.provenance;
+  const protocol = provenance?.reviewProtocol ?? "human_reviewed";
+  const expectedProtocol = scope.annotationReview?.reviewProtocol ?? "human_reviewed";
+  if (protocol !== expectedProtocol || !["human_reviewed", "machine_audited_exploratory"].includes(String(protocol))) {
+    throw new Error("Annotation review protocol differs from the declared experiment");
+  }
+  if (protocol === "machine_audited_exploratory") {
+    const declared = scope.annotationReview;
+    if (declared?.reviewProtocol !== "machine_audited_exploratory" || declared.humanReviewCount !== 0
+      || declared.machineReviewCount !== 20 || !/^[a-f0-9]{64}$/.test(declared.machineAuditHash)
+      || declared.reviewerModel !== "gpt-5.4-2026-03-05"
+      || declared.reviewIndependence !== "separate_request_and_prompt_same_model"
+      || artifact.auditedCount !== 20
+      || Object.entries(declared).some(([key, expected]) => provenance?.[key] !== expected)) {
+      throw new Error("Machine audit requires exact declared provenance and zero human reviews");
+    }
+  } else if (provenance?.machineAuditHash !== undefined || provenance?.reviewerModel !== undefined
+    || provenance?.reviewIndependence !== undefined || (provenance?.machineReviewCount ?? 0) !== 0
+    || (provenance?.humanReviewCount !== undefined && provenance.humanReviewCount !== artifact.auditedCount)
+    || (scope.annotationReview && (scope.annotationReview.humanReviewCount !== artifact.auditedCount
+      || scope.annotationReview.machineReviewCount !== 0))) {
+    throw new Error("Human review cannot contain machine audit provenance");
+  }
+  if (scope.predictor) {
+    const trained = scope.predictor.model.trainedPredictor ? validatePredictorModelIdentity(scope.predictor.model).trainedPredictor : undefined;
+    if (trained && artifact.families.some(family => !trained.calibrationFamilies.includes(family) || trained.weightFitFamilies.includes(family))) throw new Error("Goal reliability must exclude weight fitting families");
   }
   if (scope.predictor && (!artifact.provenance
     || hash(artifact.provenance.model) !== hash(scope.predictor.model)

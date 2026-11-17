@@ -101,7 +101,45 @@ test("OTLP receipts distinguish actual collector acceptance from partial rejecti
       await telemetry.span("actual-local-fixture", "run", {}, async () => "ok");
       await telemetry.close();
       assert.deepEqual(requests, ["/v1/traces", "/v1/metrics"]);
-      assert.deepEqual(telemetry.exportSummary(), { endpoint: `http://127.0.0.1:${address.port}`, spans: 1, tracesAccepted: 0, metricsAccepted: 1, failed: 1 });
+      assert.deepEqual(telemetry.exportSummary(), { endpoint: `http://127.0.0.1:${address.port}`, spans: 1, tracesAccepted: 0, metricsAccepted: 1, failed: 1,
+        shutdownFailed: false, observabilityStatus: "incomplete" });
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+});
+
+test("SDK shutdown rejection remains explicit while queued local records finish draining", async () => {
+  await fixture(async root => {
+    const telemetry = await InfraTelemetry.create(join(root, "run"));
+    const remote = telemetry as unknown as { otel: { close: () => Promise<void> }; otlpUrl: string };
+    remote.otlpUrl = "http://127.0.0.1:1";
+    remote.otel = { close: async () => { throw new Error("private SDK error text"); } };
+    telemetry.record({ type: "local_before_shutdown" });
+    await telemetry.close(); await telemetry.close();
+    const raw = await readFile(join(root, "run", "events.jsonl"), "utf8");
+    assert.deepEqual(raw.trim().split("\n").map(line => JSON.parse(line).type), ["local_before_shutdown", "telemetry_export_shutdown_failed"]);
+    assert.doesNotMatch(raw, /private SDK/);
+    assert.equal(telemetry.exportSummary().shutdownFailed, true);
+    assert.equal(telemetry.exportSummary().observabilityStatus, "incomplete");
+    assert.equal(telemetry.exportSummary().tracesAccepted, 0);
+  });
+});
+
+test("actual OTLP connection reset persists a sanitized transport code without acceptance", { timeout: 10000 }, async () => {
+  await fixture(async root => {
+    const server = createServer((req) => { req.resume(); req.on("end", () => req.socket.destroy()); }).listen(0, "127.0.0.1");
+    await once(server, "listening"); const address = server.address(); assert.ok(address && typeof address !== "string");
+    try {
+      const telemetry = await InfraTelemetry.create(join(root, "run"), `http://127.0.0.1:${address.port}`);
+      await telemetry.span("reset-fixture", "run", {}, async () => "ok");
+      await telemetry.close();
+      const events = (await readFile(join(root, "run", "events.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+      const failed = events.filter(row => row.type === "telemetry_export_receipt");
+      assert.ok(failed.length > 0);
+      assert.ok(failed.every(row => row.collectorAccepted === false && row.transportErrorCode === "ECONNRESET" && row.status === undefined));
+      assert.ok(events.some(row => row.type === "span_completed"));
+      assert.equal(telemetry.exportSummary().observabilityStatus, "incomplete");
+      assert.equal(telemetry.exportSummary().tracesAccepted, 0);
+      assert.equal(telemetry.exportSummary().metricsAccepted, 0);
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
   });
 });

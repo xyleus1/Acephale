@@ -4,6 +4,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { BudgetLedger, type Reservation } from "../../src/lib/acephale/budget";
 import { canonical, hash } from "../../src/lib/acephale/canonical";
+import { readBudgetPolicy, type BudgetAmendment } from "./budget-policy";
+import { readInfrastructureFunding, type InfrastructureFunding } from "./infrastructure-funding";
 
 type Record = { sequence: number; previous: string; entries: [string, Reservation][] } |
   { version: 2; sequence: number; previous: string; changes: [string, Reservation][] };
@@ -96,6 +98,8 @@ function equal(a: Reservation | undefined, b: Reservation) {
 // other local processes. Crash locks are intentionally never reclaimed by age.
 export class DurableBudget {
   readonly ledger: BudgetLedger;
+  readonly policy?: BudgetAmendment;
+  readonly infrastructureFunding?: InfrastructureFunding;
   private descriptor = -1;
   private lockDescriptor: number;
   private sequence = 0;
@@ -106,7 +110,7 @@ export class DurableBudget {
   private journalDigest = createHash("sha256");
   private journalBytes = 0;
   readonly recovery: { checkpointUsed: boolean; verifiedPrefixBytes: number; replayedRecords: number } = { checkpointUsed: false, verifiedPrefixBytes: 0, replayedRecords: 0 };
-  constructor(private path: string, private options: { recoveryCheckpoint?: boolean } = {}) {
+  constructor(private path: string, private options: { recoveryCheckpoint?: boolean; writeRecoveryCheckpoint?: boolean; infrastructureOwner?: boolean; nativeFundingOwner?: boolean } = {}) {
     mkdirSync(dirname(path), { recursive: true });
     this.lockDescriptor = openSync(`${path}.lock`, "wx", 0o600);
     try {
@@ -157,8 +161,18 @@ export class DurableBudget {
         const directory = openSync(dirname(path), "r");
         try { fsyncSync(directory); } finally { closeSync(directory); }
       }
-      this.ledger = new BudgetLedger(next => this.append(next), entries);
-      if (this.options.recoveryCheckpoint !== false) this.checkpoint();
+      this.policy = readBudgetPolicy(path, entries);
+      // Default consumers keep the base ceiling. An explicit, source-bound native
+      // financial port may consume v5 or v6 without changing model/API allocations.
+      this.infrastructureFunding = (this.options.infrastructureOwner || this.options.nativeFundingOwner) ? readInfrastructureFunding(path, entries, this.policy) : undefined;
+      if (this.options.nativeFundingOwner && (![5, 6].includes(this.infrastructureFunding?.version ?? 0)
+        || this.infrastructureFunding?.policy.nativeBudgetPort !== "acephale-infrastructure-aware-native-budget-v1")) {
+        throw new Error("Native financial port requires exact funding v5 or v6 authority");
+      }
+      const allocations = this.infrastructureFunding ? { ...this.policy!.policy.allocationsMicrodollars,
+        infrastructure: this.infrastructureFunding.policy.effectiveInfrastructureMicrodollars } : this.policy?.policy.allocationsMicrodollars;
+      this.ledger = new BudgetLedger(next => this.append(next), entries, allocations);
+      if (this.options.recoveryCheckpoint !== false && this.options.writeRecoveryCheckpoint !== false) this.checkpoint();
     } catch (error) {
       if (this.descriptor >= 0) closeSync(this.descriptor);
       closeSync(this.lockDescriptor);
@@ -204,10 +218,18 @@ export class DurableBudget {
     this.journalDigest.update(bytes); this.journalBytes += bytes.length;
     this.previous = digest; this.sequence++;
   }
+  validateManifestPolicy(budgets: { infrastructureMicrodollars: number; budgetPolicyHash?: string; budgetAmendmentHash?: string }) {
+    if (this.policy) {
+      if (budgets.budgetPolicyHash !== this.policy.policyHash || budgets.budgetAmendmentHash !== this.policy.contentHash
+        || budgets.infrastructureMicrodollars > this.policy.policy.allocationsMicrodollars.infrastructure) throw new Error("Manifest budget policy differs from the original journal amendment");
+    } else if (budgets.budgetPolicyHash || budgets.budgetAmendmentHash || budgets.infrastructureMicrodollars > this.ledger.allocations.infrastructure) {
+      throw new Error("Manifest requires an unapplied budget policy amendment");
+    }
+  }
   close() {
     if (this.closed) return;
     this.closed = true;
-    try { if (this.options.recoveryCheckpoint !== false) this.checkpoint(); }
+    try { if (this.options.recoveryCheckpoint !== false && this.options.writeRecoveryCheckpoint !== false) this.checkpoint(); }
     finally {
       closeSync(this.descriptor);
       closeSync(this.lockDescriptor);

@@ -17,7 +17,7 @@ from acephale.infra_native_runner import (
     validate_task_bundle,
     verify_sources,
 )
-from acephale.native_common import read, write
+from acephale.native_common import native_evaluation_type, read, write
 
 
 def empty_shadow_memory(snapshot_id: str) -> dict:
@@ -29,7 +29,8 @@ def empty_shadow_memory(snapshot_id: str) -> dict:
 
 
 def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit: str,
-                     checkpoint_hash: str, shadow_memory: dict | None = None) -> tuple[dict, dict, dict]:
+                     checkpoint_hash: str, shadow_memory: dict | None = None,
+                     budget_binding: dict | None = None, custom_source: dict | None = None) -> tuple[dict, dict, dict]:
     """Assemble measured deployment metadata and predeclared local task selections.
 
     Limits are operational policy, not invented performance measurements. The
@@ -42,6 +43,21 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
     if type(plan.get("shadowPrediction", False)) is not bool or plan.get("stage", "collection") != "collection":
         raise ValueError("Shadow collection requires an explicit boolean and collection stage")
     shadow = plan.get("shadowPrediction", False)
+    purpose = plan.get("collectionPurpose")
+    auxiliary = purpose == "auxiliary-development-validation"
+    if purpose is not None and (not auxiliary or shadow or custom_source is None):
+        raise ValueError("Auxiliary development collection requires verified custom tasks and no shadow prediction")
+    if "customTaskReceiptHash" in plan and (custom_source is None
+            or plan["customTaskReceiptHash"] != custom_source["receiptHash"]):
+        raise ValueError("Custom task receipt differs from the predeclared plan")
+    collection_partitions = plan.get("collectionPartitions")
+    expected_partitions = ["development"] if auxiliary else ["weight_fit", "calibration"]
+    if collection_partitions is not None and (custom_source is None
+            or collection_partitions != expected_partitions):
+        raise ValueError("Custom learning collection requires the declared fitting and calibration partitions")
+    if auxiliary and collection_partitions != expected_partitions:
+        raise ValueError("Auxiliary development collection requires its explicit development selection")
+    evaluation_type = native_evaluation_type(plan.get("evaluationType", "ALL"))
     if shadow and not plan.get("predictorBaseUrl"):
         raise ValueError("Shadow prediction requires the pinned predictor endpoint")
     if plan.get("memoryPath") and (not shadow or shadow_memory is None):
@@ -69,11 +85,17 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
             raise ValueError("Repeated task or family crosses split")
         family_splits[family] = split
         task_keys.add((domain, task_id))
+        if custom_source:
+            original_partition = custom_source["families"].get(family)
+            expected_split = "train" if original_partition in {"weight_fit", "calibration"} else original_partition
+            if split != expected_split or custom_source["taskFamilies"].get((domain, task_id)) != family:
+                raise ValueError("Custom collection cannot reassign a verified task family or split")
         task = catalog[domain]["tasks"].get(task_id)
         if task is None:
             raise ValueError("Selected task is absent from the pinned upstream catalog")
         tasks.append({"domain": domain, "taskId": task_id, "familyId": family, "task": task})
-        if split == "test" or shadow and split != "train":
+        if split == "test" or shadow and split != "train" or (collection_partitions is not None
+                and custom_source["families"][family] not in collection_partitions):
             continue
         for seed in seeds:
             identity = [plan["experimentId"], domain, task_id, family, seed]
@@ -92,12 +114,18 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
               "ledgerCheckpointPath": "ledger-checkpoint.json", "actorBaseUrl": plan["actorBaseUrl"],
               "snapshotId": "collection-" + hash_v1([source_commit, bundle]), "stream": False,
               "maximumLifetimeSeconds": plan.get("maximumLifetimeSeconds", 3600), "runs": runs,
-              "taskBundleHash": hash_v1(bundle), "hosted": {"allocation": "training",
+              "taskBundleHash": hash_v1(bundle), "hosted": {"allocation": "development" if auxiliary else "training",
                   "maxCostMicrodollarsPerRun": plan.get("maxCostMicrodollarsPerRun", 1_250_000),
                   "maxSteps": plan.get("maxSteps", 40), "maxErrors": plan.get("maxErrors", 5),
-                  "timeoutSeconds": plan.get("timeoutSeconds", 600)}}
+                  "timeoutSeconds": plan.get("timeoutSeconds", 600), "evaluationType": evaluation_type}}
+    if auxiliary:
+        config["collectionPurpose"] = purpose
     if plan.get("predictorBaseUrl"):
         config["predictorBaseUrl"] = plan["predictorBaseUrl"]
+    if custom_source:
+        config.update(customTaskBundleDirectory=custom_source["directory"],
+                      customTaskReceiptHash=custom_source["receiptHash"],
+                      collectionPartitions=collection_partitions)
     if shadow:
         config["shadowPrediction"] = True
         if shadow_memory is None:
@@ -130,6 +158,20 @@ def build_collection(plan: dict, deployment: dict, catalog: dict, source_commit:
                     "sameCandidatePool": True, "lookaheadHops": 1, "rankedCandidates": 3, "perRunConcurrency": 2,
                     "globalConcurrency": 4, "startsPerRun": 12, "deadlineMs": 5000,
                     "cachePolicy": "base-collection-shadow-prediction-no-speculation" if shadow else "base-collection-no-speculation", "scheduleHash": hash_v1(runs)}}
+    if budget_binding:
+        policies = [read(ROOT / f"src/lib/acephale/contracts/budget-policy-v{version}.json") for version in (2, 3)]
+        policy = next((value for value in policies if budget_binding.get("budgetPolicyHash") == hash_v1(value)), None)
+        if (policy is None
+                or set(budget_binding) != {"budgetPolicyHash", "budgetAmendmentHash"}
+                or not isinstance(budget_binding["budgetAmendmentHash"], str)
+                or len(budget_binding["budgetAmendmentHash"]) != 64
+                or any(c not in "0123456789abcdef" for c in budget_binding["budgetAmendmentHash"])):
+            raise ValueError("Invalid budget policy binding")
+        manifest["budgets"].update(budget_binding)
+        manifest["budgets"]["infrastructureMicrodollars"] = policy["allocationsMicrodollars"]["infrastructure"]
+        if policy["version"] == 3:
+            manifest["budgets"].update(totalCeilingMicrodollars=policy["totalMicrodollars"],
+                trancheMicrodollars=policy["totalMicrodollars"], maximumGpuHours=policy["maxGpuHours"])
     validate_task_bundle(config, manifest, bundle)
     return config, manifest, bundle
 
@@ -145,12 +187,26 @@ def prepare_native(plan_path: Path, deployment_path: Path, budget_directory: Pat
     # task bytes only. No actor, user, or evaluator is dispatched.
     native = NativeTauExecutor({"runs": []}, {}, upstream_root)
     catalog = {}
+    custom_source = None
+    custom_bundle = None
+    if plan.get("customTaskBundleDirectory"):
+        from acephale.custom_native_tasks import verify_custom_bundle
+
+        directory = (plan_path.resolve().parent / plan["customTaskBundleDirectory"]).resolve()
+        receipt, custom_bundle, partition = verify_custom_bundle(directory, upstream_root)
+        if plan.get("customTaskReceiptHash") != receipt["contentHash"]:
+            raise ValueError("Custom task receipt differs from the predeclared plan")
+        custom_source = {"directory": str(directory), "receiptHash": receipt["contentHash"],
+                         "families": partition["families"],
+                         "taskFamilies": {(row["domain"], row["taskId"]): row["familyId"] for row in custom_bundle["tasks"]}}
     for domain in sorted({row["domain"] for row in plan["tasks"]}):
         if domain not in {"retail", "airline"}:
             raise ValueError("Unsupported native domain")
         environment = native.registry.get_env_constructor(domain)(solo_mode=False)
         catalog[domain] = {"tools": [tool.openai_schema for tool in environment.get_tools()],
             "tasks": {str(task["id"]): task for task in read(upstream_root / f"data/tau2/domains/{domain}/tasks.json")}}
+        if custom_bundle:
+            catalog[domain]["tasks"] = {row["taskId"]: row["task"] for row in custom_bundle["tasks"] if row["domain"] == domain}
     output.mkdir(parents=True, exist_ok=False)
     checkpoint = output / "ledger-checkpoint.json"
     subprocess.run(["node", "--import", "tsx", "scripts/acephale-infra-native.ts", "checkpoint",
@@ -161,7 +217,10 @@ def prepare_native(plan_path: Path, deployment_path: Path, budget_directory: Pat
         memory_path = (plan_path.resolve().parent / plan["memoryPath"]).resolve()
         shadow_memory = read(memory_path)
         runtime_plan["memoryPath"] = str(memory_path)
-    config, manifest, bundle = build_collection(runtime_plan, deployment, catalog, source_commit, hash_v1(read(checkpoint)), shadow_memory)
+    checkpoint_value = read(checkpoint)
+    budget_binding = {key: checkpoint_value[key] for key in ("budgetPolicyHash", "budgetAmendmentHash") if key in checkpoint_value}
+    config, manifest, bundle = build_collection(runtime_plan, deployment, catalog, source_commit,
+                                                hash_v1(checkpoint_value), shadow_memory, budget_binding, custom_source)
     if config.get("shadowPrediction") and not plan.get("memoryPath"):
         write(output / "shadow-memory.json", empty_shadow_memory(config["snapshotId"]))
     for name, value in (("configuration.json", config), ("manifest.json", manifest), ("tasks.json", bundle),

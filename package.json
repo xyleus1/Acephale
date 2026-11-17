@@ -17,6 +17,7 @@
     "acephale:infra-native": "node --import tsx scripts/acephale-infra-native.ts",
     "acephale:infra-predict": "node --import tsx scripts/acephale-infra-predict.ts",
     "acephale:infra-annotate": "node --import tsx scripts/acephale-infra-annotate.ts",
+    "acephale:training-export": "node --import tsx scripts/acephale-training-export.ts",
     "acephale:embeddings": "node --import tsx scripts/acephale-infra-embeddings.ts"
   },
   "dependencies": {

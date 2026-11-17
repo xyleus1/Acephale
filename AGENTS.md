@@ -21,8 +21,10 @@ changes; read `docs/RUNBOOK.md` before execution. Keep the repository standalone
   prediction prefix or retrieval projection.
 - Split by task family before annotation, mining or calibration. Freeze memory,
   calibration and task design during evaluation. Retain failed and censored rows.
-- Scores for individual candidate hits are independent marginals. Do not
-  normalize them as a complete action distribution or claim true entropy.
+- Candidate labels are per-invocation hit events and may have multiple positives.
+  Binary decoder probabilities condition on earlier emitted tokens; they are not
+  independent marginals. Do not normalize them as a complete action distribution
+  or claim true entropy.
 - Keep the existing external budget journal and all unresolved reservations.
   Resolve its private location through operator configuration, never a hardcoded
   workstation path. Reserve costs before paid dispatch and never reset the ledger.

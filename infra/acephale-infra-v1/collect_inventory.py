@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from control import apply_hardware, apply_predictor_export, hardware_profile
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 DOCKER = ["docker", "--host", "unix:///var/run/docker.sock"]
@@ -34,17 +36,44 @@ packages = sorted([{'name': d.metadata['Name'], 'version': d.version} for d in m
                   key=lambda r: (r['name'].lower(), r['version']))
 print(json.dumps({'python': platform.python_version(), 'packages': packages}))
 """
-SERVING_PROBE = """
-import importlib.metadata as m, json, platform
+IMAGE_CUDA_PROBE = '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CUDA_VERSION"}}{{println .}}{{end}}{{end}}'
+CUDA_PROBE = """
+import hashlib, json, os, shutil, subprocess
 from pathlib import Path
+
+def cuda_observations(root=Path('/'), runner=subprocess.run, which=shutil.which, environment=os.environ):
+    path = root / 'usr/local/cuda/version.json'
+    version_file = None
+    if path.is_file():
+        raw = path.read_bytes()
+        version_file = {'path': '/usr/local/cuda/version.json', 'sha256': hashlib.sha256(raw).hexdigest(),
+                        'document': json.loads(raw.decode('utf-8'))}
+    executable = which('dpkg-query')
+    components = {'available': executable is not None, 'returnCode': None, 'packages': []}
+    if executable:
+        result = runner([executable, '--show', '--showformat=${binary:Package}\\t${Version}\\t${db:Status-Status}\\n',
+                         'cuda-toolkit*', 'cuda-cudart*', 'cuda-nvcc*', 'cuda-nvrtc*', 'libcublas*'],
+                        capture_output=True, text=True, check=False, timeout=10)
+        components['returnCode'] = result.returncode
+        if result.returncode not in (0, 1):
+            raise ValueError('CUDA package metadata query failed')
+        for line in result.stdout.splitlines():
+            fields = line.split('\\t')
+            if len(fields) != 3:
+                raise ValueError('Malformed CUDA package metadata')
+            components['packages'].append(dict(zip(('name', 'version', 'status'), fields)))
+        components['packages'].sort(key=lambda row: row['name'])
+    return {'versionFile': version_file, 'dpkg': components,
+            'environmentCudaVersion': environment.get('CUDA_VERSION')}
+"""
+SERVING_PROBE = CUDA_PROBE + """
+import importlib.metadata as m, json, platform
 import torch
 packages = sorted([{'name': d.metadata['Name'], 'version': d.version} for d in m.distributions()],
                   key=lambda r: (r['name'].lower(), r['version']))
-cuda_file = Path('/usr/local/cuda/version.json')
-cuda = json.loads(cuda_file.read_text()).get('cuda', {}).get('version') if cuda_file.is_file() else None
 print(json.dumps({'python': platform.python_version(), 'packages': packages,
     'vllm': m.version('vllm'), 'torch': m.version('torch'), 'transformers': m.version('transformers'),
-    'cuda': cuda or torch.version.cuda, 'torchCuda': torch.version.cuda}))
+    'cudaObservations': cuda_observations(), 'torchCuda': torch.version.cuda}))
 """
 NODE_PROBE = """
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
@@ -90,6 +119,79 @@ def record(path: Path, relative: str) -> dict:
     if path.is_symlink() or not path.is_file():
         raise ValueError("Inventory requires regular local files")
     return {"path": relative, "bytes": path.stat().st_size, "sha256": file_hash(path)}
+
+
+def image_cuda_identity(observed: str, image_id: str, image_digest: str) -> dict:
+    rows = [row for row in observed.splitlines() if row]
+    if (not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id) or len(rows) > 1
+            or any(not row.startswith("CUDA_VERSION=") for row in rows)):
+        raise ValueError("Ambiguous immutable image CUDA_VERSION metadata")
+    return {"imageId": image_id, "imageDigest": image_digest,
+            "source": "docker.image.inspect.Config.Env.CUDA_VERSION",
+            "version": rows[0].partition("=")[2] if rows else None}
+
+
+def cuda_identity(packages: dict, image_cuda: dict, versions: dict) -> dict:
+    """Keep image-base release, installed toolkit evidence and Torch compilation separate."""
+    observed = packages.get("cudaObservations", {})
+    toolkit = []
+    version_file = observed.get("versionFile")
+    if version_file is not None:
+        if (version_file.get("path") != "/usr/local/cuda/version.json"
+                or not SHA.fullmatch(version_file.get("sha256", "")) or not isinstance(version_file.get("document"), dict)):
+            raise ValueError("CUDA version-file provenance is incomplete")
+        value = version_file["document"].get("cuda", {}).get("version")
+        if isinstance(value, str) and re.fullmatch(r"\d+\.\d+\.\d+", value):
+            toolkit.append({"version": value, "source": "version_file", "path": version_file["path"],
+                            "jsonPointer": "/cuda/version", "sha256": version_file["sha256"]})
+    components = observed.get("dpkg", {})
+    if not isinstance(components.get("available"), bool) or not isinstance(components.get("packages"), list):
+        raise ValueError("CUDA component package observation is missing")
+    for row in components["packages"]:
+        if (row.get("status") == "installed" and re.fullmatch(r"cuda-toolkit(?:-\d+-\d+)?(?::[a-z0-9]+)?", row.get("name", ""))):
+            match = re.fullmatch(r"(?:\d+:)?(\d+\.\d+\.\d+)(?:-[A-Za-z0-9.+~]+)?", row.get("version", ""))
+            if match:
+                toolkit.append({"version": match[1], "source": "dpkg_toolkit_metapackage", "package": row["name"], "packageVersion": row["version"]})
+    if len({row["version"] for row in toolkit}) > 1:
+        raise ValueError("Conflicting installed CUDA toolkit release evidence")
+    source = versions.get("servingCudaSource", "toolkit")
+    if source == "immutable_image_cuda_version":
+        selected = image_cuda.get("version")
+        if (not isinstance(selected, str) or not re.fullmatch(r"\d+\.\d+\.\d+", selected)
+                or observed.get("environmentCudaVersion") != selected):
+            raise ValueError("Container CUDA_VERSION differs from the exact immutable image CUDA release")
+    elif source == "toolkit":
+        if not toolkit:
+            raise ValueError("Exact installed CUDA toolkit patch is unavailable; Torch or image defaults cannot establish it")
+        selected = toolkit[0]["version"]
+    else:
+        raise ValueError("Unknown pinned CUDA identity source")
+    torch_cuda = packages.get("torchCuda")
+    if (selected != versions["servingCuda"] or not isinstance(torch_cuda, str)
+            or not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", torch_cuda)
+            or torch_cuda.split(".")[:2] != selected.split(".")[:2]
+            or versions.get("servingTorchCuda", torch_cuda) != torch_cuda):
+        raise ValueError("Observed serving packages/CUDA do not match the pinned runtime")
+    return {"version": selected, "source": source,
+            "image": image_cuda,
+            "containerEnvironment": {"name": "CUDA_VERSION", "value": observed.get("environmentCudaVersion")},
+            "toolkit": toolkit[0] if toolkit else None, "toolkitObservations": toolkit,
+            "torch": {"version": torch_cuda, "source": "torch.version.cuda"},
+            "versionFile": version_file, "componentPackages": components,
+            "fullToolkitReleaseAsserted": source == "toolkit"}
+
+
+def validate_serving_packages(packages: dict, image_cuda: dict, versions: dict) -> dict:
+    """Shared pure validation for an early image probe and final resident inventory."""
+    if (image_cuda.get("imageDigest") != versions["images"]["vllm"]
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_cuda.get("imageId", ""))
+            or image_cuda.get("source") != "docker.image.inspect.Config.Env.CUDA_VERSION"):
+        raise ValueError("CUDA metadata is not bound to the pinned serving image")
+    identity = cuda_identity(packages, image_cuda, versions)
+    if (packages.get("vllm") != "0.32.0" or packages.get("torch", "").split("+")[0] != versions["servingTorch"]
+            or not packages.get("transformers") or not packages.get("packages")):
+        raise ValueError("Observed serving packages/CUDA do not match the pinned runtime")
+    return {**packages, "cuda": identity["version"], "cudaIdentity": identity}
 
 
 def run_readonly(argv: list[str], cwd: Path) -> str:
@@ -233,7 +335,28 @@ def aws_identity(receipt_path: Path, host_root: Path) -> tuple[dict, dict]:
         "identityMethod": "DescribeInstances receipt matched to local DMI board_asset_tag"}
 
 
-def gpu_inventory(text: str, processes: str, host_root: Path, minimum_driver: int) -> tuple[dict, dict]:
+def lambda_identity(receipt_path: Path, host_root: Path, selected: dict) -> tuple[dict, dict]:
+    receipt = read(receipt_path)
+    item, ssh = receipt.get("instance", {}), receipt.get("ssh", {})
+    body = {key: value for key, value in receipt.items() if key != "contentHash"}
+    if (receipt.get("version") != 1 or receipt.get("profile") != "acephale-infra-v1" or receipt.get("provider") != "lambda"
+            or receipt.get("contentHash") != digest(body) or receipt.get("providerResponseHash") != digest(item)
+            or receipt.get("hardwareProfile") != selected["id"] or receipt.get("hardwareProfileHash") != digest(selected)
+            or receipt.get("leaseName") != "acephale-infra-" + receipt.get("leaseId", "")
+            or item.get("name") != receipt["leaseName"] or item.get("status") != "active"
+            or item.get("instance_type", {}).get("name") != selected["instanceType"]
+            or not re.fullmatch(r"[a-zA-Z0-9_-]{1,100}", item.get("id", ""))
+            or ssh.get("host") != item.get("ip") or ssh.get("port") != 22 or ssh.get("user") != "ubuntu"
+            or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", ssh.get("hostKeySha256", ""))
+            or ssh.get("machineIdSha256") != file_hash(host_root / "etc/machine-id")
+            or not SHA.fullmatch(receipt.get("studyBindingHash", "")) or not receipt.get("launchImageId")):
+        raise ValueError("Lambda provider receipt does not match pinned SSH host identity and hardware")
+    return {"provider": "lambda", "instanceType": selected["instanceType"], "imageId": receipt["launchImageId"]}, {
+        "name": "lambda", "receiptSha256": file_hash(receipt_path), "instanceId": item["id"], "identityReceipt": receipt,
+        "identityMethod": "Lambda API IP + pinned SSH host key + local machine-id"}
+
+
+def gpu_inventory(text: str, processes: str, host_root: Path, minimum_driver: int, selected: dict | None = None) -> tuple[dict, dict]:
     rows = list(csv.reader(text.strip().splitlines(), skipinitialspace=True))
     if len(rows) != 1 or len(rows[0]) != 4:
         raise ValueError("The initial profile requires exactly one observed GPU")
@@ -241,7 +364,9 @@ def gpu_inventory(text: str, processes: str, host_root: Path, minimum_driver: in
     if not name or not uuid.startswith("GPU-") or not re.fullmatch(r"\d+(?:\.\d+)+", driver):
         raise ValueError("Incomplete NVIDIA GPU inventory")
     memory_bytes = int(memory) * 1024**2
-    if int(driver.split(".")[0]) < minimum_driver or memory_bytes < 45_000 * 1024**2:
+    minimum_mib = selected["minimumGpuMemoryMiB"] if selected else 45_000
+    if (int(driver.split(".")[0]) < minimum_driver or memory_bytes < minimum_mib * 1024**2
+            or (selected and selected["gpuNameContains"] not in name)):
         raise ValueError("Driver or GPU memory is below the pinned 48 GB profile")
     allocations = []
     for row in csv.reader(processes.strip().splitlines(), skipinitialspace=True):
@@ -268,9 +393,17 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
             source: Path = ROOT, host_root: Path = Path("/"), project: str = "acephale-infra-v1",
             python: str = sys.executable, node: str = "node",
             orchestrator_receipt: Path | None = None,
+            hardware_profile_name: str | None = None,
+            predictor_export: Path | None = None,
+            predictor_qualification: Path | None = None,
             runner: Callable[[list[str], Path], str] = run_readonly) -> tuple[dict, dict]:
+    observation_started = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     models, source = models.resolve(), source.resolve()
     versions, compose = read(HERE / "versions.json"), read(HERE / "compose.json")
+    selected = hardware_profile(hardware_profile_name) if hardware_profile_name else None
+    if selected:
+        apply_hardware(compose, hardware_profile_name)
+    trained = apply_predictor_export(compose, models, predictor_export) if predictor_export else None
     lock = read(images_lock)
     expected_image = versions["images"]["vllm"]
     locked = lock.get("images", {}).get("vllm", {})
@@ -283,18 +416,39 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
     if not any(isinstance(value, str) and value.endswith("@" + expected_image.split("@", 1)[1])
                for value in actual_digests):
         raise ValueError("Resident Docker image content digest differs from the immutable pin")
+    # Emit only this public version key, never the complete image/container environment.
+    image_cuda = image_cuda_identity(runner(DOCKER + ["image", "inspect", "--format", IMAGE_CUDA_PROBE,
+                                                     locked["imageId"]], source), locked["imageId"], expected_image)
     commit = source_identity(source, runner)
     orchestrator = checked_orchestrator(
         read(orchestrator_receipt) if orchestrator_receipt else orchestrator_inventory(
             source=source, python=python, node=node, runner=runner), commit, versions)
-    provider, provider_evidence = aws_identity(provider_receipt, host_root)
+    provider, provider_evidence = (lambda_identity(provider_receipt, host_root, selected)
+                                  if read(provider_receipt).get("provider") == "lambda" and selected
+                                  else aws_identity(provider_receipt, host_root))
     hardware, gpu_evidence = gpu_inventory(
         runner(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,uuid", "--format=csv,noheader,nounits"], source),
         runner(["nvidia-smi", "--query-compute-apps=pid,gpu_uuid,used_gpu_memory", "--format=csv,noheader,nounits"], source),
-        host_root, versions["minimumDriverMajor"])
+        host_root, versions["minimumDriverMajor"], selected)
     identities, model_evidence, containers, serving = {}, {}, {}, {}
     for role, context in (("actor", (32768, 28672, 4096)), ("predictor", (8192, 7168, 1024))):
-        identities[role], model_evidence[role] = model_identity(models, role, versions["models"][role], context)
+        if role == "predictor" and trained:
+            artifact = trained["artifact"]
+            weights_hash = artifact["servingWeightsHash"] if artifact["schemaVersion"] == 2 else artifact["mergedWeightsHash"]
+            identities[role] = {**artifact["base"], "servedModel": artifact["servedModel"], "weightsHash": weights_hash,
+                "tokenizerHash": artifact["tokenizerHash"], "chatTemplateHash": artifact["chatTemplateHash"], "trainedPredictor": artifact,
+                "precision": versions["models"][role]["dtype"], "contextWindow": context[0], "inputBudget": context[1], "outputCap": context[2],
+                "temperature": 0, "topP": 1, "thinking": False, "weightsFrozen": True}
+            model_evidence[role] = trained
+            if artifact["schemaVersion"] == 2:
+                base_identity, base_evidence = model_identity(models, role, versions["models"][role], context)
+                if base_identity["weightsHash"] != artifact["baseWeightsHash"]:
+                    raise ValueError("Resident native LoRA base weights differ from the exported identity")
+                model_evidence[role] = {**trained, "baseModelFiles": base_evidence,
+                    "adapterStorageDtype": artifact["adapterStorageDtype"], "runtimeLoraDtype": artifact["runtimeLoraDtype"],
+                    "vllmQualificationRequired": True, "vllmQualificationPassed": False}
+        else:
+            identities[role], model_evidence[role] = model_identity(models, role, versions["models"][role], context)
         ids = runner(DOCKER + ["ps", "--no-trunc", "--filter", f"label=com.docker.compose.project={project}",
                                "--filter", f"label=com.docker.compose.service={role}", "--format", "{{.ID}}"], source).split()
         if len(ids) != 1 or not CONTAINER.fullmatch(ids[0]) or ids[0] in {c["id"] for c in containers.values()}:
@@ -313,11 +467,8 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
         if not resident:
             raise ValueError("Both model containers must have resident NVIDIA allocations")
         packages = json.loads(runner(DOCKER + ["exec", "--env", "PYTHONDONTWRITEBYTECODE=1",
-                                             ids[0], "python", "-B", "-c", SERVING_PROBE], source))
-        if (packages.get("vllm") != "0.32.0" or packages.get("torch", "").split("+")[0] != versions["servingTorch"]
-                or packages.get("cuda") != versions["servingCuda"] or not packages.get("transformers")
-                or not packages.get("packages")):
-            raise ValueError("Observed serving packages/CUDA do not match the pinned runtime")
+                                             ids[0], "python3", "-B", "-c", SERVING_PROBE], source))
+        packages = validate_serving_packages(packages, image_cuda, versions)
         # Raw command/mount data is deliberately not persisted; it could contain unintended secrets.
         containers[role] = {"id": ids[0], "imageId": container["image"], "startedAt": container["startedAt"],
                             "commandHash": digest(container["command"]), "modelMountReadOnly": True,
@@ -331,7 +482,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
     final_hardware, final_gpu = gpu_inventory(
         runner(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,uuid", "--format=csv,noheader,nounits"], source),
         runner(["nvidia-smi", "--query-compute-apps=pid,gpu_uuid,used_gpu_memory", "--format=csv,noheader,nounits"], source),
-        host_root, versions["minimumDriverMajor"])
+        host_root, versions["minimumDriverMajor"], selected)
     if final_hardware != hardware or final_gpu["gpuUuid"] != gpu_evidence["gpuUuid"]:
         raise ValueError("GPU hardware changed during inventory collection")
     for saved in containers.values():
@@ -355,6 +506,7 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
                "python": host_python["python"], "dependencyLockHash": digest(locks),
                "packageInventoryHash": digest(package_inventory), "toolParser": "qwen3_xml"}
     evidence = {"version": 1, "profile": versions["profile"], "sourceCommit": commit,
+                "observationStartedAt": observation_started,
                 "observedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "hashAlgorithm": "sha256-compact-sorted-key-utf8-json-v1", "modelFiles": model_evidence,
                 "provider": provider_evidence, "nvidia": gpu_evidence, "containers": containers,
@@ -363,11 +515,24 @@ def collect(models: Path, images_lock: Path, provider_receipt: Path, *,
                 "orchestratorInventory": orchestrator,
                 "orchestratorReceiptSha256": file_hash(orchestrator_receipt) if orchestrator_receipt else None,
                 "imageLockSha256": file_hash(images_lock), "sourcePinsSha256": file_hash(HERE / "versions.json"),
+                "hardwareProfile": selected, "hardwareProfileHash": digest(selected) if selected else None,
                 "sourceComposeSha256": file_hash(HERE / "compose.json"),
                 "networkCalls": 0, "modelCalls": 0, "smokeReadinessVerified": False,
                 "requestSettings": "Pinned experiment policy, not an observed inference request"}
+    evidence_digest = digest
+    if trained and trained["artifact"]["schemaVersion"] == 2:
+        from acephale.contracts_v1 import hash_v1
+        from acephale.predictor_serving import validate_native_lora_serving
+        evidence_digest = hash_v1
+        evidence["hashAlgorithm"] = "sha256-rfc8785-v1"
+        if predictor_qualification is not None:
+            evidence["nativeLoraQualification"] = read(predictor_qualification)
+            qualification_hash = validate_native_lora_serving(identities["predictor"], evidence, commit)
+            model_evidence["predictor"].update(vllmQualificationPassed=True, qualificationReceiptHash=qualification_hash)
+    elif predictor_qualification is not None:
+        raise ValueError("Native LoRA qualification requires a v2 predictor export")
     deployment = {"version": 1, "observed": True, **identities, "runtime": runtime,
-                  "hardware": {**provider, **hardware}, "evidenceHash": digest(evidence),
+                  "hardware": {**provider, **hardware}, "evidenceHash": evidence_digest(evidence),
                   "sourceCommit": commit, "smokeReadinessVerified": False}
     return deployment, evidence
 
@@ -407,6 +572,10 @@ def main(argv=None) -> int:
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--node-executable", default="node")
     parser.add_argument("--compose-project", default="acephale-infra-v1")
+    parser.add_argument("--hardware-profile")
+    parser.add_argument("--predictor-export", type=Path)
+    parser.add_argument("--predictor-qualification", type=Path,
+                        help="Passed native-lora-proof.json; collect a new post-probe process inventory before admission")
     parser.add_argument("--orchestrator-inventory", type=Path,
                         help="Observed receipt from the actual local benchmark host; avoids probing benchmark tools on this GPU host")
     args = parser.parse_args(argv)
@@ -416,7 +585,9 @@ def main(argv=None) -> int:
         parser.error("Inventory output must be a new directory")
     deployment, evidence = collect(args.models_root, args.images_lock, args.provider_receipt,
                                    python=args.python_executable, node=args.node_executable,
-                                   project=args.compose_project, orchestrator_receipt=args.orchestrator_inventory)
+                                   project=args.compose_project, orchestrator_receipt=args.orchestrator_inventory,
+                                   hardware_profile_name=args.hardware_profile, predictor_export=args.predictor_export,
+                                   predictor_qualification=args.predictor_qualification)
     print(json.dumps(write_inventory(args.output, deployment, evidence), indent=2))
     return 0
 

@@ -21,10 +21,18 @@ export interface InfraModelRequest {
   seed?: number;
   signal?: AbortSignal;
   responseFormat?: { name: string; schema: Record<string, unknown>; strict: true };
+  /** Explicit vLLM token IDs, never an unbounded full-vocabulary probability request. */
+  logprobTokenIds?: number[];
   // Only complete old assistant/tool groups may be optional. All user and policy messages remain mandatory.
   optionalGroups?: { id: string; messageIndexes: number[] }[];
 }
 export interface InfraUsage { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+export interface InfraTokenProbability { token: string; bytes: number[] | null; logprob: number }
+export interface InfraTokenLogprob extends InfraTokenProbability { alternatives: InfraTokenProbability[] }
+export interface InfraCompiledInput {
+  messages: InfraChatMessage[]; tokenIds: number[]; inputTokens: number; inputHash: string;
+  selectedMessageIndexes: number[]; omittedGroups: string[]; tokenizerCalls: number; tokenizerMs: number;
+}
 export interface InfraModelResult {
   model: string;
   text: string;
@@ -35,12 +43,19 @@ export interface InfraModelResult {
   refusals: string[];
   inputHash: string;
   inputTokens: number;
+  logprobs?: InfraTokenLogprob[];
   compiler: { version: "acephale-local-input-v1"; selectedMessageIndexes: number[]; omittedGroups: string[]; tokenizerCalls: number };
   timing: { totalMs: number; tokenizerMs: number; dispatchToHeadersMs: number; firstTokenMs: number | null; generationMs: number };
 }
 export interface InfraModelEvent {
   type: string; requestId: string; model: string; clockId: string; utc: string; monotonicNs: string;
   [key: string]: unknown;
+}
+/** Parsed provider output, retained before task/output validation. Never HTTP headers or credentials. */
+export interface InfraResponseRecord {
+  version: 1; requestId: string; model: string; inputHash: string; requestContractHash: string;
+  responseHash: string; continuation: InfraAssistantMessage; text: string;
+  logprobs: InfraTokenLogprob[]; finishReason: string; usage: InfraUsage | null; contentHash: string;
 }
 export interface LocalChatModelConfiguration {
   baseUrl: string;
@@ -52,6 +67,7 @@ export interface LocalChatModelConfiguration {
   stream?: boolean;
   fetch?: typeof globalThis.fetch;
   record?: (event: InfraModelEvent) => void;
+  retainResponse?: (response: InfraResponseRecord) => Promise<void>;
 }
 
 const clockId = `node:${process.pid}:${randomUUID()}`;
@@ -144,6 +160,19 @@ export class LocalChatModelPort {
   }
   private url(path: string) { return `${this.endpoint.toString().replace(/\/$/, "")}${path}`; }
 
+  private async tokenize(input: Record<string, unknown>, signal: AbortSignal): Promise<{ count: number; tokens: number[] }> {
+    const response = await this.transport(this.url("/tokenize"), { method: "POST", signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...input, add_generation_prompt: true, add_special_tokens: false }) });
+    if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
+    const value: unknown = await response.json();
+    if (!isObject(value) || !safeInteger(value.count) || !safeInteger(value.max_model_len, 1)
+      || !Array.isArray(value.tokens) || value.tokens.length !== value.count
+      || value.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
+    if (value.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
+    return { count: value.count, tokens: value.tokens as number[] };
+  }
+
   /** Uses the serving tokenizer and frozen template; does not dispatch generation. */
   async measureInputTokens(messages: InfraChatMessage[], signal?: AbortSignal, tools: InfraFunctionTool[] = []): Promise<number> {
     validateInfraMessages(messages);
@@ -152,18 +181,51 @@ export class LocalChatModelPort {
     const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
     combined.throwIfAborted();
     this.emit(requestId, "model_tokenizer_started", { purpose: "candidate_window" });
-    const response = await this.transport(this.url("/tokenize"), { method: "POST", signal: combined,
-      headers: { "content-type": "application/json" }, body: JSON.stringify({ model: this.model, messages,
-        ...(tools.length ? { tools } : {}), add_generation_prompt: true, add_special_tokens: false,
-        chat_template_kwargs: { enable_thinking: false } }) });
-    if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
-    const value: unknown = await response.json();
-    if (!isObject(value) || !safeInteger(value.count) || !safeInteger(value.max_model_len, 1)
-      || !Array.isArray(value.tokens) || value.tokens.length !== value.count
-      || value.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
-    if (value.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
+    const value = await this.tokenize({ model: this.model, messages, ...(tools.length ? { tools } : {}),
+      chat_template_kwargs: { enable_thinking: false } }, combined);
     this.emit(requestId, "model_tokenizer_completed", { purpose: "candidate_window", inputTokens: value.count, latencyMs: milliseconds(started) });
     return value.count;
+  }
+
+  /** The same bounded compiler used by generation and training export. No model generation occurs. */
+  async compileInput(request: Pick<InfraModelRequest, "id" | "messages" | "tools" | "optionalGroups" | "maxOutputTokens">,
+    signal?: AbortSignal): Promise<InfraCompiledInput> {
+    validateInfraMessages(request.messages);
+    if (!safeInteger(request.maxOutputTokens, 1) || request.maxOutputTokens > this.maxOutputTokens) fail("invalid_request", "Invalid compiler output budget");
+    const combined = signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs);
+    const selected = new Set(request.messages.map((_, index) => index)), omittedGroups: string[] = [];
+    const optionalGroups = copy(request.optionalGroups ?? []), optionalIndexes = new Set<number>(), groupIds = new Set<string>();
+    const lastTool = request.messages.map(message => message.role).lastIndexOf("tool");
+    for (const group of optionalGroups) {
+      if (!group.id || groupIds.has(group.id) || !group.messageIndexes.length) fail("invalid_compiler_group", "Optional groups need unique identities and messages");
+      groupIds.add(group.id);
+      for (const index of group.messageIndexes) {
+        if (!safeInteger(index) || index >= request.messages.length || optionalIndexes.has(index)
+          || ["system", "user"].includes(request.messages[index].role) || index === lastTool) fail("invalid_compiler_group", "Policy, requirements, and latest decision evidence are mandatory");
+        optionalIndexes.add(index);
+      }
+      validateInfraMessages(request.messages.filter((_, index) => !group.messageIndexes.includes(index)));
+    }
+    let tokenizerCalls = 0, tokenizerMs = 0;
+    while (true) {
+      combined.throwIfAborted();
+      const messages = request.messages.filter((_, index) => selected.has(index)).map(copy);
+      validateInfraMessages(messages);
+      const input = { model: this.model, messages, ...(request.tools?.length ? { tools: copy(request.tools) } : {}), chat_template_kwargs: { enable_thinking: false } };
+      const started = process.hrtime.bigint();
+      this.emit(request.id, "model_tokenizer_started", { attempt: tokenizerCalls });
+      const value = await this.tokenize(input, combined);
+      tokenizerCalls++;
+      tokenizerMs += milliseconds(started);
+      this.emit(request.id, "model_tokenizer_completed", { inputTokens: value.count, latencyMs: milliseconds(started) });
+      if (value.count <= this.inputBudget && value.count + request.maxOutputTokens <= this.contextWindow) return {
+        messages, tokenIds: value.tokens, inputTokens: value.count, inputHash: hash(input),
+        selectedMessageIndexes: [...selected], omittedGroups, tokenizerCalls, tokenizerMs,
+      };
+      const next = optionalGroups.shift();
+      if (!next) fail("context_budget", "Mandatory actor input exceeds the tokenizer budget");
+      next.messageIndexes.forEach(index => selected.delete(index)); omittedGroups.push(next.id);
+    }
   }
 
   async complete(request: InfraModelRequest): Promise<InfraModelResult> {
@@ -171,6 +233,8 @@ export class LocalChatModelPort {
     if (!request.id || !safeInteger(request.maxOutputTokens, 1) || request.maxOutputTokens > this.maxOutputTokens
       || request.seed !== undefined && !safeInteger(request.seed)) fail("invalid_request", "Invalid model request identity or output budget");
     validateInfraMessages(request.messages);
+    if (request.logprobTokenIds && (!request.logprobTokenIds.length || request.logprobTokenIds.length > 32
+      || request.logprobTokenIds.some(id => !safeInteger(id)) || new Set(request.logprobTokenIds).size !== request.logprobTokenIds.length)) fail("invalid_request", "Invalid bounded log-probability token request");
     const tools = copy(request.tools ?? []);
     const validators = new Map<string, ReturnType<typeof ajv.compile>>();
     for (const tool of tools) {
@@ -191,57 +255,27 @@ export class LocalChatModelPort {
     const omittedGroups: string[] = [];
     try {
       this.emit(request.id, "model_request_received", { stream: this.stream, attempt: 0 });
-      const optionalGroups = copy(request.optionalGroups ?? []);
-      const optionalIndexes = new Set<number>();
-      const groupIds = new Set<string>();
-      const lastTool = request.messages.map(message => message.role).lastIndexOf("tool");
-      for (const group of optionalGroups) {
-        if (!group.id || groupIds.has(group.id) || !group.messageIndexes.length) fail("invalid_compiler_group", "Optional groups need unique identities and messages");
-        groupIds.add(group.id);
-        for (const index of group.messageIndexes) {
-          if (!safeInteger(index) || index >= request.messages.length || optionalIndexes.has(index)
-            || ["system", "user"].includes(request.messages[index].role) || index === lastTool) {
-            fail("invalid_compiler_group", "Policy, requirements, and latest decision evidence are mandatory");
-          }
-          optionalIndexes.add(index);
-        }
-        validateInfraMessages(request.messages.filter((_, index) => !group.messageIndexes.includes(index)));
-      }
-      let messages: InfraChatMessage[] = [];
-      while (true) {
-        controller.signal.throwIfAborted();
-        messages = request.messages.filter((_, index) => selected.has(index)).map(copy);
-        validateInfraMessages(messages);
-        const tokenStarted = process.hrtime.bigint();
-        this.emit(request.id, "model_tokenizer_started", { attempt: tokenizerCalls });
-        const response = await this.transport(this.url("/tokenize"), { method: "POST", signal: controller.signal,
-          headers: { "content-type": "application/json" }, body: JSON.stringify({ model: this.model, messages,
-            ...(tools.length ? { tools } : {}), add_generation_prompt: true, add_special_tokens: false,
-            chat_template_kwargs: { enable_thinking: false } }) });
-        tokenizerCalls++;
-        if (!response.ok) fail("tokenizer_http", `Tokenizer returned HTTP ${response.status}`);
-        const tokenization: unknown = await response.json();
-        tokenizerMs += milliseconds(tokenStarted);
-        if (!isObject(tokenization) || !safeInteger(tokenization.count) || !safeInteger(tokenization.max_model_len, 1)
-          || !Array.isArray(tokenization.tokens) || tokenization.tokens.length !== tokenization.count
-          || tokenization.tokens.some(token => !safeInteger(token))) fail("tokenizer_protocol", "Invalid tokenizer response");
-        if (tokenization.max_model_len < this.contextWindow) fail("tokenizer_context", "Serving context is smaller than the manifest context");
-        inputTokens = tokenization.count;
-        this.emit(request.id, "model_tokenizer_completed", { inputTokens, latencyMs: milliseconds(tokenStarted) });
-        if (inputTokens <= this.inputBudget && inputTokens + request.maxOutputTokens <= this.contextWindow) break;
-        const next = optionalGroups.shift();
-        if (!next) fail("context_budget", "Mandatory actor input exceeds the tokenizer budget");
-        next.messageIndexes.forEach(index => selected.delete(index)); omittedGroups.push(next.id);
-      }
+      const compiled = await this.compileInput(request, controller.signal);
+      tokenizerCalls = compiled.tokenizerCalls; tokenizerMs = compiled.tokenizerMs; inputTokens = compiled.inputTokens;
+      selected.clear(); compiled.selectedMessageIndexes.forEach(index => selected.add(index));
+      omittedGroups.push(...compiled.omittedGroups);
+      const messages = compiled.messages;
       const input = { model: this.model, messages, ...(tools.length ? { tools } : {}), chat_template_kwargs: { enable_thinking: false } };
       const inputHash = hash(input);
       const body = { ...input, max_tokens: request.maxOutputTokens, temperature: 0, top_p: 1, seed: request.seed ?? 0,
         ...(tools.length ? { tool_choice: "auto" } : {}), stream: this.stream,
+        ...(request.logprobTokenIds ? { logprobs: true, logprob_token_ids: request.logprobTokenIds } : {}),
         ...(this.stream ? { stream_options: { include_usage: true } } : {}),
         ...(request.responseFormat ? { response_format: { type: "json_schema", json_schema: request.responseFormat } } : {}) };
       controller.signal.throwIfAborted();
       const dispatchStart = process.hrtime.bigint();
-      this.emit(request.id, "model_dispatch", { inputHash, inputTokens, omittedGroups, attempt: 0 });
+      const requestContractHash = hash({ maxOutputTokens: request.maxOutputTokens, temperature: 0, topP: 1,
+        seed: request.seed ?? 0, stream: this.stream, responseFormat: request.responseFormat ?? null,
+        logprobTokenIds: request.logprobTokenIds ?? null, tools, enableThinking: false });
+      this.emit(request.id, "model_dispatch", { inputHash, inputTokens, omittedGroups, attempt: 0,
+        compiledMessagesHash: hash(messages), compiledTokenIdsHash: hash(compiled.tokenIds),
+        selectedMessageIndexes: [...selected], compilerVersion: "acephale-local-input-v1",
+        requestContractHash });
       dispatched = true;
       // The supported SDK owns HTTP transport. Keep the bounded protocol parser,
       // including terminal SSE and real call-ID validation, on its raw response.
@@ -263,10 +297,19 @@ export class LocalChatModelPort {
         firstTokenMs = milliseconds(dispatchStart);
         this.emit(request.id, "model_first_token", { latencyMs: firstTokenMs });
       };
-      const wire = this.stream ? await readStream(response, this.model, firstToken, controller.signal)
-        : readCompletion(await response.json(), this.model);
-      controller.signal.throwIfAborted();
+      const wire = this.stream ? await readStream(response, this.model, firstToken, controller.signal, !!request.logprobTokenIds)
+        : readCompletion(await response.json(), this.model, !!request.logprobTokenIds);
       const generationMs = milliseconds(dispatchStart);
+      if (this.configuration.retainResponse) {
+        const payload = { version: 1 as const, requestId: request.id, model: this.model, inputHash, requestContractHash,
+          responseHash: hash(wire.message), continuation: copy(wire.message), text: wire.message.content ?? "",
+          logprobs: copy(wire.logprobs), finishReason: wire.finishReason, usage: wire.usage };
+        const contentHash = hash(payload);
+        await this.configuration.retainResponse({ ...payload, contentHash });
+        this.emit(request.id, "model_response_retained", { inputHash, requestContractHash,
+          responseHash: payload.responseHash, responsePayloadHash: contentHash });
+      }
+      controller.signal.throwIfAborted();
       this.emit(request.id, "model_generation_completed", { finishReason: wire.finishReason, usage: wire.usage,
         latencyMs: generationMs, hasRefusal: !!wire.message.refusal });
       if (wire.usage && wire.usage.prompt_tokens !== inputTokens) fail("tokenizer_mismatch", "Generation token usage differs from the compiled tokenizer input");
@@ -290,7 +333,7 @@ export class LocalChatModelPort {
         if (calls.length || !outputValidator(value)) fail("output_schema", "Model response violates the requested output schema");
       }
       const result: InfraModelResult = { model: this.model, text, calls, continuation: copy(wire.message), usage: wire.usage,
-        refusals, status: "completed", inputHash, inputTokens,
+        refusals, status: "completed", inputHash, inputTokens, ...(request.logprobTokenIds ? { logprobs: wire.logprobs } : {}),
         compiler: { version: "acephale-local-input-v1", selectedMessageIndexes: [...selected], omittedGroups, tokenizerCalls },
         timing: { totalMs: milliseconds(started), tokenizerMs, dispatchToHeadersMs, firstTokenMs, generationMs } };
       this.emit(request.id, "model_completed", { inputHash, inputTokens, providerRequestId,
@@ -308,15 +351,15 @@ export class LocalChatModelPort {
   }
 }
 
-interface WireResult { message: InfraAssistantMessage; finishReason: string; usage: InfraUsage | null }
-function readCompletion(value: unknown, model: string): WireResult {
+interface WireResult { message: InfraAssistantMessage; finishReason: string; usage: InfraUsage | null; logprobs: InfraTokenLogprob[] }
+function readCompletion(value: unknown, model: string, requireLogprobs = false): WireResult {
   if (!isObject(value) || value.model !== model) fail("model_identity", "Provider returned an unexpected model");
   if (!Array.isArray(value.choices) || value.choices.length !== 1 || !isObject(value.choices[0])) fail("response_protocol", "Expected one model choice");
   const choice = value.choices[0];
   if (choice.index !== 0 || !isObject(choice.message) || choice.message.role !== "assistant"
     || typeof choice.finish_reason !== "string") fail("response_protocol", "Invalid assistant choice");
   const message = parseAssistant(choice.message);
-  return { message, finishReason: choice.finish_reason, usage: parseUsage(value.usage) };
+  return { message, finishReason: choice.finish_reason, usage: parseUsage(value.usage), logprobs: parseLogprobs(choice.logprobs, requireLogprobs && !!message.content) };
 }
 function parseAssistant(value: Record<string, unknown>): InfraAssistantMessage {
   if (value.content !== null && typeof value.content !== "string" || value.refusal != null && typeof value.refusal !== "string") fail("response_protocol", "Invalid assistant content");
@@ -332,11 +375,11 @@ function parseAssistant(value: Record<string, unknown>): InfraAssistantMessage {
   }
   return message;
 }
-async function readStream(response: Response, model: string, firstToken: () => void, signal: AbortSignal): Promise<WireResult> {
+async function readStream(response: Response, model: string, firstToken: () => void, signal: AbortSignal, requireLogprobs = false): Promise<WireResult> {
   if (!response.headers.get("content-type")?.includes("text/event-stream") || !response.body) fail("stream_protocol", "Expected an SSE response; configure stream=false explicitly for nonstreaming servers");
   const reader = response.body.getReader(), decoder = new TextDecoder("utf-8", { fatal: true });
   let buffer = "", text = "", refusal = "", finishReason: string | null = null, done = false, usage: InfraUsage | null = null;
-  const calls = new Map<number, InfraWireCall>();
+  const calls = new Map<number, InfraWireCall>(), logprobs: InfraTokenLogprob[] = [];
   const consume = (event: string) => {
     const data = event.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
     if (!data) return;
@@ -351,6 +394,8 @@ async function readStream(response: Response, model: string, firstToken: () => v
     const choice: unknown = value.choices[0];
     if (!isObject(choice) || choice.index !== 0 || !isObject(choice.delta)) fail("stream_protocol", "Invalid stream choice");
     const delta = choice.delta;
+    logprobs.push(...parseLogprobs(choice.logprobs, requireLogprobs && typeof delta.content === "string" && !!delta.content));
+    if (logprobs.length > 8192) fail("response_size", "Too many returned token probabilities");
     if (delta.role != null && delta.role !== "assistant") fail("stream_protocol", "Unexpected stream role");
     if (delta.reasoning || delta.reasoning_content) fail("unexpected_reasoning", "Serving emitted reasoning despite the frozen disabled-thinking profile");
     if (finishReason !== null && (delta.content || delta.refusal || delta.tool_calls)) fail("stream_protocol", "Content followed the finish reason");
@@ -406,6 +451,26 @@ async function readStream(response: Response, model: string, firstToken: () => v
     if (ordered.some(([index], position) => index !== position)) fail("stream_protocol", "Tool call indexes are not contiguous");
     const message = parseAssistant({ role: "assistant", content: text || (calls.size ? null : ""),
       ...(calls.size ? { tool_calls: ordered.map(([, call]) => call) } : {}), ...(refusal ? { refusal } : {}) });
-    return { message, finishReason, usage };
+    return { message, finishReason, usage, logprobs };
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
+/** Parse probabilities without clamping, repairing or silently dropping missing alternatives. */
+function parseLogprobs(value: unknown, required: boolean): InfraTokenLogprob[] {
+  if (value == null) { if (required) fail("logprob_protocol", "Requested token log probabilities are missing"); return []; }
+  if (!isObject(value) || !Array.isArray(value.content)) fail("logprob_protocol", "Malformed token log probabilities");
+  if (required && !value.content.length || value.content.length > 8192) fail("logprob_protocol", "Incomplete or excessive token probabilities");
+  const parse = (item: unknown): InfraTokenProbability => {
+    if (!isObject(item) || typeof item.token !== "string" || typeof item.logprob !== "number"
+      || !Number.isFinite(item.logprob) || item.logprob > 0
+      || item.bytes !== null && (!Array.isArray(item.bytes) || item.bytes.some(byte => !safeInteger(byte) || byte > 255))) fail("logprob_protocol", "Invalid token probability");
+    return { token: item.token, bytes: item.bytes as number[] | null, logprob: item.logprob };
+  };
+  return value.content.map((item: unknown) => {
+    const token = parse(item);
+    if (!isObject(item) || !Array.isArray(item.top_logprobs) || item.top_logprobs.length > 33) fail("logprob_protocol", "Invalid bounded token alternatives");
+    const alternatives = item.top_logprobs.map(parse);
+    if (new Set(alternatives.map(row => row.token)).size !== alternatives.length) fail("logprob_protocol", "Duplicate token alternatives");
+    return { ...token, alternatives };
+  });
 }

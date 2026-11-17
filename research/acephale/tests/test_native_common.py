@@ -172,6 +172,46 @@ def test_complete_judge_cannot_upgrade_a_native_failure():
     assert result["constraintViolations"] == 1 and result["evaluationValid"] is True
 
 
+@pytest.mark.parametrize("returned", [[], ["first"], ["first", "first"], ["first", "second", "extra"]])
+def test_incomplete_additive_audit_is_unknown_without_changing_native_verdict(returned):
+    task = SimpleNamespace(evaluation_criteria=SimpleNamespace(
+        nl_assertions=["first", "second"], reward_basis=["DB", "COMMUNICATE"]))
+    reward = SimpleNamespace(reward=1.0, nl_assertions=[SimpleNamespace(nl_assertion=item, met=True) for item in returned])
+    result = assess_official_reward(task, reward, evaluation_type="ALL_WITH_NL_ASSERTIONS")
+    assert result["officialReward"] == 1 and result["passed"] and result["evaluationValid"]
+    assert result["constraintViolations"] is None
+    assert result["constraintAudit"]["status"] == "incomplete"
+    assert result["constraintAudit"]["completeMultisetCoverage"] is False
+
+
+@pytest.mark.parametrize("met,violations", [(True, 0), (False, 1)])
+def test_complete_additive_audit_separates_constraints_from_native_reward(met, violations):
+    task = SimpleNamespace(evaluation_criteria=SimpleNamespace(nl_assertions=["private"], reward_basis=["DB"]))
+    reward = SimpleNamespace(reward=1.0, nl_assertions=[SimpleNamespace(nl_assertion="private", met=met)])
+    result = assess_official_reward(task, reward, evaluation_type="ALL_WITH_NL_ASSERTIONS")
+    assert result["officialReward"] == 1 and result["passed"]
+    assert result["constraintViolations"] == violations and result["constraintAudit"]["status"] == "complete"
+    assert "private" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("basis", [["DB"], ["DB", "NL_ASSERTION"]])
+def test_empty_assertions_never_create_a_measured_zero(basis):
+    task = SimpleNamespace(evaluation_criteria=SimpleNamespace(nl_assertions=[], reward_basis=basis))
+    result = assess_official_reward(task, SimpleNamespace(reward=1, nl_assertions=[]), evaluation_type="ALL_WITH_NL_ASSERTIONS")
+    assert result["passed"] and result["constraintViolations"] is None
+    assert result["constraintAudit"]["status"] == "no_assertions"
+
+
+def test_absent_reward_remains_unmeasured_and_unsafe_modes_are_rejected():
+    task = SimpleNamespace(evaluation_criteria=SimpleNamespace(nl_assertions=["private"], reward_basis=["DB"]))
+    result = assess_official_reward(task, None, evaluation_type="ALL_WITH_NL_ASSERTIONS")
+    assert result["officialReward"] is None and result["passed"] is False
+    assert result["constraintAudit"]["status"] == "not_evaluated" and result["constraintViolations"] is None
+    for value in ("ALL_IGNORE_BASIS", "NL_ASSERTIONS", None, True):
+        with pytest.raises(ValueError, match="evaluation type"):
+            assess_official_reward(task, None, evaluation_type=value)
+
+
 def heartbeat(path, sequence=1, **changes):
     value = {
         "healthy": True,

@@ -1,0 +1,76 @@
+--- a/heartbeat_startup_v2.py
++++ b/heartbeat_startup_v2.py
+@@ -172,6 +172,13 @@
+     return min(now + 90, publication['ownerHeartbeatAt'] + 105, effective - 15, lease['deadline'] - 15)
+ 
+ 
++def acknowledgement_until(context, publication):
++    """Bound verification of an already timely child publication by its freshness."""
++    lease = context['lease']
++    effective = lease['setupDeadline'] if context['mode'] == 'active_lease' else context['qualificationDeadline']
++    return min(publication['ownerHeartbeatAt'] + 60, effective - 15, lease['deadline'] - 15)
++
++
+ def start_and_wait(*, control, watchdog, deployment_path, ledger_path, lease, start_task,
+                    stop_and_drain, log_path, context_path, configuration_sha256,
+                    clock=time.time, sleeper=time.sleep, identity=process_identity):
+@@ -242,10 +249,14 @@
+         while clock() < until:
+             require_alive(prepared['workerIdentity'], identity)
+             record = fresh_record(Path(log_path), lease['id'], clock())
+-            if record and record['ownerHeartbeatAt'] > final['ownerHeartbeatAt']:
++            first_observed = clock()
++            if record and record['ownerHeartbeatAt'] > final['ownerHeartbeatAt'] and first_observed < until:
++                ack_until = acknowledgement_until(context, record)
+                 states = verified_states(control, watchdog, deployment_path, record, lease)
+                 observed = clock()
+-                if states is not None and observed < until and 0 <= observed - record['ownerHeartbeatAt'] <= 60:
++                if states is not None and observed < ack_until and 0 <= observed - record['ownerHeartbeatAt'] <= 60:
++                    if (root / 'cancel.json').exists():
++                        raise ValueError('Startup cancelled before verified acknowledgement')
+                     require_alive(prepared['workerIdentity'], identity)
+                     proof = {**expected, 'kind': 'acephale-heartbeat-child-handoff-v2', 'verified': True,
+                         'verifiedAt': observed, 'record': record, 'actualControllerStates': states,
+@@ -256,10 +267,15 @@
+                         'totalStartupToVerifiedSeconds': observed - started,
+                         'startupToVerifiedSeconds': observed - release['releasedAt'],
+                         'startupToVerifiedSecondsMeaning': 'post_release_to_verified', 'waitUntil': until,
++                        'firstChildPublicationObservedAt': first_observed,
++                        'acknowledgementWaitUntil': ack_until, 'maximumAcknowledgementAgeSeconds': 60,
+                         'originalHardDeadline': lease['deadline'], 'originalSetupDeadline': lease['setupDeadline'],
+                         'maximumStartupWaitSeconds': 90, 'watchdogTimeoutSeconds': 120,
++                        'maximumStartupWaitSecondsMeaning': 'first_child_publication_observed',
+                         'parentPublicationAfterRelease': False, 'publisherPreparedIsScientificReadiness': False}
+                     atomic_new(root / 'handoff.json', proof)
++                    if clock() >= ack_until or (root / 'cancel.json').exists():
++                        raise TimeoutError('Child acknowledgement expired during atomic publication')
+                     return record
+             sleeper(.25)
+         raise TimeoutError('Released publisher did not verify within the unchanged handoff window')
+--- a/heartbeat_companion_v2.py
++++ b/heartbeat_companion_v2.py
+@@ -126,7 +126,10 @@
+             success(value)  # Flush the real publication so the parent can verify it.
+             if acknowledged:
+                 return
+-            while clock() < release['waitUntil']:
++            if clock() >= release['waitUntil']:
++                raise TimeoutError('First child publication missed the original release window')
++            ack_until = startup.acknowledgement_until(context, value)
++            while clock() < ack_until:
+                 if (root / 'cancel.json').exists():
+                     raise ValueError('Parent cancelled before verified handoff')
+                 if (root / 'handoff.json').exists():
+@@ -136,7 +139,11 @@
+                             or handoff.get('workerIdentity') != worker
+                             or handoff.get('releaseSha256') != startup.sha(root / 'release.json')
+                             or handoff.get('parentPublicationAfterRelease') is not False
+-                            or handoff['verifiedAt'] >= release['waitUntil']):
++                            or not release['releasedAt'] <= handoff.get('firstChildPublicationObservedAt', float('inf')) < release['waitUntil']
++                            or handoff.get('acknowledgementWaitUntil') != ack_until
++                            or handoff.get('maximumAcknowledgementAgeSeconds') != 60
++                            or not handoff['firstChildPublicationObservedAt'] <= handoff['verifiedAt'] < ack_until
++                            or clock() >= ack_until):
+                         raise ValueError('Exact actual parent readback acknowledgement required')
+                     acknowledged = True
+                     return
