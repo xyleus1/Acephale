@@ -1,5 +1,27 @@
 # Acephale engineering log
 
+## Prospective GPU recovery capacity, 2026-11-17
+
+GPU capacity v5 is an explicit, creation-only 300-hour evaluation allowance
+under the existing necessary-resource instruction. It retains the full
+GPU4/3/2/1 chain and binds current funding6 separately from the historical
+funding5 authority of GPU4. Prior reservations, unknown holds and deadlines
+remain unchanged. This prospective allowance does not claim an activated
+authority or a completed native benchmark.
+
+The funding6 monetary caps remain $1,050 infrastructure, $815 compute and
+$235 associated. The $303 API plan, $65 contingency and original funding5
+16-lease horizon are unchanged; GPU5 does not reset lease slots. Per-lease
+limits remain eight hours at $1.99/hour, with no optimizer permission. The
+new GPU5 policy JSON is pinned by the native financial manifest; no native
+budget implementation, scientific model, dataset or controller worker changes.
+Generate a new source-bound manifest from the committed operator before use.
+
+The downstream export contract must distinguish the provider's current
+funding6 from retained funding5 and preserve every ancestor. An export or
+report cannot treat these distinct valid authorities as equal.
+
+
 ## Money-only evaluation recovery funding, 2026-11-17
 
 Funding v6 adds an operator-selected $500 infrastructure allowance under the

@@ -364,3 +364,15 @@ export, then follow the guarded shutdown procedure. Report native reward, tool
 prediction accuracy, logical calls, physical calls, total latency and billed cost
 separately with family-clustered paired intervals. Inspect an actual trace and
 metric in the observability backend; collector HTTP acceptance alone is insufficient.
+
+
+### Prospective evaluation GPU recovery allowance
+
+After exact prior-host closure and independent review, generate a fresh
+operational-history snapshot and invoke the creation-only
+`record-gpu-hour-capacity-recovery --ledger <ledger> --authorization-reason
+<reason> --operational-history <history>` controller command. It requires
+current funding6 and an existing validated GPU4/200 authority, then writes
+only the GPU5 sidecar. Do not overwrite any old authority or release unknown
+holds. Regenerate the exact current-source native budget manifest after the
+implementation commit and retain the unchanged controller-source identity.

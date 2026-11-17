@@ -1,0 +1,16 @@
+{
+  "version": 5,
+  "profile": "acephale-gpu-hour-capacity-policy-v5",
+  "parentCapacityVersion": 4,
+  "fundingVersion": 6,
+  "basePolicyMaximumGpuHours": 64,
+  "parentEngineeringMaximumGpuHours": 200,
+  "engineeringMaximumGpuHours": 300,
+  "evaluationOnly": true,
+  "optimizerPermitted": false,
+  "financialPolicyChanged": false,
+  "existingReservationsChanged": false,
+  "existingDeadlinesChanged": false,
+  "modelContractsChanged": false,
+  "leaseCountAuthorityChanged": false
+}
