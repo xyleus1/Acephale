@@ -846,3 +846,5 @@ original cross-provider journal binding and count CPU holds in future GPU comput
 admission. Reserve tax/storage separately; do not assume free Actions minutes.
 
 Use the canonical GitHub repository metadata URL without a trailing slash. Keep the explicit slash-prefixed store API and normalize only its root endpoint centrally.
+
+Permit bounded read-only startup observation retries for eventually visible Actions metadata. Provider access and branch claims remain unavailable until all exact workflow/job/runner checks pass. Local environment mismatch stays fail-fast.

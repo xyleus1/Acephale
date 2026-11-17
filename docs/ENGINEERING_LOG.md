@@ -1346,3 +1346,5 @@ cases passed together with forty-five existing controller cases in the initial
 collection. Original journal holds, GPU hours and lease counts remain unchanged.
 
 An actual read-only GitHub probe rejected the trailing-slash repository root with 404. The store now normalizes only that endpoint; one actual HTTP-request construction regression passed. Earlier mocked fixtures did not establish live routing.
+
+Retained failed workflow43997937701 and undispatched lease20ea144b closure. Added ninety-second GET-only identity retry and safe Boolean failure diagnostics. Six focused actual identity cases plus three subtests passed, including persistent mismatch, invalid local environment, transport failure and late success rejection.

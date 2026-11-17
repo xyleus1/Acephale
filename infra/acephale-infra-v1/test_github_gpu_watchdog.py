@@ -386,6 +386,74 @@ class GitHubWatchdogTests(unittest.TestCase):
         with patch.object(self.store, "request", create=True, side_effect=[obs["run"], {"total_count": 2, "jobs": obs["jobs"]}]), self.assertRaises(ValueError):
             worker.job_identity(self.store, self.b, self.b["controllers"][0], environment, self.now)
 
+    def startup_fixture(self):
+        data, _, _ = self.receipt()
+        obs = p.unseal(data["apiObservation"], KEY)
+        env = {"GITHUB_REPOSITORY":self.b["repository"],"GITHUB_REPOSITORY_ID":"42",
+            "GITHUB_SHA":self.b["workflowCommit"],"GITHUB_JOB":"watchdog_a","GITHUB_EVENT_NAME":"workflow_dispatch",
+            "GITHUB_RUN_ID":"10","GITHUB_RUN_ATTEMPT":"1","RUNNER_NAME":"runner0"}
+        return obs["run"], {"total_count":2,"jobs":obs["jobs"]}, env
+
+    def test_startup_identity_retries_only_get_observations_until_exact(self):
+        run,jobs,env = self.startup_fixture()
+        diagnostics=[]
+        before=copy.deepcopy(self.provider.calls)
+        for first in ({**run,"status":"queued"}, {**run,"repository":{}}, {**run,"path":"not-yet-visible"}):
+            with self.subTest(first=first):
+                self.now=1100
+                with patch.object(self.store,"request",create=True,side_effect=[first,jobs,run,jobs]) as request:
+                    found=worker.observe_job_identity(self.store,self.b,self.b["controllers"][0],env,diagnostics.append,
+                        clock=lambda:self.now,sleep=lambda delay:setattr(self,"now",self.now+delay))
+                self.assertEqual(found["jobId"],20)
+                self.assertTrue(all(call.args[0]=="GET" for call in request.call_args_list))
+                self.assertEqual(diagnostics[-2]["phase"],"workflow")
+                self.assertFalse(all(diagnostics[-2]["predicates"].values()))
+                self.assertTrue(diagnostics[-1]["verified"])
+        self.assertEqual(self.provider.calls,before)
+
+    def test_startup_identity_persistent_wrong_commit_still_fails_bounded(self):
+        run,jobs,env = self.startup_fixture()
+        diagnostics=[]
+        def read(method,path):
+            self.assertEqual(method,"GET")
+            return jobs if path.endswith("jobs?per_page=100") else {**run,"head_sha":"f"*40}
+        with patch.object(self.store,"request",create=True,side_effect=read), self.assertRaises(TimeoutError):
+            worker.observe_job_identity(self.store,self.b,self.b["controllers"][0],env,diagnostics.append,
+                clock=lambda:self.now,sleep=lambda delay:setattr(self,"now",self.now+delay))
+        self.assertEqual(self.now,1190)
+        self.assertEqual(len(diagnostics),18)
+        self.assertTrue(all(row["predicates"]["commit"] is False for row in diagnostics))
+
+    def test_startup_identity_local_environment_mismatch_never_retries(self):
+        _,_,env = self.startup_fixture()
+        env["GITHUB_REPOSITORY"]="different/repo"
+        with patch.object(self.store,"request",create=True) as request, self.assertRaises(ValueError):
+            worker.observe_job_identity(self.store,self.b,self.b["controllers"][0],env,lambda _:None,
+                clock=lambda:self.now,sleep=lambda _:self.fail("Unexpected retry"))
+        request.assert_not_called()
+
+    def test_startup_identity_transport_retry_retains_only_safe_diagnostics(self):
+        run,jobs,env = self.startup_fixture()
+        diagnostics=[]
+        with patch.object(self.store,"request",create=True,side_effect=[GitHubFailure(503),run,jobs]):
+            found=worker.observe_job_identity(self.store,self.b,self.b["controllers"][0],env,diagnostics.append,
+                clock=lambda:self.now,sleep=lambda delay:setattr(self,"now",self.now+delay))
+        self.assertEqual(found["jobId"],20)
+        self.assertEqual(diagnostics[0]["phase"],"transport")
+        self.assertEqual(diagnostics[0]["predicates"],{})
+        self.assertNotIn("response",json.dumps(diagnostics).lower())
+
+    def test_startup_identity_slow_success_cannot_outlive_read_window(self):
+        run,jobs,env = self.startup_fixture()
+        def slow(method,path):
+            if path.endswith("jobs?per_page=100"):
+                self.now+=91
+                return jobs
+            return run
+        with patch.object(self.store,"request",create=True,side_effect=slow), self.assertRaises(ValueError):
+            worker.observe_job_identity(self.store,self.b,self.b["controllers"][0],env,lambda _:None,
+                clock=lambda:self.now,sleep=lambda _:self.fail("Late success must not retry"))
+
     def recovery_proofs(self):
         proofs = {}
         for i, config in enumerate(self.b["controllers"]):

@@ -21,6 +21,17 @@ from github_watchdog_store import GitHubStore
 CONTROL_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
 
+class IdentityObservationError(ValueError):
+    def __init__(self, phase, predicates):
+        self.phase, self.predicates = phase, predicates
+        super().__init__("Actual workflow identity is not yet verified")
+
+
+def identity_require(phase, predicates):
+    if not all(predicates.values()):
+        raise IdentityObservationError(phase, predicates)
+
+
 def timestamp(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
@@ -35,19 +46,19 @@ def job_identity(store, binding, controller, environment, now):
     run_id, attempt = int(environment["GITHUB_RUN_ID"]), int(environment["GITHUB_RUN_ATTEMPT"])
     run = store.request("GET", f"/actions/runs/{run_id}/attempts/{attempt}")
     jobs = store.request("GET", f"/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100")
-    core.require(run.get("id") == run_id and run.get("run_attempt") == attempt
-        and run.get("head_sha") == binding["workflowCommit"] and run.get("event") == "workflow_dispatch"
-        and run.get("path") == binding["workflowPath"] and run.get("status") == "in_progress"
-        and run.get("repository", {}).get("id") == binding["repositoryId"], "Actual workflow identity mismatch")
-    core.require(type(jobs.get("total_count")) is int and jobs["total_count"] == 2
-                 and len(jobs.get("jobs", [])) == 2, "Exactly two fixed workflow jobs required")
+    identity_require("workflow", {"runId":run.get("id") == run_id,"runAttempt":run.get("run_attempt") == attempt,
+        "commit":run.get("head_sha") == binding["workflowCommit"],"event":run.get("event") == "workflow_dispatch",
+        "path":run.get("path") == binding["workflowPath"],"running":run.get("status") == "in_progress",
+        "repositoryId":run.get("repository", {}).get("id") == binding["repositoryId"]})
+    identity_require("jobs", {"exactCount":type(jobs.get("total_count")) is int and jobs["total_count"] == 2,
+                              "exactRows":len(jobs.get("jobs", [])) == 2})
     matches = [j for j in jobs["jobs"] if j.get("name") == controller["jobName"]]
-    core.require(len(matches) == 1, "Exact job absent or ambiguous")
+    identity_require("job_selection", {"exactNamedJob":len(matches) == 1})
     job = matches[0]
-    core.require(job.get("run_id") == run_id and job.get("head_sha") == binding["workflowCommit"]
-        and job.get("status") == "in_progress" and type(job.get("id")) is int and job["id"] > 0
-        and type(job.get("runner_id")) is int and job["runner_id"] > 0
-        and job.get("runner_name") == environment.get("RUNNER_NAME"), "Actual running job/runner required")
+    identity_require("runner", {"runId":job.get("run_id") == run_id,"commit":job.get("head_sha") == binding["workflowCommit"],
+        "running":job.get("status") == "in_progress","jobId":type(job.get("id")) is int and job["id"] > 0,
+        "runnerId":type(job.get("runner_id")) is int and job["runner_id"] > 0,
+        "runnerName":job.get("runner_name") == environment.get("RUNNER_NAME")})
     started = timestamp(job["started_at"])
     core.require(0 <= now - started <= 600, "Job startup observation too old")
     expires = started + protocol.CONTROLLER_SECONDS
@@ -59,6 +70,30 @@ def job_identity(store, binding, controller, environment, now):
         "runnerId": job["runner_id"], "runnerName": job["runner_name"], "jobStartedAt": started,
         "controllerExpiresAt": expires, "cleanupUntil": started + protocol.CLEANUP_SECONDS,
         "jobTimeoutMinutes": protocol.JOB_MINUTES, "observedAt": now}
+
+
+def observe_job_identity(store,binding,controller,environment,diagnostic,*,clock=time.time,sleep=time.sleep):
+    """Bounded GET-only startup observation; no provider or branch write exists here."""
+    until=clock()+90
+    attempt=0
+    while clock()<until:
+        attempt+=1
+        try:
+            value=job_identity(store,binding,controller,environment,clock())
+        except (IdentityObservationError, OSError, RuntimeError) as error:
+            diagnostic({"kind":"acephale-github-startup-identity-observation-v1","attempt":attempt,
+                "observedAt":clock(),"verified":False,"errorType":type(error).__name__,
+                "phase":getattr(error,"phase","transport"),"predicates":getattr(error,"predicates",{}),
+                "providerCalls":0,"githubWrites":0})
+            if clock()>=until:
+                break
+            sleep(min(5,max(0,until-clock())))
+        else:
+            core.require(clock()<until,"Startup observation exceeded its fixed90-second bound")
+            diagnostic({"kind":"acephale-github-startup-identity-observation-v1","attempt":attempt,
+                "observedAt":clock(),"verified":True,"providerCalls":0,"githubWrites":0})
+            return value
+    raise TimeoutError("Exact startup identity did not become observable within90 seconds")
 
 
 class Worker:
@@ -231,9 +266,19 @@ def main(argv=None):
     core.require(hashlib.sha256(workflow.read_bytes()).hexdigest() == binding["workflowSha256"], "Workflow source changed")
     controller = next(r for r in binding["controllers"] if r["controllerId"] == args.controller_id)
     store = GitHubStore(binding["repository"], os.environ["GITHUB_TOKEN"], write_branch=controller["evidenceBranch"])
-    identity = job_identity(store, binding, controller, os.environ, time.time())
+    startup = []
+    def diagnostic(value):
+        startup.append(value)
+        print(json.dumps(value), flush=True)
+    try:
+        identity = observe_job_identity(store, binding, controller, os.environ, diagnostic)
+    except BaseException:
+        args.output.mkdir(parents=True, exist_ok=False)
+        (args.output / "startup-identity-observations.json").write_text(json.dumps(startup), encoding="utf-8")
+        raise
     worker = Worker(binding, args.controller_id, key, store, core.Provider(os.environ["LAMBDA_API_KEY"]),
                     identity, args.output)
+    (worker.output / "startup-identity-observations.json").write_text(json.dumps(startup), encoding="utf-8")
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: setattr(worker, "cancelled", True))
     while time.time() < identity["cleanupUntil"]:

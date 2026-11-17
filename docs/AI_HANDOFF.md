@@ -699,3 +699,5 @@ CPU runtime does not consume GPU hours or lease slots. No live job was dispatche
 by these implementation tests.
 
 Repository metadata requests now normalize the root endpoint to omit a trailing slash, following an actual pre-dispatch GitHub 404 observation. Subordinate endpoint paths remain unchanged. No canary had launched.
+
+The first actual GitHub canary pair failed initial API identity observation before provider dispatch; its exact lease was closed after provider absence, retaining its hold. Startup now retries only bounded identity GET observations for ninety seconds with safe predicate diagnostics. No identity requirement or cleanup timer changed.
