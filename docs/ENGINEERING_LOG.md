@@ -1344,3 +1344,5 @@ Added explicit GitHub CPU-runner overhead classification and included retained
 CPU compute in subsequent GPU monetary admission. Five new actual writer/admission
 cases passed together with forty-five existing controller cases in the initial
 collection. Original journal holds, GPU hours and lease counts remain unchanged.
+
+An actual read-only GitHub probe rejected the trailing-slash repository root with 404. The store now normalizes only that endpoint; one actual HTTP-request construction regression passed. Earlier mocked fixtures did not establish live routing.

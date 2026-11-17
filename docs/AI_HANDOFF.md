@@ -697,3 +697,5 @@ GitHub CPU billing uses explicit compute-classified overhead reservations under
 the original journal binding. Future GPU monetary admission includes those holds;
 CPU runtime does not consume GPU hours or lease slots. No live job was dispatched
 by these implementation tests.
+
+Repository metadata requests now normalize the root endpoint to omit a trailing slash, following an actual pre-dispatch GitHub 404 observation. Subordinate endpoint paths remain unchanged. No canary had launched.

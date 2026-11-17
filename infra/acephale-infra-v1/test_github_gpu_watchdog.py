@@ -252,6 +252,27 @@ class GitHubWatchdogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.cas("main", p.STATE_PATH, self.record)
 
+    def test_actual_repository_request_removes_only_root_trailing_slash(self):
+        captured = []
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self, maximum):
+                self.maximum = maximum
+                return b'{"id":42}'
+        class Opener:
+            def open(self, request, timeout):
+                captured.append((request.full_url, timeout))
+                return Response()
+        store = GitHubStore("owner/repo", "synthetic")
+        with patch("github_watchdog_store.urllib.request.build_opener", return_value=Opener()):
+            self.assertEqual(store.request("GET", "/"), {"id":42})
+            store.request("GET", "/actions/runs/1/attempts/1")
+        self.assertEqual(captured, [("https://api.github.com/repos/owner/repo",6),
+            ("https://api.github.com/repos/owner/repo/actions/runs/1/attempts/1",6)])
+
     def test_ready_transition_forces_observed_ack_before_period(self):
         self.w.cycle()
         newer = p.owner_record(self.b, {**self.s, "ready": True, "ownerHeartbeatAt": 1101}, 1, KEY, self.record)

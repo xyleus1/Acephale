@@ -34,7 +34,9 @@ class GitHubStore:
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *args, **kwargs):
                 raise GitHubFailure()
-        request = urllib.request.Request("https://api.github.com/repos/" + self.repository + suffix,
+        # Repository metadata rejects a trailing slash; subordinate paths keep it.
+        endpoint = "" if suffix == "/" else suffix
+        request = urllib.request.Request("https://api.github.com/repos/" + self.repository + endpoint,
             data=canonical(value) if value is not None else None, method=method,
             headers={"Authorization": "Bearer " + self.token, "Accept": "application/vnd.github+json",
                      "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json",

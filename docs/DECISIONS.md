@@ -844,3 +844,5 @@ Reserve paid GitHub runner charges as CPU compute within existing infrastructure
 caps, with a distinct provider/kind on the retained overhead row. Preserve the
 original cross-provider journal binding and count CPU holds in future GPU compute
 admission. Reserve tax/storage separately; do not assume free Actions minutes.
+
+Use the canonical GitHub repository metadata URL without a trailing slash. Keep the explicit slash-prefixed store API and normalize only its root endpoint centrally.
