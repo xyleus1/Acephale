@@ -685,3 +685,10 @@ paired result exists at this checkpoint. The latest repository CI passed 304
 Node tests, 642 research tests, two Docker cases and 499 infrastructure cases
 plus 123 subtests; skips were 2/30/28 respectively. These are validation counts,
 not benchmark outcomes. Both completed 204-update adapters remain immutable.
+# Prospective watchdog qualification transport
+
+The GitHub admission reader now accepts an explicit signed same-version
+qualification transfer between separately identified private control and fence
+repositories. Both real canary proofs remain required, alongside fresh actual
+destination job/runner/provider observations. This local implementation is not
+a live qualification or provider launch. Original leases and holds are unchanged.

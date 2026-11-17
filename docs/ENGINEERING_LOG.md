@@ -1333,3 +1333,9 @@ Each parent published three times before release, never after it. Every child
 and task drained, financial bytes stayed identical, and no model or GPU ran.
 The qualification result SHA-256 is
 `43490917fc11fe7d1667dc3704cd55a6f9192e299c8cfcb366bf17ecf60e6dfd`.
+# GitHub qualification transfer boundary
+
+Added an explicit signed repository transfer contract around existing actual
+canary evidence. Three focused cases and thirteen negative subtests passed,
+covering both retained proofs, changed repository/source/workflow/assignment,
+and current runner/job identity. No GitHub or provider calls were performed.

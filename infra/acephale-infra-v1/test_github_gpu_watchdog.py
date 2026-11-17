@@ -41,7 +41,7 @@ def state(b):
 
 
 def identity(b, index=0):
-    return {"repositoryId": 42, "repository": b["repository"], "workflowCommit": b["workflowCommit"],
+    return {"repositoryId": b["repositoryId"], "repository": b["repository"], "workflowCommit": b["workflowCommit"],
         "workflowPath": b["workflowPath"], "runId": 10, "runAttempt": 1, "jobId": 20 + index,
         "jobName": b["controllers"][index]["jobName"], "runnerId": 30 + index, "runnerName": "runner" + str(index),
         "jobStartedAt": 900, "controllerExpiresAt": 900 + p.CONTROLLER_SECONDS,
@@ -380,8 +380,10 @@ class GitHubWatchdogTests(unittest.TestCase):
             proofs[config["controllerId"]] = {"binding": p.seal(old, KEY), "recovery": w.recovery}
         return proofs
 
-    def ordinary_receipt(self, *, fence=False):
+    def ordinary_receipt(self, *, fence=False, destination=False):
         proofs = self.recovery_proofs()
+        if destination:
+            self.b.update(repository="owner/private-fence", repositoryId=43, workflowCommit="e" * 40)
         self.b["leasePolicy"] = {}
         self.s.pop("purpose")
         self.s.pop("recoveryControllerId")
@@ -416,9 +418,9 @@ class GitHubWatchdogTests(unittest.TestCase):
             "runner_id": 30 + i, "runner_name": "runner" + str(i), "started_at": "1970-01-01T00:15:00Z"}
             for i, letter in enumerate(("a", "b"))]
         obs = {"kind": "acephale-github-api-observation-v1", "bindingHash": p.digest(self.b), "observedAt": self.now,
-            "repository": {"id": 42, "full_name": self.b["repository"], "private": True},
+            "repository": {"id": self.b["repositoryId"], "full_name": self.b["repository"], "private": True},
             "run": {"id": 10, "run_attempt": 1, "head_sha": self.b["workflowCommit"], "path": self.b["workflowPath"],
-                    "event": "workflow_dispatch", "status": "in_progress", "repository": {"id": 42}}, "jobs": jobs}
+                    "event": "workflow_dispatch", "status": "in_progress", "repository": {"id": self.b["repositoryId"]}}, "jobs": jobs}
         data = {"version": 1, "backend": p.BACKEND, "binding": p.seal(self.b, KEY), "apiObservation": p.seal(obs, KEY),
             "ownerRecord": self.record, "qualification": proofs,
             "controllers": [self.store.read(r["evidenceBranch"], p.ACK_PATH)[0] for r in self.b["controllers"]]}
@@ -467,6 +469,54 @@ class GitHubWatchdogTests(unittest.TestCase):
         bad["qualification"]["acephale-gha-a"]["recovery"] = p.seal(body, KEY)
         with self.assertRaises(ValueError):
             admission.enrollments(bad, ledger, lease, self.now, self.b["sourceFiles"], key=KEY)
+
+    def transfer_receipt(self):
+        data, ledger, lease = self.ordinary_receipt(fence=True, destination=True)
+        transfer = {"kind": "acephale-github-qualification-transfer-v1",
+            "sourceRepository": {"id": 42, "full_name": "owner/private-control", "private": True},
+            "destinationRepository": {"id": 43, "full_name": "owner/private-fence", "private": True},
+            "destinationBindingHash": p.digest(self.b), "sourceCommit": self.b["sourceCommit"],
+            "sourceFiles": self.b["sourceFiles"], "workflowSha256": self.b["workflowSha256"],
+            "qualificationHashes": {cid: p.digest(proof) for cid, proof in data["qualification"].items()},
+            "currentJobsPerformedHistoricalRecovery": False, "freshDestinationEnrollmentRequired": True,
+            "authorizedAt": self.now}
+        data["qualificationTransfer"] = p.seal(transfer, KEY)
+        return data, ledger, lease
+
+    def test_cross_repository_fence_requires_explicit_version_transfer(self):
+        data, ledger, lease = self.transfer_receipt()
+        rows = admission.enrollments(data, ledger, lease, self.now, self.b["sourceFiles"], key=KEY, fence=True)
+        self.assertEqual({row["identity"]["repositoryId"] for row in rows}, {43})
+        self.assertTrue(all(row["recoveryTestPassed"] for row in rows))
+        del data["qualificationTransfer"]
+        with self.assertRaises(ValueError):
+            admission.enrollments(data, ledger, lease, self.now, self.b["sourceFiles"], key=KEY, fence=True)
+
+    def test_cross_repository_transfer_rejects_changed_scope_or_proofs(self):
+        data, ledger, lease = self.transfer_receipt()
+        for field, replacement in (("sourceRepository", {"id": 44}), ("destinationRepository", {"id": 44}),
+                ("sourceCommit", "f" * 40), ("sourceFiles", {}), ("workflowSha256", "f" * 64),
+                ("qualificationHashes", {}), ("destinationBindingHash", "f" * 64),
+                ("currentJobsPerformedHistoricalRecovery", True), ("freshDestinationEnrollmentRequired", False),
+                ("authorizedAt", self.now + 1)):
+            with self.subTest(field=field):
+                bad = copy.deepcopy(data)
+                value = p.unseal(bad["qualificationTransfer"], KEY)
+                value[field] = replacement
+                bad["qualificationTransfer"] = p.seal(value, KEY)
+                with self.assertRaises(ValueError):
+                    admission.enrollments(bad, ledger, lease, self.now, self.b["sourceFiles"], key=KEY, fence=True)
+
+    def test_transferred_qualification_never_replaces_current_job_identity(self):
+        data, ledger, lease = self.transfer_receipt()
+        for field, replacement in (("runnerId", 999), ("repositoryId", 42), ("jobId", 999)):
+            with self.subTest(field=field):
+                bad = copy.deepcopy(data)
+                value = p.unseal(bad["controllers"][0], KEY)
+                value["identity"][field] = replacement
+                bad["controllers"][0] = p.seal(value, KEY)
+                with self.assertRaises(ValueError):
+                    admission.enrollments(bad, ledger, lease, self.now, self.b["sourceFiles"], key=KEY, fence=True)
 
     def test_real_unresolved_fence_preserves_aws_history_and_hold(self):
         import unresolved_launch

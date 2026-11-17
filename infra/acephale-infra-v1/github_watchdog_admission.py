@@ -12,13 +12,46 @@ def stamp(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
 
-def qualified_version(proof, key, binding, controller_id, now):
+def checked_qualification_transfer(record, key, binding, proofs, now):
+    """Explicit operator-signed transport of tested code, never job readiness."""
+    value = p.unseal(record, key)
+    ids = {row["controllerId"] for row in binding["controllers"]}
+    require(type(proofs) is dict and set(proofs) == ids,
+            "Both original controller recovery proofs are required")
+    old = [p.checked_binding(p.unseal(proofs[cid]["binding"], key)) for cid in sorted(ids)]
+    source = {"id": old[0]["repositoryId"], "full_name": old[0]["repository"], "private": True}
+    destination = {"id": binding["repositoryId"], "full_name": binding["repository"], "private": True}
+    require(source["id"] != destination["id"] and source["full_name"] != destination["full_name"]
+        and all(row["repositoryId"] == source["id"] and row["repository"] == source["full_name"] for row in old),
+        "Qualification transfer requires one exact separate source repository")
+    require(value.get("kind") == "acephale-github-qualification-transfer-v1"
+        and value.get("sourceRepository") == source and value.get("destinationRepository") == destination
+        and value.get("destinationBindingHash") == p.digest(binding)
+        and value.get("sourceCommit") == binding["sourceCommit"]
+        and value.get("sourceFiles") == binding["sourceFiles"]
+        and value.get("workflowSha256") == binding["workflowSha256"]
+        and value.get("qualificationHashes") == {cid: p.digest(proofs[cid]) for cid in sorted(ids)}
+        and value.get("currentJobsPerformedHistoricalRecovery") is False
+        and value.get("freshDestinationEnrollmentRequired") is True
+        and number(value.get("authorizedAt")) and value["authorizedAt"] <= now,
+        "Explicit same-version repository qualification transfer required")
+    for cid in sorted(ids):
+        qualified_version(proofs[cid], key, binding, cid, now, transfer=value)
+    return value
+
+
+def qualified_version(proof, key, binding, controller_id, now, *, transfer=None):
     old = p.checked_binding(p.unseal(proof["binding"], key))
     recovery = p.unseal(proof["recovery"], key)
     request = p.unseal(recovery["requestEvidence"], key)
     state = p.check_owner(request["ownerRecord"], key, old)["state"]
+    same_repository = old["repositoryId"] == binding["repositoryId"] and old["repository"] == binding["repository"]
+    transferred = (transfer is not None
+        and transfer.get("sourceRepository") == {"id": old["repositoryId"], "full_name": old["repository"], "private": True}
+        and transfer.get("destinationBindingHash") == p.digest(binding)
+        and transfer.get("qualificationHashes", {}).get(controller_id) == p.digest(proof))
     require(old["sourceFiles"] == binding["sourceFiles"] and old["sourceCommit"] == binding["sourceCommit"]
-        and old["workflowSha256"] == binding["workflowSha256"] and old["repositoryId"] == binding["repositoryId"],
+        and old["workflowSha256"] == binding["workflowSha256"] and (same_repository or transferred),
         "Recovery tested a different backend version")
     require(recovery.get("kind") == "acephale-github-recovery-v1"
         and request.get("kind") == "acephale-github-termination-ack-v1"
@@ -72,6 +105,10 @@ because control.launch invokes it before paid dispatch.
     require(type(jobs) is list and len(jobs) == 2
         and {j.get("name") for j in jobs} == {"watchdog_a", "watchdog_b"}, "Exact two running jobs required")
     require(type(data.get("controllers")) is list and len(data["controllers"]) == 2, "Two live signed ACKs required")
+    transfer = None
+    if data.get("qualificationTransfer") is not None:
+        transfer = checked_qualification_transfer(data["qualificationTransfer"], key, binding,
+                                                   data.get("qualification"), now)
     values, job_ids, runner_ids = [], set(), set()
     for config in binding["controllers"]:
         matching = [v for v in data["controllers"] if p.unseal(v, key).get("controllerId") == config["controllerId"]]
@@ -121,7 +158,8 @@ because control.launch invokes it before paid dispatch.
             require(lease["deadline"] - lease["reservedAt"] <= 600, "Canary exceeds ten minutes")
             recovery_hash = None
         else:
-            recovery_hash = qualified_version(data["qualification"][config["controllerId"]], key, binding, config["controllerId"], now)
+            recovery_hash = qualified_version(data["qualification"][config["controllerId"]], key, binding,
+                                             config["controllerId"], now, transfer=transfer)
         host = f"github:{binding['repositoryId']}:{identity['runId']}:{identity['runAttempt']}:{identity['jobId']}"
         values.append({"profile": "acephale-infra-v1", "controllerKind": "bounded_actions_job",
             "hostingKind": "github_actions", "controllerId": config["controllerId"], "hostId": host,

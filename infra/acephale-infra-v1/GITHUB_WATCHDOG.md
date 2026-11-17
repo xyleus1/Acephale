@@ -73,6 +73,14 @@ This retains the exact prior row/hash, AWS IDs, financial binding and holds,
 and requires fresh actual absent-name observations from two qualified jobs.
 Absence is not relabeled termination. Original AWS history remains intact.
 
+A separate private fence repository may reuse actual canary qualification only
+through a signed `acephale-github-qualification-transfer-v1` receipt. It binds
+both repository identities, the destination assignment, exact public source and
+workflow bytes, and hashes of both original recovery proofs. Fresh destination
+API/job/provider observations remain mandatory. The new jobs are never described
+as having performed those historical recoveries. An expired predecessor keeps
+its original signed owner state; it does not need renewed owner publication.
+
 GitHub documents the six-hour hosted-job ceiling in [Actions limits](https://docs.github.com/en/actions/reference/limits),
 conditional previous-blob updates in the [Contents API](https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents),
 and actual runner/start identity in the [jobs API](https://docs.github.com/en/rest/actions/workflow-jobs).

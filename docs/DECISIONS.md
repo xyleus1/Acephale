@@ -832,3 +832,10 @@ handoff interval or establish scientific readiness. Preserve the 120-second
 watchdog and original active-lease deadlines. A terminated-lease timing fixture
 may use an explicitly declared local bound after fresh provider-absence proof;
 that exception cannot admit an active lease.
+# Separate watchdog rate domains
+
+Use a separate private repository for the retained expired-name fence so its
+job-token request quota is separate from the research pair. Transfer only exact
+source/workflow version qualification through a signed typed receipt binding both
+historical recovery proofs and both repository identities. Current destination
+job readiness must still be observed independently; no old lease is extended.
