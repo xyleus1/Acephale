@@ -1,0 +1,263 @@
+--- a/steady_state_reader.py
++++ b/steady_state_reader.py
+@@ -239,0 +240,9 @@
++        # Publisher compatibility: the exact existing payload shape is unchanged.
++        return self.observe_current()['state']
++
++    def observe_current(self):
++        """Return current lease/plan and payload from one validated byte bracket.
++
++        This is a local state observation, never provider/controller admission.
++        Returned copies cannot modify the retained baseline or lifecycle state.
++        """
+@@ -260 +269,2 @@
+-            return result
++            return {'state': result, 'lease': copy.deepcopy(row), 'planHash': ledger['planHash'],
++                    'observedAt': observed, 'completedAt': completed}
+--- a/managed_stage.py
++++ b/managed_stage.py
+@@ -249,0 +250,141 @@
++    @contextlib.contextmanager
++    def _authority_timing(self, operation):
++        started, tick = self.now(), self.monotonic()
++        rows = []
++        outcome = {'success': False}
++
++        def measured(name, call):
++            before = self.monotonic()
++            row = {'stage': name, 'startedAfterSeconds': before - tick, 'success': False}
++            try:
++                result = call()
++                row['success'] = True
++                return result
++            except BaseException as error:
++                row['errorType'] = type(error).__name__
++                raise
++            finally:
++                row['elapsedSeconds'] = self.monotonic() - before
++                rows.append(row)
++
++        try:
++            yield measured
++            outcome['success'] = True
++        except BaseException as error:
++            outcome['errorType'] = type(error).__name__
++            raise
++        finally:
++            # No exception text, API bodies, command lines, headers or credentials.
++            # Preparation is reported separately and is never subtracted from a
++            # caller's existing observation window or original lease lifetime.
++            result = {'kind': 'acephale-managed-authority-timing-v1', 'operation': operation,
++                'startedAt': started, 'completedAt': self.now(),
++                'elapsedSeconds': self.monotonic() - tick, 'stages': rows, **outcome}
++            with (ROOT / 'authority-observation-timings.jsonl').open('a', encoding='utf-8') as stream:
++                stream.write(json.dumps(result, allow_nan=False) + '\n')
++
++    def _registered_github_authority(self):
++        path = ROOT / 'heartbeat-registration.json'
++        if not path.is_file() or path.is_symlink():
++            raise OwnershipLost('Regular heartbeat registration required')
++        raw = path.read_bytes()
++        registration = json.loads(raw)
++        configuration = Path(registration['xml'].removesuffix('.scheduled-task.xml'))
++        if self.control.sha256(configuration) != registration['configurationSha256']:
++            raise OwnershipLost('Registered heartbeat configuration changed')
++        config = read(configuration)
++        if config.get('watchdogBackend') != 'github_actions_v1':
++            raise OwnershipLost('Registered heartbeat backend differs')
++        if hasattr(self, '_github_registration_bytes') and raw != self._github_registration_bytes:
++            raise OwnershipLost('Prepared heartbeat registration changed')
++        return raw, configuration, registration['configurationSha256'], config
++
++    def _current_authority_scope(self, observation, original):
++        if self.stopped():
++            raise ExplicitStop('Stop during current authority observation')
++        current = observation['lease']
++        if any(current.get(key) != original.get(key) for key in
++               ('id', 'instanceId', 'name', 'deadline', 'setupDeadline')):
++            raise OwnershipLost('Original infrastructure lease association changed')
++        if current['status'] != 'active':
++            raise OwnershipLost('Original infrastructure lease is no longer active')
++        effective = current['deadline'] if current.get('ready') is True else min(
++            current['setupDeadline'], current['deadline'])
++        if self.now() >= effective:
++            raise LeaseDeadline('Original effective provider deadline reached')
++        return current
++
++    def prepare_authority(self):
++        """Fully validate once per actual observer, without authorizing dispatch.
++
++        Normal sequence startup calls this before its first observation window.
++        Direct callers still initialize inside their existing timed observation.
++        Cleanup-only never needs an active baseline or provider/controller read.
++        """
++        backend = getattr(self.launch, 'WATCHDOG_BACKEND', 'aws_lambda_v1')
++        if backend != 'github_actions_v1':
++            if backend != 'aws_lambda_v1':
++                raise OwnershipLost('Unknown explicit watchdog backend')
++            return
++        if getattr(self, '_github_authority_prepared', False):
++            return
++        with self._authority_timing('prepare') as measured:
++            original = self.lease()
++            self._current_authority_scope({'lease': original}, original)
++            raw, path, expected, config = measured('registration', self._registered_github_authority)
++            if not hasattr(self, '_github_owner'):
++                self._github_registration_bytes = raw
++                self._github_owner = measured('owner_runtime', lambda:
++                    self.launch.github_runtime.owner_entry.Runtime(path, expected,
++                        stopped=self.stopped, clock=self.now))
++            owner = self._github_owner
++            if (Path(owner.config['ledger']).resolve() != Path(self.launch.SLICE).resolve()
++                    or owner.config['leaseId'] != original['id']
++                    or owner.config['instanceId'] != original['instanceId']
++                    or owner.config != config):
++                raise OwnershipLost('Prepared owner belongs to a different current lease or configuration')
++            observation = measured('initial_full_and_guarded_state', owner.read_state.observe_current)
++            self._current_authority_scope(observation, original)
++            measured('registration_after', self._registered_github_authority)
++            self._github_authority_prepared = True
++
++    def _github_authority(self, *, allow_booting):
++        with self._authority_timing('observe') as measured:
++            original = measured('owned_lease_identity', self.lease)
++            # No silent rebaseline after changed authority or invalidated lifecycle.
++            self.prepare_authority()
++            owner = self._github_owner
++            _, _, _, config = measured('registration', self._registered_github_authority)
++            observation = measured('guarded_current_ledger', owner.read_state.observe_current)
++            current = self._current_authority_scope(observation, original)
++            instance = measured('provider_get', lambda: self.control_client.request(
++                'GET', '/instances/' + current['instanceId']))
++            if instance.get('id') != current['instanceId'] or instance.get('name') != current['name']:
++                raise OwnershipLost('Provider observation contradicts the owned instance')
++            if instance.get('status') not in (('active', 'booting') if allow_booting else ('active',)):
++                raise OwnershipLost('Owned provider instance is no longer running')
++            self._current_authority_scope(observation, original)
++            try:
++                proof = measured('github_verification', lambda: owner.authority(
++                    current, observation['planHash'], config, timing=measured))
++            except self.launch.github_runtime.owner_entry.heartbeat.AckPending as error:
++                raise ObservationUnavailable('Authenticated active readiness observation is pending') from error
++            final = measured('guarded_current_ledger_after', owner.read_state.observe_current)
++            latest = self._current_authority_scope(final, original)
++            if latest != current or final['planHash'] != observation['planHash']:
++                raise ObservationUnavailable('Current validated readiness changed during observation')
++            measured('registration_after', self._registered_github_authority)
++            now = self.now()
++            # Guard work after the network cannot extend the original signed
++            # ACK/local heartbeat freshness or controller/lease lifetime.
++            heartbeat = self.launch.github_runtime.owner_entry.heartbeat
++            heartbeat.require(0 <= now - proof['heartbeatRecord']['ownerHeartbeatAt'] <= 60,
++                              'Authority observation outlived the local heartbeat')
++            for row in proof['controllerAcks']:
++                owner.protocol.check_ack(row['record'], owner.key, owner.binding, row['controllerId'], now)
++            if (proof.get('backend') != 'github_actions_v1' or proof.get('sharedControlPlane') != 'github.com'
++                    or proof.get('regionIndependent') is not False):
++                raise OwnershipLost('Explicit current GitHub authority proof required')
++            self._current_authority_scope(final, original)
++            return current, {**proof, 'providerStatus': instance['status']}
++
+@@ -251 +391,0 @@
+-        original = self.lease()
+@@ -255,2 +395,4 @@
+-        ledger = (self.control.checked_bound_ledger(self.launch.SLICE) if backend == 'github_actions_v1'
+-                  else self.control.read_json(self.launch.SLICE))
++        if backend == 'github_actions_v1':
++            return self._github_authority(allow_booting=allow_booting)
++        original = self.lease()
++        ledger = self.control.read_json(self.launch.SLICE)
+@@ -275,13 +416,0 @@
+-        if backend == 'github_actions_v1':
+-            if heartbeat_config.get('watchdogBackend') != backend:
+-                raise OwnershipLost('Registered heartbeat backend differs')
+-            if self.stopped():
+-                raise ExplicitStop('Stop before GitHub authority observation')
+-            try:
+-                proof = self.launch.github_authority(current, ledger['planHash'], heartbeat_config)
+-            except self.launch.github_runtime.owner_entry.heartbeat.AckPending as error:
+-                raise ObservationUnavailable('Authenticated active readiness observation is pending') from error
+-            if (proof.get('backend') != backend or proof.get('sharedControlPlane') != 'github.com'
+-                    or proof.get('regionIndependent') is not False or self.stopped()):
+-                raise OwnershipLost('Explicit current GitHub authority proof required')
+-            return current, {**proof, 'providerStatus': instance['status']}
+--- a/github_owner_entry.py
++++ b/github_owner_entry.py
+@@ -121 +121 @@
+-    def check_jobs(self):
++    def check_jobs(self, *, timing=None):
+@@ -129,2 +129,5 @@
+-        run = self.store.request('GET', f'/actions/runs/{run_id}/attempts/{attempt}')
+-        jobs = self.store.request('GET', f'/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')
++        measured = timing or (lambda name, call: call())
++        run = measured('github_run_get', lambda: self.store.request(
++            'GET', f'/actions/runs/{run_id}/attempts/{attempt}'))
++        jobs = measured('github_jobs_get', lambda: self.store.request(
++            'GET', f'/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100'))
+@@ -156,2 +159,3 @@
+-    def authority(self, current, plan_hash, heartbeat_config):
+-        self.check_inputs()
++    def authority(self, current, plan_hash, heartbeat_config, *, timing=None):
++        measured = timing or (lambda name, call: call())
++        measured('github_source_guards', self.check_inputs)
+@@ -159,3 +163,17 @@
+-        local = fresh_local_record(Path(self.config['output']) / 'heartbeat.stdout.log',
+-                                   self.binding['leaseIdentity']['leaseId'], self.clock())
+-        return heartbeat.observe_authority(self.protocol, self.binding, self.key, self.store,
++        local = measured('github_local_record', lambda: fresh_local_record(
++            Path(self.config['output']) / 'heartbeat.stdout.log',
++            self.binding['leaseIdentity']['leaseId'], self.clock()))
++        store = self.store
++        names = {(self.binding['stateBranch'], self.binding['statePath']): 'github_owner_get'}
++        names.update({(row['evidenceBranch'], self.protocol.ACK_PATH): 'github_ack_' + str(i + 1) + '_get'
++                      for i, row in enumerate(self.binding['controllers'])})
++
++        class ReadOnlyTimedStore:
++            repository, write_branch = store.repository, store.write_branch
++
++            def read(self, branch, path):
++                # Only timings differ: same store, sequential transport, same verifier.
++                heartbeat.require((branch, path) in names, 'Unexpected authority evidence read')
++                return measured(names[(branch, path)], lambda: store.read(branch, path))
++
++        return heartbeat.observe_authority(self.protocol, self.binding, self.key, ReadOnlyTimedStore(),
+@@ -163 +181 @@
+-            controller_check=self.check_jobs)
++            controller_check=lambda: self.check_jobs(timing=timing))
+--- a/evaluation_sequence_v2.py
++++ b/evaluation_sequence_v2.py
+@@ -400,0 +401,3 @@
++            # One measured full local validation before any observation/dispatch.
++            # It remains inside original lease bounds and this cleanup-protected try.
++            runtime.prepare_authority()
+--- a/study_sequence.py
++++ b/study_sequence.py
+@@ -75,0 +76,3 @@
++            # Initial full validation belongs to this actual scheduled owner,
++            # before its first75s observation and within existing cleanup.
++            runtime.prepare_authority()
+--- a/successor_owner.py
++++ b/successor_owner.py
+@@ -180,0 +181 @@
++            runtime.prepare_authority()
+@@ -334,0 +336,7 @@
++            # Each actual child owns a separate reader. Preparation does not
++            # reset either its phase bound or the original provider deadline.
++            runtime.prepare_authority()
++            if runtime.stopped():
++                raise policy.ExplicitStop('Stop during phase authority preparation')
++            if not runtime.now() < phase_deadline < runtime.lease()['deadline']:
++                raise policy.LeaseDeadline('Original phase bound reached during authority preparation')
+--- a/managed_serving_v3.py
++++ b/managed_serving_v3.py
+@@ -19 +19 @@
+-POLICY_SHA = 'c9114cfb4c227940ccd5ed019bb6f275cd39c92a00cb0683ed4a4176a2489eba'
++POLICY_SHA = '2a89b2d23e5d382df2e5d2b12c93468fa5bbbd38db77af6fb6f8a72cc01397f1'
+@@ -21 +21 @@
+-HELPERS = {'managed_stage.py': 'c9114cfb4c227940ccd5ed019bb6f275cd39c92a00cb0683ed4a4176a2489eba', 'serving_owner_probe.py': 'fa4197f7949bcba640cf01ce63809ce62792d7bc1b62d7f92ff04322d7b65ac7', 'serving_host_v3.py': '69b9474a5fbf509633797e57ec810b01e8b79fb74ba12bc6931f78a3aace3bc1', 'run_serving_v3.py': 'c64ecde4574a27ced022a609baa8f6394c687d34a49717ecd1b5a71bff2ebeb7', 'prepare_serving_bindings_v3.py': '0cf4f1518f0d6a77a5514170c4ed4d54276f3ac652c575ef44a402ccb965a501', 'current_lease_readiness.py': '79dd1935ae08b5ffa59b571e522bdb99ff026da3dbedc543d44f5ec1f6b1c464', 'evaluated_main_contract_v2.py': '9573bd43fdb82cb9ffaa66cbc605bb007c788ce0910e15242e26541f3d6d0b36', 'numerical_policy_binding.py': '9fdccf0c1009e8f6a6231133acc339a9bee0f5b46424b2db302c43b203bfe34e', 'serving_precision.py': 'c0f75e2c4cbb8a4c7b686a8632363a71bbd37d9e2cce7c4796036afb4b4c47bd', 'serving-diagnostic.mjs': '91ee8b5f8312af926660c7906ff3091e4550c59ff16d88775a2ebee102d991be'}
++HELPERS = {'managed_stage.py': '2a89b2d23e5d382df2e5d2b12c93468fa5bbbd38db77af6fb6f8a72cc01397f1', 'serving_owner_probe.py': 'fa4197f7949bcba640cf01ce63809ce62792d7bc1b62d7f92ff04322d7b65ac7', 'serving_host_v3.py': '69b9474a5fbf509633797e57ec810b01e8b79fb74ba12bc6931f78a3aace3bc1', 'run_serving_v3.py': 'c64ecde4574a27ced022a609baa8f6394c687d34a49717ecd1b5a71bff2ebeb7', 'prepare_serving_bindings_v3.py': '0cf4f1518f0d6a77a5514170c4ed4d54276f3ac652c575ef44a402ccb965a501', 'current_lease_readiness.py': '79dd1935ae08b5ffa59b571e522bdb99ff026da3dbedc543d44f5ec1f6b1c464', 'evaluated_main_contract_v2.py': '9573bd43fdb82cb9ffaa66cbc605bb007c788ce0910e15242e26541f3d6d0b36', 'numerical_policy_binding.py': '9fdccf0c1009e8f6a6231133acc339a9bee0f5b46424b2db302c43b203bfe34e', 'serving_precision.py': 'c0f75e2c4cbb8a4c7b686a8632363a71bbd37d9e2cce7c4796036afb4b4c47bd', 'serving-diagnostic.mjs': '91ee8b5f8312af926660c7906ff3091e4550c59ff16d88775a2ebee102d991be'}
+--- a/native_stage_owner_v2.py
++++ b/native_stage_owner_v2.py
+@@ -26 +26 @@
+-SERVING_OWNER_SHA = 'e9a1a1ef821b2a23c358eed28773911ce5c1d5c0e2c393a8d48c0b65f5450e29'
++SERVING_OWNER_SHA = '011a4bf55a3a4caf90cf67f53c0434e8d73090d8926a6cc9ab7413f8ebd76378'

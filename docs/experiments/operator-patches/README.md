@@ -1,5 +1,68 @@
 # Evaluation operator repairs
 
+## External controller start block, 2026-11-17
+
+E28's two GitHub Actions controller checks completed with failure on November 17
+at 14:44:38 and 14:44:39 UTC, before any job step or GPU dispatch. Both annotations
+identify failed account payments or a spending-limit restriction. The retained
+evidence does not establish which condition applies. Repository/account URLs,
+job identifiers and raw API responses are omitted from this public summary.
+
+The retained read-only check observation has SHA-256
+`6daec55b7e992da6c3a4d915276c73d14b3a63dc90218ba339f2896c7b10b7d7`.
+This is an external operational block, not an authority-fix or numerical-model
+outcome. The authority patch and its verification manifest below are unchanged.
+Final trained-replay and native benchmark results remain unavailable.
+
+## Authority observation preparation, 2026-11-17
+
+E27 completed foundation execution and export but did not admit the phase:
+post-operation authority observations took 88.5591347 and 78.2148187 seconds,
+exceeding the original 75-second repair window. Cleanup followed before main
+evaluation, the numerical diagnostic, replay or native trials. No timeout is
+extended by this correction.
+
+Source inspection found repeated full local financial-chain validation. A
+subsequent closed-state profile measured one full call at 11.8743202 seconds,
+including 272 JSON reads, 532 canonical-digest calls and 104 file hashes. Earlier
+network-component timing was unavailable. This sample establishes avoidable
+local work, not the complete cause of the 78-89 second observations or a measured
+live speedup.
+
+The adapter fully validates one local baseline per actual owner/phase observer,
+then reuses it only with current authority file-set/byte checks and a fresh
+whole-ledger comparison. Only the existing typed readiness and cleanup
+transitions may differ. It never silently rebaselines changed financial, source,
+lease or unrelated-row state. Every observation still reads the exact provider,
+signed owner, both controller acknowledgements and workflow run/jobs. Network
+transports stay sequential, with unchanged timeout/retry behavior and final
+freshness checks. The 75-second observation, 60-second signed-evidence and
+120-second owner-heartbeat bounds remain unchanged.
+
+Preparation runs inside the scheduled owner's existing locks and cleanup path,
+before its first observation. Each phase child prepares after identity/deadline
+validation and rechecks its original bound before dispatch. Preparation still
+consumes the original lease and phase lifetimes. Direct unprepared observations
+retain that work inside their existing interval; cleanup-only entry does not
+require an active baseline. Safe monotonic stage timings retain failures without
+API bodies, credentials or exception text.
+
+Twenty-three focused cases passed for the reader, live-read composition,
+mutation rejection, readiness/cleanup and timing boundaries. An entry audit then
+found that scheduled study and phase subprocesses bypass standalone sequence
+main. Five additional actual-function cases passed after those routes were
+corrected. The 28 cases use isolated clocks, transport and temporary financial
+ports; earlier fixture failures and the narrower original entry coverage remain
+recorded. They establish neither live timing nor scientific success.
+
+The [patch](20261117-authority-observation.patch) and
+[byte verification manifest](20261117-authority-observation.json) cover six
+behavior files and their required dependency-pin updates. Apply with
+`git -c core.autocrlf=false apply --unidiff-zero` to the exact retained private
+baselines named and hashed in the manifest. Applying and reversing the patch
+reproduced both sets of bytes. The public checkout alone does not reconstruct
+the full operator, private runtime configuration or credentials.
+
 ## Predictor numerical diagnostic, 2026-11-17
 
 E20 passed the one-token serving gate. E26 completed strict export, then failed

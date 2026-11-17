@@ -352,6 +352,15 @@ with proof index zero fixed beforehand. Runtime configuration and cache evidence
 accompany the responses. This diagnostic is separate from model-quality
 evaluation; it establishes neither determinism nor a historical failure's cause.
 
+Operational authority observations may reuse a fully validated local baseline
+only while current authority file sets/bytes and the entire protected ledger
+projection still match. Narrow typed readiness and cleanup transitions remain
+checked; provider and signed controller observations are always fresh. Initial
+preparation is counted against the original lease/phase lifetime and does not
+extend the 75-second observation window. This operational control changes no
+scientific score or numerical gate. See the
+[authority preparation note](experiments/operator-patches/README.md#authority-observation-preparation-2026-11-17).
+
 ## Relationship to prior methods
 
 [PASTE](https://arxiv.org/abs/2603.18897v3) motivates overlapping tool execution

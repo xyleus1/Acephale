@@ -1,0 +1,111 @@
+{
+  "kind": "acephale-public-authority-observation-patch-v1",
+  "verified": true,
+  "patch": "20261117-authority-observation.patch",
+  "patchSha256": "d108c62aad7b35f20565f18fae2301c8f38647351e6dc934baeb8f3259886a73",
+  "files": [
+    {
+      "name": "steady_state_reader.py",
+      "beforeSha256": "52ce5cf69803ce8fff67d19a91301e7e138751ac870ca1ac9d6a3b8c1aeb3a34",
+      "afterSha256": "af03a9e114e69081c2cea74798519290f538c97c4f8b3799677891eab8ea81ad",
+      "scope": "behavior"
+    },
+    {
+      "name": "managed_stage.py",
+      "beforeSha256": "c9114cfb4c227940ccd5ed019bb6f275cd39c92a00cb0683ed4a4176a2489eba",
+      "afterSha256": "2a89b2d23e5d382df2e5d2b12c93468fa5bbbd38db77af6fb6f8a72cc01397f1",
+      "scope": "behavior"
+    },
+    {
+      "name": "github_owner_entry.py",
+      "beforeSha256": "f31e3871eaeeacd96fa9b3efb4e304312fd90b112869f08b9b3661c823d2b893",
+      "afterSha256": "4c2d018cc15a43a3958b4aed618578c5fee92b76e8d27837d1af5819e4ac6476",
+      "scope": "behavior"
+    },
+    {
+      "name": "evaluation_sequence_v2.py",
+      "beforeSha256": "ff2202207a2249f279f455d1e2a93169ba9d60c52bdd3861df95c1a6ffa7e2c9",
+      "afterSha256": "a5a174ef7d43d6fdeca9e0ad445d3c47cd881d998bc454298e57191c67a6590f",
+      "scope": "behavior"
+    },
+    {
+      "name": "study_sequence.py",
+      "beforeSha256": "77fbdb4197da68f60898b938726f5cd6c110910c11f98222c76fc922bb110b71",
+      "afterSha256": "187dc70bc1086ad7131a313c0d59dd4cb95c8ee1bcdeb66cc54055bc07dd731e",
+      "scope": "behavior"
+    },
+    {
+      "name": "successor_owner.py",
+      "beforeSha256": "63b97a371f057ad963aa37e60987a8673fed9545e56174bdeadf96700e760995",
+      "afterSha256": "a8f7f540c87bbd823762f4f255f34cd50802f61396b9162ab7015f54af8baa9c",
+      "scope": "behavior"
+    },
+    {
+      "name": "managed_serving_v3.py",
+      "beforeSha256": "e9a1a1ef821b2a23c358eed28773911ce5c1d5c0e2c393a8d48c0b65f5450e29",
+      "afterSha256": "011a4bf55a3a4caf90cf67f53c0434e8d73090d8926a6cc9ab7413f8ebd76378",
+      "scope": "dependency hash assignments only"
+    },
+    {
+      "name": "native_stage_owner_v2.py",
+      "beforeSha256": "bf3a2c63b018a79eb6c9a9663b8f1dcb2c01070bfa06213921a148d3cb5cc7b2",
+      "afterSha256": "18709348cad015c50571a2717ee71a4ec2297b354d89bab94ce07c42dc433a16",
+      "scope": "dependency hash assignments only"
+    }
+  ],
+  "forwardAndReverseAppliedBytesMatch": true,
+  "applicationArguments": [
+    "git",
+    "-c",
+    "core.autocrlf=false",
+    "apply",
+    "--unidiff-zero"
+  ],
+  "requiresRetainedPrivateBaselines": true,
+  "publicCheckoutAloneReconstructsOperator": false,
+  "scope": "Six reviewed authority behavior files plus two exact dependency-pin updates. Private configuration, credentials, prospective deadline bindings and other run sources are not reconstructed.",
+  "zeroContextReason": "Omit unrelated private unchanged path context while retaining exact before/after identities.",
+  "producerSha256": "2546eb1ab811705da4585d446afd47ed160a6a67ebfa6f166ab3ab81d3f4f35c",
+  "independentReviewSha256": "f738024d2d0098f1eade3aefd92aff61a13e3fa62edf8d3fee27e649672c4220",
+  "sourceCascadeSha256": "551080b73c974441a869ef2669e9de9a007afe24b01bfa8fb8b407422019a77f",
+  "actualEntryCopySha256": "d2937658e667ee3de875ee8d3fdb0959e16dbd463817ad5d42217f3f21c98350",
+  "focusedAuthorCases": {
+    "priorReaderAndCompositionPassed": 23,
+    "actualIntegratedEntryPassed": 5,
+    "uniqueTotalPassed": 28,
+    "independentRerun": false
+  },
+  "coverageCorrection": "Standalone sequence-main tests did not cover scheduled-study and phase subprocess entry; five additional actual-function cases cover the final entry routes.",
+  "retainedFixtureFailures": [
+    "Observer count included independent mark-ready full validation",
+    "Preparation fixture lacked run_root",
+    "Fixture indentation error during run_root correction"
+  ],
+  "historicalObservationSeconds": [
+    88.5591347,
+    78.2148187
+  ],
+  "closedFullValidationProfile": {
+    "seconds": 11.8743202,
+    "jsonReadCalls": 272,
+    "canonicalDigestCalls": 532,
+    "fileHashCalls": 104,
+    "proofSha256": "c07f65455b520281e6cafca9b51776c954ecf2dabcb4b088afaf8584dbea2b4a"
+  },
+  "unchangedBounds": {
+    "observationSeconds": 75,
+    "signedEvidenceSeconds": 60,
+    "ownerHeartbeatSeconds": 120
+  },
+  "initialPreparationCountsAgainstOriginalLeaseAndPhase": true,
+  "noNewNetworkConcurrencyOrRetry": true,
+  "historicalWholeCauseEstablished": false,
+  "measuredLiveSpeedupClaimed": false,
+  "future75SecondSuccessEstablished": false,
+  "modelCalls": 0,
+  "providerCalls": 0,
+  "liveAuthorityReads": 0,
+  "testsRerun": false,
+  "scientificFormulasOrNumericalGateChanged": false,
+  "sealedBaselineSourcesChanged": false
+}

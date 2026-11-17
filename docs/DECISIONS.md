@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-17: Prepare a validated reader without caching admission
+
+Keep the existing 75-second observation, 60-second signed-evidence and 120-second
+owner-heartbeat bounds after E27's pre-main failure. Move one full local baseline
+validation before the first observation on each actual owner entry route, inside
+its original cleanup and lifetime bounds. Reuse only that validated baseline;
+read current authority bytes, ledger state, provider and controller evidence for
+each admission. Do not cache a provider result, extend a deadline or silently
+rebaseline changed authority. Add per-component timings without claiming the
+historical total delay is fully explained. See the
+[authority note](experiments/operator-patches/README.md#authority-observation-preparation-2026-11-17).
+
 ## 2026-11-17: Diagnose serving reduction without changing acceptance
 
 Keep the model, adapter, prompt and 0.01 gate after E26's failed qualification.

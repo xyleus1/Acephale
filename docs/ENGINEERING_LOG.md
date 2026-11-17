@@ -1,5 +1,28 @@
 # Acephale engineering log
 
+## Controller jobs refused before execution, 2026-11-17
+
+Both E28 controller checks completed as failures before job steps or GPU dispatch.
+GitHub's annotations cite failed account payments or a spending-limit restriction,
+without establishing which condition applies. No managed scientific phase, numerical
+diagnostic or native trial ran. Retained the failed attempt; no tests were repeated
+and the published authority patch bytes remain unchanged. The redacted observation
+and evidence hash are in the [operator note](experiments/operator-patches/README.md#external-controller-start-block-2026-11-17).
+
+## Authority reader entry correction, 2026-11-17
+
+E27 authority observations exceeded 75 seconds before main. One later closed-state
+full financial validation took 11.8743 seconds; the earlier observations lack
+per-network-step timing, so that sample does not explain their entire delay.
+Prepared a retained local-reader adapter and safe stage timings, preserving
+fresh provider/GitHub checks and original bounds. An actual-entry audit caught
+scheduled-study and phase-child routes that bypassed standalone sequence main;
+the correction covers both. Twenty-three focused cases plus five actual-entry
+cases passed with external effects isolated. Earlier fixture failures and the
+entry-coverage correction remain explicit in the
+[reproducible patch note](experiments/operator-patches/README.md#authority-observation-preparation-2026-11-17).
+No live speedup, numerical qualification or benchmark success is claimed.
+
 ## Serving numerical discrepancy, 2026-11-17
 
 Compared retained E20/E26 metadata and the exact image build's upstream source.

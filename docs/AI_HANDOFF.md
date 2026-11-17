@@ -1,5 +1,27 @@
 # Working on Acephale
 
+## External controller start block, 2026-11-17
+
+E28 could not start either GitHub Actions controller: both checks reported failed
+account payments or a spending-limit restriction before job steps or GPU dispatch.
+The retained annotation does not distinguish those causes. Preserve the failed
+attempt and its reservation history; no numerical or benchmark result follows
+from it. The authority patch remains verified locally but unmeasured in a live
+observation. See the [redacted evidence summary](experiments/operator-patches/README.md#external-controller-start-block-2026-11-17).
+
+## Authority observation preparation, 2026-11-17
+
+E27 stopped before main after two authority observations exceeded the original
+75-second window. The prospective adapter initializes one validated local reader
+per actual observer, then checks current authority bytes, ledger state and live
+provider/GitHub evidence on every observation. Preparation consumes the original
+lease and phase lifetimes. Both the scheduled study and phase subprocess routes
+must prepare before their first observation; standalone-main coverage alone
+missed those routes. Preserve the 60-second signed-evidence and 120-second owner
+heartbeat bounds. The [patch and evidence note](experiments/operator-patches/README.md#authority-observation-preparation-2026-11-17)
+records 28 focused cases and the limits of the timing diagnosis. E28 was blocked
+before execution; numerical/scientific outcomes remain unavailable.
+
 ## Numerical serving diagnostic, 2026-11-17
 
 E26 exported successfully but failed the original serving probability gate before

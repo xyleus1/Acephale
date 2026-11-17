@@ -1,6 +1,22 @@
 # Current state
 
-Updated November 17, 2026 (UTC). E26 completed strict two-seed export and
+Updated November 17, 2026 (UTC). E28's controller jobs were rejected by GitHub
+Actions before any job step or GPU dispatch. Both checks reported failed account
+payments or a spending-limit restriction; the evidence does not identify which.
+The authority correction therefore has no live observation result from E28.
+Final trained-replay and native benchmark results remain unavailable. See the
+[redacted operational observation](experiments/operator-patches/README.md#external-controller-start-block-2026-11-17).
+
+Earlier E27 stopped before main evaluation. Foundation
+execution and export succeeded, but two post-operation authority observations
+took 88.5591 and 78.2148 seconds, exceeding the existing 75-second window.
+Cleanup followed; the numerical serving diagnostic, replay and native trials
+did not run. A prospective local-reader correction passed 28 focused cases.
+It preserves the observation window and fresh network checks; no measured live
+speedup or complete explanation of those historical delays is established. See
+the [authority observation note](experiments/operator-patches/README.md#authority-observation-preparation-2026-11-17).
+
+Earlier E26 completed strict two-seed export and
 teacher-forced evaluation with the retained weights. Its first serving attempt
 failed the unchanged 0.01 numerical gate: conditional token-1 probability was
 0.34864513533394575 against reference 0.3629692055196168. E20 passed with the same
