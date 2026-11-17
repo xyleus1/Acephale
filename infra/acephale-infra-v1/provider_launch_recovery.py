@@ -56,13 +56,24 @@ def pulse(refresh, lease, phase, enrollments, expected_state, digest, cancelled,
     if type(proof) is not dict:
         raise ValueError("Actual synchronous heartbeat proof required")
     rows = proof.get("controllers", [])
-    regions = {row["hostId"].split(":")[3] for row in enrollments}
+    github = any(row.get("hostingKind") == "github_actions" for row in enrollments)
+    if github:
+        expected = {(row.get("controllerId"), row.get("hostId")) for row in enrollments}
+        scope_matches = (len(enrollments) == 2 and len(expected) == 2
+            and all(row.get("hostingKind") == "github_actions" for row in enrollments)
+            and proof.get("backend") == "github_actions_v1"
+            and proof.get("sharedControlPlane") == "github.com" and proof.get("regionIndependent") is False
+            and {(row.get("controllerId"), row.get("hostId")) for row in rows} == expected
+            and all("region" not in row for row in rows))
+    else:
+        regions = {row["hostId"].split(":")[3] for row in enrollments}
+        scope_matches = proof.get("backend") != "github_actions_v1" and {row.get("region") for row in rows} == regions
     if (proof.get("verified") is not True or proof.get("phase") != phase
             or proof.get("leaseId") != lease["id"] or proof.get("instanceId") != lease["instanceId"]
             or proof.get("status") != lease["status"] or proof.get("deadline") != lease["deadline"]
             or proof.get("setupDeadline") != lease["setupDeadline"]
             or proof.get("watchdogTimeoutSeconds") != 120 or len(rows) != 2
-            or {row.get("region") for row in rows} != regions):
+            or not scope_matches):
         raise ValueError("Exact two-controller reconciliation heartbeat required")
     completed = proof.get("publicationCompletedAt")
     if (type(completed) not in (int, float) or not math.isfinite(completed) or completed > now

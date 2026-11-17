@@ -24,6 +24,9 @@ def identities(value):
 
 
 def checked_fence(ledger: dict, value: dict, now: float, *, current_lease_id=None) -> dict:
+    if value.get("profile") == "acephale-github-unresolved-launch-fence-v1":
+        from github_watchdog_admission import checked_fence as checked_github_fence
+        return checked_github_fence(ledger, value, now, current_lease_id=current_lease_id)
     pending = [row for row in ledger["leases"] if row["id"] != current_lease_id and row["status"] != "terminated"]
     require(len(pending) == 1, "Exactly one unresolved predecessor is required")
     previous = pending[0]

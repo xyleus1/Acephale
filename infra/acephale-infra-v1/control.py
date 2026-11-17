@@ -1839,7 +1839,9 @@ def committed_source(initial_commit: str) -> str:
 
 def controller_source_files() -> list[dict]:
     return [{"path": name, "sha256": sha256(HERE / name)} for name in
-            ("control.py", "evaluation_lease_capacity.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py", "versions.json", "hardware-profiles.json", "training-window-capacity-v1.json")]
+            ("control.py", "evaluation_lease_capacity.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py",
+             "github_watchdog_protocol.py", "github_watchdog_store.py", "github_gpu_watchdog.py", "github_watchdog_admission.py",
+             "versions.json", "hardware-profiles.json", "training-window-capacity-v1.json")]
 
 
 def record_source_amendment(ledger_path: Path, output: Path, reason: str, readiness_evidence: Path,
@@ -2094,6 +2096,10 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
 
 def watchdog_enrollments(receipt_path: Path, ledger: dict[str, Any], lease: dict[str, Any], now: float) -> list[dict[str, Any]]:
     data = read_json(receipt_path)
+    if data.get("backend") == "github_actions_v1":
+        from github_watchdog_admission import enrollments
+        from github_watchdog_protocol import SOURCE_NAMES
+        return enrollments(data, ledger, lease, now, {name: sha256(HERE / name) for name in SOURCE_NAMES})
     values = data.get("controllers", [])
     if data.get("version") != 1 or len(values) != 2:
         raise ValueError("Two actual independent watchdog enrollments required")

@@ -99,6 +99,45 @@ def test_successful_post_has_no_reconciliation_get_or_extra_publisher(scenario):
     assert sum(path == '/instances' for _, path, _ in scenario.client.calls) == 1
 
 
+@pytest.mark.parametrize('invalid', [None, 'wrong-job', 'mixed-backend', 'fake-region', 'missing-disclosure'])
+def test_actual_launch_actions_reconciliation_binds_jobs_not_regions(scenario, monkeypatch, invalid):
+    case = scenario
+    controllers = [{'hostingKind': 'github_actions', 'controllerId': 'acephale-gha-' + letter,
+                    'hostId': f'github:42:100:1:{200 + i}'} for i, letter in enumerate(('a', 'b'))]
+    monkeypatch.setattr(base.control, 'watchdog_enrollments', lambda *args: copy.deepcopy(controllers))
+    original = case.heartbeat
+
+    def actual_scope(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result.update(backend='github_actions_v1', sharedControlPlane='github.com', regionIndependent=False)
+        result['controllers'] = [{**{k: v for k, v in row.items() if k != 'region'},
+                                  'controllerId': controller['controllerId'], 'hostId': controller['hostId']}
+                                 for row, controller in zip(result['controllers'], controllers)]
+        if invalid == 'wrong-job':
+            result['controllers'][0]['hostId'] = 'github:42:100:1:999'
+        elif invalid == 'fake-region':
+            result['controllers'][0]['region'] = 'us-east-1'
+        elif invalid == 'missing-disclosure':
+            result.pop('sharedControlPlane')
+        return result
+
+    case.heartbeat = actual_scope
+    if invalid == 'mixed-backend':
+        controllers[1]['hostingKind'] = 'aws_lambda'
+    if invalid:
+        with pytest.raises(ValueError, match='two-controller'):
+            case.run()
+        assert not case.attempted
+    else:
+        result = case.run()
+        assert result['status'] == 'active'
+        assert result['launchRecovery']['postAttempts'] == 1
+        assert sum(method == 'POST' for method, _, _ in case.client.calls) == 1
+        assert case.budget_calls.count('reserve') == 1
+        for field in ('deadline', 'setupDeadline', 'reservedHours', 'studyReservation'):
+            assert result[field] == case.prepared[field]
+
+
 def test_existing_exact_name_prevents_the_only_post(scenario):
     scenario.rows = [{'id': 'b' * 32, 'name': scenario.prepared['name']}]
     with pytest.raises(ValueError, match='already exists'):

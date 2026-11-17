@@ -1,5 +1,16 @@
 # Working on Acephale
 
+## Prospective Actions watchdog, 2026-11-17
+
+The isolated GitHub cleanup backend reuses exact-instance provider logic and
+preserves owner120/setup/hard deadlines. Explicit signed enrollment and
+predecessor migration retain AWS history, all holds and scientific sources.
+Two Actions jobs share one control plane; do not call them independent regions.
+Local tests are implementation evidence, not live recovery qualification. See
+the [backend contract](../infra/acephale-infra-v1/GITHUB_WATCHDOG.md) before deployment.
+E20 main export and first serving qualification succeeded; replay stopped before
+rows when its relay guard exited. No native trials completed; closure is retained.
+
 ## Retry an individual S3 transport request, 2026-11-16
 
 E19's actual startup handoff passed in 15.42 seconds after release, within the old

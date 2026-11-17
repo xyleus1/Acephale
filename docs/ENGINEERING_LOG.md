@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## Prospective signed Actions watchdog, 2026-11-17
+
+Added a bounded-job backend around unchanged Lambda GPU watchdog pure functions.
+HMAC records, monotone sequence and blob-SHA CAS bind exact lease authority.
+Current-job admission and historical actual recovery are distinct. A typed
+predecessor migration preserves old AWS identities and unknown holds. Focused
+tests exercise actual cleanup/public admission with external effects intercepted,
+including API outage, ambiguous writes, duplicate jobs and predecessor history.
+Live provisioning and qualification remain separate from this implementation.
+
 ## Prepared S3 client retries, 2026-11-16
 
 E19 passed startup, foundation and image preparation but lost its heartbeat

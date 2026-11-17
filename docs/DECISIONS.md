@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-17: explicit finite Actions cleanup backend
+
+Keep AWS enrollment intact and add a distinct signed Actions contract. Require
+actual separate jobs/runners, version-specific recovery, finite API-derived
+lifetime and fresh current assignment. Conditional blob writes and unique
+session branches preserve evidence. Cached state permits cleanup during API
+failure, never new launch, heartbeat renewal or deadline extension. Disclose the
+shared control plane; retain financial/GPU authorities and frozen science.
+
 ## 2026-11-16: use bounded SDK retries for heartbeat transport
 
 Use the prepared S3 client's standard retry policy with three total attempts
