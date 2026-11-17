@@ -839,3 +839,8 @@ job-token request quota is separate from the research pair. Transfer only exact
 source/workflow version qualification through a signed typed receipt binding both
 historical recovery proofs and both repository identities. Current destination
 job readiness must still be observed independently; no old lease is extended.
+
+Reserve paid GitHub runner charges as CPU compute within existing infrastructure
+caps, with a distinct provider/kind on the retained overhead row. Preserve the
+original cross-provider journal binding and count CPU holds in future GPU compute
+admission. Reserve tax/storage separately; do not assume free Actions minutes.

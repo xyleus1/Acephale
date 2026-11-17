@@ -86,3 +86,11 @@ conditional previous-blob updates in the [Contents API](https://docs.github.com/
 and actual runner/start identity in the [jobs API](https://docs.github.com/en/rest/actions/workflow-jobs).
 Simultaneous runner/control-plane loss remains a shared failure mode. Financial
 caps, holds, native allocations and model/data/scoring are unchanged.
+
+Paid CPU runner time requires an explicit `github_actions_compute` overhead
+reservation before workflow dispatch. Its full charge consumes the existing
+compute and infrastructure ceilings, while tax and evidence storage consume
+associated allowance. Retained CPU holds also count against later GPU monetary
+admission, but consume neither GPU hours nor evaluation lease slots. The original
+journal's exclusive lambda slice and reservation namespace remain unchanged;
+the slice row explicitly identifies GitHub as the billed provider.

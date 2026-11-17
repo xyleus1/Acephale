@@ -692,3 +692,8 @@ qualification transfer between separately identified private control and fence
 repositories. Both real canary proofs remain required, alongside fresh actual
 destination job/runner/provider observations. This local implementation is not
 a live qualification or provider launch. Original leases and holds are unchanged.
+
+GitHub CPU billing uses explicit compute-classified overhead reservations under
+the original journal binding. Future GPU monetary admission includes those holds;
+CPU runtime does not consume GPU hours or lease slots. No live job was dispatched
+by these implementation tests.

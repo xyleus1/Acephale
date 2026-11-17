@@ -1892,7 +1892,7 @@ def deployment_source(ledger: dict, amendment: Path | None, *, source_probe=comm
 
 def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
                      kind: str = "watchdog_storage_export", budget=study_budget) -> dict[str, Any]:
-    if kind not in {"watchdog_storage_export", "provider_tax_allowance"}:
+    if kind not in {"watchdog_storage_export", "provider_tax_allowance", "github_actions_compute"}:
         raise ValueError("Explicit supported associated-charge kind required")
     if str(uuid.UUID(reservation_id)) != reservation_id:
         raise ValueError("Explicit unique overhead reservation UUID required")
@@ -1902,15 +1902,22 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
         all_rows = value["leases"] + value.get("overheads", [])
         if any(row["id"] == reservation_id for row in all_rows):
             raise ValueError("Overhead reservation already attempted")
-        infrastructure, _, associated = infrastructure_caps(value)
+        infrastructure, compute, associated = infrastructure_caps(value)
         if value["priorInfraUsd"] + sum(row["reservedUsd"] for row in all_rows) + maximum > infrastructure:
             raise ValueError("Original infrastructure allocation exhausted")
         charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in all_rows)
-        if charges + maximum > associated:
+        cpu = kind == "github_actions_compute"
+        if cpu and _infrastructure_reserved_totals(value)["computeUsd"] + maximum > compute:
+            raise ValueError("Retained CPU and GPU compute exceed the approved allowance")
+        if not cpu and charges + maximum > associated:
             raise ValueError("Associated infrastructure charges exceed five dollars" if associated == 5
                              else "Associated infrastructure charges exceed the approved allowance")
         row = {"id": reservation_id, "kind": kind, "status": "reservation_pending",
                "reservedUsd": maximum, "reservedMicrodollars": math.ceil(maximum * 1_000_000)}
+        if cpu:
+            # Keep the original journal slice/UUID namespace, but classify the
+            # actual bill explicitly. CPU runner time consumes no GPU hours.
+            row.update(provider="github", reservedComputeUsd=maximum)
         value["overheads"].append(row)
         atomic_json(path, value)
         row["studyReservation"] = budget(value["plan"], "reserve", row)
@@ -1947,7 +1954,9 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     used_hours = ledger["priorGpuHours"] + sum(lease["reservedHours"] for lease in leases)
     reserved = ledger["priorInfraUsd"] + sum(lease["reservedUsd"] for lease in leases + ledger.get("overheads", []))
     cost = round(rate * hours + allowance, 6)
-    compute = ledger.get("priorComputeUsd", ledger["priorInfraUsd"]) + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
+    compute = (ledger.get("priorComputeUsd", ledger["priorInfraUsd"])
+               + sum(lease.get("reservedComputeUsd", lease["reservedUsd"]) for lease in leases)
+               + sum(row.get("reservedComputeUsd", 0) for row in ledger.get("overheads", [])))
     charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
     infrastructure_cap, compute_cap, associated_cap = infrastructure_caps(ledger)
     funding = infrastructure_funding(ledger)
@@ -2390,7 +2399,7 @@ def main(argv: list[str] | None = None) -> int:
     overhead.add_argument("--ledger", type=Path, required=True)
     overhead.add_argument("--reservation-id", required=True)
     overhead.add_argument("--maximum-usd", type=float, required=True)
-    overhead.add_argument("--kind", choices=["watchdog_storage_export", "provider_tax_allowance"], default="watchdog_storage_export")
+    overhead.add_argument("--kind", choices=["watchdog_storage_export", "provider_tax_allowance", "github_actions_compute"], default="watchdog_storage_export")
     suballocation = commands.add_parser("record-infrastructure-suballocation")
     suballocation.add_argument("--ledger", type=Path, required=True)
     suballocation.add_argument("--reason", required=True)

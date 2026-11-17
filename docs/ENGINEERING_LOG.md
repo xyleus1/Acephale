@@ -1339,3 +1339,8 @@ Added an explicit signed repository transfer contract around existing actual
 canary evidence. Three focused cases and thirteen negative subtests passed,
 covering both retained proofs, changed repository/source/workflow/assignment,
 and current runner/job identity. No GitHub or provider calls were performed.
+
+Added explicit GitHub CPU-runner overhead classification and included retained
+CPU compute in subsequent GPU monetary admission. Five new actual writer/admission
+cases passed together with forty-five existing controller cases in the initial
+collection. Original journal holds, GPU hours and lease counts remain unchanged.
