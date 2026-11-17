@@ -701,3 +701,13 @@ by these implementation tests.
 Repository metadata requests now normalize the root endpoint to omit a trailing slash, following an actual pre-dispatch GitHub 404 observation. Subordinate endpoint paths remain unchanged. No canary had launched.
 
 The first actual GitHub canary pair failed initial API identity observation before provider dispatch; its exact lease was closed after provider absence, retaining its hold. Startup now retries only bounded identity GET observations for ninety seconds with safe predicate diagnostics. No identity requirement or cleanup timer changed.
+
+## Explicit bootstrap fence, 2026-11-17
+
+The prospective Actions bootstrap fence is intentionally unqualified. It can
+admit only a funded cleanup canary with its original at-most-600-second window
+and designated controller. The actual prepare arguments and funded launch row,
+not a receipt assertion, establish that scope. Ordinary research still requires
+both actual physical recovery proofs and the signed repository transfer. The
+three first GitHub attempts closed without a provider POST; they are not recovery
+qualification. All old AWS history, unknown holds and lease deadlines remain.

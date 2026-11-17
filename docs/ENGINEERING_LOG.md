@@ -1348,3 +1348,13 @@ collection. Original journal holds, GPU hours and lease counts remain unchanged.
 An actual read-only GitHub probe rejected the trailing-slash repository root with 404. The store now normalizes only that endpoint; one actual HTTP-request construction regression passed. Earlier mocked fixtures did not establish live routing.
 
 Retained failed workflow43997937701 and undispatched lease20ea144b closure. Added ninety-second GET-only identity retry and safe Boolean failure diagnostics. Six focused actual identity cases plus three subtests passed, including persistent mismatch, invalid local environment, transport failure and late success rejection.
+
+## Actions bootstrap without expired AWS credentials
+
+Added a distinct signed bootstrap fence profile for cleanup canaries only. It
+retains actual two-job/API/runner/provider-absence checks, current source closure,
+expired predecessor identity and unchanged financial holds. Default research
+admission rejects it, and launch derives permission from the funded row. Separate
+GitHub repositories may repeat logical job labels only when their actual
+repository, job, runner and host identities are disjoint. Previous failed canary
+attempts remain closed and unqualified. No scientific source or model changed.

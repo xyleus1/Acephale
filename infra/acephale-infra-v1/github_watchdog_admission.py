@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 
 import github_watchdog_protocol as p
@@ -74,7 +75,7 @@ def qualified_version(proof, key, binding, controller_id, now, *, transfer=None)
     return p.digest(proof)
 
 
-def enrollments(data, ledger, lease, now, source_files, *, key=None, fence=False):
+def enrollments(data, ledger, lease, now, source_files, *, key=None, fence=False, bootstrap=False):
     """Prelaunch admission (or explicit expired predecessor fence), not runtime readiness.
 
 Active study phases use check_ack's ready-dependent deadline rule and their
@@ -84,6 +85,8 @@ because control.launch invokes it before paid dispatch.
     key = key or os.environ["ACEPHALE_WATCHDOG_HMAC_KEY"]
     require(data.get("version") == 1 and data.get("backend") == p.BACKEND,
             "Explicit Actions backend required")
+    require(not bootstrap or (fence and "qualification" not in data and "qualificationTransfer" not in data),
+            "Bootstrap fence cannot claim historical recovery qualification")
     binding = p.checked_binding(p.unseal(data["binding"], key))
     require(binding["sourceFiles"] == source_files, "Current controller source closure differs")
     require(binding["leaseIdentity"] == {"leaseId": lease["id"], "expectedName": lease["name"],
@@ -154,8 +157,8 @@ because control.launch invokes it before paid dispatch.
                 and now < lease["setupDeadline"] and now < lease["deadline"]
                 and observed.get("reason") is None, "Current owned lease is not launch ready")
         canary = lease.get("purpose") == "cleanup_canary"
-        if canary:
-            require(lease["deadline"] - lease["reservedAt"] <= 600, "Canary exceeds ten minutes")
+        if canary or bootstrap:
+            require(bootstrap or lease["deadline"] - lease["reservedAt"] <= 600, "Canary exceeds ten minutes")
             recovery_hash = None
         else:
             recovery_hash = qualified_version(data["qualification"][config["controllerId"]], key, binding,
@@ -165,7 +168,7 @@ because control.launch invokes it before paid dispatch.
             "hostingKind": "github_actions", "controllerId": config["controllerId"], "hostId": host,
             "leaseId": lease["id"], "expectedName": lease["name"], "planHash": ledger["planHash"],
             "deadline": lease["deadline"], "setupDeadline": lease["setupDeadline"], "maxPollSeconds": 60,
-            "readOnlyProbeSucceeded": True, "recoveryTestPassed": not canary,
+            "readOnlyProbeSucceeded": True, "recoveryTestPassed": not (canary or bootstrap),
             "recoveryEvidenceSha256": recovery_hash, "codeSha256": source_files["lambda_gpu_watchdog.py"],
             "backendSourceFiles": source_files, "verifiedAt": ack["verifiedAt"], "observed": observed,
             "controllerExpiresAt": identity["controllerExpiresAt"], "sharedControlPlane": "github.com",
@@ -176,17 +179,34 @@ because control.launch invokes it before paid dispatch.
     return values
 
 
-def checked_fence(ledger, value, now, *, current_lease_id=None, key=None):
+def checked_fence(ledger, value, now, *, current_lease_id=None, key=None, successor_policy=None):
     """Explicit signed backend migration; never overwrite historical AWS rows."""
     import control
     key = key or os.environ["ACEPHALE_WATCHDOG_HMAC_KEY"]
     pending = [row for row in ledger["leases"] if row["id"] != current_lease_id and row["status"] != "terminated"]
     require(len(pending) == 1, "Exactly one unresolved predecessor required")
     previous = pending[0]
+    bootstrap = value.get("profile") == "acephale-github-bootstrap-canary-fence-v1"
+    if bootstrap:
+        if current_lease_id is not None:
+            successors = [row for row in ledger["leases"] if row["id"] == current_lease_id]
+            require(len(successors) == 1 and successors[0].get("studyReservation")
+                and successors[0].get("status") == "reserved" and successors[0].get("instanceId") is None,
+                "Bootstrap dispatch requires the actual funded undispatched canary")
+            successor = successors[0]
+            scope = {"purpose": successor.get("purpose"), "recoveryControllerId": successor.get("recoveryControllerId"),
+                     "maximumSeconds": successor["deadline"] - successor["reservedAt"]}
+        else:
+            scope = successor_policy or {}
+        require(scope.get("purpose") == "cleanup_canary" and number(scope.get("maximumSeconds"))
+            and 0 < scope["maximumSeconds"] <= 600
+            and re.fullmatch(r"acephale-[a-z0-9-]+", scope.get("recoveryControllerId") or ""),
+            "Unqualified bootstrap fence permits only explicit bounded cleanup canaries")
     require(previous["status"] == "launch_unknown" and previous.get("instanceId") is None
             and previous.get("studyReservation"), "Only the retained funded unknown launch may migrate")
     predecessor = {"id": previous["id"], "name": previous["name"], "leaseHash": control.digest(previous)}
-    require(value.get("version") == 1 and value.get("profile") == "acephale-github-unresolved-launch-fence-v1"
+    require(value.get("version") == 1 and value.get("profile") in {
+        "acephale-github-unresolved-launch-fence-v1", "acephale-github-bootstrap-canary-fence-v1"}
         and value.get("contentHash") == control.digest({k: v for k, v in value.items() if k != "contentHash"})
         and value.get("predecessor") == predecessor and value.get("planHash") == ledger["planHash"]
         and value.get("financialBindingHash") == control._financial_binding_hash(ledger)
@@ -199,7 +219,12 @@ def checked_fence(ledger, value, now, *, current_lease_id=None, key=None):
     binding = p.checked_binding(p.unseal(receipt["binding"], key))
     migration = p.unseal(value["backendMigration"], key)
     old = [{"controllerId": r["controllerId"], "hostId": r["hostId"]} for r in previous.get("watchdogs", [])]
-    require(len(old) == 2 and migration.get("kind") == "acephale-github-fence-migration-v1"
+    migration_kind = "acephale-github-bootstrap-fence-migration-v1" if bootstrap else "acephale-github-fence-migration-v1"
+    require(not bootstrap or (migration.get("cleanupCanariesOnly") is True
+        and migration.get("historicalRecoveryQualified") is False
+        and value.get("cleanupCanariesOnly") is True and value.get("historicalRecoveryQualified") is False),
+        "Explicit unqualified bootstrap scope required")
+    require(len(old) == 2 and migration.get("kind") == migration_kind
         and migration.get("predecessor") == predecessor and migration.get("planHash") == ledger["planHash"]
         and migration.get("financialBindingHash") == value["financialBindingHash"]
         and migration.get("previousControllers") == old and migration.get("newBindingHash") == p.digest(binding)
@@ -209,7 +234,7 @@ def checked_fence(ledger, value, now, *, current_lease_id=None, key=None):
         and isinstance(migration.get("reason"), str) and 0 < len(migration["reason"]) <= 1024,
         "Explicit signed migration preserving original controller history required")
     files = {name: control.sha256(control.HERE / name) for name in p.SOURCE_NAMES}
-    values = enrollments(receipt, ledger, previous, now, files, key=key, fence=True)
+    values = enrollments(receipt, ledger, previous, now, files, key=key, fence=True, bootstrap=bootstrap)
     # Controller ordering is canonical in the binding, never inferred from an
     # arbitrary receipt list. Identity extraction remains compatible with the
     # existing no-reuse replacement check in unresolved_launch.

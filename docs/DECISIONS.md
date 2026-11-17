@@ -848,3 +848,13 @@ admission. Reserve tax/storage separately; do not assume free Actions minutes.
 Use the canonical GitHub repository metadata URL without a trailing slash. Keep the explicit slash-prefixed store API and normalize only its root endpoint centrally.
 
 Permit bounded read-only startup observation retries for eventually visible Actions metadata. Provider access and branch claims remain unavailable until all exact workflow/job/runner checks pass. Local environment mismatch stays fail-fast.
+
+## Distinguish bootstrap safety from historical recovery qualification
+
+An unqualified current GitHub predecessor fence may protect only a prospective
+cleanup canary, never an ordinary research lease. Preserve the original 600-second
+canary and 120-second owner bounds. Promote the separately observed fence only
+after both physical canaries produce actual termination/absence proofs, through
+the existing typed cross-repository transfer. Preserve all old controller history
+and uncertain financial holds. No AWS-shaped receipt or expired credential can
+stand in for the new backend.

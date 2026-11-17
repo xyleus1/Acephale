@@ -23,10 +23,11 @@ def identities(value):
             for row in value["controllers"]}
 
 
-def checked_fence(ledger: dict, value: dict, now: float, *, current_lease_id=None) -> dict:
-    if value.get("profile") == "acephale-github-unresolved-launch-fence-v1":
+def checked_fence(ledger: dict, value: dict, now: float, *, current_lease_id=None, successor_policy=None) -> dict:
+    if value.get("profile") in {"acephale-github-unresolved-launch-fence-v1", "acephale-github-bootstrap-canary-fence-v1"}:
         from github_watchdog_admission import checked_fence as checked_github_fence
-        return checked_github_fence(ledger, value, now, current_lease_id=current_lease_id)
+        return checked_github_fence(ledger, value, now, current_lease_id=current_lease_id,
+                                    successor_policy=successor_policy)
     pending = [row for row in ledger["leases"] if row["id"] != current_lease_id and row["status"] != "terminated"]
     require(len(pending) == 1, "Exactly one unresolved predecessor is required")
     previous = pending[0]
@@ -121,6 +122,17 @@ def checked_fence(ledger: dict, value: dict, now: float, *, current_lease_id=Non
 
 def check_new_controllers(fence: dict, enrollments: list[dict]) -> None:
     old = identities(fence)
+    prior = [row["enrollment"] for row in fence["controllers"]]
+    if all(row.get("hostingKind") == "github_actions" for row in [*prior, *enrollments]):
+        # Logical job labels repeat across dedicated repositories. Actual
+        # repository/job/runner identities must remain separate.
+        require(len(prior) == len(enrollments) == 2
+            and not ({row[1] for row in old} & {row.get("hostId") for row in enrollments})
+            and all({row["identity"][key] for row in prior}.isdisjoint(
+                    {row["identity"][key] for row in enrollments})
+                    for key in ("repositoryId", "jobId", "runnerId")),
+            "GitHub successor requires separate dedicated repository, jobs and runners")
+        return
     require(not ({row[0] for row in old} & {row.get("controllerId") for row in enrollments})
             and not ({row[1] for row in old} & {row.get("hostId") for row in enrollments}),
             "Replacement must use two new controllers and preserve both predecessor fences")

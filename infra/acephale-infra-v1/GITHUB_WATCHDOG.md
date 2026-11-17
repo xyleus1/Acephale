@@ -94,3 +94,20 @@ associated allowance. Retained CPU holds also count against later GPU monetary
 admission, but consume neither GPU hours nor evaluation lease slots. The original
 journal's exclusive lambda slice and reservation namespace remain unchanged;
 the slice row explicitly identifies GitHub as the billed provider.
+
+## Limited bootstrap fence
+
+`acephale-github-bootstrap-canary-fence-v1` explicitly records
+`historicalRecoveryQualified: false` and `cleanupCanariesOnly: true`. It has no
+qualification or transfer payload. The reservation caller must supply its actual
+cleanup purpose, designated controller and duration at most 600 seconds; the
+public launch path instead derives those facts from the exact funded reserved
+row. The old unknown predecessor, old owner timestamp, deadlines, controller
+history and financial binding stay unchanged. Both current job identities and
+fresh authenticated provider-absence observations are still required.
+
+Ordinary research rejects this profile even if its receipt claims otherwise.
+After both physical canaries pass, create a separate qualified migration through
+the existing typed transfer; do not overwrite or relabel bootstrap evidence.
+Logical job labels can repeat in the two dedicated repositories, while actual
+repository IDs, job IDs, runner IDs and host IDs must all be disjoint.

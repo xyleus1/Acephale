@@ -1927,7 +1927,8 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
 
 
 def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: float, extra_allowance_usd: float,
-                  now: float, *, unresolved_fence: dict | None = None, setup_seconds: int = 1800) -> dict[str, Any]:
+                  now: float, *, unresolved_fence: dict | None = None, setup_seconds: int = 1800,
+                  purpose: str = "research", recovery_controller_id: str | None = None) -> dict[str, Any]:
     if type(setup_seconds) is not int or not 120 <= setup_seconds <= 3600:
         raise ValueError("Setup allowance must be an integer from 120 to 3600 seconds")
     hours = finite_number(hours, "session hours", 0.01)
@@ -1948,7 +1949,8 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
         if unresolved_fence is None:
             raise ValueError("Another lease is active or unresolved")
         from unresolved_launch import checked_fence
-        checked_fence(ledger, unresolved_fence, now)
+        checked_fence(ledger, unresolved_fence, now, successor_policy={"purpose": purpose,
+            "recoveryControllerId": recovery_controller_id, "maximumSeconds": hours * 3600})
     elif unresolved_fence is not None:
         raise ValueError("A replacement fence requires an unresolved predecessor")
     used_hours = ledger["priorGpuHours"] + sum(lease["reservedHours"] for lease in leases)
@@ -2074,7 +2076,8 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
         validate_firewall(client, access["firewallRulesetId"], region)
         fence = read_json(unresolved_fence) if unresolved_fence else None
         lease = reserve_lease(ledger, current_quote, hours, extra_allowance_usd, current,
-                              unresolved_fence=fence, setup_seconds=setup_seconds)
+                              unresolved_fence=fence, setup_seconds=setup_seconds,
+                              purpose=purpose, recovery_controller_id=recovery_controller_id)
         funding = infrastructure_funding(ledger)
         api_ceiling = funding["policy"]["effectiveTotalMicrodollars"] - 65_000_000 if funding and funding["version"] == 5 else 935_000_000
         if funding and ((funding["version"] == 5 and inspection.get("nativeBudgetPort") != funding["policy"]["nativeBudgetPort"])
