@@ -18,7 +18,7 @@ export const FINANCIAL_FILES = [
   "src/lib/acephale/budget.ts", "src/lib/acephale/canonical.ts",
   "src/lib/acephale/contracts/budget-policy-v2.json",
   "src/lib/acephale/contracts/budget-policy-v3.json",
-  ...[1, 2, 3, 4, 5].map(v => `src/lib/acephale/contracts/infrastructure-funding-v${v}.json`),
+  ...[1, 2, 3, 4, 5, 6].map(v => `src/lib/acephale/contracts/infrastructure-funding-v${v}.json`),
 ];
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 function checked(path, expected) {

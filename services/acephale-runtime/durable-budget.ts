@@ -163,11 +163,11 @@ export class DurableBudget {
       }
       this.policy = readBudgetPolicy(path, entries);
       // Default consumers keep the base ceiling. An explicit, source-bound native
-      // financial port may consume v5 without changing model/API allocations.
+      // financial port may consume v5 or v6 without changing model/API allocations.
       this.infrastructureFunding = (this.options.infrastructureOwner || this.options.nativeFundingOwner) ? readInfrastructureFunding(path, entries, this.policy) : undefined;
-      if (this.options.nativeFundingOwner && (this.infrastructureFunding?.version !== 5
-        || this.infrastructureFunding.policy.nativeBudgetPort !== "acephale-infrastructure-aware-native-budget-v1")) {
-        throw new Error("Native financial port requires exact funding v5 authority");
+      if (this.options.nativeFundingOwner && (![5, 6].includes(this.infrastructureFunding?.version ?? 0)
+        || this.infrastructureFunding?.policy.nativeBudgetPort !== "acephale-infrastructure-aware-native-budget-v1")) {
+        throw new Error("Native financial port requires exact funding v5 or v6 authority");
       }
       const allocations = this.infrastructureFunding ? { ...this.policy!.policy.allocationsMicrodollars,
         infrastructure: this.infrastructureFunding.policy.effectiveInfrastructureMicrodollars } : this.policy?.policy.allocationsMicrodollars;

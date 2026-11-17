@@ -1,5 +1,33 @@
 # Working on Acephale
 
+## Money-only evaluation recovery funding, 2026-11-17
+
+Funding v6 adds an operator-selected $500 infrastructure allowance under the
+user's broad instruction to continue with necessary resources. This is an
+implementation ceiling, not a dollar limit quoted from the user. Effective
+infrastructure, compute and associated caps become $1,050, $815 and $235. The
+complete study ceiling becomes $1,850. The existing $303 API plan, $65
+contingency, all prior unknown holds and every original authority remain intact.
+
+This amendment adds no GPU hours or lease slots. GPU capacity remains 200 hours.
+The original funding-v5 16-lease horizon is retained, subtracting leases consumed
+before v6; the monetary successor cannot reset that count. Per-lease limits remain
+eight hours at $1.99/hour, evaluation-only, with no optimizer permission.
+
+The native financial port admits exact parent-bound v5 or v6 authority while
+redirecting only the two pinned frozen durable-budget modules. Models, native
+workers, per-trial API limits and scientific identities remain frozen. Generate a
+new source-bound port manifest after committing the financial implementation.
+Historical GPU4 export evidence still binds funding5, while current operational
+funding6 is recorded separately. The five GitHub watchdog worker files remain
+byte-identical; controller commit/workflow identity and the newer financial
+operator commit are explicit separate provenance fields.
+
+Activation is creation-only through funding request version6 and retains the
+original journal. It requires the ordinary current financial and predecessor
+checks. Source and local tests are not activation or live recovery evidence.
+
+
 ## Prospective Actions watchdog, 2026-11-17
 
 The isolated GitHub cleanup backend reuses exact-instance provider logic and

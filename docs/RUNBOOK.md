@@ -2,7 +2,7 @@
 
 ## Explicit native financial compatibility
 
-After funding-v5 activation and independent review of the current operator,
+After funding-v5 or money-only funding-v6 activation and independent review of the current operator,
 create a new immutable port manifest from the clean committed sources:
 
 ```powershell
@@ -18,7 +18,9 @@ original budget-policy hashes or overwrite its source. An absent port retains
 the old ceiling and may reject new infrastructure commitments. The private
 execution configuration records both original and operational source identities.
 The loader rejects a changed target, source file or manifest hash before the
-native module executes; the adapter requires exact funding-v5 authority.
+native module executes; the adapter requires exact parent-bound funding-v5 or funding-v6 authority.
+Funding-v6 requests add monetary headroom only: retain GPU4/200 and the original
+funding5 sixteen-lease horizon, including already consumed slots.
 
 Follow [methods](METHODS.md) and [current state](STATE.md) before execution. Run
 Node commands at repository root. Python commands require the research package on

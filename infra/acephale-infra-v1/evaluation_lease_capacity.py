@@ -106,6 +106,21 @@ def validate(value: dict, ledger: dict, funding: dict, *, canonical_digest=diges
 
 def effective_limit(ledger: dict, funding: dict, *, canonical_digest=digest) -> tuple[int, dict | None]:
     original = funding["policy"]["maximumNewLeases"]
+    if funding["version"] == 6:
+        # Funding6 adds money only. Count from the unchanged funding5 baseline,
+        # deducting slots already consumed before the successor was recorded.
+        path = Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + ".infrastructure-funding-v5.json")
+        parent = read(path)
+        consumed = len(funding["baselineLeases"]) - len(parent["baselineLeases"])
+        if (type(parent.get("version")) is not int or parent["version"] != 5
+                or funding["policy"].get("leaseCountParentFundingVersion") != 5
+                or original != 16 or parent["policy"].get("maximumNewLeases") != original
+                or funding.get("parentFundingHash") != parent.get("contentHash")
+                or funding.get("parentFundingSha256") != sha(path)
+                or parent.get("contentHash") != canonical_digest({k: v for k, v in parent.items() if k != "contentHash"})
+                or not 0 <= consumed <= original):
+            raise ValueError("Money-only funding must retain the original evaluation lease-count horizon")
+        return original - consumed, None
     if funding["version"] == 4:
         path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=3)
         if path.exists():

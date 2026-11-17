@@ -1054,7 +1054,7 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
 def infrastructure_funding(ledger: dict) -> dict | None:
     """Validate each append-only authority against its retained history."""
     journal = ledger.get("plan", {}).get("studyLedgerPath")
-    version = next((v for v in (5, 4, 3, 2) if journal and
+    version = next((v for v in (6, 5, 4, 3, 2) if journal and
                     Path(str(Path(journal).resolve()) + f".infrastructure-funding-v{v}.json").exists()), 1)
     return _validate_infrastructure_funding_chain(ledger, version)
 
@@ -1598,6 +1598,12 @@ def _validate_gpu_hour_continuation(ledger: dict, amendment: dict | None, value:
     parent_path = gpu_hour_capacity_path(ledger_path, 3)
     parent = read_gpu_hour_capacity(parent_path)
     funding = infrastructure_funding(ledger)
+    if funding is not None and funding["version"] == 6:
+        # A money-only successor retains GPU4's funding5 identity and baseline.
+        # Validate that parent against its retained rows, never the funding6 suffix.
+        historical = {**ledger, "leases": funding["baselineLeases"],
+                      "overheads": funding["baselineOverheads"], "trainingWindows": funding["baselineTrainingWindows"]}
+        funding = _validate_infrastructure_funding_chain(historical, 5)
     policy_path = Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json")
     funding_path = Path(ledger["plan"]["studyLedgerPath"] + ".infrastructure-funding-v5.json")
     history = value.get("operationalHistory", {})
@@ -2079,8 +2085,8 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
                               unresolved_fence=fence, setup_seconds=setup_seconds,
                               purpose=purpose, recovery_controller_id=recovery_controller_id)
         funding = infrastructure_funding(ledger)
-        api_ceiling = funding["policy"]["effectiveTotalMicrodollars"] - 65_000_000 if funding and funding["version"] == 5 else 935_000_000
-        if funding and ((funding["version"] == 5 and inspection.get("nativeBudgetPort") != funding["policy"]["nativeBudgetPort"])
+        api_ceiling = funding["policy"]["effectiveTotalMicrodollars"] - 65_000_000 if funding and funding["version"] >= 5 else 935_000_000
+        if funding and ((funding["version"] >= 5 and inspection.get("nativeBudgetPort") != funding["policy"]["nativeBudgetPort"])
                         or inspection.get("infrastructureFundingSupplementHash") != funding["contentHash"]
                         or inspection.get("frozenApiHeadroomMicrodollars") != funding["policy"]["frozenApiHeadroomMicrodollars"]
                         or inspection.get("frozenApiPlanHash") != _budget_digest(funding["policy"]["frozenApiPlanMicrodollars"])
