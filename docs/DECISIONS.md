@@ -919,3 +919,13 @@ after both physical canaries produce actual termination/absence proofs, through
 the existing typed cross-repository transfer. Preserve all old controller history
 and uncertain financial holds. No AWS-shaped receipt or expired credential can
 stand in for the new backend.
+
+## 2026-11-17: Portable frozen-reader test prerequisite
+
+The count-recovery wrapper directly calls a separately decorated frozen-reader
+integration test. Pytest does not apply the callee's skip marker to a direct
+function call, so public CI failed with a missing ACEPHALE_FROZEN_IMAGE_ROOT even
+though the actual frozen-checkout test had passed locally. Apply the same explicit
+prerequisite marker to the wrapper. Test logic and production source are unchanged;
+retain the local configured-reader result and report CI's missing checkout as a
+skip, never a pass. The running evaluation keeps its original committed source.

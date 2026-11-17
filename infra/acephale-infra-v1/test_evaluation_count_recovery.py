@@ -1,6 +1,7 @@
 """The actual funding6/GPU5 chain permits exactly four additional evaluations."""
 # ruff: noqa: F811 -- imported pytest fixtures retain their public names.
 import copy
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -164,6 +165,7 @@ def test_creation_protects_source_authority_sets_and_does_not_read_raw_journal(e
     assert not capacity.capacity_path(path, version=4).exists()
 
 
+@pytest.mark.skipif(not os.environ.get("ACEPHALE_FROZEN_IMAGE_ROOT"), reason="Exact frozen4438 checkout required")
 def test_actual_frozen4438_reader_accepts_new_count_bound_execution_lease(exhausted, tmp_path):
     import test_evaluation_recovery_funding as frozen_test
     path, ledger, funding, gpu = exhausted

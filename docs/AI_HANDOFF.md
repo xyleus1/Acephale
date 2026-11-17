@@ -782,3 +782,13 @@ not a receipt assertion, establish that scope. Ordinary research still requires
 both actual physical recovery proofs and the signed repository transfer. The
 three first GitHub attempts closed without a provider POST; they are not recovery
 qualification. All old AWS history, unknown holds and lease deadlines remain.
+
+## 2026-11-17: Portable frozen-reader test prerequisite
+
+The count-recovery wrapper directly calls a separately decorated frozen-reader
+integration test. Pytest does not apply the callee's skip marker to a direct
+function call, so public CI failed with a missing ACEPHALE_FROZEN_IMAGE_ROOT even
+though the actual frozen-checkout test had passed locally. Apply the same explicit
+prerequisite marker to the wrapper. Test logic and production source are unchanged;
+retain the local configured-reader result and report CI's missing checkout as a
+skip, never a pass. The running evaluation keeps its original committed source.

@@ -1422,3 +1422,13 @@ admission rejects it, and launch derives permission from the funded row. Separat
 GitHub repositories may repeat logical job labels only when their actual
 repository, job, runner and host identities are disjoint. Previous failed canary
 attempts remain closed and unqualified. No scientific source or model changed.
+
+## 2026-11-17: Portable frozen-reader test prerequisite
+
+The count-recovery wrapper directly calls a separately decorated frozen-reader
+integration test. Pytest does not apply the callee's skip marker to a direct
+function call, so public CI failed with a missing ACEPHALE_FROZEN_IMAGE_ROOT even
+though the actual frozen-checkout test had passed locally. Apply the same explicit
+prerequisite marker to the wrapper. Test logic and production source are unchanged;
+retain the local configured-reader result and report CI's missing checkout as a
+skip, never a pass. The running evaluation keeps its original committed source.
