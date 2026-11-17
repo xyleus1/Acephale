@@ -1,0 +1,53 @@
+{
+  "kind": "acephale-public-operator-patch-verification-v1",
+  "verified": true,
+  "modelCalls": 0,
+  "providerCalls": 0,
+  "financialCalls": 0,
+  "independentTestRerun": false,
+  "authorFocusedCases": {
+    "javascriptPassed": 18,
+    "pythonPassed": 12
+  },
+  "retainedInitialProductionFailure": {
+    "javascriptPassed": 17,
+    "failed": 1,
+    "reason": "Proof consumer included the diagnostic row instead of just original timing fields; repaired final source passed all 18."
+  },
+  "producerSha256": "86dccde418d4e1f3619a95e67a6a050b9e0c8b56c8853e0036b72e53c91ca7e5",
+  "independentReviewSha256": "5059534c28e6e05a7c247f89e9f0fbb3a60630bd1923d201777e81aeffa87c74",
+  "numericalPolicyHash": "b86e768cd4857952ab8f55a54e968ef37f06b14b317f8da196554056d262b2dc",
+  "actualGpuNumericalOutcomePending": true,
+  "rootCauseEstablished": false,
+  "determinismProven": false,
+  "scope": "Reviewed producer candidates before later runtime path/hash rebinding; frozen source is not edited by this patch publication.",
+  "patches": [
+    {
+      "patch": "20261117-serving-numerical-configuration.patch",
+      "sha256": "02855991a02d79935d560b9238a0ded218c92171e6d09050c5148e28ec77b498",
+      "appliedBytesMatch": true,
+      "files": [
+        {
+          "name": "serving_precision.py",
+          "beforeSha256": null,
+          "afterSha256": "c0f75e2c4cbb8a4c7b686a8632363a71bbd37d9e2cce7c4796036afb4b4c47bd"
+        },
+        {
+          "name": "serving-diagnostic.mjs",
+          "beforeSha256": null,
+          "afterSha256": "91ee8b5f8312af926660c7906ff3091e4550c59ff16d88775a2ebee102d991be"
+        },
+        {
+          "name": "serving_host_v3.py",
+          "beforeSha256": "92d53a63cb76fc27686e1b9a939d12b3094fd89d3e7606c1bf0aba738a76283f",
+          "afterSha256": "69b9474a5fbf509633797e57ec810b01e8b79fb74ba12bc6931f78a3aace3bc1"
+        },
+        {
+          "name": "run_serving_v3.py",
+          "beforeSha256": "3ad632974c80d0fdaad082ce6688e5a55682305d65f256f1077402b65e6fc043",
+          "afterSha256": "c64ecde4574a27ced022a609baa8f6394c687d34a49717ecd1b5a71bff2ebeb7"
+        }
+      ]
+    }
+  ]
+}

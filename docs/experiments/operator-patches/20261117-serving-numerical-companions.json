@@ -1,0 +1,108 @@
+{
+  "kind": "acephale-public-numerical-patch-closure-v1",
+  "verified": true,
+  "scope": "Nine reviewed E27 numerical producer/companion files including the direct native-owner dependency pin; private runtime/configuration/sealing and frozen model code are not reconstructed.",
+  "publicCheckoutAloneReconstructsOperator": false,
+  "requiresRetainedPrivateBaselines": true,
+  "requiredBaselineFiles": [
+    {
+      "name": "serving_host_v3.py",
+      "sha256": "92d53a63cb76fc27686e1b9a939d12b3094fd89d3e7606c1bf0aba738a76283f"
+    },
+    {
+      "name": "run_serving_v3.py",
+      "sha256": "3ad632974c80d0fdaad082ce6688e5a55682305d65f256f1077402b65e6fc043"
+    },
+    {
+      "name": "continuation_hooks.py",
+      "sha256": "bda9ad38958827b3e52584c9cf4dd0fc24f303df780913eb19f4325ba786c3a5"
+    },
+    {
+      "name": "serving_owner_probe.py",
+      "sha256": "9593fd10e9c5e0d80c3999cfe8fb2701697d24518578036c7932aac4ff5e824f"
+    },
+    {
+      "name": "managed_serving_v3.py",
+      "sha256": "ff107ec59cd6a693325926d63c4f57284394aff510ca2f02d1238ea12dc77a5b"
+    },
+    {
+      "name": "native_stage_owner_v2.py",
+      "sha256": "33d4c5d9de3845e923b44b8e9872d0a406e9950608739aa94db7c31e73fc93ba"
+    }
+  ],
+  "applicationOrder": [
+    {
+      "patch": "20261117-serving-numerical-configuration.patch",
+      "arguments": [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "apply"
+      ],
+      "sha256": "02855991a02d79935d560b9238a0ded218c92171e6d09050c5148e28ec77b498"
+    },
+    {
+      "patch": "20261117-serving-numerical-companions.patch",
+      "arguments": [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "apply",
+        "--unidiff-zero"
+      ],
+      "sha256": "424e833919bf89e16526444e5f5b870e00e937d4bc95de6efb6c110d7b0ecb1f"
+    }
+  ],
+  "zeroContextReason": "Changed lines only omit unrelated private unchanged path context; before/after SHA-256 identities and byte-application verification remain exact.",
+  "appliedBytesMatchAllNineCurrentFiles": true,
+  "files": [
+    {
+      "name": "serving_precision.py",
+      "sha256": "c0f75e2c4cbb8a4c7b686a8632363a71bbd37d9e2cce7c4796036afb4b4c47bd"
+    },
+    {
+      "name": "serving-diagnostic.mjs",
+      "sha256": "91ee8b5f8312af926660c7906ff3091e4550c59ff16d88775a2ebee102d991be"
+    },
+    {
+      "name": "serving_host_v3.py",
+      "sha256": "69b9474a5fbf509633797e57ec810b01e8b79fb74ba12bc6931f78a3aace3bc1"
+    },
+    {
+      "name": "run_serving_v3.py",
+      "sha256": "c64ecde4574a27ced022a609baa8f6394c687d34a49717ecd1b5a71bff2ebeb7"
+    },
+    {
+      "name": "numerical_policy_binding.py",
+      "sha256": "9fdccf0c1009e8f6a6231133acc339a9bee0f5b46424b2db302c43b203bfe34e"
+    },
+    {
+      "name": "continuation_hooks.py",
+      "sha256": "fc472434b7c6ad1ad939c0602270dcb3216f938ecdbe172b50233ef47f1cfdd5"
+    },
+    {
+      "name": "serving_owner_probe.py",
+      "sha256": "fa4197f7949bcba640cf01ce63809ce62792d7bc1b62d7f92ff04322d7b65ac7"
+    },
+    {
+      "name": "managed_serving_v3.py",
+      "sha256": "e9a1a1ef821b2a23c358eed28773911ce5c1d5c0e2c393a8d48c0b65f5450e29"
+    },
+    {
+      "name": "native_stage_owner_v2.py",
+      "sha256": "bf3a2c63b018a79eb6c9a9663b8f1dcb2c01070bfa06213921a148d3cb5cc7b2"
+    }
+  ],
+  "companionProducerSha256": "d42c0282090b327abb2bdbc229cf2e4a49b430cc00ad671ea2340d2640d6d2fc",
+  "companionIndependentReviewSha256": "cc6b73c12bc700eaee8b6dd409fa888d75b6789f2e7914ac3d829d3f8420af88",
+  "finalPinIndependentReviewSha256": "6d68587b21c96b597e660f7703806a13e98efe9da8f6dd9c7759f5176ebe94e5",
+  "companionAuthorCasesPassed": 21,
+  "independentTestRerun": false,
+  "modelCalls": 0,
+  "providerCalls": 0,
+  "financialCalls": 0,
+  "thresholdChanged": false,
+  "frozenScientificSchemaChanged": false,
+  "actualGpuNumericalOutcomePending": true,
+  "determinismProven": false
+}

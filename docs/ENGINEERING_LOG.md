@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## Serving numerical discrepancy, 2026-11-17
+
+Compared retained E20/E26 metadata and the exact image build's upstream source.
+Artifact/probe identities and predictor image, command and precision environment
+match. The probability difference is 0.01432407, above the retained 0.01 gate.
+Source review identified a standard scoped shrink configuration that avoids its
+atomic reduction; this is not a measured cause. The
+[fixed diagnostic](experiments/operator-patches/README.md#predictor-numerical-diagnostic-2026-11-17)
+retains all outcomes and explicit cache-observation limits. No new GPU
+qualification or benchmark result is claimed by this documentation.
+
 ## Money-only evaluation recovery funding, 2026-11-17
 
 Funding v6 adds an operator-selected $500 infrastructure allowance under the

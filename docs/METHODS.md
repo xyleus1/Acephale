@@ -345,6 +345,13 @@ containers, commands, images and provider before admission. Old calibration or
 timing profiles cannot validate a new checkpoint. Run execution and measured
 outcomes are recorded separately in [STATE](STATE.md).
 
+The prospective [serving numerical diagnostic](experiments/operator-patches/README.md#predictor-numerical-diagnostic-2026-11-17)
+compares fixed baseline/configured requests using the standard predictor-only
+LoRA shrink configuration. Every configured response must pass the 0.01 gate,
+with proof index zero fixed beforehand. Runtime configuration and cache evidence
+accompany the responses. This diagnostic is separate from model-quality
+evaluation; it establishes neither determinism nor a historical failure's cause.
+
 ## Relationship to prior methods
 
 [PASTE](https://arxiv.org/abs/2603.18897v3) motivates overlapping tool execution

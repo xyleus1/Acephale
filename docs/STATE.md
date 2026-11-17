@@ -1,11 +1,18 @@
 # Current state
 
-Updated November 16, 2026 (UTC). Both predictor seeds completed their 204 optimizer
-updates. E17 independently completed strict GPU export and teacher-forced
-evaluation with unchanged weights and tolerances. Each seed reproduced all
-248,320 reference logits exactly. Separate vLLM serving qualification, trained
-replay and paired native evaluation remain pending. Training and reload completion
-are not benchmark results.
+Updated November 17, 2026 (UTC). E26 completed strict two-seed export and
+teacher-forced evaluation with the retained weights. Its first serving attempt
+failed the unchanged 0.01 numerical gate: conditional token-1 probability was
+0.34864513533394575 against reference 0.3629692055196168. E20 passed with the same
+reference, artifact, input IDs and serving recipe. Trained replay and paired
+native evaluation did not follow the E26 failure. See the retained
+[comparison and prospective fixed diagnostic](experiments/operator-patches/README.md#predictor-numerical-diagnostic-2026-11-17).
+
+Both predictor seeds previously completed their 204 optimizer updates. E17
+independently completed strict GPU export and teacher-forced evaluation with
+unchanged weights and tolerances; each seed reproduced all 248,320 reference
+logits exactly. Training, reload and teacher-forced diagnostics are not native
+benchmark results. Neither optimizer will be repeated.
 
 E19 subsequently passed startup and the foundation/image stages, then stopped
 before diagnostics when its heartbeat process hit `ConnectionClosedError`.

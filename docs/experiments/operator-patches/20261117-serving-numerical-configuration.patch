@@ -1,0 +1,586 @@
+--- /dev/null
++++ b/serving_precision.py
+@@ -0,0 +1,229 @@
++"""Prospective standard vLLM SHRINK configuration and observable recipe guards.
++
++Only split_k changes. This module does not modify a kernel, model, reference or
++acceptance threshold and performs no provider or financial operation.
++"""
++import copy
++import hashlib
++import json
++from pathlib import Path
++import rfc8785
++
++GPU_NAME = 'NVIDIA A100-SXM4-40GB'
++CONFIG_NAME = 'NVIDIA_A100_SXM4_40GB_SHRINK.json'
++CONTAINER_FOLDER = '/acephale-tuned'
++UTILS_SHA256 = '387444c1ca83d20e8a0f5c93d4886393a6040aab9f00c58086393670c24a6387'
++KERNEL_SHA256 = '31f0f3846633393c25d36c5b6fdd8513051d2318e3b75c2a53ee837b87333f17'
++SHRINK_SHA256 = '261e39f1831f2763691d746a8858ad5ed66d7a5fc9186fb361e9ab378324d113'
++IMAGE_BUILD = '5df63a7203cdb9328d824a27b682e77c7b9928be'
++VARIANTS = ('baseline', 'split_k1')
++
++
++def require(ok, reason):
++    if not ok:
++        raise ValueError(reason)
++
++
++def leaf(batch, split):
++    return {'block_m': 32, 'block_n': 16, 'block_k': 256 if batch < 128 else 32,
++            'split_k': split, 'num_warps': 4, 'num_ctas': 1, 'group_size_m': 8,
++            'num_stages': 2, 'max_nreg': None}
++
++
++def tuned_configuration():
++    # Nearest-key lookup preserves the integer M<128 boundary. The standard
++    # num_slices lookup is exact; Qwen3.5 includes four physical GDN slices.
++    return {'1': {str(s): {str(m): {str(k): {'16': leaf(m, 1)}
++        for k in (1024, 2048, 3584)} for m in (1, 127, 128)} for s in (1, 2, 3, 4)}}
++
++
++def configuration_bytes():
++    return (json.dumps(tuned_configuration(), sort_keys=True, indent=2) + '\n').encode()
++
++
++def numerical_policy():
++    """Stable across seeds/occurrences; observed identities belong in attestations."""
++    return {'kind': 'acephale-predictor-numerical-policy-v1', 'version': 1,
++        'frozenServingSourceCommit': '5a36a8b3835820fe65b3615ead31fb6fb7bc9672',
++        'upstreamImageBuild': IMAGE_BUILD, 'predictorOnly': True,
++        'standardEnvironmentName': 'VLLM_TUNED_CONFIG_FOLDER',
++        'containerFolder': CONTAINER_FOLDER, 'configFilename': CONFIG_NAME,
++        'configSha256': hashlib.sha256(configuration_bytes()).hexdigest(),
++        'onlyKernelParameterChange': {'operation': 'shrink', 'split_k': 1},
++        'expandDefaultUnchanged': True, 'modelAndWeightsAndReferenceUnchanged': True,
++        'adapterStorageDtype': 'float32', 'runtimeLoraDtype': 'bfloat16',
++        'variants': ['baseline', 'split_k1'], 'requestsPerVariant': 3,
++        'cacheOrder': ['cold_requested_A', 'warm_requested_A', 'cold_requested_B'],
++        'cacheSaltScheme': 'sha256-instance-lease-occurrence-container-variant-label-v1',
++        'configuredProofIndex': 0, 'allConfiguredPassesRequired': True,
++        'baselineNumericalFailuresDiagnosticOnly': True,
++        'otherBaselineFailuresTerminal': True, 'determinismClaimed': False,
++        'originalGate': {'version': 1, 'requireTopTokenMatch': True,
++                         'maximumConditionalProbabilityDifference': 0.01},
++        'resolverSourceSha256': {'utils': UTILS_SHA256, 'kernel': KERNEL_SHA256,
++                                'shrink': SHRINK_SHA256}}
++
++
++def numerical_attestation(scope, policy_hash, observations, effective_compose_sha, config_sha, actor_id):
++    require(set(observations) == {'baselineBefore', 'baselineAfter', 'configuredBefore', 'configuredAfter'},
++            'All four exact recipe observations required')
++    for key, value in observations.items():
++        configured = key.startswith('configured')
++        require(value['inspection']['configured'] is configured and value['resolver']['configured'] is configured,
++                'Observed configuration variant differs')
++        require(value['resolver']['verified'] is True and len(value['resolver']['rows']) == 96,
++                'Actual standard resolver coverage incomplete')
++        require(value['resolver']['installedSourceSha256'] == numerical_policy()['resolverSourceSha256'],
++                'Actual installed standard source differs')
++        require(value['inspection']['configSha256'] == (config_sha if configured else None),
++                'Observed tuned bytes differ')
++    baseline_id = observations['baselineBefore']['inspection']['containerId']
++    configured_id = observations['configuredBefore']['inspection']['containerId']
++    require(baseline_id == observations['baselineAfter']['inspection']['containerId']
++        and configured_id == observations['configuredAfter']['inspection']['containerId']
++        and baseline_id != configured_id, 'Exact two predictor process lifetimes required')
++    require(all(observations[variant + 'Before']['inspection']['startedAt'] ==
++                observations[variant + 'After']['inspection']['startedAt']
++                for variant in ('baseline', 'configured')), 'Predictor process restarted during a fixed variant')
++    return {'kind': 'acephale-predictor-numerical-attestation-v1', 'scope': scope,
++        'numericalPolicyHash': policy_hash, 'effectiveComposeSha256': effective_compose_sha,
++        'tunedConfigSha256': config_sha, 'baselinePredictorContainerId': baseline_id,
++        'configuredPredictorContainerId': configured_id, 'actorContainerId': actor_id,
++        'actorUnchanged': True, 'observations': observations,
++        'resolverEvidenceKind': 'same-image-container-exec-standard-resolver',
++        'engineWorkerKernelTraceClaimed': False}
++
++
++def diagnostic_receipt(scope, policy_hash, baseline, configured, baseline_path, configured_path, sha):
++    for label, value in (('baseline', baseline), ('split_k1', configured)):
++        require(value['variant'] == label and value['fixedRequestCount'] == 3
++                and value['selectedProofIndex'] == 0 and len(value['rows']) == 3,
++                'Fixed diagnostic request plan changed')
++        require(all(value['scope'][k] == scope[k] for k in ('leaseId', 'instanceId', 'occurrenceId', 'hardDeadline')),
++                'Diagnostic original scope changed')
++        require(value['originalGate'] == numerical_policy()['originalGate'], 'Original gate changed')
++        require(all(row['index'] == i and (row['passed'] is True or
++                    row['gateFailure'] == 'Cross-engine binary probability gate failed')
++                    for i, row in enumerate(value['rows'])), 'Non-numerical diagnostic failure cannot continue')
++    require(configured['allPassed'] is True and all(row['passed'] is True for row in configured['rows']),
++            'Every configured numerical result must pass the original gate')
++    return {'kind': 'acephale-fixed-numerical-diagnostic-receipt-v1', 'scope': scope,
++        'numericalPolicyHash': policy_hash, 'baselineReportPath': str(baseline_path),
++        'baselineReportSha256': sha(baseline_path), 'configuredReportPath': str(configured_path),
++        'configuredReportSha256': sha(configured_path), 'baselineAllPassed': baseline['allPassed'],
++        'configuredAllPassed': True, 'requestsPerVariant': 3, 'selectedProofIndex': 0,
++        'configuredPredictorContainerId': configured['scope']['predictorContainerId'],
++        'selectedResponseHash': configured['rows'][0]['responseHash'],
++        'baselineFailuresDoNotAdmitServing': True, 'deterministicExecutionProven': False}
++
++
++def configure_compose(original, host_folder):
++    value = copy.deepcopy(original)
++    predictor = value['services']['predictor']
++    env = predictor.setdefault('environment', {})
++    require(isinstance(env, dict) and 'VLLM_TUNED_CONFIG_FOLDER' not in env,
++            'Baseline predictor must not already select a tuned folder')
++    mounts = predictor.setdefault('volumes', [])
++    require(isinstance(mounts, list) and not any(CONTAINER_FOLDER in str(x) for x in mounts),
++            'Tuned mount destination already exists')
++    env['VLLM_TUNED_CONFIG_FOLDER'] = CONTAINER_FOLDER
++    mounts.append({'type': 'bind', 'source': str(host_folder), 'target': CONTAINER_FOLDER, 'read_only': True})
++    return value
++
++
++def check_inspect(row, baseline, folder, config_sha, *, configured):
++    require(row['Config']['Cmd'] == baseline['Config']['Cmd'] and row['Image'] == baseline['Image'],
++            'Predictor command or image changed')
++    before_env = baseline['Config'].get('Env', [])
++    after_env = row['Config'].get('Env', [])
++    require(len(before_env) == len(set(before_env)) and len(after_env) == len(set(after_env)),
++            'Duplicate container environment entry')
++    require(not any(v.startswith('VLLM_TUNED_CONFIG_FOLDER=') for v in before_env),
++            'Baseline container already uses tuned configuration')
++    expected = 'VLLM_TUNED_CONFIG_FOLDER=' + CONTAINER_FOLDER
++    require(set(after_env) == set(before_env) | ({expected} if configured else set()),
++            'Unexpected predictor environment change')
++    mounts = [v for v in row.get('Mounts', []) if v.get('Destination') == CONTAINER_FOLDER]
++    require(len(mounts) == (1 if configured else 0), 'Unexpected tuned mount count')
++    if configured:
++        require(mounts[0].get('RW') is False and mounts[0].get('Type') == 'bind'
++                and Path(mounts[0]['Source']) == Path(folder), 'Exact readonly tuned mount required')
++    remaining = [v for v in row.get('Mounts', []) if v.get('Destination') != CONTAINER_FOLDER]
++    require(remaining == baseline.get('Mounts', []), 'Original model or other mounts changed')
++    require(row['State']['Running'] is True, 'Observed predictor must be running')
++    canonical_sha = lambda value: hashlib.sha256(rfc8785.dumps(value)).hexdigest()
++    return {'containerId': row['Id'], 'imageId': row['Image'], 'configured': configured,
++            'startedAt': row['State']['StartedAt'], 'environmentSha256': canonical_sha(sorted(after_env)),
++            'mountsSha256': canonical_sha(row.get('Mounts', [])), 'commandSha256': canonical_sha(row['Config']['Cmd']),
++            'configSha256': config_sha if configured else None,
++            'tunedEnvironment': expected if configured else None,
++            'tunedMount': mounts[0] if mounts else None,
++            'originalCommandAndEnvironmentAndMountsPreserved': True}
++
++
++def resolver_script(config_sha, *, configured):
++    """Use the actual installed upstream resolver in the observed container."""
++    spec = {'configured': configured, 'configSha256': config_sha, 'folder': CONTAINER_FOLDER,
++            'fileName': CONFIG_NAME, 'gpuName': GPU_NAME, 'utilsSha256': UTILS_SHA256,
++            'kernelSha256': KERNEL_SHA256, 'shrinkSha256': SHRINK_SHA256, 'imageBuild': IMAGE_BUILD}
++    return 'SPEC = ' + repr(spec) + '\n' + RESOLVER_BODY
++
++
++RESOLVER_BODY = r'''
++import hashlib, inspect, json, os
++from pathlib import Path
++import torch
++import vllm.lora.ops.triton_ops.utils as u
++import vllm.lora.ops.triton_ops.kernel_utils as kernel
++import vllm.lora.ops.triton_ops.lora_shrink_op as shrink
++sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
++assert sha(inspect.getfile(u)) == SPEC['utilsSha256'], 'Installed upstream resolver changed'
++assert sha(inspect.getfile(kernel)) == SPEC['kernelSha256'], 'Installed upstream kernel changed'
++assert sha(inspect.getfile(shrink)) == SPEC['shrinkSha256'], 'Installed upstream shrink launcher changed'
++gpu = torch.cuda.get_device_name()
++assert gpu == SPEC['gpuName'], 'Observed GPU differs from declared standard config filename'
++assert not u.is_batch_invariant, 'Unrelated batch invariant policy unexpectedly changed'
++assert (gpu.replace(' ', '_').replace('-', '_') + '_SHRINK.json') == SPEC['fileName']
++folder = os.environ.get('VLLM_TUNED_CONFIG_FOLDER')
++if SPEC['configured']:
++    assert folder == SPEC['folder']
++    path = Path(folder) / SPEC['fileName']
++    assert path.is_file() and not path.is_symlink() and sha(path) == SPEC['configSha256']
++    assert {p.name for p in Path(folder).iterdir()} == {SPEC['fileName']}
++    assert u.load_lora_op_config('shrink', None) is not None, 'Standard resolver silently fell back'
++else:
++    assert folder is None, 'Baseline unexpectedly has tuned config'
++    assert u.load_lora_op_config('shrink', None) is None
++rows = []
++for max_loras in (1, 2):
++    for slices in (1, 2, 3, 4):
++        for batch in (1, 127, 128, 2630):
++            for k in (1024, 2048, 3584):
++                expected = dict(block_m=32, block_n=16, block_k=256 if batch < 128 else 32,
++                    split_k=1 if SPEC['configured'] else (64 if batch < 128 else 8),
++                    num_warps=4, num_ctas=1, group_size_m=8, num_stages=2, max_nreg=None)
++                actual = u.get_lora_op_configs('shrink', max_loras, batch, k, 16, slices)
++                assert actual == expected, 'Standard SHRINK selection differs'
++                for add in (False, True):
++                    expand = u.get_lora_op_configs('expand', max_loras, batch, k, 16, slices, add)
++                    assert expand == dict(block_m=64, block_n=64 if slices > 1 else 128,
++                        block_k=32, num_warps=4, num_ctas=1, num_stages=2, max_nreg=None), 'EXPAND changed'
++                rows.append(dict(maxLoras=max_loras, slices=slices, batch=batch, hiddenSize=k,
++                                 rank=16, shrink=actual, expandDefaultUnchanged=True))
++print(json.dumps(dict(kind='acephale-observed-upstream-lora-resolver-v1', verified=True,
++    configured=SPEC['configured'], gpuName=gpu, configSha256=SPEC['configSha256'] if SPEC['configured'] else None,
++    installedSourceSha256=dict(utils=SPEC['utilsSha256'], kernel=SPEC['kernelSha256'], shrink=SPEC['shrinkSha256']),
++    expectedImageBuild=SPEC['imageBuild'], rows=rows)))
++'''
++
++
++def qualification_source(original, diagnostic_path):
++    """Reuse the predetermined first configured response, never select a pass."""
++    marker = "import {parityRequest, validateParityBinding, verifyParityResponse} from './serving-parity.mjs';"
++    require(original.count(marker) == 1, 'Frozen qualification import boundary changed')
++    before = """      const probeStartedAtUnixMs = Date.now();
++      const response = await json('http://predictor:8000/v1/completions',parityRequest(binding.artifact,binding.probe));
++      const probeCompletedAtUnixMs = Date.now();"""
++    require(original.count(before) == 1, 'Frozen qualification parity request boundary changed')
++    after = '      const {response,probeStartedAtUnixMs,probeCompletedAtUnixMs} = await loadFixedProof(' + json.dumps(str(diagnostic_path)) + ',binding,sourceCommit,hash);'
++    return original.replace(marker, marker + "\nimport {loadFixedProof} from './serving-diagnostic.mjs';").replace(before, after)
+--- /dev/null
++++ b/serving-diagnostic.mjs
+@@ -0,0 +1,129 @@
++/** Fixed three-request diagnostic per variant; original numerical gate unchanged. */
++import assert from 'node:assert/strict';
++import {mkdir,readFile,writeFile} from 'node:fs/promises';
++import {pathToFileURL} from 'node:url';
++import {parityRequest,validateParityBinding,verifyParityResponse} from './serving-parity.mjs';
++
++export function requestPlan(scope, variant, hash) {
++  assert(['baseline','split_k1'].includes(variant));
++  assert(typeof scope.instanceId==='string' && /^[a-f0-9]{32}$/.test(scope.instanceId));
++  assert(typeof scope.leaseId==='string' && typeof scope.occurrenceId==='string');
++  assert(scope.predictorContainerId && Number.isFinite(scope.hardDeadline));
++  const salt = label => hash({kind:'acephale-fixed-parity-cache-domain-v1',
++    instanceId:scope.instanceId,leaseId:scope.leaseId,occurrenceId:scope.occurrenceId,
++    predictorContainerId:scope.predictorContainerId,variant,label});
++  return [
++    {index:0,cacheIntent:'cold_requested',cacheSalt:salt('A')},
++    {index:1,cacheIntent:'warm_requested',cacheSalt:salt('A')},
++    {index:2,cacheIntent:'cold_requested',cacheSalt:salt('B')},
++  ];
++}
++
++function numeric(response, probe) {
++  const row=response.choices[0], values=row.logprobs.top_logprobs[0];
++  const zero=values['token_id:'+probe.binaryTokenIds.zero], one=values['token_id:'+probe.binaryTokenIds.one];
++  assert(Number.isFinite(zero) && Number.isFinite(one));
++  const m=Math.max(zero,one), probability=Math.exp(one-m)/(Math.exp(zero-m)+Math.exp(one-m));
++  return {observedLogprobs:{zero,one},observedConditionalOneProbability:probability,
++    conditionalProbabilityDifference:Math.abs(probability-probe.referenceConditionalOneProbability)};
++}
++
++export async function runDiagnostic({binding,sourceCommit,scope,variant,hash,request,write,clock=Date.now,deadline}) {
++  const identity=validateParityBinding(binding,sourceCommit,hash);
++  assert.equal(scope.predictorContainerId,identity.containerId);
++  assert.equal(scope.predictorStartedAt,identity.containerStartedAt);
++  assert(Number.isFinite(deadline) && deadline<=scope.hardDeadline*1000);
++  const plan=requestPlan(scope,variant,hash), rows=[];
++  const bounded=()=>assert(clock()<deadline-5000,'Original diagnostic deadline reached');
++  await write('plan.json',{kind:'acephale-fixed-serving-parity-plan-v1',scope,variant,
++    bindingHash:hash(binding),plan,originalGate:binding.probe.gate,selectedProofIndex:0});
++  for(const item of plan) {
++    bounded();
++    const body={...parityRequest(binding.artifact,binding.probe),cache_salt:item.cacheSalt};
++    await write(`request-${item.index}.json`,body);
++    const probeStartedAtUnixMs=clock();
++    const response=await request(body);
++    const probeCompletedAtUnixMs=clock();
++    await write(`response-${item.index}.json`,response);
++    bounded();
++    const timing={probeStartedAtUnixMs,probeCompletedAtUnixMs};
++    let receipt=null,gateFailure=null;
++    try {receipt=verifyParityResponse(response,binding.artifact,binding.probe,identity,hash,timing);}
++    catch(error) {
++      // Only the existing final numeric gate can be observed as a failed arm.
++      // All identity/token/model/HTTP/nonfinite/structural failures terminate.
++      if(error?.code!=='ERR_ASSERTION' || error.message!=='Cross-engine binary probability gate failed') throw error;
++      gateFailure=error.message;
++    }
++    const cached=response.usage?.prompt_tokens_details?.cached_tokens;
++    if(cached!==undefined && cached!==null) assert(Number.isSafeInteger(cached)&&cached>=0&&cached<=response.usage.prompt_tokens);
++    const row={...item,...timing,responseHash:hash(response),passed:receipt!==null,receipt,gateFailure,
++      ...numeric(response,binding.probe),cachedTokens:Number.isSafeInteger(cached)&&cached>=0?cached:null,
++      cacheTokenCountObserved:Number.isSafeInteger(cached)&&cached>=0,
++      responseFile:`response-${item.index}.json`,requestHash:hash(body)};
++    rows.push(row);await write(`result-${item.index}.json`,row);
++  }
++  const result={kind:'acephale-fixed-serving-parity-diagnostic-v1',scope,variant,
++    bindingHash:hash(binding),sourceCommit,plan,rows,allPassed:rows.every(row=>row.passed),
++    fixedRequestCount:3,selectedProofIndex:0,originalGate:binding.probe.gate,
++    deterministicExecutionProven:false,benchmarkAccuracyMeasured:false};
++  await write('diagnostic.json',result);
++  return result;
++}
++
++export async function loadFixedProof(path,binding,sourceCommit,hash) {
++  const report=JSON.parse(await readFile(path,'utf8'));
++  assert.equal(report.kind,'acephale-fixed-serving-parity-diagnostic-v1');
++  assert.equal(report.variant,'split_k1');assert.equal(report.allPassed,true);
++  assert.equal(report.fixedRequestCount,3);assert.equal(report.selectedProofIndex,0);
++  assert.equal(report.bindingHash,hash(binding));assert.equal(report.sourceCommit,sourceCommit);
++  assert.deepEqual(report.originalGate,binding.probe.gate);
++  assert.deepEqual(report.plan,requestPlan(report.scope,'split_k1',hash));
++  assert.equal(report.rows.length,3);
++  const declared=JSON.parse(await readFile(new URL('plan.json',pathToFileURL(path)),'utf8'));
++  assert.deepEqual(declared,{kind:'acephale-fixed-serving-parity-plan-v1',scope:report.scope,variant:report.variant,
++    bindingHash:report.bindingHash,plan:report.plan,originalGate:report.originalGate,selectedProofIndex:0});
++  const identity=validateParityBinding(binding,sourceCommit,hash);
++  assert.equal(report.scope.predictorContainerId,identity.containerId);
++  assert.equal(report.scope.predictorStartedAt,identity.containerStartedAt);
++  let selected,previousEnd=Date.parse(identity.inventoryObservedAt);
++  for(let index=0;index<3;index++) {
++    const row=report.rows[index];assert.equal(row.index,index);assert.equal(row.passed,true);
++    assert.deepEqual({index:row.index,cacheIntent:row.cacheIntent,cacheSalt:row.cacheSalt},report.plan[index]);
++    assert.equal(row.responseFile,`response-${index}.json`);
++    assert(Number.isSafeInteger(row.probeStartedAtUnixMs)&&Number.isSafeInteger(row.probeCompletedAtUnixMs));
++    assert(previousEnd<=row.probeStartedAtUnixMs&&row.probeStartedAtUnixMs<=row.probeCompletedAtUnixMs
++      &&row.probeCompletedAtUnixMs<=report.scope.hardDeadline*1000);
++    previousEnd=row.probeCompletedAtUnixMs;
++    const request=JSON.parse(await readFile(new URL(`request-${index}.json`,pathToFileURL(path)),'utf8'));
++    assert.deepEqual(request,{...parityRequest(binding.artifact,binding.probe),cache_salt:report.plan[index].cacheSalt});
++    assert.equal(hash(request),row.requestHash);
++    const response=JSON.parse(await readFile(new URL(row.responseFile,pathToFileURL(path)),'utf8'));
++    assert.equal(hash(response),row.responseHash);
++    const receipt=verifyParityResponse(response,binding.artifact,binding.probe,identity,hash,
++      {probeStartedAtUnixMs:row.probeStartedAtUnixMs,probeCompletedAtUnixMs:row.probeCompletedAtUnixMs});
++    assert.deepEqual(receipt,row.receipt);
++    if(index===0) selected={response,probeStartedAtUnixMs:row.probeStartedAtUnixMs,probeCompletedAtUnixMs:row.probeCompletedAtUnixMs};
++  }
++  return selected;
++}
++
++if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
++  const [configurationPath]=process.argv.slice(2);
++  const config=JSON.parse(await readFile(configurationPath,'utf8'));
++  assert(config.output.startsWith('/artifacts/')&&!config.output.split('/').includes('..'));
++  const {hash}=await import('/app/src/lib/acephale/canonical.ts');
++  const binding=JSON.parse(await readFile(config.bindingPath,'utf8'));
++  await mkdir(config.output,{recursive:false});
++  const write=async(name,value)=>writeFile(config.output+'/'+name,JSON.stringify(value,null,2)+'\n',{flag:'wx',mode:0o600});
++  const request=async(body)=>{
++    const remaining=Math.min(90000,config.deadline*1000-Date.now()-5000);
++    assert(remaining>0);
++    const response=await fetch('http://predictor:8000/v1/completions',{method:'POST',
++      headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(Math.floor(remaining))});
++    assert(response.ok,`Diagnostic HTTP status ${response.status}`);
++    return response.json();
++  };
++  await runDiagnostic({binding,sourceCommit:config.sourceCommit,scope:config.scope,
++    variant:config.variant,hash,request,write,deadline:config.deadline*1000});
++}
+--- a/serving_host_v3.py
++++ b/serving_host_v3.py
+@@ -17,6 +17,7 @@
+ import rfc8785
+ 
+ import evaluated_main_contract_v2 as recovered_main_contract
++import serving_precision as precision
+ 
+ COMMIT = '5a36a8b3835820fe65b3615ead31fb6fb7bc9672'
+ FOUNDATION = '65d5e3e219fbb79862b33f921da27ecd202f9a32'
+@@ -129,6 +130,10 @@
+     selected_seed, prior_occurrence = occurrence(config['occurrenceId'])
+     require(config['seed'] == selected_seed and config['priorOccurrenceId'] == prior_occurrence, 'Fixed occurrence/seed order changed')
+     require(bool(config.get('priorServingReceiptPath')) == bool(prior_occurrence), 'Exactly the required prior occurrence must be supplied')
++    require(sha(precision.__file__) == config['precisionHelperSha256']
++        and sha(Path(__file__).parent / 'serving-diagnostic.mjs') == config['diagnosticHelperSha256']
++        and config['numericalPolicyHash'] == digest(precision.numerical_policy()),
++        'Exact predeclared numerical policy and helper sources required')
+     require(config['sourceCommit'] == COMMIT and config['foundationSourceCommit'] == FOUNDATION
+         and config['helperSha256'] == sha(__file__) and config['seed'] in (17, 29), 'Frozen serving source/helper/seed required')
+     require(time.time() + 60 < config['deadline'] <= config['hardDeadline'] - 300,
+@@ -214,6 +219,47 @@
+         'runtimeImageId': owner.container('acephale-runtime')['Image'], 'servingQualified': False})
+ 
+ 
++def numerical_snapshot(owner, config, output, label, baseline, current_id, folder, config_sha, configured):
++    row = owner.container('predictor')
++    require(row['Id'] == current_id, 'Predictor changed during fixed diagnostic variant')
++    inspected = precision.check_inspect(row, baseline, folder, config_sha, configured=configured)
++    require(sha(folder / precision.CONFIG_NAME) == config_sha, 'Declared tuned config bytes changed')
++    text = owner.run(['docker', 'exec', current_id, 'python', '-c',
++        precision.resolver_script(config_sha, configured=configured)], capture=True,
++        timeout=90, name='actual-standard-resolver-' + label)
++    resolver = json.loads(text.splitlines()[-1])
++    require(resolver['verified'] is True and resolver['configured'] is configured,
++            'Actual installed standard resolver observation failed')
++    result = {'observedAt': time.time(), 'inspection': inspected, 'resolver': resolver}
++    write(output / ('numerical-observation-' + label + '.json'), result)
++    return result
++
++
++def fixed_diagnostic(owner, config, output, variant, binding_path, predictor_id, predictor_started_at, policy_hash):
++    root = output / 'parity-diagnostics'
++    root.mkdir(exist_ok=True)
++    destination = root / variant
++    configuration_path = output / (variant + '-diagnostic-configuration.json')
++    relative = output.relative_to(BASE / 'artifacts').as_posix()
++    scope = {'leaseId': config['leaseId'], 'instanceId': config['instanceId'],
++        'occurrenceId': config['occurrenceId'], 'hardDeadline': config['hardDeadline'],
++        'predictorContainerId': predictor_id, 'predictorStartedAt': predictor_started_at,
++        'numericalPolicyHash': policy_hash}
++    write(configuration_path, {'sourceCommit': COMMIT, 'scope': scope, 'variant': variant,
++        'bindingPath': '/artifacts/' + binding_path.relative_to(BASE / 'artifacts').as_posix(),
++        'output': '/artifacts/' + destination.relative_to(BASE / 'artifacts').as_posix(),
++        'deadline': config['deadline']})
++    owner.run([*owner.compose, 'exec', '-T', 'acephale-runtime', 'node', '--import', 'tsx',
++        f'/artifacts/{relative}/serving-diagnostic.mjs',
++        '/artifacts/' + configuration_path.relative_to(BASE / 'artifacts').as_posix()],
++        timeout=300, name='fixed-three-parity-' + variant)
++    report_path = destination / 'diagnostic.json'
++    report = read(report_path)
++    require(report['scope'] == scope and report['variant'] == variant
++        and report['bindingHash'] == digest(read(binding_path)), 'Actual diagnostic binding or scope differs')
++    return report_path, report
++
++
+ def serve(config, owner, output, exported, artifact, created, prior):
+     derived = BASE / 'models' / f'main-seed{config["seed"]}-{artifact["servingWeightsHash"][:12]}'
+     if derived.exists():
+@@ -251,6 +297,72 @@
+     write(output / 'actual-actor-start.json', {'originalPrecreatedReceiptSha256': config['precreatedActorSha256'],
+         'actorContainerId': created['containerId'], 'modelReceiptSha256': sha(actor_receipt),
+         'createdWithoutWeights': True, 'nowStartedWithPinnedWeights': True, 'servingQualified': False})
++    # Predeclare and retain both fixed diagnostic arms. Baseline numeric failure
++    # is observation only; only all three configured passes can admit serving.
++    policy = precision.numerical_policy()
++    policy_hash = digest(policy)
++    require(policy_hash == config['numericalPolicyHash'], 'Prospective numerical policy changed')
++    policy_path = output / 'numerical-policy.json'
++    write(policy_path, {**policy, 'contentHash': policy_hash})
++    folder = output / 'vllm-tuned'
++    folder.mkdir()
++    tuned_path = folder / precision.CONFIG_NAME
++    with tuned_path.open('xb') as stream:
++        stream.write(precision.configuration_bytes())
++    tuned_path.chmod(0o444)
++    config_sha = sha(tuned_path)
++    baseline = owner.container('predictor')
++    require(baseline['Id'] == predictor['Id'], 'Original diagnostic predictor identity changed')
++    for name in ('serving-parity.mjs',):
++        shutil.copyfile(INFRA / 'lambda-operator' / name, output / name)
++    shutil.copyfile(Path(__file__).parent / 'serving-diagnostic.mjs', output / 'serving-diagnostic.mjs')
++    inventory = [PYTHON, INFRA / 'collect_inventory.py', '--models-root', BASE / 'models',
++        '--images-lock', BASE / 'artifacts/images.pinned.json', '--provider-receipt', BASE / 'provider-receipt.json',
++        '--orchestrator-inventory', config['orchestratorInventoryPath'], '--hardware-profile', 'a100-40gb-v1',
++        '--predictor-export', derived]
++    baseline_inventory = output / 'inventory-baseline'
++    owner.run([*inventory, '--output', baseline_inventory], timeout=360, name='actual-baseline-probe-inventory')
++    baseline_binding = output / 'binding-baseline.json'
++    write(baseline_binding, {'schemaVersion': 1, 'artifact': artifact, 'probe': read(derived / 'serving-probe.json'),
++        'deployment': read(baseline_inventory / 'observed-deployment.json'),
++        'inventory': read(baseline_inventory / 'inventory-evidence.json')})
++    observations = {'baselineBefore': numerical_snapshot(owner, config, output, 'baseline-before',
++        baseline, baseline['Id'], folder, config_sha, False)}
++    baseline_report_path, baseline_report = fixed_diagnostic(owner, config, output, 'baseline',
++        baseline_binding, baseline['Id'], baseline['State']['StartedAt'], policy_hash)
++    observations['baselineAfter'] = numerical_snapshot(owner, config, output, 'baseline-after',
++        baseline, baseline['Id'], folder, config_sha, False)
++    actor_matches(owner.container('actor'), created, compose['services']['actor'], first=False)
++    # Standard, predictor-only configuration: no command/image/model/kernel edit.
++    configured_compose = precision.configure_compose(compose, folder)
++    effective_path = output / 'effective-compose.json'
++    write(effective_path, configured_compose)
++    effective_runtime = INFRA / f'compose.resolved.serving-{config["occurrenceId"]}-splitk1.json'
++    with effective_runtime.open('xb') as stream:
++        stream.write(effective_path.read_bytes())
++    effective_sha = sha(effective_path)
++    owner.compose = ['docker', 'compose', '-f', str(effective_runtime)]
++    owner.run([*owner.compose, 'up', '-d', '--no-deps', '--force-recreate', 'predictor'],
++              name='configured-native-lora-start')
++    predictor = owner.container('predictor')
++    require(predictor['Id'] != baseline['Id'], 'Configured variant requires a distinct fresh predictor process')
++    owner.wait_health('predictor', 8000, '/health', limit=480)
++    precision.check_inspect(owner.container('predictor'), baseline, folder, config_sha, configured=True)
++    actor_matches(owner.container('actor'), created, compose['services']['actor'], first=False)
++    before, after = output / 'inventory-before', output / 'inventory-after'
++    owner.run([*inventory, '--output', before], timeout=360, name='actual-configured-pre-probe-inventory')
++    write(output / 'binding.json', {'schemaVersion': 1, 'artifact': artifact, 'probe': read(derived / 'serving-probe.json'),
++        'deployment': read(before / 'observed-deployment.json'), 'inventory': read(before / 'inventory-evidence.json')})
++    observations['configuredBefore'] = numerical_snapshot(owner, config, output, 'configured-before',
++        baseline, predictor['Id'], folder, config_sha, True)
++    configured_report_path, configured_report = fixed_diagnostic(owner, config, output, 'split_k1',
++        output / 'binding.json', predictor['Id'], predictor['State']['StartedAt'], policy_hash)
++    scope = {key: config[key] for key in ('leaseId', 'instanceId', 'occurrenceId', 'hardDeadline')}
++    diagnostic_path = output / 'diagnostic-receipt.json'
++    write(diagnostic_path, precision.diagnostic_receipt(scope, policy_hash, baseline_report,
++        configured_report, baseline_report_path, configured_report_path, sha))
++    # Relays are installed/refreshed only for the final configured predictor.
++    # Diagnostic HTTP requests used its Docker service name; no relay was needed.
+     if prior is None:
+         owner.relays()
+     else:
+@@ -270,16 +382,11 @@
+         require(relay['leaseId'] == config['leaseId'] and len(current) == 1 and current[0]['containerId'] == predictor['Id'],
+                 'Fresh relay must bind the current predictor')
+         shutil.copyfile(relay_path, output / 'relay-receipt.json')
+-    for name in ('serving-qualification.mjs', 'serving-parity.mjs'):
+-        shutil.copyfile(INFRA / 'lambda-operator' / name, output / name)
+-    inventory = [PYTHON, INFRA / 'collect_inventory.py', '--models-root', BASE / 'models',
+-        '--images-lock', BASE / 'artifacts/images.pinned.json', '--provider-receipt', BASE / 'provider-receipt.json',
+-        '--orchestrator-inventory', config['orchestratorInventoryPath'], '--hardware-profile', 'a100-40gb-v1',
+-        '--predictor-export', derived]
+-    before, after = output / 'inventory-before', output / 'inventory-after'
+-    owner.run([*inventory, '--output', before], timeout=360, name='actual-pre-probe-inventory')
+-    write(output / 'binding.json', {'schemaVersion': 1, 'artifact': artifact, 'probe': read(derived / 'serving-probe.json'),
+-        'deployment': read(before / 'observed-deployment.json'), 'inventory': read(before / 'inventory-evidence.json')})
++    frozen_qualification = (INFRA / 'lambda-operator/serving-qualification.mjs').read_text()
++    private_qualification = precision.qualification_source(frozen_qualification,
++        '/artifacts/' + configured_report_path.relative_to(BASE / 'artifacts').as_posix())
++    with (output / 'serving-qualification.mjs').open('x', encoding='utf-8') as stream:
++        stream.write(private_qualification)
+     # Qualification requires a /artifacts/qualification-* output name. Its
+     # adjacent parity module imports remain under this versioned seed directory.
+     qname = f'qualification-main-{config["occurrenceId"]}'
+@@ -297,6 +404,14 @@
+     require(evidence['modelFiles']['predictor']['vllmQualificationPassed'] is True
+         and evidence['containers']['actor']['id'] == created['containerId']
+         and evidence['containers']['predictor']['id'] == predictor['Id'], 'Fresh post-proof process inventory failed')
++    observations['configuredAfter'] = numerical_snapshot(owner, config, output, 'configured-after',
++        baseline, predictor['Id'], folder, config_sha, True)
++    actor_matches(owner.container('actor'), created, compose['services']['actor'], first=False)
++    require(sha(effective_path) == sha(effective_runtime) == effective_sha,
++            'Exact effective Compose bytes changed during qualification')
++    attestation_path = output / 'numerical-attestation.json'
++    write(attestation_path, precision.numerical_attestation(scope, policy_hash, observations,
++        effective_sha, config_sha, created['containerId']))
+     require(files(derived) == files(exported), 'Served weights changed during qualification')
+     require(not owner.run(['git', 'status', '--porcelain=v1'], capture=True), 'Serving source changed during qualification')
+     return {'completed': True, 'sourceCommit': COMMIT, 'trainingSourceCommit': COMMIT, 'foundationSourceCommit': FOUNDATION,
+@@ -306,6 +421,12 @@
+         'runtimeContainerId': owner.container('acephale-runtime')['Id'], 'runtimeImageId': owner.container('acephale-runtime')['Image'],
+         'servedModel': artifact['servedModel'], 'servingWeightsHash': artifact['servingWeightsHash'],
+         'artifactPath': str(derived / 'predictor.json'), 'proofPath': str(qpath / 'native-lora-proof.json'),
++        'numericalPolicyHash': policy_hash, 'numericalPolicyPath': str(policy_path),
++        'numericalPolicySha256': sha(policy_path), 'effectiveComposePath': str(effective_path),
++        'effectiveComposeRuntimePath': str(effective_runtime), 'effectiveComposeSha256': effective_sha,
++        'tunedConfigPath': str(tuned_path), 'tunedConfigSha256': config_sha,
++        'numericalAttestationPath': str(attestation_path), 'numericalAttestationSha256': sha(attestation_path),
++        'diagnosticReceiptPath': str(diagnostic_path), 'diagnosticReceiptSha256': sha(diagnostic_path),
+         'proofSha256': sha(qpath / 'native-lora-proof.json'), 'deploymentPath': str(after / 'observed-deployment.json'),
+         'deploymentSha256': sha(after / 'observed-deployment.json'), 'inventoryPath': str(after / 'inventory-evidence.json'),
+         'inventorySha256': sha(after / 'inventory-evidence.json'), 'relayReceiptPath': str(output / 'relay-receipt.json'),
+--- a/run_serving_v3.py
++++ b/run_serving_v3.py
+@@ -14,6 +14,7 @@
+ from pathlib import Path, PurePosixPath
+ 
+ import evaluated_main_contract_v2 as recovered_main_contract
++import serving_precision as precision
+ 
+ HERE = Path(__file__).resolve().parent
+ sys.path.insert(0, str(HERE.parent / 'future-784b43d1-single'))
+@@ -107,7 +108,10 @@
+     deadline = min(preparation['deadline'], config['hardDeadline'] - 300)
+     if deadline <= time.time() + 120:
+         raise TimeoutError('No meaningful qualified serving transition window remains')
+-    value = {**preparation, 'helperSha256': owner.control.sha256(helper), 'deadline': deadline}
++    value = {**preparation, 'helperSha256': owner.control.sha256(helper), 'deadline': deadline,
++        'precisionHelperSha256': owner.control.sha256(HERE / 'serving_precision.py'),
++        'diagnosticHelperSha256': owner.control.sha256(HERE / 'serving-diagnostic.mjs'),
++        'numericalPolicyHash': recovered_main_contract.digest(precision.numerical_policy())}
+     owner.write(output / 'configuration.json', value)
+     options = owner.ssh_command(config, '')[2:-2]
+     failure = None
+@@ -122,6 +126,7 @@
+                 owner.owned(owner.ssh_command(config, shlex.join(sync)), output / 'serving-environment.log',
+                     min(time.time() + 300, deadline), stopped)
+             uploads = [(helper, 'serving_host_v3.py'), (output / 'configuration.json', f'serving-{occurrence_id}-configuration.json')]
++            uploads.extend((HERE / name, name) for name in ('serving_precision.py', 'serving-diagnostic.mjs'))
+             for row in preparation.get('uploads', []):
+                 path = Path(row['localPath'])
+                 if owner.control.sha256(path) != row['sha256'] or Path(row['remoteName']).name != row['remoteName']:

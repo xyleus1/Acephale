@@ -1,5 +1,17 @@
 # Working on Acephale
 
+## Numerical serving diagnostic, 2026-11-17
+
+E26 exported successfully but failed the original serving probability gate before
+replay/native trials. Preserve E20's passing and E26's failing responses; their
+artifact, prompt and serving recipe identities match. The prospective predictor
+`split_k=1` override uses the pinned upstream interface, fixed three-request
+baseline/configured arms and index-zero proof selection. All three configured
+responses must pass 0.01; do not retry until a favorable response. Retain live
+configuration attestation and separate numerical-policy provenance. The
+[methods note](experiments/operator-patches/README.md#predictor-numerical-diagnostic-2026-11-17)
+states the observations, cache-evidence limits and pending benchmark work.
+
 ## Money-only evaluation recovery funding, 2026-11-17
 
 Funding v6 adds an operator-selected $500 infrastructure allowance under the

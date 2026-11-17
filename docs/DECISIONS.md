@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-17: Diagnose serving reduction without changing acceptance
+
+Keep the model, adapter, prompt and 0.01 gate after E26's failed qualification.
+Investigate the standard predictor-only LoRA `split_k=1` override with three
+fixed baseline and three fixed configured requests. Preserve every outcome and
+choose proof index zero before execution. Configuration attestation and unchanged
+gate success are required; source inspection cannot establish a cause or repair.
+See the [numerical methods note](experiments/operator-patches/README.md#predictor-numerical-diagnostic-2026-11-17).
+
 ## Money-only evaluation recovery funding, 2026-11-17
 
 Funding v6 adds an operator-selected $500 infrastructure allowance under the

@@ -1,0 +1,396 @@
+--- /dev/null
++++ b/numerical_policy_binding.py
+@@ -0,0 +1,229 @@
++"""Private provenance companions for the observed numerical serving policy.
++
++Frozen scientific manifests remain byte-for-byte outputs of their original
++writers. These companions bind those outputs to the separately observed recipe.
++"""
++import hashlib
++import json
++import os
++from pathlib import Path, PurePosixPath
++
++from acephale.contracts_v1 import hash_v1
++
++SOURCE = '5a36a8b3835820fe65b3615ead31fb6fb7bc9672'
++OCCURRENCES = ('seed17-01', 'seed29-01', 'seed17-02', 'seed29-02')
++
++
++def require(value, message):
++    if not value:
++        raise ValueError(message)
++
++
++def sha(path):
++    path = Path(path)
++    require(path.is_file() and not path.is_symlink(), 'Regular numerical provenance input required')
++    with path.open('rb') as stream:
++        return hashlib.file_digest(stream, 'sha256').hexdigest()
++
++
++def read(path):
++    sha(path)
++    return json.loads(Path(path).read_text(encoding='utf-8'))
++
++
++def sealed(value):
++    return {**value, 'contentHash': hash_v1(value)}
++
++
++def verified(value):
++    require(value.get('contentHash') == hash_v1({k: v for k, v in value.items() if k != 'contentHash'}),
++            'Numerical provenance content hash changed')
++    return value
++
++
++def write(path, value):
++    path = Path(path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with path.open('x', encoding='utf-8') as stream:
++        json.dump(value, stream, indent=2, allow_nan=False)
++        stream.write('\n')
++        stream.flush()
++        os.fsync(stream.fileno())
++
++
++def archived(root, occurrence, remote):
++    base = PurePosixPath('/srv/acephale/artifacts/serving-' + occurrence)
++    name = PurePosixPath(remote)
++    require(name.is_absolute() and '..' not in name.parts and name.is_relative_to(base),
++            'Numerical evidence must be inside the exact serving archive')
++    local = Path(root) / f'serving-{occurrence}-stage/verified/serving' / str(name.relative_to(base))
++    require(not any(p.is_symlink() for p in [local, *local.parents]), 'Symlink numerical evidence forbidden')
++    return local
++
++
++def load(root, occurrence):
++    """Read only the actual completed configured occurrence and its exact files."""
++    import serving_precision as precision
++    require(occurrence in OCCURRENCES, 'Declared occurrence required')
++    root = Path(root)
++    output = root / f'serving-{occurrence}-stage/verified/serving'
++    completed_path = output / 'serving-completed.json'
++    completed = verified(read(completed_path))
++    owner = read(root / 'remote-owner-config.json')
++    require(completed.get('completed') is True and completed['sourceCommit'] == SOURCE
++            and completed['occurrenceId'] == occurrence
++            and all(completed[k] == owner[k] for k in ('leaseId', 'instanceId')),
++            'Completed numerical recipe belongs to another owner')
++    paths = {}
++    for name in ('numericalPolicy', 'effectiveCompose', 'tunedConfig', 'numericalAttestation', 'diagnosticReceipt'):
++        paths[name] = archived(root, occurrence, completed[name + 'Path'])
++        require(sha(paths[name]) == completed[name + 'Sha256'], 'Numerical recipe file hash changed: ' + name)
++    policy_document = verified(read(paths['numericalPolicy']))
++    policy = {k: v for k, v in policy_document.items() if k != 'contentHash'}
++    require(policy == precision.numerical_policy() and policy_document['contentHash'] == completed['numericalPolicyHash'],
++            'Numerical policy differs from the exact prospective policy')
++    require(paths['tunedConfig'].read_bytes() == precision.configuration_bytes(), 'Configured SHRINK bytes differ')
++    attestation = read(paths['numericalAttestation'])
++    diagnostic = read(paths['diagnosticReceipt'])
++    scope = attestation['scope']
++    require(all(scope[k] == owner[k] for k in ('leaseId', 'instanceId', 'hardDeadline'))
++            and scope['occurrenceId'] == occurrence, 'Numerical attestation scope differs')
++    require(attestation == precision.numerical_attestation(scope, completed['numericalPolicyHash'],
++        attestation['observations'], completed['effectiveComposeSha256'], completed['tunedConfigSha256'],
++        completed['actorContainerId']), 'Numerical attestation is detached from the completed recipe')
++    reports = {}
++    for variant in ('baseline', 'configured'):
++        path = archived(root, occurrence, diagnostic[variant + 'ReportPath'])
++        require(sha(path) == diagnostic[variant + 'ReportSha256'], 'Diagnostic response report changed')
++        paths[variant + 'Report'] = path
++        reports[variant] = read(path)
++    expected_diagnostic = precision.diagnostic_receipt(scope, completed['numericalPolicyHash'],
++        reports['baseline'], reports['configured'], diagnostic['baselineReportPath'],
++        diagnostic['configuredReportPath'], lambda path: sha(archived(root, occurrence, str(path))))
++    require(diagnostic == expected_diagnostic, 'Fixed numerical diagnostic commitment changed')
++    require(attestation['configuredPredictorContainerId'] == diagnostic['configuredPredictorContainerId']
++            == completed['predictorContainerId'], 'Baseline or another predictor cannot admit science')
++    inventory_path = output / 'inventory-after/inventory-evidence.json'
++    deployment_path = output / 'inventory-after/observed-deployment.json'
++    require(sha(inventory_path) == completed['inventorySha256']
++            and sha(deployment_path) == completed['deploymentSha256'], 'Frozen inventory commitment changed')
++    inventory = read(inventory_path)
++    predictor = inventory['containers']['predictor']
++    require(predictor['id'] == completed['predictorContainerId']
++            and inventory['containers']['actor']['id'] == completed['actorContainerId'],
++            'Configured predictor differs from frozen post-qualification inventory')
++    for stage in ('configuredBefore', 'configuredAfter'):
++        seen = attestation['observations'][stage]['inspection']
++        require(seen['containerId'] == predictor['id'] and seen['imageId'] == predictor['imageId']
++                and seen['startedAt'] == predictor['startedAt'], 'Configured process lifetime differs')
++    before = attestation['observations']['configuredBefore']['inspection']
++    after = attestation['observations']['configuredAfter']['inspection']
++    require(all(before[k] == after[k] for k in ('environmentSha256', 'mountsSha256', 'tunedMount', 'tunedEnvironment')),
++            'Configured recipe changed during qualification')
++    proof_path = root / f'serving-{occurrence}-stage/verified/qualification/native-lora-proof.json'
++    require(sha(proof_path) == completed['proofSha256']
++            and hash_v1(read(proof_path)['response']) == diagnostic['selectedResponseHash'],
++            'Original proof must use predetermined configured response zero')
++    runtime_compose = PurePosixPath(completed['effectiveComposeRuntimePath'])
++    require(runtime_compose == PurePosixPath('/srv/acephale/training-source-5a36a8b3/infra/acephale-infra-v1') /
++            f'compose.resolved.serving-{occurrence}-splitk1.json', 'Unexpected effective runtime compose path')
++    files = {str(path.resolve()): sha(path) for path in [completed_path, inventory_path, deployment_path, proof_path, *paths.values()]}
++    return sealed({'kind': 'acephale-serving-numerical-policy-binding-v1', 'sourceCommit': SOURCE,
++        'leaseId': owner['leaseId'], 'instanceId': owner['instanceId'], 'hardDeadline': owner['hardDeadline'],
++        'occurrenceId': occurrence, 'predictorContainerId': predictor['id'], 'predictorStartedAt': predictor['startedAt'],
++        'numericalPolicyHash': completed['numericalPolicyHash'], 'effectiveComposeSha256': completed['effectiveComposeSha256'],
++        'tunedConfigSha256': completed['tunedConfigSha256'], 'numericalAttestationSha256': completed['numericalAttestationSha256'],
++        'diagnosticReceiptSha256': completed['diagnosticReceiptSha256'],
++        'baseSourceComposeSha256': inventory['sourceComposeSha256'],
++        'baseRecipeIsFrozen': True, 'effectiveRecipeIncludesNumericalOverlay': True,
++        'frozenManifestSchemaChanged': False, 'files': files,
++        'remote': {'numericalPolicyHash': completed['numericalPolicyHash'],
++            'effectiveComposePath': str(runtime_compose), 'effectiveComposeSha256': completed['effectiveComposeSha256'],
++            'tunedConfigPath': completed['tunedConfigPath'], 'tunedConfigSha256': completed['tunedConfigSha256'],
++            'numericalPolicyPath': completed['numericalPolicyPath'], 'numericalPolicySha256': completed['numericalPolicySha256'],
++            'predictorContainerId': predictor['id'], 'environmentSha256': after['environmentSha256'],
++            'mountsSha256': after['mountsSha256'], 'tunedMount': after['tunedMount'],
++            'tunedEnvironment': after['tunedEnvironment']}})
++
++
++def verify_files(value):
++    verified(value)
++    require(value['files'] and all(sha(path) == expected for path, expected in value['files'].items()),
++            'Numerical companion references changed')
++    return value
++
++
++def check_observation(binding, observation):
++    seen = observation.get('numericalPolicyObservation', {})
++    require(observation.get('servingOwnershipConfirmed') is True
++            and all(observation.get(k) == binding[k] for k in ('leaseId', 'instanceId'))
++            and seen.get('verified') is True and seen.get('changesMade') is False
++            and all(seen.get(k) == binding[k] for k in ('numericalPolicyHash', 'effectiveComposeSha256',
++                                                     'tunedConfigSha256', 'predictorContainerId')),
++            'Fresh configured numerical-policy observation required')
++
++
++def companion(root, occurrence, label, paths, *, observation=None, parents=()):
++    binding = load(root, occurrence)
++    if observation is not None:
++        check_observation(binding, observation)
++    files = {str(Path(path).resolve()): sha(path) for path in paths}
++    parent_refs = []
++    for path in parents:
++        previous = check_companion(root, occurrence, path)
++        require(previous['numericalPolicyHash'] == binding['numericalPolicyHash']
++                and previous['tunedConfigSha256'] == binding['tunedConfigSha256'],
++                'Calibration/replay numerical policy differs from current serving')
++        parent_refs.append({'path': str(Path(path).resolve()), 'sha256': sha(path), 'contentHash': previous['contentHash']})
++    result = sealed({'kind': 'acephale-scientific-numerical-policy-companion-v1', 'stage': label,
++        'sourceCommit': SOURCE, 'occurrenceId': occurrence, 'leaseId': binding['leaseId'], 'instanceId': binding['instanceId'],
++        'numericalPolicyHash': binding['numericalPolicyHash'], 'tunedConfigSha256': binding['tunedConfigSha256'],
++        'servingBindingHash': binding['contentHash'], 'servingBinding': binding, 'files': files,
++        'parents': parent_refs, 'frozenScientificOutputsModified': False,
++        'observation': observation, 'diagnosticResponsesUsedAsReplayOrCalibration': False})
++    path = Path(root) / 'downstream' / occurrence / 'numerical-policy' / (label + '.json')
++    write(path, result)
++    return path
++
++
++def check_companion(root, occurrence, path, *, seen=None):
++    path = Path(path).resolve()
++    seen = set() if seen is None else set(seen)
++    require(path not in seen and len(seen) < 12, 'Cyclic or oversized numerical provenance chain')
++    seen.add(path)
++    value = verify_files(read(path))
++    current = load(root, occurrence)
++    require(value.get('kind') == 'acephale-scientific-numerical-policy-companion-v1'
++            and value.get('stage') == path.stem
++            and path.parent == (Path(root)/'downstream'/value['occurrenceId']/'numerical-policy').resolve(),
++            'Numerical companion kind or actual stage path changed')
++    require(value['numericalPolicyHash'] == current['numericalPolicyHash']
++            and value['tunedConfigSha256'] == current['tunedConfigSha256']
++            and value['occurrenceId'][:6] == occurrence[:6]
++            and all(value[k] == current[k] for k in ('leaseId', 'instanceId')),
++            'Scientific companion belongs to another effective numerical policy')
++    embedded = verify_files(value['servingBinding'])
++    require(embedded.get('kind') == 'acephale-serving-numerical-policy-binding-v1'
++            and value['servingBindingHash'] == embedded['contentHash']
++            and all(value[k] == embedded[k] for k in ('occurrenceId', 'leaseId', 'instanceId',
++                                                     'numericalPolicyHash', 'tunedConfigSha256')),
++            'Scientific companion is detached from its serving binding')
++    base = Path(root)/'downstream'/value['occurrenceId']
++    expected = None
++    if value['stage'] == 'qualified':
++        expected = [base/'qualified'/name for name in
++            ('manifest.json', 'profile.json', 'native.json', 'guard.json', 'deployment.json', 'inventory.json', 'preparation.json')]
++    elif value['stage'] == 'replay':
++        expected = [base/'replay/local-export-verification.json', *[base/'replay/verified/output'/condition/name
++            for condition in ('neutral-fixed', 'goals-selected', 'goals-fixed') for name in ('manifest.json', 'closed-payload.json')]]
++    elif value['stage'] == 'calibration':
++        expected = [base/'analysis'/name for name in
++            ('commands.json', 'probability-calibration/calibration.json', 'goal-reliability/goal-reliability.json')]
++    if expected is not None:
++        require(set(value['files']) == {str(p.resolve()) for p in expected}, 'Numerical companion stage artifacts differ')
++    for parent in value['parents']:
++        require(sha(parent['path']) == parent['sha256'], 'Numerical companion parent changed')
++        prior = check_companion(root, occurrence, parent['path'], seen=seen)
++        require(prior['contentHash'] == parent['contentHash']
++                and prior['numericalPolicyHash'] == current['numericalPolicyHash'], 'Numerical parent identity changed')
++    return value
+--- a/continuation_hooks.py
++++ b/continuation_hooks.py
+@@ -17,0 +18 @@
++import numerical_policy_binding as numerical
+@@ -30 +31 @@
+-CONTEXT = PHASE / 'prepare_downstream_context_e26_20261116.py'
++CONTEXT = PHASE / 'prepare_downstream_context_e27_20261116.py'
+@@ -83,2 +84,2 @@
+-        ROOT/'successor_hooks.py', ROOT/'native_financial_port.py', ROOT/'native-budget-port.json', ROOT/'finalize_evaluated_study.py', ROOT/'render_public_summary.py',
+-        OP/'assemble_evaluated_study_report_e26_20261116.py', PHASE/'prepare_final_report_e26_20261116.py',
++        ROOT/'successor_hooks.py', ROOT/'numerical_policy_binding.py', ROOT/'serving_precision.py', ROOT/'native_financial_port.py', ROOT/'native-budget-port.json', ROOT/'finalize_evaluated_study.py', ROOT/'render_public_summary.py',
++        OP/'assemble_evaluated_study_report_e27_20261116.py', PHASE/'prepare_final_report_e27_20261116.py',
+@@ -242 +243,23 @@
+-    return prepared_phase(runtime,'qualified-'+occurrence,'qualified',occurrence,checkpointPath=current)
++    output = prepared_phase(runtime,'qualified-'+occurrence,'qualified',occurrence,checkpointPath=current)
++    numerical.companion(ROOT, occurrence, 'qualified', [output / name for name in
++        ('manifest.json', 'profile.json', 'native.json', 'guard.json', 'deployment.json', 'inventory.json', 'preparation.json')])
++    return output
++
++
++def numerical_path(occurrence, stage):
++    return ROOT / 'downstream' / occurrence / 'numerical-policy' / (stage + '.json')
++
++
++def numerical_observation(runtime, occurrence, label):
++    """Reuse the existing exact owned serving probe; never publish/alter serving."""
++    import managed_serving_v3 as owner
++    class Runtime(owner.Runtime):
++        def authority(self, *, allow_booting=False):
++            return runtime.authority(allow_booting=allow_booting)
++    attempt = ROOT / 'downstream' / occurrence / 'numerical-observations' / label
++    attempt.mkdir(parents=True, exist_ok=False)
++    observer = Runtime(runtime.stop)
++    result = observer.observe_occurrence(occurrence, attempt, 'after', qualified=True)
++    owner.policy.valid_observation(result, observer.lease(), observer.now())
++    numerical.check_observation(numerical.load(ROOT, occurrence), result)
++    return result
+@@ -252,0 +276,2 @@
++    numerical.check_companion(ROOT, occurrence, numerical_path(occurrence, 'qualified'))
++    numerical_observation(runtime, occurrence, 'before-replay')
+@@ -291 +316,15 @@
+-    return output/'verified/output'
++    replays = output/'verified/output'
++    qualified_manifest = read(ROOT/'downstream'/occurrence/'qualified/manifest.json')
++    manifests = []
++    for condition in ('neutral-fixed', 'goals-selected', 'goals-fixed'):
++        path = replays/condition/'manifest.json'
++        manifest = numerical.verified(read(path))
++        require(manifest.get('splitGuard', {}).get('manifestHash') == numerical.hash_v1(qualified_manifest)
++            and manifest['splitGuard'].get('remoteInstanceId') == observed['instanceId']
++            and manifest['model']['trainedPredictor'] == qualified_manifest['predictor']['trainedPredictor'],
++            'Prediction replay manifest differs from the configured qualified predictor')
++        manifests.extend([path, replays/condition/'closed-payload.json'])
++    after = numerical_observation(runtime, occurrence, 'after-replay')
++    numerical.companion(ROOT, occurrence, 'replay', [output/'local-export-verification.json', *manifests],
++        observation=after, parents=[numerical_path(occurrence, 'qualified')])
++    return replays
+@@ -294,0 +334,2 @@
++    numerical.check_companion(ROOT, occurrence, numerical_path(occurrence, 'replay'))
++    numerical_observation(runtime, occurrence, 'before-calibration')
+@@ -301,0 +343,4 @@
++    after = numerical_observation(runtime, occurrence, 'after-calibration')
++    numerical.companion(ROOT, occurrence, 'calibration', [output/'commands.json',
++        output/'probability-calibration/calibration.json', output/'goal-reliability/goal-reliability.json'],
++        observation=after, parents=[numerical_path(occurrence, 'replay')])
+@@ -318,0 +364,6 @@
++    calibration = numerical_path(occurrence[:6] + '-01', 'calibration')
++    numerical.check_companion(ROOT, occurrence, calibration)
++    input_companion = numerical.companion(ROOT, occurrence, stage_id + '-inputs',
++        [path, *[preparation/name for name in ('experiment.json', 'preparation.json', 'configuration.json', 'manifest.json')]],
++        parents=[numerical_path(occurrence, 'qualified'), calibration])
++    numerical.check_companion(ROOT, occurrence, input_companion)
+@@ -321,0 +373,6 @@
++    attempts = list((ROOT/'managed-native').glob('*-' + stage_id))
++    require(len(attempts) == 1, 'One exact numerical-bound native attempt required')
++    after = read(attempts[0]/'after.json')
++    numerical.companion(ROOT, occurrence, stage_id + '-outputs',
++        [preparation/'run/completion.json', attempts[0]/'result.json', attempts[0]/'after.json'],
++        observation=after, parents=[input_companion])
+@@ -484,0 +542 @@
++        evidence.extend(sorted((ROOT/'downstream'/occurrence/'numerical-policy').glob('*.json')))
+--- a/serving_owner_probe.py
++++ b/serving_owner_probe.py
+@@ -41 +41,39 @@
+-def inspect_serving(raw, expected, *, run=command):
++def canonical_hash(value):
++    # Docker Env/Mounts are strings, booleans, arrays, objects and integers;
++    # this subset has the same encoding as the producer's RFC8785 hash.
++    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
++        separators=(',', ':'), allow_nan=False).encode()).hexdigest()
++
++
++def inspect_numerical(predictor, actor, spec):
++    require(predictor['Id'] == spec['predictorContainerId'], 'Numerical policy is bound to another predictor')
++    env = predictor['Config'].get('Env', [])
++    mounts = predictor.get('Mounts', [])
++    require(canonical_hash(sorted(env)) == spec['environmentSha256']
++        and canonical_hash(mounts) == spec['mountsSha256'], 'Actual configured environment or mounts changed')
++    require([v for v in env if v.startswith('VLLM_TUNED_CONFIG_FOLDER=')] == [spec['tunedEnvironment']]
++        and spec['tunedEnvironment'] == 'VLLM_TUNED_CONFIG_FOLDER=/acephale-tuned',
++        'Exact numerical environment required')
++    tuned = [v for v in mounts if v.get('Destination') == '/acephale-tuned']
++    require(tuned == [spec['tunedMount']] and tuned[0].get('RW') is False
++        and tuned[0].get('Type') == 'bind', 'Exact readonly numerical mount required')
++    config = Path(spec['tunedConfigPath'])
++    require(config.name == 'NVIDIA_A100_SXM4_40GB_SHRINK.json'
++        and config.parent == Path(tuned[0]['Source'])
++        and {p.name for p in config.parent.iterdir()} == {config.name}, 'Numerical config directory changed')
++    for key in ('tunedConfig', 'effectiveCompose', 'numericalPolicy'):
++        path = Path(spec[key + 'Path'])
++        require(path.is_file() and not path.is_symlink() and sha(path) == spec[key + 'Sha256'],
++                'Current numerical recipe file changed: ' + key)
++    policy = read(spec['numericalPolicyPath'])
++    require(policy.get('contentHash') == spec['numericalPolicyHash']
++        == canonical_hash({k: v for k, v in policy.items() if k != 'contentHash'}),
++            'Current numerical policy body changed')
++    require(not any(v.startswith('VLLM_TUNED_CONFIG_FOLDER=') for v in actor['Config'].get('Env', []))
++        and not any(v.get('Destination') == '/acephale-tuned' for v in actor.get('Mounts', [])),
++        'Predictor-only numerical policy leaked into actor')
++    return {key: spec[key] for key in ('numericalPolicyHash', 'effectiveComposeSha256',
++        'tunedConfigSha256', 'predictorContainerId', 'environmentSha256', 'mountsSha256')}
++
++
++def inspect_serving(raw, expected, *, run=command, numerical=None):
+@@ -66,0 +105,3 @@
++    if numerical is not None:
++        by_role = {row['Config']['Labels']['com.docker.compose.service']: row for row in rows}
++        numerical_before = inspect_numerical(by_role['predictor'], by_role['actor'], numerical)
+@@ -82,0 +124,7 @@
++    numerical_observation = {}
++    if numerical is not None:
++        by_role = {row['Config']['Labels']['com.docker.compose.service']: row for row in final}
++        require(inspect_numerical(by_role['predictor'], by_role['actor'], numerical) == numerical_before,
++                'Numerical recipe changed during ownership observation')
++        numerical_observation = {'numericalPolicyObservation': {**numerical_before,
++            'verified': True, 'changesMade': False}}
+@@ -86 +134,2 @@
+-        'modelGpuProcessIds': sorted(gpu), 'qualityQualificationCreated': False, 'changesMade': False}
++        'modelGpuProcessIds': sorted(gpu), 'qualityQualificationCreated': False, 'changesMade': False,
++        **numerical_observation}
+@@ -98 +147 @@
+-    return {**inspect_serving(raw, config['expectedContainers']), 'servingSourceCommit': SOURCE,
++    return {**inspect_serving(raw, config['expectedContainers'], numerical=config['numericalPolicy']), 'servingSourceCommit': SOURCE,
+--- a/managed_serving_v3.py
++++ b/managed_serving_v3.py
+@@ -20,2 +20,2 @@
+-PROBE_SHA = '9593fd10e9c5e0d80c3999cfe8fb2701697d24518578036c7932aac4ff5e824f'
+-HELPERS = {'managed_stage.py': 'c9114cfb4c227940ccd5ed019bb6f275cd39c92a00cb0683ed4a4176a2489eba', 'serving_owner_probe.py': '9593fd10e9c5e0d80c3999cfe8fb2701697d24518578036c7932aac4ff5e824f', 'serving_host_v3.py': '92d53a63cb76fc27686e1b9a939d12b3094fd89d3e7606c1bf0aba738a76283f', 'run_serving_v3.py': '3ad632974c80d0fdaad082ce6688e5a55682305d65f256f1077402b65e6fc043', 'prepare_serving_bindings_v3.py': '0cf4f1518f0d6a77a5514170c4ed4d54276f3ac652c575ef44a402ccb965a501', 'current_lease_readiness.py': '79dd1935ae08b5ffa59b571e522bdb99ff026da3dbedc543d44f5ec1f6b1c464', 'evaluated_main_contract_v2.py': '9573bd43fdb82cb9ffaa66cbc605bb007c788ce0910e15242e26541f3d6d0b36'}
++PROBE_SHA = 'fa4197f7949bcba640cf01ce63809ce62792d7bc1b62d7f92ff04322d7b65ac7'
++HELPERS = {'managed_stage.py': 'c9114cfb4c227940ccd5ed019bb6f275cd39c92a00cb0683ed4a4176a2489eba', 'serving_owner_probe.py': 'fa4197f7949bcba640cf01ce63809ce62792d7bc1b62d7f92ff04322d7b65ac7', 'serving_host_v3.py': '69b9474a5fbf509633797e57ec810b01e8b79fb74ba12bc6931f78a3aace3bc1', 'run_serving_v3.py': 'c64ecde4574a27ced022a609baa8f6394c687d34a49717ecd1b5a71bff2ebeb7', 'prepare_serving_bindings_v3.py': '0cf4f1518f0d6a77a5514170c4ed4d54276f3ac652c575ef44a402ccb965a501', 'current_lease_readiness.py': '79dd1935ae08b5ffa59b571e522bdb99ff026da3dbedc543d44f5ec1f6b1c464', 'evaluated_main_contract_v2.py': '9573bd43fdb82cb9ffaa66cbc605bb007c788ce0910e15242e26541f3d6d0b36', 'numerical_policy_binding.py': '9fdccf0c1009e8f6a6231133acc339a9bee0f5b46424b2db302c43b203bfe34e', 'serving_precision.py': 'c0f75e2c4cbb8a4c7b686a8632363a71bbd37d9e2cce7c4796036afb4b4c47bd', 'serving-diagnostic.mjs': '91ee8b5f8312af926660c7906ff3091e4550c59ff16d88775a2ebee102d991be'}
+@@ -38,0 +39 @@
++import numerical_policy_binding  # noqa: E402
+@@ -250,0 +252 @@
++        numerical_policy_binding.load(ROOT, occurrence)
+@@ -301,0 +304,2 @@
++        numerical = numerical_policy_binding.load(ROOT, prior if phase == 'before' else occurrence)
++        value['numericalPolicy'] = numerical['remote']
+@@ -317,0 +322 @@
++        numerical_policy_binding.check_observation(numerical, observed)
+--- a/native_stage_owner_v2.py
++++ b/native_stage_owner_v2.py
+@@ -26 +26 @@
+-SERVING_OWNER_SHA = 'ff107ec59cd6a693325926d63c4f57284394aff510ca2f02d1238ea12dc77a5b'
++SERVING_OWNER_SHA = 'e9a1a1ef821b2a23c358eed28773911ce5c1d5c0e2c393a8d48c0b65f5450e29'

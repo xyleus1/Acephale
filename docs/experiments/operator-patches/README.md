@@ -1,5 +1,68 @@
 # Evaluation operator repairs
 
+## Predictor numerical diagnostic, 2026-11-17
+
+E20 passed the one-token serving gate. E26 completed strict export, then failed
+that gate before trained replay or native trials. The retained adapter, probe,
+2,630 input IDs, top token, predictor image, command and precision environment
+match across those two attempts.
+
+| Observation | Conditional probability of token 1 | Absolute reference difference |
+| --- | ---: | ---: |
+| Retained HF reference | 0.3629692055196168 | 0 |
+| E20 vLLM response | 0.3629692055196168 | 0 |
+| E26 vLLM response | 0.34864513533394575 | 0.014324070185671056 |
+
+The tolerance remains 0.01. E26's binary log-probability difference changed from
+-0.5625 to -0.625, consistent with a BF16-scale rounding change but not proof of
+its cause. The HF reference uses the pinned BF16 base, preserved FP32 decay
+parameters, an unmerged FP32-stored adapter and BF16 autocast. Serving declares
+BF16 base and LoRA arithmetic. Weights, references and token IDs stay unchanged.
+
+The prospective diagnostic uses standard `VLLM_TUNED_CONFIG_FOLDER` only for the
+predictor. A GPU-specific `SHRINK.json` retains existing configuration fields with
+only `split_k=1` changed. The pinned upstream
+[resolver](https://github.com/vllm-project/vllm/blob/5df63a7203cdb9328d824a27b682e77c7b9928be/vllm/lora/ops/triton_ops/utils.py)
+supports this override; its
+[kernel](https://github.com/vllm-project/vllm/blob/5df63a7203cdb9328d824a27b682e77c7b9928be/vllm/lora/ops/triton_ops/kernel_utils.py)
+uses a store instead of atomic addition for one split. This is a numerical
+hypothesis, not an established E26 explanation or a determinism guarantee.
+It enables neither global batch invariance nor an engine-code modification.
+
+Each serving occurrence has two arms, each with exactly three predeclared
+requests: new salt A, repeated salt A, then new salt B. The standard
+[`cache_salt` field](https://github.com/vllm-project/vllm/blob/5df63a7203cdb9328d824a27b682e77c7b9928be/vllm/entrypoints/openai/completion/protocol.py)
+changes cache domains without changing prompt IDs. These are cold-requested,
+warm-requested and cold-requested conditions; cache reuse is verified only when
+response evidence supports it. All baseline outcomes are retained. After a
+predictor restart, all three configured responses must pass the unchanged gate.
+Index zero is fixed for the ordinary proof; later successes cannot replace it.
+
+Retain the exact container, environment, read-only mount and configuration hash,
+and check the installed upstream resolver's selection. That check is not an
+engine kernel trace. Actual configured qualification, trained replay and paired
+native results remain pending; this note reports none.
+
+The [producer patch](20261117-serving-numerical-configuration.patch) contains the
+configuration, fixed diagnostic and host/transport changes. The
+[companion patch](20261117-serving-numerical-companions.patch) binds that policy
+to the actual container and downstream replay, calibration and native artifacts;
+it also updates the native owner's direct helper pin. Frozen scientific schemas
+and scoring formulas remain unchanged. The focused author suites passed 18
+JavaScript, 12 Python producer and 21 companion cases with external effects
+isolated. The first JavaScript run retained one production proof-timing consumer
+failure; its correction passed all 18 cases. These are implementation checks,
+not GPU numerical or benchmark outcomes.
+
+The [producer manifest](20261117-serving-numerical-configuration.json) and
+[combined byte verification](20261117-serving-numerical-companions.json) identify
+every before/after file. Applying both patches reproduced all nine current
+files byte for byte. The second uses `git -c core.autocrlf=false apply
+--unidiff-zero` so unrelated private path context is omitted. Application
+requires the retained private baseline files named and hashed in the manifest;
+the public checkout alone does not reconstruct the full operator or its run
+configuration. Runtime credentials and private evidence are not included.
+
 ## Prepared S3 transport retries
 
 [`20261116-heartbeat-sdk-retry.patch`](20261116-heartbeat-sdk-retry.patch) changes
