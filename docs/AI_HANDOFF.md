@@ -1,5 +1,26 @@
 # Working on Acephale
 
+## Four additional evaluation dispatches, 2026-11-17
+
+Evaluation lease-count capacity v4 adds exactly four prospective slots after
+the original funding5 horizon of sixteen is exhausted. It binds current
+funding6, the original funding5 authority, GPU5 and the retained operational
+prefix. The effective limit is twenty minus slots consumed before funding6;
+each new reservation must carry this count authority's hash. No monetary,
+GPU-hour, API, contingency, model or prior-reservation authority changes.
+
+The creation-only writer is `evaluation_lease_capacity.record_funding6_capacity`.
+It checks the full current chain and immutable authority sets, protects the raw
+journal by stat without rehashing it, and creates only the new count sidecar.
+GPU5's historical GPU4 validation receives the already-validated current funding
+context, preserving the original funding5 parent rather than applying a later
+count prefix to an older snapshot. Current-ledger truncation still fails closed.
+
+Keep GPU5's creator and funding6's creator as historical source identities when
+binding a newer count operator. Generate the ordinary source-bound native port
+manifest again; the native budget modules and scientific export contract do not
+change. Local checks are not activation or native benchmark results.
+
 ## Prospective GPU recovery capacity, 2026-11-17
 
 GPU capacity v5 is an explicit, creation-only 300-hour evaluation allowance

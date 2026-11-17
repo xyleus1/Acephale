@@ -1,5 +1,17 @@
 # Acephale research runbook
 
+## Count-only continuation after funding6
+
+After the original funding5 sixteen-slot horizon is exhausted, the separately
+reviewed `evaluation_lease_capacity.record_funding6_capacity` writer can create
+count capacity v4 exactly once. It grants four additional evaluation leases
+while retaining funding6 money, GPU5/300 hours, all prior holds and the original
+API/contingency allocations. Do not reset a ledger or alter an older count file.
+Use the normal current reader and reservation path; every new lease must bind
+the count-v4 content hash. Keep historical GPU5/funding6 creator provenance
+distinct from the current operator and regenerate the source-bound native port
+manifest from that clean committed operator before dispatch.
+
 ## Explicit native financial compatibility
 
 After funding-v5 or money-only funding-v6 activation and independent review of the current operator,

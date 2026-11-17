@@ -1,5 +1,16 @@
 # Acephale decisions
 
+## 2026-11-17: Four bounded evaluation slots without another financial amendment
+
+The necessary-resource authorization permits an explicit four-lease count
+supplement once the original sixteen-slot funding5 horizon is exhausted.
+Count capacity v4 binds funding6 and GPU5 without changing either authority.
+Every earlier hold, deadline and count consumption remains intact. Eight-hour
+and $1.99/hour per-lease limits, API $303 and contingency $65 remain unchanged.
+This is a finite operational allowance, not a new scientific experiment or
+permission to repeat optimizer work. Publication must preserve the historical
+GPU5 and funding6 creator identities separately from the current count operator.
+
 ## Prospective GPU recovery capacity, 2026-11-17
 
 GPU capacity v5 is an explicit, creation-only 300-hour evaluation allowance

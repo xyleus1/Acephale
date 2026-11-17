@@ -1,5 +1,19 @@
 # Acephale engineering log
 
+## 2026-11-17: Prospective count-only recovery
+
+Added a creation-only funding6 count-v4 reader/writer to the existing evaluation
+lease-capacity module. The supplement admits exactly four additional leases
+after the original funding5 horizon and requires each suffix reservation to bind
+the new count hash, unchanged funding6 and unchanged GPU5. Compact prefix hashes
+retain old financial holds and original identity/deadline fields. A narrow GPU4
+ancestor-validation parameter uses the existing historical-funding pattern so a
+new count authority is never misapplied to a retained older GPU snapshot.
+
+No native financial module, watchdog worker, scoring rule, dataset or model
+source changes. Exact focused validation and actual activation evidence belong
+to their separately retained receipts; this entry does not claim live completion.
+
 ## Prospective GPU recovery capacity, 2026-11-17
 
 GPU capacity v5 is an explicit, creation-only 300-hour evaluation allowance

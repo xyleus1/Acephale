@@ -18,7 +18,7 @@ EXTENDED_LIMIT = 6
 
 
 def capacity_path(ledger_path: Path, *, version: int = 1) -> Path:
-    if type(version) is not int or version not in (1, 2, 3):
+    if type(version) is not int or version not in (1, 2, 3, 4):
         raise ValueError("Unknown evaluation lease-count capacity version")
     return Path(str(ledger_path.resolve()) + f".evaluation-lease-capacity-v{version}.json")
 
@@ -120,6 +120,12 @@ def effective_limit(ledger: dict, funding: dict, *, canonical_digest=digest) -> 
                 or parent.get("contentHash") != canonical_digest({k: v for k, v in parent.items() if k != "contentHash"})
                 or not 0 <= consumed <= original):
             raise ValueError("Money-only funding must retain the original evaluation lease-count horizon")
+        path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=4)
+        if path.exists():
+            value = validate_funding6_capacity(read(path), ledger, funding, canonical_digest=canonical_digest)
+            return original - consumed + RECOVERY_SLOTS, value
+        if any("evaluationLeaseCapacityHash" in row for row in ledger["leases"][len(funding["baselineLeases"]):]):
+            raise ValueError("Current funding6 evaluation count authority is missing")
         return original - consumed, None
     if funding["version"] == 4:
         path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=3)
@@ -427,5 +433,163 @@ def record_funding4_capacity(ledger_path: Path, reason: str, *, controller=None,
                                           canonical_digest=controller._budget_digest)
         if protected_files() != set(before) or any(sha(path) != expected for path, expected in before.items()):
             raise ValueError("Original financial files changed during count authorization")
+        controller.write_new(output, value)
+        return value
+
+
+RECOVERY_PROFILE = "acephale-evaluation-lease-capacity-v4"
+RECOVERY_SLOTS = 4
+
+
+def _authority_path(ledger: dict, version: int) -> Path:
+    return Path(str(Path(ledger["plan"]["studyLedgerPath"]).resolve()) + f".infrastructure-funding-v{version}.json")
+
+
+def validate_funding6_capacity(value: dict, ledger: dict, funding: dict, *, canonical_digest=digest) -> dict:
+    """Add four slots after the exhausted funding5 horizon; never replace it."""
+    parent_path = _authority_path(ledger, 5)
+    parent = read(parent_path)
+    gpu_path = Path(str(Path(ledger["plan"]["infrastructureLedgerPath"]).resolve()) + ".gpu-hour-capacity-v5.json")
+    gpu = read(gpu_path)
+    gpu_digest = hashlib.sha256(json.dumps({k: v for k, v in gpu.items() if k != "contentHash"},
+        sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    consumed = len(funding["baselineLeases"]) - len(parent["baselineLeases"])
+    body = {key: item for key, item in value.items() if key != "contentHash"}
+    if (funding.get("version") != 6 or parent.get("version") != 5
+            or funding["policy"].get("leaseCountParentFundingVersion") != 5
+            or funding["policy"].get("maximumNewLeases") != 16 or parent["policy"].get("maximumNewLeases") != 16
+            or funding.get("parentFundingHash") != parent.get("contentHash")
+            or funding.get("parentFundingSha256") != sha(parent_path)
+            or parent.get("contentHash") != canonical_digest({k: v for k, v in parent.items() if k != "contentHash"})
+            or not 0 <= consumed <= 16
+            or type(value.get("version")) is not int or value["version"] != 4
+            or value.get("profile") != RECOVERY_PROFILE or value.get("contentHash") != canonical_digest(body)
+            or value.get("fundingHash") != funding["contentHash"]
+            or value.get("fundingSha256") != sha(_authority_path(ledger, 6))
+            or value.get("fundingPolicyHash") != funding["policyHash"]
+            or value.get("originalCountFundingHash") != parent["contentHash"]
+            or value.get("originalCountFundingSha256") != sha(parent_path)
+            or gpu.get("version") != 5 or gpu.get("profile") != "acephale-gpu-hour-capacity-v5"
+            or gpu.get("contentHash") != gpu_digest
+            or gpu.get("engineeringMaximumGpuHours") != 300 or gpu.get("fundingHash") != funding["contentHash"]
+            or value.get("gpuHourCapacityHash") != gpu["contentHash"] or value.get("gpuHourCapacitySha256") != sha(gpu_path)
+            or value.get("planHash") != ledger["planHash"]
+            or any(value.get(key) != funding.get(key) for key in
+                   ("infrastructureBindingHash", "infrastructureLedgerPathHash", "studyLedgerPathHash"))
+            or any(type(value.get(key)) is not int or value[key] != expected for key, expected in (
+                ("originalMaximumNewLeases", 16), ("effectiveOriginalMaximumNewLeases", 20),
+                ("consumedBeforeFunding6", consumed), ("baseMaximumNewLeases", 16 - consumed),
+                ("effectiveMaximumNewLeases", 20 - consumed), ("additionalLeases", RECOVERY_SLOTS)))
+            or value.get("evaluationOnly") is not True or value.get("optimizerPermitted") is not False
+            or value.get("leaseCountAuthorityChanged") is not True
+            or any(value.get(key) is not False for key in ("financialCeilingsChanged", "gpuHoursChanged",
+                   "existingReservationsChanged", "existingDeadlinesChanged", "modelContractsChanged"))
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str) or not value["authorizationReason"].strip()
+            or len(value["authorizationReason"]) > 1024
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("originalSliceSha256", ""))):
+        raise ValueError("Funding6 count recovery requires exactly four slots and unchanged money, GPU and original count authority")
+    authorized = datetime.fromisoformat(funding["authorizedAt"].replace("Z", "+00:00"))
+    if authorized.tzinfo is None:
+        authorized = authorized.replace(tzinfo=timezone.utc)
+    recorded = value.get("recordedAt")
+    if (type(recorded) not in (int, float) or not math.isfinite(recorded)
+            or recorded < max(authorized.timestamp(), gpu["recordedAt"])):
+        raise ValueError("Count recovery must follow its actual financial and GPU authorities")
+    counts = value.get("baselineCounts")
+    if (not isinstance(counts, dict) or set(counts) != {"leases", "overheads", "trainingWindows"}
+            or any(type(counts[key]) is not int or counts[key] < 0 for key in counts)
+            or counts["leases"] != len(parent["baselineLeases"]) + 16):
+        raise ValueError("Count recovery requires the exhausted original funding5 horizon")
+    for field, count in counts.items():
+        rows = ledger.get(field, [])
+        if type(rows) is not list or len(rows) < count:
+            raise ValueError("Count recovery cannot truncate retained operational history")
+        projection = _stable_history(rows[:count]) if field in {"leases", "overheads"} else rows[:count]
+        if canonical_digest(projection) != value.get("baselineHashes", {}).get(field):
+            raise ValueError("Count recovery cannot change retained holds, identities or deadlines")
+    if len(ledger.get("trainingWindows", [])) != counts["trainingWindows"]:
+        raise ValueError("Count recovery never permits optimizer windows")
+    states = value.get("baselineStates")
+    if type(states) is not list or len(states) != counts["leases"]:
+        raise ValueError("Count recovery requires every original lifecycle identity")
+    for old, current in zip(states, ledger["leases"][:counts["leases"]], strict=True):
+        if (set(old) != {"id", "status", "instanceId"} or old["id"] != current["id"]
+                or old["status"] not in {"terminated", "launch_unknown"}
+                or (old["status"] == "launch_unknown" and old["instanceId"] is not None)
+                or (old["status"] == "terminated" and
+                    (current.get("status") != "terminated" or current.get("instanceId") != old["instanceId"]))):
+            raise ValueError("Count recovery requires closed work and retained unresolved ownership")
+    suffix = ledger["leases"][counts["leases"]:]
+    if len(suffix) > RECOVERY_SLOTS:
+        raise ValueError("Only four additional evaluation leases are authorized")
+    for row in suffix:
+        at = row.get("reservedAt")
+        if (row.get("evaluationLeaseCapacityHash") != value["contentHash"]
+                or row.get("infrastructureFundingSupplementHash") != funding["contentHash"]
+                or row.get("gpuHourCapacityAddendumHash") != gpu["contentHash"]
+                or type(at) not in (int, float) or not math.isfinite(at) or at < recorded):
+            raise ValueError("New evaluation lease must bind its exact prospective count, funding and GPU authority")
+    return value
+
+
+def record_funding6_capacity(ledger_path: Path, reason: str, *, controller=None, source_probe=None) -> dict:
+    """Append four count slots; never write any existing authority or reservation."""
+    if controller is None:
+        import control as controller
+    source_probe = source_probe or controller.committed_source
+    ledger_path = ledger_path.resolve()
+    with controller.ledger_lock(ledger_path), controller.budget_digest_scope():
+        output = capacity_path(ledger_path, version=4)
+        if output.exists():
+            raise ValueError("Funding6 count authority cannot be overwritten")
+        ledger = controller.checked_bound_ledger(ledger_path)
+        funding = controller.infrastructure_funding(ledger)
+        maximum, gpu = controller.effective_gpu_hour_capacity(ledger)
+        if funding is None or funding["version"] != 6 or gpu is None or gpu["version"] != 5 or maximum != 300:
+            raise ValueError("Exact existing funding6 and GPU5 authority required")
+        journal = Path(ledger["plan"]["studyLedgerPath"]).resolve()
+
+        def protected_files():
+            result = {ledger_path, Path(__file__).resolve(), Path(controller.__file__).resolve()}
+            result.update(path for path in journal.parent.glob(journal.name + ".*.json") if path.is_file())
+            result.update(path for path in ledger_path.parent.glob(ledger_path.name + ".*.json") if path.is_file())
+            return result
+
+        def journal_identity():
+            info = journal.stat()
+            return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+        before = {path: sha(path) for path in protected_files()}
+        journal_before = journal_identity()
+        parent_path = _authority_path(ledger, 5)
+        parent = read(parent_path)
+        consumed = len(funding["baselineLeases"]) - len(parent["baselineLeases"])
+        counts = {key: len(ledger.get(key, [])) for key in ("leases", "overheads", "trainingWindows")}
+        hashes = {key: controller._budget_digest(_stable_history(ledger.get(key, []))
+                   if key in {"leases", "overheads"} else ledger.get(key, [])) for key in counts}
+        body = {"version": 4, "profile": RECOVERY_PROFILE,
+            "fundingHash": funding["contentHash"], "fundingSha256": before[_authority_path(ledger, 6)],
+            "fundingPolicyHash": funding["policyHash"], "planHash": ledger["planHash"],
+            "originalCountFundingHash": parent["contentHash"], "originalCountFundingSha256": before[parent_path],
+            "gpuHourCapacityHash": gpu["contentHash"],
+            "gpuHourCapacitySha256": before[controller.gpu_hour_capacity_path(ledger_path, 5)],
+            **{key: funding[key] for key in ("infrastructureBindingHash", "infrastructureLedgerPathHash", "studyLedgerPathHash")},
+            "originalSliceSha256": before[ledger_path], "originalMaximumNewLeases": 16,
+            "effectiveOriginalMaximumNewLeases": 20, "consumedBeforeFunding6": consumed,
+            "baseMaximumNewLeases": 16 - consumed, "effectiveMaximumNewLeases": 20 - consumed,
+            "additionalLeases": RECOVERY_SLOTS, "baselineCounts": counts, "baselineHashes": hashes,
+            "baselineStates": [{key: row.get(key) for key in ("id", "status", "instanceId")} for row in ledger["leases"]],
+            "recordedAt": controller.time.time(), "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+            "authorizationSource": "explicit_user_instruction", "authorizationReason": reason.strip(),
+            "evaluationOnly": True, "optimizerPermitted": False, "leaseCountAuthorityChanged": True,
+            "financialCeilingsChanged": False, "gpuHoursChanged": False, "existingReservationsChanged": False,
+            "existingDeadlinesChanged": False, "modelContractsChanged": False}
+        value = validate_funding6_capacity({**body, "contentHash": controller._budget_digest(body)}, ledger, funding,
+                                          canonical_digest=controller._budget_digest)
+        if (protected_files() != set(before) or any(sha(path) != expected for path, expected in before.items())
+                or journal_identity() != journal_before):
+            raise ValueError("Original authorities, sources or journal stat changed during count authorization")
         controller.write_new(output, value)
         return value
