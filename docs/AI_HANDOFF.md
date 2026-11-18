@@ -1,5 +1,26 @@
 # Working on Acephale
 
+## E31 managed handoff confirmed, 2026-11-18
+
+E31's launch process closed with exit code zero at 04:38:53 UTC after the managed
+study handoff. Foundation execution has started. Handoff receipt SHA-256:
+`19ef27275f7fd61447e34fe3d02ed32d8adfb13091732111ad49258cd17387c6`.
+The original 09:30 UTC hard stop remains fixed. Continue the existing run from
+its actual phase artifacts, without repeating completed optimizers or dispatch.
+Numerical serving qualification, trained replay and paired native scores remain
+pending. Publish scientific results only after their actual closure and verified
+export/cleanup.
+
+The applied serving-host correction changes only the inspector's executable
+from `python` to `python3`. Seven focused tests passed, and the
+[actual CPU image check](https://github.com/xyleus1/Acephale/actions/runs/44233766569)
+verified the interpreter, canonical image/build and installed source hashes.
+The [retained metadata](experiments/serving-image-preflight-2026-11-18/metadata.json)
+establishes no GPU or numerical result. Preserve E30's original failure, all saved
+weights and unchanged numerical gates. The final public output must include the
+verified closed `Acephale-results.md` summary for physical call components, as
+well as the aggregate bundle and numerical-methods attachment.
+
 ## E30 serving interpreter failure, 2026-11-18
 
 Strict export and main evaluation completed for both saved predictor seeds;

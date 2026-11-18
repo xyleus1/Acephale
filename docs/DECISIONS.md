@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-18: Verify the serving interpreter in the pinned image
+
+Replace only the serving inspector's `python` command with the observed
+`python3` executable after E30's command-lookup failure. Verify the exact image,
+build and installed source files in an isolated CPU job before another GPU run.
+Keep model weights, resolver code, request counts and numerical tolerances fixed.
+The [CPU metadata](experiments/serving-image-preflight-2026-11-18/metadata.json)
+does not establish numerical parity or benchmark performance.
+
 ## 2026-11-17: Prepare a validated reader without caching admission
 
 Keep the existing 75-second observation, 60-second signed-evidence and 120-second

@@ -1,5 +1,37 @@
 # Acephale engineering log
 
+## E31 managed handoff confirmed, 2026-11-18
+
+The launch process closed with exit code zero at 04:38:53 UTC after the managed
+handoff; foundation execution has started. Handoff receipt SHA-256:
+`19ef27275f7fd61447e34fe3d02ed32d8adfb13091732111ad49258cd17387c6`.
+The saved predictors are reused, with neither optimizer rerun. The applied
+interpreter correction below leaves scientific models and numerical gates fixed.
+Trained-replay and paired native scores remain pending.
+
+## Serving interpreter verified in the exact image, 2026-11-18
+
+The [GitHub CPU preflight](https://github.com/xyleus1/Acephale/actions/runs/44233766569)
+completed successfully at 04:00:38 UTC under source
+`578c035c3e97ad1432c4c467c7872732dd88985b`. In the pinned vLLM image, `python`
+failed with exit 127; `python3` resolved to Python 3.12.3 and matched the vLLM
+console script's `#!/usr/bin/python3` shebang. The canonical repository digest,
+build revision and all three installed resolver-source hashes matched. Docker's
+image ID was recorded separately. No weights or GPU devices were loaded, and
+both the probe and final cleanup confirmed no owned containers remained.
+
+The applied E31 serving-host correction changes one interpreter literal. Seven
+focused tests of the actual snapshot function passed, including terminal
+container/configuration and resolver failures. The resolver, saved checkpoints
+and 0.01 gate remain unchanged. This is interface verification, not numerical
+qualification or a benchmark result. E30's failed serving attempt is retained.
+
+The allowlisted [metadata](experiments/serving-image-preflight-2026-11-18/metadata.json)
+and [cleanup receipt](experiments/serving-image-preflight-2026-11-18/cleanup.json)
+are preserved byte-for-byte; their SHA-256 hashes are respectively
+`3230472df56104883cf3701ca93078ea67dbce241c171fe6934d1148a8e76809`
+and `56b976f83f1d6a07f1a27abdb751f62f8e4611bfb8f062f71d457a57e75fc4f9`.
+
 ## E30 export completed, serving interpreter missing, 2026-11-18
 
 Strict export and main evaluation completed for saved seeds 17 and 29 without

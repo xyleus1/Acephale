@@ -1,0 +1,5 @@
+{
+  "kind": "acephale-serving-image-preflight-cleanup-v1",
+  "noOwnedContainersRemain": true,
+  "ownedContainersRemoved": 0
+}

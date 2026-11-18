@@ -1,0 +1,61 @@
+{
+  "cleanup": {
+    "noOwnedContainersRemain": true,
+    "ownedContainersRemoved": 0
+  },
+  "containerNetwork": "none",
+  "containerReadOnly": true,
+  "disk": {
+    "freeBytesBeforePull": 114986389504,
+    "minimumRequiredBytes": 59055800320,
+    "sufficient": true
+  },
+  "gpuDevicesRequested": false,
+  "gpuKernelOrNumericalParityTest": false,
+  "image": {
+    "architecture": "amd64",
+    "buildCommit": "5df63a7203cdb9328d824a27b682e77c7b9928be",
+    "entrypoint": [
+      "vllm",
+      "serve"
+    ],
+    "identityVerified": true,
+    "imageId": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
+    "imageIdEqualityToRepoDigestRequired": false,
+    "os": "linux",
+    "repoDigest": "vllm/vllm-openai@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+    "revision": "5df63a7203cdb9328d824a27b682e77c7b9928be"
+  },
+  "installedSourcesMatch": true,
+  "kind": "acephale-serving-image-cpu-preflight-v1",
+  "modelMounts": false,
+  "modelWeightsLoaded": false,
+  "originalPython": {
+    "commandLookupFailureReported": true,
+    "exitCode": 127
+  },
+  "passed": true,
+  "pull": {
+    "durationSeconds": 154.304,
+    "exitCode": 0
+  },
+  "python3": {
+    "distributionLocation": "/usr/local/lib/python3.12/dist-packages",
+    "executable": "/usr/bin/python3",
+    "installedSourceHashes": {
+      "kernel_utils": "31f0f3846633393c25d36c5b6fdd8513051d2318e3b75c2a53ee837b87333f17",
+      "lora_shrink_op": "261e39f1831f2763691d746a8858ad5ed66d7a5fc9186fb361e9ab378324d113",
+      "utils": "387444c1ca83d20e8a0f5c93d4886393a6040aab9f00c58086393670c24a6387"
+    },
+    "nvidiaDeviceCount": 0,
+    "pythonVersion": "3.12.3",
+    "resolvedExecutable": "/usr/bin/python3.12",
+    "vllmExecutable": "/usr/local/bin/vllm",
+    "vllmShebang": "#!/usr/bin/python3",
+    "vllmVersion": "0.32.0"
+  },
+  "resolverSelectionTestPerformed": false,
+  "runtime": "runc",
+  "sourceSha256": "0ebda68e465d13e42222feea582a883187e9496a241072810dcfdf8a675fa10e",
+  "stage": "completed"
+}

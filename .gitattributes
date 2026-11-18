@@ -12,3 +12,4 @@
 /research/acephale/src/acephale/native_study.py text eol=lf
 # Published operator patches must retain their verified byte representation.
 /docs/experiments/operator-patches/*.patch text eol=lf
+/docs/experiments/serving-image-preflight-2026-11-18/*.json text eol=lf

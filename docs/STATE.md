@@ -1,6 +1,19 @@
 # Current state
 
-Updated November 18, 2026 (UTC). E30 completed strict export and main evaluation
+Updated November 18, 2026 (UTC). E31's launch process closed with exit code zero
+at 04:38:53 UTC after the managed study handoff. Foundation execution has started.
+The run uses the saved seed 17/29 predictors and includes the verified serving
+interpreter correction. Neither optimizer is rerun. The hard stop remains
+09:30 UTC. Numerical serving qualification, trained replay and paired native
+scores are still pending; startup is not a benchmark result.
+
+The [CPU image check](https://github.com/xyleus1/Acephale/actions/runs/44233766569)
+passed before dispatch. Its retained
+[metadata](experiments/serving-image-preflight-2026-11-18/metadata.json)
+confirms `python3`, the exact image/build and installed resolver-source hashes;
+it loaded no weights or GPU devices. The numerical gate remains unchanged.
+
+Previously, E30 completed strict export and main evaluation
 for both saved predictor seeds, without rerunning either optimizer. Serving then
 stopped during the baseline resolver observation: the container could not find
 the `python` executable and returned OCI exit 127. Numerical acceptance, trained

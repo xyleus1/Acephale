@@ -33,6 +33,15 @@ is disabled for this profile. Actor context is 32,768 tokens: 28,672 input plus
 configuration remains an explicit baseline. The separately declared predictor
 LoRA experiment below changes only the auxiliary predictor's weights.
 
+The serving inspector uses `python3`, the interpreter verified in the exact
+pinned image and named by its `vllm` console-script shebang. The CPU preflight
+records the canonical repository digest separately from Docker's image ID,
+checks the build revision and three installed resolver-source hashes, and drains
+its isolated containers. It loads no weights or GPU devices. This establishes
+interpreter and file compatibility; numerical serving qualification still requires
+the unchanged GPU checks. See the retained
+[image metadata](experiments/serving-image-preflight-2026-11-18/metadata.json).
+
 Prospective HF predictor training retains the pinned checkpoint's 18 `A_log`
 vectors, 288 parameters, in FP32; all other floating base parameters use BF16.
 It uses Transformers 5.10.1's `_keep_in_fp32_modules_strict` on a scoped model
