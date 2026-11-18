@@ -1,5 +1,15 @@
 # Acephale research runbook
 
+## Continuing after count-v4 exhaustion
+
+Use `evaluation_lease_capacity.record_funding6_extension` from a clean committed
+operator to create count v5 once the four v4 leases have been consumed and closed.
+It adds four evaluation-only slots and retains the original v4 parent file and
+creator identity. Every subsequent reservation must bind the v5 content hash.
+Run the normal current reader and reservation path; money, GPU hours, vendor
+access, original deadlines and independent cleanup still require their own
+successful checks. Regenerate the source-bound native port for the new operator.
+
 ## Count-only continuation after funding6
 
 After the original funding5 sixteen-slot horizon is exhausted, the separately

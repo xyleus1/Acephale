@@ -1,5 +1,13 @@
 # Acephale decisions
 
+## 2026-11-18: Retain the exhausted count parent when continuing evaluation
+
+Use a new count-v5 sidecar for four prospective evaluation slots after v4 is
+exhausted. Validate old leases against their original v4 authority and new leases
+against v5. Preserve every prior reservation, unresolved hold and deadline.
+This count change does not increase money or GPU-hour limits, authorize training,
+or establish that GitHub has accepted or charged for a runner.
+
 ## 2026-11-17: Four bounded evaluation slots without another financial amendment
 
 The necessary-resource authorization permits an explicit four-lease count

@@ -1,5 +1,19 @@
 # Working on Acephale
 
+## Count continuation v5, 2026-11-18
+
+After all four count-v4 slots have been consumed and closed, the creation-only
+`evaluation_lease_capacity.record_funding6_extension` writer adds four evaluation
+slots. It binds the exact v4 file, content hash and creator, validates that
+historical prefix under v4, and binds only the new suffix to v5. The original
+funding5 horizon becomes twenty-four, minus slots consumed before funding6.
+Funding6, GPU5, old holds, deadlines and optimizer restrictions remain in force.
+
+Use a new source-bound native financial port for this operator. Creation of the
+sidecar and actual vendor job admission are separate from local tests. E28 never
+launched a GPU because GitHub rejected its jobs; the user subsequently restored
+the GitHub budget. Neither completed optimizer may be repeated.
+
 ## Four additional evaluation dispatches, 2026-11-17
 
 Evaluation lease-count capacity v4 adds exactly four prospective slots after

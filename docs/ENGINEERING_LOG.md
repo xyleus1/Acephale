@@ -1,5 +1,18 @@
 # Acephale engineering log
 
+## 2026-11-18: Count-v5 continuation
+
+Added the v5 reader and creation-only writer to the existing lease-count module.
+The current reservation path returns the v5 hash for new leases while preserving
+the exact exhausted v4 prefix. Focused tests exercise the full current funding/GPU
+chain, four-slot exhaustion, altered parent and suffix bindings, closed histories,
+creation races and the frozen image's evaluation-only reader.
+
+The first local test invocation failed during temporary-directory setup because
+the default pytest directory was inaccessible. Its result is retained; the
+corrected invocation uses a new explicit workspace test directory. These checks
+do not measure model quality or benchmark performance.
+
 ## 2026-11-17: Prospective count-only recovery
 
 Added a creation-only funding6 count-v4 reader/writer to the existing evaluation

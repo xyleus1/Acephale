@@ -1,5 +1,14 @@
 # Current state
 
+Current continuation, November 18, 2026 (UTC): E28 closed without a GPU after
+GitHub rejected its controller jobs. The user restored the GitHub budget, and
+a fresh controller pair has now started and returned valid acknowledgements.
+Count v5 is the prospective four-slot evaluation continuation after v4 exhaustion.
+Its activation and the next live study remain separate from source verification.
+No new trained-replay or paired native score follows from this preparation.
+
+Historical diagnostics:
+
 Updated November 16, 2026 (UTC). Both predictor seeds completed their 204 optimizer
 updates. E17 independently completed strict GPU export and teacher-forced
 evaluation with unchanged weights and tolerances. Each seed reproduced all
