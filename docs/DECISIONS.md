@@ -980,3 +980,18 @@ though the actual frozen-checkout test had passed locally. Apply the same explic
 prerequisite marker to the wrapper. Test logic and production source are unchanged;
 retain the local configured-reader result and report CI's missing checkout as a
 skip, never a pass. The running evaluation keeps its original committed source.
+
+## 2026-11-18: One finite completion envelope
+
+Use the existing user authorization for necessary resources to append funding7
+with $2,150 total and $1,350 infrastructure ($1,000 compute, $350 associated),
+GPU6 with 350 reserved hours, and count8 with eight additional slots. Preserve
+the $303 API headroom, $65 contingency, other allocation limits, original
+creator identities and all unresolved holds. These are operational capacities,
+not scientific changes or promises of benchmark gains.
+
+Validate the actual consumed parent prefix instead of exhausting its last
+unused slot. Count8 records both the original 32-to-40 horizon and the remaining
+allowance relative to funding7. Require the complete funding7/GPU6/count8 chain
+before any new lease is returned; intermediate activation remains inspectable.
+Keep the independently qualified controller bytes unchanged.

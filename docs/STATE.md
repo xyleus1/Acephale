@@ -1,5 +1,19 @@
 # Current state
 
+The completion-envelope source adds prospective funding7 ($2,150 total,
+$1,350 infrastructure: $1,000 compute and $350 associated charges), GPU6
+(350 reserved hours) and count8 (eight additional slots). The original count
+horizon rises from 32 to 40. At the retained closed prefix, one unused slot plus
+eight new slots permits nine future leases. Activation has not been performed
+by this implementation. Partial activation remains readable but cannot reserve
+a new lease. Model/API allocations, the $65 contingency, all earlier holds and
+deadlines, scientific inputs and five controller files remain unchanged.
+
+E36 subsequently stopped during root startup before any GPU launch. Its
+undispatched reservation was closed with its hold retained. No new benchmark
+result came from that attempt. Completion still requires real replay and paired
+native trials, their closed artifacts, and verified cleanup.
+
 E35 reached the GPU and completed foundation and image preparation. Diagnostic
 execution stopped before dispatch because too little of the original one-hour
 setup window remained. It produced no new model or native benchmark scores.

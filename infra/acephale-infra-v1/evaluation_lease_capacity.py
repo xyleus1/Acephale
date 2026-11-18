@@ -18,7 +18,7 @@ EXTENDED_LIMIT = 6
 
 
 def capacity_path(ledger_path: Path, *, version: int = 1) -> Path:
-    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7):
+    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7, 8):
         raise ValueError("Unknown evaluation lease-count capacity version")
     return Path(str(ledger_path.resolve()) + f".evaluation-lease-capacity-v{version}.json")
 
@@ -105,6 +105,9 @@ def validate(value: dict, ledger: dict, funding: dict, *, canonical_digest=diges
 
 
 def effective_limit(ledger: dict, funding: dict, *, canonical_digest=digest) -> tuple[int, dict | None]:
+    if funding["version"] == 7:
+        from evaluation_completion import count_limit
+        return count_limit(ledger, funding)
     original = funding["policy"]["maximumNewLeases"]
     if funding["version"] == 6:
         # Funding6 adds money only. Count from the unchanged funding5 baseline,

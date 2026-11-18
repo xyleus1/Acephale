@@ -1,5 +1,23 @@
 # Working on Acephale
 
+## Finite completion envelope, 2026-11-18
+
+The current source supports append-only funding7, GPU6 and count8. Activate in
+that order through the normal writers from a reviewed committed checkout.
+Funding7 preserves every prior journal entry and all non-infrastructure
+allocations. GPU6 raises cumulative reserved hours from 300 to 350. Count8 retains
+the actual closed count7 prefix, including unused slots, then adds eight. Its
+original horizon is 40; with 31 consumed, nine remain relative to funding7's
+baseline. No old slot needs to be spent just to permit the successor.
+
+`evaluation_completion.record(path, "gpu" | "count", reason)` is the Python
+writer. It validates the complete retained parent chain under the normal lock,
+checks unchanged authority bytes and journal identity, and creates only the
+new sidecar. Intermediate funding7 and funding7+GPU6 states admit zero new
+leases. Native budget manifests must bind the new funding7 financial source;
+frozen model and benchmark modules are not redirected. No actual activation or
+research execution is part of these source changes.
+
 ## Prospective evaluation setup allowance, 2026-11-18
 
 The normal lease constructor now accepts an explicit setup allowance up to 7,200

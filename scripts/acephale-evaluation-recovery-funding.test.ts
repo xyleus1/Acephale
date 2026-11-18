@@ -12,7 +12,7 @@ import { budgetPolicyPath } from "../services/acephale-runtime/budget-policy";
 import { frozenApiProjection, infrastructureFundingPath } from "../services/acephale-runtime/infrastructure-funding";
 import { canonical, hash } from "../src/lib/acephale/canonical";
 import { amendBudgetPolicy } from "./acephale-budget-policy";
-import { addInfrastructureFunding, extendInfrastructureFunding, continueEvaluationFunding, completeEvaluationFunding, fundEvaluationOperations, fundEvaluationRecovery } from "./acephale-infrastructure-funding";
+import { addInfrastructureFunding, extendInfrastructureFunding, continueEvaluationFunding, completeEvaluationFunding, fundEvaluationOperations, fundEvaluationRecovery, fundEvaluationCompletion } from "./acephale-infrastructure-funding";
 import { awsBudget } from "./acephale-aws-budget";
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "acephale-funding-")), ledger = join(directory, "budget.jsonl"), slice = join(directory, "slice.json");
@@ -56,6 +56,8 @@ function priorFunding(f:ReturnType<typeof fixture>) {
 }
 const finance=(f:ReturnType<typeof fixture>)=>fundEvaluationRecovery(f.ledger,f.slice,"2026-11-17T03:00:00Z",
   "Operator-selected bounded allowance under broad necessary-resource authorization.",()=>"d".repeat(40));
+const completion=(f:ReturnType<typeof fixture>)=>fundEvaluationCompletion(f.ledger,f.slice,"2026-11-18T18:00:00Z",
+  "Finite completion envelope under the existing necessary-resource authorization.",()=>"e".repeat(40));
 function fill(f:ReturnType<typeof fixture>) {
   const owner=new DurableBudget(f.ledger,{infrastructureOwner:true});
   owner.ledger.reserveMany([
@@ -111,6 +113,75 @@ test("native financial port rejects modified v6 authority and retains exact v5 s
       writeFileSync(infrastructureFundingPath(f.ledger,6),canonical({...body,contentHash:hash(body)}));
       assert.throws(()=>new NativeBudget(f.ledger),/funding/i);
     }
+  }finally{f.close();}
+});
+test("completion funding7 preserves every old hold and protected allocation",()=>{
+  const f=fixture();try{
+    priorFunding(f);finance(f);
+    const paths=[f.ledger,f.slice,budgetPolicyPath(f.ledger,2),budgetPolicyPath(f.ledger,3),
+      ...([1,2,3,4,5,6] as const).map(v=>infrastructureFundingPath(f.ledger,v))];
+    const originals=paths.map(path=>[path,readFileSync(path)] as const);
+    const value=completion(f);
+    assert.equal(value.version,7);
+    assert.deepEqual([value.policy.effectiveTotalMicrodollars,value.policy.effectiveInfrastructureMicrodollars,
+      value.policy.effectiveComputeMicrodollars,value.policy.effectiveAssociatedMicrodollars],
+      [2150000000,1350000000,1000000000,350000000]);
+    for(const [path,bytes] of originals)assert.deepEqual(readFileSync(path),bytes);
+    assert.throws(()=>completion(f),/EEXIST/);
+    fill(f);
+    let owner=new DurableBudget(f.ledger,{infrastructureOwner:true});
+    owner.ledger.reserve("completion-runner-and-gpu-headroom","infrastructure",120_000_000);
+    owner.close();
+    const native=new NativeBudget(f.ledger);
+    assert.equal(native.ledger.totalCeilingMicrodollars,2150000000);
+    assert.deepEqual({...native.ledger.allocations,infrastructure:200000000},f.base.policy.allocationsMicrodollars);
+    const projection=frozenApiProjection(native.ledger.snapshot(),120_000_000,f.base,value);
+    assert.equal(projection.frozenApiHeadroomMicrodollars,303000000);
+    assert.equal(projection.frozenNonContingencyCeilingMicrodollars,2085000000);
+    assert.equal(native.ledger.allocations.contingency,65000000);
+    assert.equal(native.ledger.snapshot().find(row=>row.id==="retained-gpu-unknown")?.actual,undefined);
+    assert.throws(()=>native.ledger.reserve("forbidden-finance","infrastructure",1),/cannot reserve/);
+    assert.throws(()=>frozenApiProjection(native.ledger.snapshot(),500_000_000,f.base,value),/headroom/);
+    native.close();
+  }finally{f.close();}
+});
+test("completion funding7 rejects rehashed changes and a missing retained parent",()=>{
+  const f=fixture();try{
+    priorFunding(f);finance(f);const value=completion(f);
+    const target=infrastructureFundingPath(f.ledger,7);
+    for(const change of [{parentFundingHash:"f".repeat(64)}, {parentFundingSha256:"f".repeat(64)},
+      {policy:{...value.policy,frozenApiHeadroomMicrodollars:0}},
+      {policy:{...value.policy,effectiveComputeMicrodollars:1000000001}},
+      {policy:{...value.policy,maximumSessionHours:9}}]){
+      const {contentHash:_,...body}={...value,...change};
+      writeFileSync(target,canonical({...body,contentHash:hash(body)}));
+      assert.throws(()=>new NativeBudget(f.ledger),/funding/i);
+    }
+    writeFileSync(target,canonical(value));
+    const parent=infrastructureFundingPath(f.ledger,6), bytes=readFileSync(parent);
+    rmSync(parent);
+    try{assert.throws(()=>new NativeBudget(f.ledger),/parent/i);}finally{writeFileSync(parent,bytes);}
+  }finally{f.close();}
+});
+test("completion funding7 works through the actual frozen native financial port",{skip:!process.env.ACEPHALE_FROZEN_RUNTIME || !process.env.ACEPHALE_FROZEN_ANALYSIS_ROOT},async()=>{
+  const f=fixture();try{
+    priorFunding(f);finance(f);completion(f);fill(f);
+    const root=resolve(fileURLToPath(new URL("..",import.meta.url))), frozen=resolve(process.env.ACEPHALE_FROZEN_RUNTIME!);
+    const analysis=resolve(process.env.ACEPHALE_FROZEN_ANALYSIS_ROOT!);
+    const loader=join(root,"scripts/acephale-native-budget-port.mjs"), module=await import(pathToFileURL(loader).href);
+    const sha=(path:string)=>createHash("sha256").update(readFileSync(path)).digest("hex");
+    const manifest={version:1,profile:module.PROFILE,frozenSourceCommit:module.FROZEN_COMMIT,
+      frozenRoot:frozen,analysisRoot:analysis,analysisSourceCommit:module.ANALYSIS_COMMIT,
+      analysisTargetPath:join(analysis,"services/acephale-runtime/durable-budget.ts"),analysisTargetSha256:module.FROZEN_BUDGET_SHA,
+      operatorRoot:root,operatorSourceCommit:"e".repeat(40),targetPath:join(frozen,"services/acephale-runtime/durable-budget.ts"),
+      targetSha256:module.FROZEN_BUDGET_SHA,modelContractsChanged:false,originalJournalRewritten:false,
+      files:Object.fromEntries(module.FINANCIAL_FILES.map((path:string)=>[path,sha(join(root,path))]))};
+    const path=join(f.directory,"completion-port.json");writeFileSync(path,JSON.stringify(manifest));
+    const child=spawnSync(process.execPath,["--import","tsx","scripts/fixtures/native-financial-port.mjs",f.ledger,f.directory],
+      {cwd:root,env:{...process.env,ACEPHALE_NATIVE_BUDGET_PORT:path,ACEPHALE_NATIVE_BUDGET_PORT_SHA256:sha(path),
+        NODE_OPTIONS:`--import=${pathToFileURL(loader).href}`,OPENAI_API_KEY:"synthetic-unused-test-key"},encoding:"utf8",timeout:120000});
+    assert.equal(child.status,0,child.stdout+child.stderr);
+    assert.match(child.stdout,/actualFrozenNativeServicePassed/);
   }finally{f.close();}
 });
 test("actual frozen native service accepts funding6 through only the pinned financial modules",{skip:!process.env.ACEPHALE_FROZEN_RUNTIME || !process.env.ACEPHALE_FROZEN_ANALYSIS_ROOT},async()=>{

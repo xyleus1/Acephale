@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "profile": "acephale-evaluation-completion-envelope-policy-v1",
+  "fundingVersion": 7,
+  "parentFundingVersion": 6,
+  "gpuCapacityVersion": 6,
+  "parentGpuCapacityVersion": 5,
+  "parentEngineeringMaximumGpuHours": 300,
+  "engineeringMaximumGpuHours": 350,
+  "countCapacityVersion": 8,
+  "parentCountCapacityVersion": 7,
+  "parentOriginalMaximumNewLeases": 32,
+  "effectiveOriginalMaximumNewLeases": 40,
+  "additionalLeases": 8,
+  "evaluationOnly": true,
+  "optimizerPermitted": false,
+  "existingReservationsChanged": false,
+  "existingDeadlinesChanged": false,
+  "modelContractsChanged": false
+}

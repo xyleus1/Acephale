@@ -1,5 +1,24 @@
 # Acephale research runbook
 
+## Activate the finite completion envelope
+
+Use a reviewed, clean committed operator. Keep the sole original journal and
+slice. First invoke `scripts/acephale-infrastructure-funding.ts` with the usual
+request object and `version: 7`. Then run the normal Python CLI:
+
+```text
+control.py record-evaluation-completion --ledger <slice> --kind gpu --authorization-reason <reason>
+control.py record-evaluation-completion --ledger <slice> --kind count --authorization-reason <reason>
+```
+
+These create GPU6 and count8 without replacing prior sidecars or changing old
+reservations. A fresh normal `checked_bound_ledger` must validate the entire
+chain after each step. The first two intermediate states cannot reserve a new
+lease. Count8 carries unused parent slots forward; it does not require spending
+the last count7 slot. Regenerate and validate the exact native financial port
+for the new committed source before research. Actual credentials, runner holds,
+quotes, source checks and physical controller qualification remain required.
+
 ## Reserve enough setup time before evaluation
 
 For a new evaluation-only research lease, `prepare-lease --setup-seconds 7200`

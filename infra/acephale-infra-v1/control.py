@@ -1054,7 +1054,7 @@ def infrastructure_caps(ledger: dict) -> tuple[float, float, float]:
 def infrastructure_funding(ledger: dict) -> dict | None:
     """Validate each append-only authority against its retained history."""
     journal = ledger.get("plan", {}).get("studyLedgerPath")
-    version = next((v for v in (6, 5, 4, 3, 2) if journal and
+    version = next((v for v in (7, 6, 5, 4, 3, 2) if journal and
                     Path(str(Path(journal).resolve()) + f".infrastructure-funding-v{v}.json").exists()), 1)
     return _validate_infrastructure_funding_chain(ledger, version)
 
@@ -1232,7 +1232,7 @@ def record_infrastructure_suballocation(ledger_path: Path, reason: str, *, sourc
 
 
 def gpu_hour_capacity_path(ledger_path: Path, version: int = 1) -> Path:
-    if type(version) is not int or version not in (1, 2, 3, 4, 5):
+    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6):
         raise ValueError("Supported GPU-hour capacity version required")
     return ledger_path.with_name(ledger_path.name + f".gpu-hour-capacity-v{version}.json")
 
@@ -1311,6 +1311,15 @@ def _validate_gpu_hour_capacity(ledger: dict, amendment: dict | None, value: dic
 @_digest_operation
 def effective_gpu_hour_capacity(ledger: dict) -> tuple[float, dict | None]:
     """Layer an explicit engineering limit over the unchanged financial policy."""
+    journal = ledger.get("plan", {}).get("studyLedgerPath")
+    original_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
+    funding7_exists = bool(journal and Path(str(Path(journal).resolve()) + ".infrastructure-funding-v7.json").exists())
+    if original_path and not funding7_exists and any(Path(str(Path(original_path).resolve()) + suffix).exists() for suffix in
+            (".gpu-hour-capacity-v6.json", ".evaluation-lease-capacity-v8.json")):
+        raise ValueError("Completion capacity requires its funding7 authority")
+    if funding7_exists:
+        from evaluation_completion import gpu_capacity
+        return gpu_capacity(ledger, infrastructure_funding(ledger))
     amendment = effective_budget_policy(ledger)
     original = amendment["policy"]["maxGpuHours"] if amendment else 24
     ledger_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
@@ -1721,13 +1730,14 @@ def record_gpu_hour_capacity_continuation(ledger_path: Path, authorization_reaso
         return value
 
 
-def _validate_gpu_hour_recovery(ledger: dict, amendment: dict | None, value: dict) -> dict:
+def _validate_gpu_hour_recovery(ledger: dict, amendment: dict | None, value: dict,
+                                *, current_funding: dict | None = None) -> dict:
     """Validate all four retained GPU parents under unchanged funding6 and count authority."""
     ledger_path = Path(ledger["plan"]["infrastructureLedgerPath"])
     policy = read_json(ROOT / "src/lib/acephale/contracts/gpu-hour-capacity-v5.json")
     parent_path = gpu_hour_capacity_path(ledger_path, 4)
     parent = read_gpu_hour_capacity(parent_path)
-    funding = infrastructure_funding(ledger)
+    funding = infrastructure_funding(ledger) if current_funding is None else current_funding
     policy_path = Path(ledger["plan"]["studyLedgerPath"] + ".policy-v3.json")
     funding_path = Path(ledger["plan"]["studyLedgerPath"] + ".infrastructure-funding-v6.json")
     history = value.get("operationalHistory", {})
@@ -1788,7 +1798,10 @@ def _validate_gpu_hour_recovery(ledger: dict, amendment: dict | None, value: dic
            or finite_number(row.get("reservedAt"), "capacity-bound reservation timestamp") < recorded for row in extra):
         raise ValueError("New provider lease must bind the GPU-hour extension")
     hours = ledger["priorGpuHours"] + sum(row["reservedHours"] for row in ledger["leases"])
-    caps, totals = infrastructure_caps(ledger), _infrastructure_reserved_totals(ledger)
+    caps = infrastructure_caps(ledger) if current_funding is None else tuple(
+        current_funding["policy"][key] / 1_000_000 for key in
+        ("effectiveInfrastructureMicrodollars", "effectiveComputeMicrodollars", "effectiveAssociatedMicrodollars"))
+    totals = _infrastructure_reserved_totals(ledger)
     if hours > 300 or any(totals[key] > cap for key, cap in zip(
             ("infrastructureUsd", "computeUsd", "associatedUsd"), caps, strict=True)):
         raise ValueError("GPU-hour extension cannot exceed effective financial authority")
@@ -2565,6 +2578,10 @@ def main(argv: list[str] | None = None) -> int:
     capacity_recovery.add_argument("--ledger", type=Path, required=True)
     capacity_recovery.add_argument("--authorization-reason", required=True)
     capacity_recovery.add_argument("--operational-history", type=Path, required=True)
+    envelope = commands.add_parser("record-evaluation-completion")
+    envelope.add_argument("--ledger", type=Path, required=True)
+    envelope.add_argument("--kind", choices=["gpu", "count"], required=True)
+    envelope.add_argument("--authorization-reason", required=True)
     training_capacity = commands.add_parser("record-training-window-capacity-addendum")
     training_capacity.add_argument("--ledger", type=Path, required=True)
     training_capacity.add_argument("--authorization-reason", required=True)
@@ -2673,6 +2690,9 @@ def main(argv: list[str] | None = None) -> int:
         value = record_gpu_hour_capacity_continuation(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "record-gpu-hour-capacity-recovery":
         value = record_gpu_hour_capacity_recovery(args.ledger, args.authorization_reason, args.operational_history)
+    elif args.command == "record-evaluation-completion":
+        from evaluation_completion import record
+        value = record(args.ledger, args.kind, args.authorization_reason)
     elif args.command == "record-training-window-capacity-addendum":
         value = record_training_window_capacity_addendum(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "training-window-headroom":

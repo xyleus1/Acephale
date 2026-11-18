@@ -1,3 +1,4 @@
+import approvedV7 from "../../src/lib/acephale/contracts/infrastructure-funding-v7.json";
 import approvedV6 from "../../src/lib/acephale/contracts/infrastructure-funding-v6.json";
 import approvedV5 from "../../src/lib/acephale/contracts/infrastructure-funding-v5.json";
 import { createHash } from "node:crypto";
@@ -17,7 +18,8 @@ export const INFRASTRUCTURE_FUNDING_V3 = approvedV3;
 export const INFRASTRUCTURE_FUNDING_V4 = approvedV4;
 export const INFRASTRUCTURE_FUNDING_V5 = approvedV5;
 export const INFRASTRUCTURE_FUNDING_V6 = approvedV6;
-export type FundingVersion = 1 | 2 | 3 | 4 | 5 | 6;
+export const INFRASTRUCTURE_FUNDING_V7 = approvedV7;
+export type FundingVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export const infrastructureFundingPath = (journal: string, version: FundingVersion = 1) => `${resolve(journal)}.infrastructure-funding-v${version}.json`;
 export type FundingRow = Record<string, unknown>;
 export interface InfrastructureFunding {
@@ -44,7 +46,7 @@ export function checkedFundingFile(path: string) {
 
 export function readInfrastructureFunding(journal: string, entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding | undefined {
   let latest: InfrastructureFunding | undefined;
-  for (const version of [1, 2, 3, 4, 5, 6] as const) {
+  for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
     const path = infrastructureFundingPath(journal, version);
     if (!existsSync(path)) continue;
     if (version > 1 && latest?.version !== version - 1) throw new Error("Infrastructure funding extension requires its original parent");
@@ -56,9 +58,9 @@ export function readInfrastructureFunding(journal: string, entries: [string, Res
 export function validateInfrastructureFunding(value: InfrastructureFunding, journal: string,
   entries: [string, Reservation][], base?: BudgetAmendment): InfrastructureFunding {
   const { contentHash, ...body } = value;
-  const expected = value.version === 6 ? approvedV6 : value.version === 5 ? approvedV5 : value.version === 4 ? approvedV4 : value.version === 3 ? approvedV3 : value.version === 2 ? approvedV2 : approved;
+  const expected = value.version === 7 ? approvedV7 : value.version === 6 ? approvedV6 : value.version === 5 ? approvedV5 : value.version === 4 ? approvedV4 : value.version === 3 ? approvedV3 : value.version === 2 ? approvedV2 : approved;
   const date = Date.parse(value.authorizedAt), digest = /^[a-f0-9]{64}$/;
-  if (base?.version !== 3 || ![1, 2, 3, 4, 5, 6].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
+  if (base?.version !== 3 || ![1, 2, 3, 4, 5, 6, 7].includes(value.version) || value.profile !== `acephale-infrastructure-funding-v${value.version}`
     || contentHash !== hash(body) || value.policyHash !== hash(expected) || hash(value.policy) !== hash(expected)
     || value.baseBudgetPolicyHash !== base.policyHash || value.baseBudgetAmendmentHash !== base.contentHash
     || value.baseBudgetAmendmentSha256 !== createHash("sha256").update(checkedFundingFile(budgetPolicyPath(journal, 3))).digest("hex")
@@ -90,7 +92,7 @@ export function validateInfrastructureFunding(value: InfrastructureFunding, jour
   return value;
 }
 
-/** Versions 1-4 preserve the original ceiling. V5 and V6 declare the explicit native financial port. */
+/** Versions 1-4 preserve the original ceiling. Later versions bind the explicit native financial port. */
 export function frozenApiProjection(entries: (Reservation & { id: string })[], additionalInfrastructure: number,
   base: BudgetAmendment, funding: InfrastructureFunding) {
   if (!Number.isSafeInteger(additionalInfrastructure) || additionalInfrastructure < 0) throw new Error("Invalid infrastructure projection");

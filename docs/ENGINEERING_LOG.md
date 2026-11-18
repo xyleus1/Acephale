@@ -1521,3 +1521,30 @@ though the actual frozen-checkout test had passed locally. Apply the same explic
 prerequisite marker to the wrapper. Test logic and production source are unchanged;
 retain the local configured-reader result and report CI's missing checkout as a
 skip, never a pass. The running evaluation keeps its original committed source.
+
+## 2026-11-18: Completion envelope implementation
+
+Added one shared Python successor module for GPU6 and count8, using the existing
+normal parent validators and creation-only writer protections. Funding7 uses
+the existing TypeScript writer and durable/native budget readers. The native
+financial source manifest now includes its exact funding7 policy. No original
+authority or journal was rewritten and no actual capacity was activated.
+
+The focused checks exercise readable intermediate states with zero dispatch
+allowance, retained unused count capacity, exact parent/source bindings, missing
+and rehashed authorities, old holds, and the finite next-lease limit. The two
+focused Python cases passed. A separate 30-case check exercised the final
+financial predicate across dictionary orders and limit boundaries. Historical
+count validators/writers and all five controller files retain their original
+code. The exact previously tested heartbeat-clock fixture was also carried over.
+
+With Node 22.23.4, `npm run check` passed and `npm test` finished with 319 passed,
+two PostgreSQL prerequisite skips and no failures. Research pytest finished with
+647 passed, 23 skipped and two failures: the native gateway did not become ready
+within 25 seconds, and the native configuration subprocess exceeded 30 seconds.
+Those failures remain recorded; this run does not establish their cause. No
+broad suite was repeated. The first focused Node run also remains recorded:
+two funding7 cases exposed a native-port allowlist limited to funding5/6. After
+adding funding7, all six funding6/7 cases, including both actual frozen native
+port consumers, passed in the full Node suite. No authority was activated and no
+model or provider request was made by these checks.
