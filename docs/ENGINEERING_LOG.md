@@ -1,5 +1,37 @@
 # Acephale engineering log
 
+## Prospective count-v7 reader and writer, 2026-11-18
+
+Added one finite four-slot successor to count v6. Existing v1-v6 validation and
+writer bodies stay unchanged. The current reader checks v7 first and validates
+its v6 parent against the retained historical prefix before checking new rows.
+The writer creates only the new sidecar, requires exhausted closed history,
+retains all old authorities and rejects changes to protected files or journal
+identity during creation. It does not rehash the raw journal.
+
+Focused synthetic-ledger cases cover actual reservation limits for both research
+and canaries, parent/creator and retained-hold tampering, missing authority,
+concurrent authority creation, optimizer denial and the unchanged frozen execution
+reader. No live financial state, provider or model is used. The five controller
+files are unchanged from `e05634b`; source validation is not physical qualification.
+
+All three focused cases passed in 112.61 seconds with no skips, including the
+actual frozen `4438b56c` execution reader: diagnostic/export/evaluation accepted,
+training rejected. Completion checks then ran sequentially on this candidate:
+`npm run check` passed; `npm test` passed 314 tests with four skips; research
+`python -m pytest -q` passed 649 tests with 23 skips. None failed or timed out.
+The Node skips require PostgreSQL (two) or optional frozen financial integration
+fixtures (two). Python skips require PyTorch (14), Linux process groups (four),
+Docker permissions (two), pinned native environments (two) or a private immutable
+replay (one). These checks do not establish physical qualification or benchmark
+performance. Earlier failed verification receipts remain unchanged.
+
+Retained the already-reviewed fixture-only PID publication repair from the
+research-results branch: write the complete PID to a temporary sibling before
+atomic rename. This prevents the known empty-file read race in the owner-crash
+test without changing production process ownership or controller code. The
+original broad-suite failure remains recorded in the research report.
+
 ## Shorter acknowledgement cadence and finite count continuation, 2026-11-18
 
 The worker timestamps `last_ack` after its compare-and-swap response. With the

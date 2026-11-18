@@ -1,5 +1,26 @@
 # Working on Acephale
 
+## Prospective count v7, 2026-11-18
+
+`evaluation_lease_capacity.record_funding6_followup` creates a count-v7 sidecar
+only after all four v6 slots have been consumed and the retained work is closed.
+It binds the exact v6 bytes, content hash and original creator, and keeps the
+complete earlier count ancestry. The finite four-slot addition changes the
+original funding5 horizon from 28 to 32, minus pre-funding6 consumption. Both
+canaries and research consume slots; closed undispatched reservations still count.
+
+This is prospective source only. Verify that v6 is exhausted and every retained
+reservation has closed before activation; do not rewrite older authority.
+After exhaustion and separate review, bind a new committed-source native port
+for the research operator. Funding6, GPU5/300 hours, all holds, existing deadlines,
+API allocation and optimizer restrictions remain unchanged. The five controller
+files retain exact `e05634b` bytes; a new count operator does not substitute for
+actual controller qualification or change its creator identity.
+
+Current broad checks passed with documented external prerequisites skipped; see
+the engineering log for exact counts. No count authority or research dispatch
+was created by those checks.
+
 ## Controller acknowledgement cadence and count v6, 2026-11-18
 
 The controller changes only `ACK_SECONDS` from 40 to 10; `POLL_SECONDS` stays 20.

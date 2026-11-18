@@ -49,7 +49,8 @@ def tree_command(root: Path, *, parent_exits=False):
         "import json,os,pathlib,subprocess,sys,time\n"
         "root=pathlib.Path(__file__).parent\n"
         "level=int(sys.argv[1])\n"
-        "(root/f'pid-{level}').write_text(str(os.getpid()))\n"
+        "pid=root/f'pid-{level}'; pending=pid.with_suffix('.pending')\n"
+        "pending.write_text(str(os.getpid())); pending.replace(pid)\n"
         "if level < 2: subprocess.Popen([sys.executable,__file__,str(level+1)])\n"
         "while not (root/'release-parent').exists() or level != 0: time.sleep(.025)\n"
     )

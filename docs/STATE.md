@@ -1,12 +1,14 @@
 # Current state
 
-Current operator candidate, November 18, 2026 (UTC): acknowledgement threshold is
-10 seconds with unchanged 20-second polling, and count v6 permits four additional
-slots after v5 exhaustion while retaining prior holds and limits. Fresh physical
-qualification of both independent controllers is required before research; local
-verification is not qualification or a completed benchmark. Actual study results
-and the latest closed execution attempt are recorded in the
-[research status](https://github.com/xyleus1/Acephale/blob/44f7404b90fa7ff263b6658f7af2be383a1d2a65/docs/STATE.md).
+Prospective operator source, November 18, 2026 (UTC): count v7 adds four finite
+evaluation slots only after the count-v6 horizon has been consumed and closed.
+The original funding5 horizon becomes 32, minus slots consumed before funding6.
+All earlier holds, deadlines, money/GPU/API limits and optimizer restrictions stay
+intact. The five controller files remain byte-identical to `e05634b`; actual
+qualification of both controllers is still required before research. This source
+does not activate capacity or establish a benchmark result. Closed study results
+and their limitations are recorded in the
+[research status](https://github.com/xyleus1/Acephale/blob/4fc73ed0bfaf9cf4c3ab5422d4421275c006badd/docs/STATE.md).
 
 Historical diagnostics:
 

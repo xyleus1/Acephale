@@ -1,5 +1,18 @@
 # Acephale decisions
 
+## 2026-11-18: Add one finite count successor after v6 exhaustion
+
+Count v7 adds four evaluation-only slots using the same append-only writer and
+normal full-chain reader as v6. Require exhausted closed v6 history before
+creation, preserve every prior creator and hold, and bind new reservations to
+the v7 hash. There is no configurable unbounded count, refund, new money,
+GPU-hour increase or optimizer authorization. Original funding5 horizon: 32.
+
+Keep the five controller files byte-identical to `e05634b`. Future actual
+qualifications bind that controller source separately from the newer financial
+operator and native port. Local tests cannot activate the sidecar or qualify
+research. Earlier undispatched failures remain counted and reported.
+
 ## 2026-11-18: Refresh acknowledgements sooner without widening admission
 
 Set `ACK_SECONDS` to 10 while retaining 20-second polling and every existing

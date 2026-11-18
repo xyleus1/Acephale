@@ -1,5 +1,19 @@
 # Acephale research runbook
 
+## Continuing after count-v6 exhaustion
+
+The prospective `evaluation_lease_capacity.record_funding6_followup` writer adds
+four count-v7 evaluation slots only after every v6 slot has been consumed and the
+retained work has closed. Do not create this sidecar while v6 has unused slots.
+Use a clean, separately reviewed committed operator and retain all historical
+count files and creator identities. The normal reader must validate the entire
+funding/count/GPU chain; new reservations must bind the v7 content hash.
+
+Regenerate the source-bound native financial port for the new operator. Keep the
+five controller files at their exact `e05634b` bytes and bind their actual physical
+qualification separately. This step adds no money, GPU hours, API allowance,
+optimizer window or deadline extension, and it releases no old reservation.
+
 ## Continuing after count-v4 exhaustion
 
 Use `evaluation_lease_capacity.record_funding6_extension` from a clean committed
