@@ -1,0 +1,20 @@
+--- a/transport_evaluated_main_v2.py
++++ b/transport_evaluated_main_v2.py
+@@ -146,2 +146,5 @@
+-            owner.owned(owner.ssh_command(current, shlex.join(['python3', '-c', check, json.dumps(proof_rows)])),
+-                output / 'remote-input-verification.log', min(time.time() + 90, config['deadline']), stopped)
++            verification = owner.ssh_command(current, shlex.join(['python3', '-c', check, json.dumps(proof_rows)]))
++            # Retry only the initial SSH connection, within the existing command deadline.
++            verification[1:1] = ['-o', 'ConnectionAttempts=3']
++            owner.owned(verification, output / 'remote-input-verification.log',
++                min(time.time() + 90, config['deadline']), stopped)
+@@ -163,2 +166,7 @@
+-    result = verify_transport(output, config)
+-    if failure:
++    try:
++        result = verify_transport(output, config)
++    except BaseException as verification_error:
++        if failure is not None:
++            raise failure from verification_error
++        raise
++    if failure is not None:

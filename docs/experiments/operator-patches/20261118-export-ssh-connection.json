@@ -1,0 +1,60 @@
+{
+  "kind": "acephale-public-operator-patch-verification-v1",
+  "verified": true,
+  "patch": "20261118-export-ssh-connection.patch",
+  "patchSha256": "24ca7a438cafcded53af847a739164085fed3269a3dc3f763b77a801008cc17a",
+  "hunks": 2,
+  "files": [
+    {
+      "name": "transport_evaluated_main_v2.py",
+      "beforeSha256": "c6cad04a15232eadcd01d2a8d0c9ec309ea8ec9632baf452e4246314426a439c",
+      "afterSha256": "c5bb5e17f7b120ffc1fb125ab4f1a64944c52d52743f2439a9ef7c73e0128f31"
+    }
+  ],
+  "forwardAndReverseAppliedBytesMatch": true,
+  "applicationArguments": [
+    "git",
+    "-c",
+    "core.autocrlf=false",
+    "apply",
+    "--unidiff-zero"
+  ],
+  "verifyTransportAstUnchanged": true,
+  "producerSha256": "b735a97d2a224e9e6ef96bd33316ff7519be90f9838de0947276ad66d7e139f0",
+  "independentReviewSha256": "1f26432f68bfc382859d8f108c7846ef5ef81c881c3c3f1c01b0abdc6e26cd01",
+  "focusedAuthorCases": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "resultsXmlSha256": "65e3bec71bde7422457b1dd94d7b3bc87f7cc40b3f087e2c30dcc0546278a4d4",
+    "actualExecuteFunctionUsed": true,
+    "externalEffectsIsolated": true,
+    "rerunDuringPublication": false
+  },
+  "retainedFixtureCorrection": "Initial isolated SSH fixture omitted the real -T option; the final seven-case fixture checks the actual SSH argv and SCP identity option. Production candidate bytes did not change.",
+  "localOpenSshParser": {
+    "software": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2",
+    "exitCode": 0,
+    "mode": "ssh -G -F none, no connection",
+    "connectionAttempts": 3,
+    "connectTimeout": 10,
+    "batchMode": true,
+    "strictHostKeyChecking": true
+  },
+  "scope": "ConnectionAttempts=3 only for the existing read-only input-verification SSH invocation; preserve an earlier operation error when final export verification also fails.",
+  "preservedBoundaries": [
+    "ConnectTimeout=10, BatchMode, strict host-key checking, cancellation and the original absolute 90-second verification bound.",
+    "No retries of evaluation dispatch, uploads, directory creation or cleanup transfer.",
+    "Original archive integrity, completion qualification, numerical gates, models and scoring formulas."
+  ],
+  "requiresRetainedPrivateBaselines": true,
+  "publicCheckoutAloneReconstructsOperator": false,
+  "zeroContextReason": "Omit unrelated private path context while retaining canonical relative headers and exact before/after identities.",
+  "modelCalls": 0,
+  "providerCalls": 0,
+  "financialReads": 0,
+  "realConnectionRecoveryEstablished": false,
+  "limitation": "The E29 pre-dispatch timeout is observed; its underlying cause and real-world recovery from this connection option remain unestablished.",
+  "officialReference": "https://man.openbsd.org/ssh_config#ConnectionAttempts"
+}

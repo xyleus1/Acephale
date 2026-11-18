@@ -1,12 +1,27 @@
 # Working on Acephale
 
+## Input verification transport failure, 2026-11-18
+
+E29 stopped before evaluation when an SSH connection timed out during read-only
+verification of uploaded inputs. All 19 uploads had succeeded; no evaluation log
+was created. The later missing-export error is secondary and must not replace
+the transport diagnosis. Retained observation SHA-256:
+`3af9f744ca1d7352cf2e6012257ae203c3040fd2f231aca857c3a68812614f5e`.
+There is no host evaluation result or numerical-admission failure from this
+attempt. Trained-replay and native scores remain pending. Preserve the saved
+predictors and the prior handoff/setup evidence. A bounded retry for the read-only
+transport check is being prepared separately; frozen models and gates stay fixed.
+Managed cleanup and independent provider absence are verified; local tasks are
+disabled with no remaining owners. Joint closure receipt SHA-256:
+`afd7bfb7f4c95c72262958fb06850ed703fbcb552076f81ac3fa0e8c17564816`.
+
 ## Scheduled study handoff confirmed, 2026-11-18
 
 GitHub controller admission recovered, and E29's actual scheduled study handoff
 succeeded at 01:01:08 UTC with launch exit code zero. The handoff receipt SHA-256
 is `da8dcc768c97638408200be180325e4e1716f09c3ad9be853a32ab99ece8f4b6`.
-Foundation setup has completed; image setup is running. Trained-replay and native
-benchmark scores remain pending. Continue with the saved seed 17/29 predictors
+At this checkpoint, foundation setup had completed and image setup was running.
+Trained-replay and native benchmark scores remained pending. Continue with the saved seed 17/29 predictors
 and retain all prior failures, reservations and numerical gates. Neither
 completed optimizer is rerun. Record scientific outcomes only from closed phase
 artifacts, and publish the final report after verified export and cleanup.

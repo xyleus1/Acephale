@@ -1,5 +1,38 @@
 # Evaluation operator repairs
 
+## Read-only SSH connection attempts, 2026-11-18
+
+E29 uploaded all 19 inputs, then stopped before evaluation dispatch when the
+read-only remote input-verification SSH connection timed out. No evaluation log
+was created. A later missing-export exception obscured the original transport
+failure; it was not a numerical-admission failure. The retained observation has
+SHA-256 `3af9f744ca1d7352cf2e6012257ae203c3040fd2f231aca857c3a68812614f5e`.
+
+The [two-hunk patch](20261118-export-ssh-connection.patch) sets OpenSSH
+[`ConnectionAttempts=3`](https://man.openbsd.org/ssh_config#ConnectionAttempts)
+only on that existing read-only verification invocation. The ten-second connect
+timeout, absolute ninety-second command bound, cancellation, authentication and
+host-key checks remain unchanged. Evaluation dispatch, uploads, directory
+creation and cleanup transfers receive no retry. The second change preserves
+an earlier operation exception as primary when export verification also fails,
+while retaining the latter as its explicit cause. `verify_transport`, including
+archive integrity and completion qualification, is unchanged.
+
+The [byte verification manifest](20261118-export-ssh-connection.json) records
+exact before/after hashes and successful forward/reverse patch application.
+Seven isolated author tests exercised the actual execution function and exact
+SSH/SCP argument shapes. The initial fixture omitted SSH's `-T` option; the
+corrected seven-case fixture and earlier fixture are retained. A separate actual
+OpenSSH configuration-parser check confirmed three connection attempts and the
+unchanged options without opening a network connection. These checks establish
+neither the underlying timeout cause nor real connection recovery or benchmark
+performance. No tests or parser calls were repeated for publication.
+
+Apply with `git -c core.autocrlf=false apply --unidiff-zero` to the exact private
+baseline named and hashed in the manifest. Canonical relative headers and zero
+context omit unrelated private paths. This patch does not reconstruct the full
+operator, runtime configuration or credentials from the public checkout alone.
+
 ## External controller start block, 2026-11-17
 
 E28's two GitHub Actions controller checks completed with failure on November 17
