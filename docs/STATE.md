@@ -1,6 +1,12 @@
 # Current state
 
-Updated November 17, 2026 (UTC). E28's controller jobs were rejected by GitHub
+Updated November 18, 2026 (UTC). E29's scheduled study handoff succeeded at
+01:01:08 UTC; the launch process exited zero. Foundation setup has completed and
+image setup is running. The study continues from the saved seed 17/29 predictor
+checkpoints without repeating either optimizer. Trained-replay and native
+benchmark scores remain pending; setup completion is not benchmark completion.
+
+On November 17, E28's controller jobs were rejected by GitHub
 Actions before any job step or GPU dispatch. Both checks reported failed account
 payments or a spending-limit restriction; the evidence does not identify which.
 The authority correction therefore has no live observation result from E28.

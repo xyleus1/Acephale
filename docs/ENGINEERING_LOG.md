@@ -1,5 +1,43 @@
 # Acephale engineering log
 
+## Scheduled study handoff confirmed, 2026-11-18
+
+E29's scheduled study handoff succeeded at 01:01:08 UTC; the launch process
+exited zero. Its retained handoff receipt has SHA-256
+`da8dcc768c97638408200be180325e4e1716f09c3ad9be853a32ab99ece8f4b6`.
+Foundation setup subsequently closed successfully and image setup is running.
+These are setup observations, not trained-replay or native benchmark results.
+The saved seed 17/29 predictors remain unchanged and neither optimizer is rerun.
+
+## Numerical-methods publication checks, 2026-11-18
+
+Added a separate [numerical-methods attachment](experiments/numerical-methods-publication.md)
+that reuses the reviewed closed-report and numerical provenance readers. It
+requires all 20 declared companions, including native input/output pairs, and
+checks stored pass/delta values against the unchanged gate and original receipts.
+Only approved scalar observations and provenance hashes enter the attachment;
+frozen reporters and scientific outputs are unchanged.
+
+All 18 focused synthetic cases passed in 4.71 seconds. Ruff and the whitespace
+check passed. The initial invocation encountered Windows default temporary-folder
+permissions; an explicit fresh fixture directory resolved that setup failure.
+No actual numerical or benchmark result was extracted by these checks.
+
+## Controller admission restored, 2026-11-18
+
+The fresh recovery-controller pair was assigned runners, passed source/binding
+startup checks and returned signed acknowledgements. Its helper exited zero.
+The retained readiness receipt has SHA-256
+`fd1cb2f80314cc84ddaf365feb2752bb0cef5c885c4aaf131a7ecde2f0d65bee`.
+This confirms actual admission of these jobs after E28's billing rejection.
+At this controller-admission checkpoint, E29 was being prepared from the unchanged
+saved predictors; no scientific phase or benchmark score had been recorded.
+
+Creation-only E29 report wrappers retain the reviewed scoring and privacy rules.
+Their projector now binds the actual allowlist hash, correcting a stale E28
+literal while preserving E28 history. The actual policy reader passed; no model
+or scoring call was needed for this metadata correction.
+
 ## Controller jobs refused before execution, 2026-11-17
 
 Both E28 controller checks completed as failures before job steps or GPU dispatch.

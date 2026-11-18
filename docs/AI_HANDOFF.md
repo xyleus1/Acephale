@@ -1,13 +1,24 @@
 # Working on Acephale
 
+## Scheduled study handoff confirmed, 2026-11-18
+
+GitHub controller admission recovered, and E29's actual scheduled study handoff
+succeeded at 01:01:08 UTC with launch exit code zero. The handoff receipt SHA-256
+is `da8dcc768c97638408200be180325e4e1716f09c3ad9be853a32ab99ece8f4b6`.
+Foundation setup has completed; image setup is running. Trained-replay and native
+benchmark scores remain pending. Continue with the saved seed 17/29 predictors
+and retain all prior failures, reservations and numerical gates. Neither
+completed optimizer is rerun. Record scientific outcomes only from closed phase
+artifacts, and publish the final report after verified export and cleanup.
+
 ## External controller start block, 2026-11-17
 
 E28 could not start either GitHub Actions controller: both checks reported failed
 account payments or a spending-limit restriction before job steps or GPU dispatch.
 The retained annotation does not distinguish those causes. Preserve the failed
 attempt and its reservation history; no numerical or benchmark result follows
-from it. The authority patch remains verified locally but unmeasured in a live
-observation. See the [redacted evidence summary](experiments/operator-patches/README.md#external-controller-start-block-2026-11-17).
+from it. E28 provided no live measurement of the authority patch. See the
+[redacted evidence summary](experiments/operator-patches/README.md#external-controller-start-block-2026-11-17).
 
 ## Authority observation preparation, 2026-11-17
 
