@@ -1,0 +1,8 @@
+--- a/successor_owner.py
++++ b/successor_owner.py
+@@ -76,2 +76,3 @@
+-            or any(type(seconds) is not int or not 1 <= seconds <= 10800
+-                   for seconds in value['phaseMaximumSeconds'].values())):
++            or any(type(seconds) is not int or not 1 <= seconds <=
++                   (14400 if phase in ('seed17_01', 'seed29_01') else 10800)
++                   for phase, seconds in value['phaseMaximumSeconds'].items())):

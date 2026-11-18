@@ -1,5 +1,53 @@
 # Evaluation operator repairs
 
+## Replay phase limits, 2026-11-18
+
+E32 failed configuration validation during task registration: its two initial seed
+phases specified 14,400 seconds, above the supervisor's 10,800-second maximum.
+No task, provider lease or model dispatch followed. Its sealed inputs and failure
+remain retained. E33 uses a fresh declaration and output namespace.
+
+The [parser patch](20261118-replay-phase-limits.patch) allows 14,400 seconds only
+for `seed17_01` and `seed29_01`. Other phases keep 10,800 seconds; exact integer
+validation, source checks, execution clipping and the hard deadline are unchanged.
+The [redacted manifest](20261118-replay-phase-limits.json) records 14 passing
+offline cases and independent review, including the original rejection and the
+candidate consumer's acceptance of the actual complete retained configuration.
+This counterfactual configuration check establishes no E33 execution or benchmark
+result. Source tests were not repeated for publication. Forward/reverse patch
+application was verified against the manifest's exact source hashes. Apply with
+`git -c core.autocrlf=false apply --unidiff-zero` to that private baseline.
+
+## Parallel prediction replay, 2026-11-18
+
+E31's first trained replay closed its neutral condition, then stopped at the
+2,400-second selected-goal condition bound. It retained 745 completed neutral
+predictions out of 746, and 314 completed plus 377 failed selected-goal predictions
+out of 691 written rows. The separate output-format and grounding failures remain
+research outcomes. No paired native actor trial ran. E33 is a prospectively
+designated full replay attempt, with all original rows and both saved predictors;
+E31's outputs and E32's undispatched registration failure remain retained.
+E33 subsequently stopped at initial admission before GPU allocation or model
+dispatch, so this wrapper has no E33 replay performance result.
+
+The [wrapper patch](20261118-parallel-prediction-replay.patch) starts the three
+condition containers after one successful precheck. Each condition keeps its
+sequential row loop, separate output, full declared cohort and independent closure.
+The wrapper runs three concurrent conditions. The prospective configuration
+supplies a 7,200-second bound for each.
+It waits for all workers, retains failed exports, and drains owned work on
+cancellation. The frozen TypeScript predictor, prompts, model weights and numerical
+gates are unchanged. Concurrent inference changes batching and may affect outputs
+or replay timing; this is not a native latency or accuracy improvement claim.
+
+The [redacted verification manifest](20261118-parallel-prediction-replay.json)
+records original/candidate source hashes, nine passing offline cases, independent
+review, and verified forward/reverse patch application. It contains no operator
+paths or credentials. Tests were not rerun for publication. Apply the zero-context
+patch with `git -c core.autocrlf=false apply --unidiff-zero` to the exact private
+baseline files named in that manifest. The patch does not reconstruct the full
+operator or authorize dispatch on its own.
+
 ## Read-only SSH connection attempts, 2026-11-18
 
 E29 uploaded all 19 inputs, then stopped before evaluation dispatch when the

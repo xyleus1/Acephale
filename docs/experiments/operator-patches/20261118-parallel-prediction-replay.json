@@ -1,0 +1,46 @@
+{
+  "kind": "acephale-parallel-prediction-replay-publication-v1",
+  "scientificSourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+  "patch": {
+    "path": "20261118-parallel-prediction-replay.patch",
+    "sha256": "711a602470c4489ed5ef6c93b9f8deab9b66b43a2084a5f35f02010c713225d5",
+    "contextLines": 0,
+    "forwardApplicationMatchesCandidate": true,
+    "reverseApplicationMatchesOriginal": true
+  },
+  "files": [
+    {
+      "path": "same_host_trained_replay.py",
+      "beforeSha256": "62cf1730e996abf44da3aa10ce364641746c8c667dd18fdf5d78566564bd96f0",
+      "afterSha256": "b0a115d25bfe1200aaf5af4d481c1f0a6b7a323ff936b2242cece7e4bca47e4b"
+    },
+    {
+      "path": "run_same_host_trained_replay.py",
+      "beforeSha256": "8ced176f852cbe3b510e2fab12faa8e82e7ebbfb6fd65666626a5aae76679e6f",
+      "afterSha256": "ba5697b98498eedad0f0e9c54b63df7a96b9693b8371a590039e5e819cd89c9a"
+    }
+  ],
+  "scheduling": {
+    "mode": "parallel_conditions_v1",
+    "conditionConcurrency": 3,
+    "rowsWithinCondition": "sequential",
+    "maximumSecondsPerCondition": 7200
+  },
+  "offlineTests": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junitSha256": "b7b495ebdc7d7e234a32ccb4c823b609eff1e907a1bbbb9d500dff07ebf31bc1",
+    "testSourceSha256": "f663ab033918c046fe0db33567a832a7b73fe847f1e509486e7832a5cec33c91"
+  },
+  "independentReviewSha256": "b75cdb502f576fd5d3737751187df331ff44c5392f982bbb90d2ef5129ec8c55",
+  "scientificSourceModified": false,
+  "modelWeightsOrPromptsChanged": false,
+  "optimizerRerun": false,
+  "nativeTrialReplacement": false,
+  "parentAttemptRetained": true,
+  "benchmarkGainEstablished": false,
+  "timingScope": "prediction_replay_only",
+  "scope": "Three separately bounded prediction condition containers after one precheck; preserve each independent result and drain on cancellation."
+}

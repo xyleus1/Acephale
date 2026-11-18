@@ -1,5 +1,31 @@
 # Acephale decisions
 
+## 2026-11-18: Retain E31 and predeclare a complete new replay attempt
+
+Keep E31's numerical success, partial replay, all semantic prediction failures
+and raw responses as a separate infrastructure-aborted attempt. E32 was predeclared
+but failed registration before dispatch; retain that sealed attempt as well.
+Predeclare E33 as a complete 746-prefix replay across three conditions and both
+saved seeds, regardless of its eventual outcomes. E33 subsequently failed initial
+admission before any provider launch request or model dispatch. Preserve that
+unexecuted declaration and investigate timing before a successor. Any full new
+replay repeats calls rather than combining selected rows from different attempts. No best-attempt
+selection, optimizer rerun, native claim reset or native trial replacement.
+
+Use the existing supported 7,200-second per-condition bound and explicitly
+declare three concurrent condition containers. Each condition retains its own
+ordered sequential rows, guarded serving, output directory and closure. Frozen
+research code, weights, prompts and numerical gates remain fixed. Concurrent
+batching changes replay timing and may affect served outputs; it is not evidence
+of improved native latency. The model's observed goal-format and grounding
+failures remain research outcomes, not infrastructure errors erased by recovery.
+
+The supervisor's accepted phase limit is 14,400 seconds only for the two initial seed
+phases, matching their declared workload. Other phases retain 10,800 seconds;
+execution remains clipped to the fixed hard deadline. This is a configuration
+parser repair, not a scientific threshold change. Report the retained E31 neutral
+development scores separately from fit/calibration scores and native task results.
+
 ## 2026-11-18: Verify the serving interpreter in the pinned image
 
 Replace only the serving inspector's `python` command with the observed

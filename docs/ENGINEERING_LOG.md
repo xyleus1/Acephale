@@ -1,5 +1,79 @@
 # Acephale engineering log
 
+## E31 numerical qualification passed; replay stopped, 2026-11-18
+
+Strict export/evaluation completed for both retained predictors without optimizer
+execution. First seed17 serving qualification retained all three baseline and
+three configured observations. Baseline probability delta was
+`0.014324070185671056`; predictor-only `split_k=1` had zero delta and conditional
+token-1 probability `0.3629692055196168`. The unchanged 0.01/top-token gate failed
+all baseline requests and passed all configured requests. This establishes the
+observed compatibility, not task accuracy or an isolated root cause.
+
+The verified first replay export contains 4,911 files. Neutral closed with
+745 completed predictions and one failure among 746 rows. Selected-goal retained
+314 completed and 377 failed rows before the 2,400-second condition timeout;
+55 rows lack final records, including one with a retained response. Its 377
+persisted failures comprise 244 output-cap incomplete responses, 73 invalid
+probability sums, 58 invisible paths and two invisible sources. Fixed-goal did
+not start. No paired native trial ran. Physical request counts must use records,
+not unique request IDs, which can repeat across ranking roles.
+
+The prospective full-attempt provenance helper passed 23 offline cases, including
+original model/compiler identity, exact saved seed/adapter binding, failed-row
+retention, copied-parent rejection and explicit scheduling. A default pytest
+temporary-directory permission failure was resolved with a test-owned workspace
+directory before those tests ran. The helper never calls models or rewrites old
+payloads. E32's six output locations were predeclared at 06:34:52 UTC, after
+independent review and before any existed. Registration then failed because its
+14,400-second seed phases exceeded the supervisor's 10,800-second parser cap.
+No task, provider lease or model dispatch followed. Sealed E32 inputs are retained.
+The scoped [phase-limit patch](experiments/operator-patches/README.md#replay-phase-limits-2026-11-18)
+passed 14 offline cases, including rejection by the original parser and acceptance
+by the candidate consumer of the actual complete configuration. Only the two initial
+seed phases may use 14,400 seconds; hard-stop clipping is unchanged.
+
+E33 was independently reviewed and predeclared at 06:54:10 UTC, with all six
+output directories absent. It repeats the full prediction cohort with unchanged
+saved predictors and scientific contracts; it does not adopt partial E31 rows.
+The E33 sealer wrote its reviewed configuration but exited 1 at its final
+in-process frozen-module-origin check. A separate fresh process then passed the
+unchanged `study_sequence --validate-only` consumer against those exact files;
+the normal registrar also exited 0. Independent review accepted the separate
+proofs without rewriting the original failure or changing the frozen graph.
+The original sealer remains failed; these later checks establish their own scope.
+
+E33's subsequent launch exited 1 at 07:26:55 UTC. Three bounded initial joint
+admission attempts did not converge before any provider launch request, GPU
+allocation or model dispatch. The generic cleanup then raised an ownership error
+because no instance identifier existed. No managed handoff occurred. Retain the
+unexecuted declaration, both errors and undispatched holds. Independent closure
+confirmed the exact provider name absent, unchanged reserved row/ledger, disabled
+local task with no owner, and both main workflow jobs completed/cancelled. The
+static controller remains retained. This verifies this attempt's absence and
+local closure, not GPU termination or cleanup of all historical resources.
+Provider-absence receipt SHA-256:
+`5c53a721ff1cec9e606e7c2e54f18992b83c8129a6f2264820005c5b6b280bca`;
+main workflow closure SHA-256:
+`5fd0f0226ee17e87ca9381cd6c4bd6da8d4dd0171e95211c015c2bab8a3435b7`.
+Launch-result
+SHA-256: `db6aea7b1b4ddd9f71fc0dfb3b2f56d34e5241b810e32235c0e3d66cd9aa9f7f`;
+launch stderr SHA-256:
+`df3d7881cf3ae3a855c5094cbfa39018ec750a4b140e47e717b74867666d5363`.
+
+The separate
+[parallel wrapper patch](experiments/operator-patches/README.md#parallel-prediction-replay-2026-11-18)
+passed nine focused offline cases. These are engineering checks, not model gains.
+
+The frozen C8 scoring CLI successfully read E31's closed neutral replay, then
+scored original fit/calibration/development partitions separately without model
+calls. Development contains 136 completed checkpoints from six families, 52 with
+an eligible next read. Exact-invocation Top-1 is 24/52 (46.15%), Top-3 is 27/52
+(51.92%). Across 112 nonempty scored panels and 254 probabilities, binary log loss
+is 1.074203530495743 nats and Brier 0.09804148606291671. These are uncalibrated
+trained-predictor development metrics, not native accuracy or held-out results.
+No paired goal comparison is available.
+
 ## E31 managed handoff confirmed, 2026-11-18
 
 The launch process closed with exit code zero at 04:38:53 UTC after the managed

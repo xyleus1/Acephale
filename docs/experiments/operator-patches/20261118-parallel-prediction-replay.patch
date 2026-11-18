@@ -1,0 +1,117 @@
+--- a/same_host_trained_replay.py
++++ b/same_host_trained_replay.py
+@@ -3,0 +4 @@
++from concurrent.futures import ThreadPoolExecutor, as_completed
+@@ -13,0 +15 @@
++import threading
+@@ -18,0 +21,45 @@
++SCHEDULE = {'kind': 'parallel_conditions_v1', 'maximumConcurrentConditions': 3,
++            'rowOrder': 'original_sequential_within_condition', 'automaticRetry': False}
++
++
++class SupervisorStopped(BaseException):
++    """An external stop must bypass ordinary per-condition failure handling."""
++
++
++def run_conditions(rows, run, complete, abort):
++    """Run the three isolated conditions once; retain independent failures.
++
++    The shared Bootstrap owns and drains each child process. An external stop
++    sets its abort event before joining workers, so waiting does not outlive the
++    original deadline. A condition failure does not discard its siblings.
++    """
++    require([row['id'] for row in rows] == list(CONDITIONS), 'Exact three conditions required')
++    failures = {}
++    stop_handlers = {}
++    pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='replay-condition')
++    try:
++        futures = {pool.submit(run, row): row for row in rows}
++        for future in as_completed(futures):
++            row = futures[future]
++            try:
++                complete(row, future.result())
++            except Exception as error:
++                failures[row['id']] = {'type': type(error).__name__, 'message': str(error)}
++    except BaseException:
++        # Repeated signals cannot interrupt the owned worker drain. Restore the
++        # caller's handlers only after every child owner has returned.
++        if threading.current_thread() is threading.main_thread():
++            for name in ('SIGTERM', 'SIGINT', 'SIGALRM'):
++                number = getattr(signal, name, None)
++                if number is not None:
++                    stop_handlers[number] = signal.getsignal(number)
++                    signal.signal(number, signal.SIG_IGN)
++        abort()
++        raise
++    finally:
++        try:
++            pool.shutdown(wait=True, cancel_futures=True)
++        finally:
++            for number, handler in stop_handlers.items():
++                signal.signal(number, handler)
++    return {name: failures[name] for name in CONDITIONS if name in failures}
+@@ -202,0 +250 @@
++    require(config.get('executionSchedule') == SCHEDULE, 'Declared concurrent replay schedule required')
+@@ -250,0 +299 @@
++        'executionSchedule': SCHEDULE,
+@@ -252 +301 @@
+-    process, failure, counts, drain_errors = None, None, {}, []
++    process, failure, counts, drain_errors, condition_failures = None, None, {}, [], {}
+@@ -271 +320,3 @@
+-            for row, name in zip(amendment['commands'], names(config), strict=True):
++            command_names = dict(zip(['precheck', *CONDITIONS], names(config), strict=True))
++
++            def run(row):
+@@ -276 +327,2 @@
+-                code = owner.run(command(row['argv'], name, config, package, output, status), name=row['id'], timeout=remaining, check=False)
++                code = owner.run(command(row['argv'], command_names[row['id']], config, package, output, status),
++                                 name=row['id'], timeout=remaining, check=False)
+@@ -279,11 +331,19 @@
+-                if row['id'] == 'precheck':
+-                    checked = read(output / 'precheck.json')
+-                    require(checked.get('declaredRows') == 746 and checked.get('amendmentHash') == amendment['contentHash']
+-                        and checked.get('modelRequests') == 0, 'Full public-only precheck required before model requests')
+-                else:
+-                    counts[row['id']] = verify_condition(output / row['id'], declaration['checkpointIds'], amendment['predictorArtifactHash'],
+-                        condition=row['id'], declaration=declaration)
+-                    closed_spec = importlib.util.spec_from_file_location('closed_trained_replay', package / 'closed_replay.py')
+-                    closed = importlib.util.module_from_spec(closed_spec); closed_spec.loader.exec_module(closed)
+-                    closed.seal(output / row['id'])
+-                    counts[row['id']]['closedPayloadSha256'] = sha(output / row['id'] / 'closed-payload.json')
++                return code
++
++            run(amendment['commands'][0])
++            checked = read(output / 'precheck.json')
++            require(checked.get('declaredRows') == 746 and checked.get('amendmentHash') == amendment['contentHash']
++                and checked.get('modelRequests') == 0, 'Full public-only precheck required before model requests')
++
++            def complete(row, code):
++                count = verify_condition(output / row['id'], declaration['checkpointIds'], amendment['predictorArtifactHash'],
++                                         condition=row['id'], declaration=declaration)
++                closed_spec = importlib.util.spec_from_file_location('closed_trained_replay', package / 'closed_replay.py')
++                closed = importlib.util.module_from_spec(closed_spec); closed_spec.loader.exec_module(closed)
++                closed.seal(output / row['id'])
++                count['closedPayloadSha256'] = sha(output / row['id'] / 'closed-payload.json')
++                counts[row['id']] = count
++
++            condition_failures = run_conditions(amendment['commands'][1:], run, complete, owner.aborted.set)
++            if condition_failures:
++                failure = {'type': 'ReplayConditionFailure', 'message': 'One or more declared conditions did not close'}
+@@ -319,0 +380 @@
++        'executionSchedule': SCHEDULE, 'conditionFailures': condition_failures,
+@@ -335 +396 @@
+-        raise TimeoutError('Absolute trained replay phase deadline expired')
++        raise SupervisorStopped('Absolute trained replay phase deadline expired')
+--- a/run_same_host_trained_replay.py
++++ b/run_same_host_trained_replay.py
+@@ -17,0 +18,2 @@
++SCHEDULE = {'kind': 'parallel_conditions_v1', 'maximumConcurrentConditions': 3,
++            'rowOrder': 'original_sequential_within_condition', 'automaticRetry': False}
+@@ -48,0 +51,2 @@
++    require(receipt.get('executionSchedule') == config.get('executionSchedule') == SCHEDULE,
++            'Exported replay execution schedule differs')
+@@ -111,0 +116 @@
++    require(config.get('executionSchedule') == SCHEDULE, 'Declared concurrent replay schedule required')
+@@ -137 +142 @@
+-        'archiveSha256', 'helperSha256', 'guardHelperSha256')}
++        'archiveSha256', 'helperSha256', 'guardHelperSha256', 'executionSchedule')}

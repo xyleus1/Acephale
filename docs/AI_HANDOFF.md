@@ -1,5 +1,54 @@
 # Working on Acephale
 
+## E31 partial results retained; E33 stopped before GPU launch, 2026-11-18
+
+E31 completed strict export/evaluation for both saved seeds and the first
+seed17 serving qualification under the unchanged fixed three-baseline/three-
+configured protocol. Configured `split_k=1` passed all three requests; baseline
+passed none. Neither optimizer ran again. The first replay then hit its
+2,400-second condition timeout. Its verified export preserves neutral 745/746
+completed predictions, and selected-goal 314 completed, 377 failed and 55
+unwritten rows. These are completion counts, not accuracy. Failure categories
+are recorded in [STATE.md](STATE.md); no paired native actor trial ran.
+
+Offline scoring of the closed neutral condition gives development exact-invocation
+Top-1 24/52 and Top-3 27/52 among 136 checkpoints from six families. Raw binary
+log loss is 1.074203530495743 nats and Brier 0.09804148606291671 over 112 nonempty
+scored panels / 254 probabilities. Fit and calibration scores remain separate.
+These are trained-predictor development results, not held-out or native accuracy.
+
+E32 was predeclared at 06:34:52 UTC but registration failed before any task,
+provider lease or model dispatch because 14,400-second seed phases exceeded
+the supervisor's 10,800-second parser cap. Preserve its sealed inputs/declaration
+and failure. The scoped parser repair passed 14 offline cases, including the
+actual configuration consumer. It permits 14,400 only for the two initial seed phases;
+other phase bounds and the hard deadline remain unchanged.
+
+E33 was predeclared at 06:54:10 UTC before its six output directories existed:
+all 746 prefixes, all three conditions, both original saved seeds. Declaration
+SHA-256: `ff68ef76a5f5c7f0ce4d879ea083a96ca15232372979299671f53a0974039d48`.
+Its provenance retains E31 raw failures and E32's undispatched registration
+failure. No row adoption, best-attempt selection, optimizer rerun or native-claim
+reset. The prospective wrapper uses three concurrent conditions with 7,200-second
+bounds; within-condition order, models, prompts and gates remain fixed. Record
+scheduling because it changes replay batching, not native latency.
+
+E33 launch exited 1 at 07:26:55 UTC after three bounded initial admission attempts
+failed to converge. No provider launch request, GPU allocation, model execution
+or managed handoff followed. Its generic cleanup then failed the ownership check
+because the instance identifier was null. Preserve both failures and undispatched
+holds. Independent closure verified the exact provider name absent, local task
+disabled with no owner, and both main workflow jobs completed/cancelled. The
+reserved row and ledger bytes are unchanged; holds and the static controller
+remain retained. This is absence verification, not claimed GPU termination or
+cleanup of every historical resource. Provider-absence receipt SHA-256:
+`5c53a721ff1cec9e606e7c2e54f18992b83c8129a6f2264820005c5b6b280bca`.
+Launch-result SHA-256:
+`db6aea7b1b4ddd9f71fc0dfb3b2f56d34e5241b810e32235c0e3d66cd9aa9f7f`.
+The earlier sealer exit 1 and separate fresh CLI/registrar successes remain
+recorded in ENGINEERING_LOG. Investigate admission timing before any successor;
+the E33 declaration remains unexecuted and establishes no research gain.
+
 ## E31 managed handoff confirmed, 2026-11-18
 
 E31's launch process closed with exit code zero at 04:38:53 UTC after the managed

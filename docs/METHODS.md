@@ -267,6 +267,29 @@ missing/failed predictions and family-clustered paired intervals. These are not
 full-action cross entropy or true conditional entropy. A test partition alone
 does not prove untouched preregistered heldout evaluation.
 
+The E31 replay attempt stopped at its per-condition infrastructure bound after
+one closed condition and a partial second condition. Its original prediction
+failures and raw responses remain separate from any successor. E32 did not
+register or dispatch; its original sealed attempt remains retained. E33 is a
+prospectively designated full new attempt with the same 746 public prefixes,
+three conditions and two saved predictors; it repeats calls rather than merging
+rows or selecting the best attempt. It uses three concurrent condition containers
+and a 7,200-second bound per condition, with sequential rows inside each container.
+The frozen scientific source, weights, prompts and validation gates are unchanged.
+Scheduling is explicit because concurrent batching can change replay timing and
+served outputs. Replay timing is never reported as native live latency. A failed
+or incomplete successor remains reported; source tests establish no model gains.
+E33's launch stopped during initial admission before a provider launch request or
+model dispatch. Its unexecuted declaration is not a completed replay experiment.
+
+The retained E31 neutral-only scores are split using the original fit, calibration
+and development family assignment; combined scores do not establish generalization.
+Exact-invocation Top-k uses checkpoints with an eligible next read as denominator.
+Binary log loss uses natural logs, averages candidate losses within each nonempty
+scored checkpoint, then averages those checkpoints. Its probabilities condition
+on earlier emitted tokens; it is not full-action cross entropy or true entropy.
+Empty panels, failed rows, scored checkpoints and candidate counts remain separate.
+
 Live reporting separates native reward/pass1, constraints, two-trial consistency,
 logical actor calls, physical read/prefetch/revalidation calls, total latency,
 tail sample counts, model overhead and billed costs. Exact argument matches and

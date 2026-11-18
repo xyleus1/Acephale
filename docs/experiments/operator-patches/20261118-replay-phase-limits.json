@@ -1,0 +1,50 @@
+{
+  "kind": "acephale-replay-phase-limits-publication-v1",
+  "scientificSourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+  "patch": {
+    "path": "20261118-replay-phase-limits.patch",
+    "sha256": "b6131b286a3bbf5c40adeb2c1e4c7a3218f8ebca04b29baaa6ffe8c7413bf043",
+    "contextLines": 0,
+    "forwardApplicationMatchesCandidate": true,
+    "reverseApplicationMatchesOriginal": true
+  },
+  "files": [
+    {
+      "path": "successor_owner.py",
+      "beforeSha256": "a8f7f540c87bbd823762f4f255f34cd50802f61396b9162ab7015f54af8baa9c",
+      "afterSha256": "ffcfd58739f5529c879c2a60c8c57dec76bc940c73ff7718d339e346710f2f2a"
+    }
+  ],
+  "allowedMaximumSeconds": {
+    "seed17_01": 14400,
+    "seed29_01": 14400,
+    "otherDeclaredPhases": 10800
+  },
+  "offlineTests": {
+    "tests": 14,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junitSha256": "1f5aa5e4fa5c67b65831ee536b4086883237a6ec63d66bd5750a8269341c7809",
+    "testSourceSha256": "8d9e3e547c838dbcb538b0b02c4a13d26e89d9dacfd43ce7fd9be0f36c7ceb7b",
+    "actualOriginalConsumerRejectionReproduced": true,
+    "candidateActualCompleteConfigurationConsumerPassed": true,
+    "counterfactualRootMappedToRetainedE32": true,
+    "testsRerunForPublication": false
+  },
+  "independentReviewSha256": "e841c7451e8b2dd99f65e57c76efd01a84d3bd90c60efd8d4ad4e656906bd3f0",
+  "producerVerificationSha256": "cd5a1ba130e46d36f566ec5b9c32e5ce2441cb838404ea598a49743497bec6f0",
+  "e32Failure": {
+    "registrationExitCode": 1,
+    "taskCreated": false,
+    "providerLeaseCreated": false,
+    "modelDispatch": false,
+    "sealedInputsRetained": true,
+    "receiptSha256": "4e9e83b9c6bd206fe1aaf5aa89a86ba9ead9221d7ba0d87283bd7753322384cc"
+  },
+  "providerHardDeadlineAndExecutionClippingChanged": false,
+  "scientificAcceptanceChanged": false,
+  "modelWeightsOrPromptsChanged": false,
+  "benchmarkGainEstablished": false,
+  "scope": "Allow declared 14,400-second seed phases through configuration validation; preserve all other phase bounds, exact integer checks and hard-deadline clipping."
+}
