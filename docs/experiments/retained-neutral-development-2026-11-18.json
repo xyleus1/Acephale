@@ -1,0 +1,172 @@
+{
+  "kind": "acephale-retained-neutral-development-comparison-v1",
+  "sourceReportSha256": "527e5fa2854f6d7ba7c0ca923a16ba73874cbbadee72799a992c237a49d9904f",
+  "analysisSourceCommit": "c8a662c97c5daae33d4868d7e50494d8355fbc2c",
+  "comparisonKind": "neutral_binary_predictor_weights_development",
+  "model": {
+    "repository": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17"
+  },
+  "savedAdapterSeed": 17,
+  "developmentFamilies": 6,
+  "developmentCheckpoints": 136,
+  "conditions": {
+    "base_binary": {
+      "binary_log_loss_nats": 0.4547176759771367,
+      "brier": 0.13888550923067985,
+      "candidate_panel_any_hit_coverage": 0.5192307692307693,
+      "coverage_eligible_checkpoints": 52,
+      "declared_checkpoints": 136,
+      "eligible_read_checkpoints": 52,
+      "empty_panel_checkpoints": 24,
+      "exact_top1_any_hit_over_declared_eligible": 0.17307692307692307,
+      "exact_top3_any_hit_over_declared_eligible": 0.38461538461538464,
+      "no_read_checkpoints": 84,
+      "scored_candidates": 243,
+      "scored_checkpoints": 103,
+      "status_counts": {
+        "completed": 127,
+        "failed": 9
+      },
+      "unavailable_panel_checkpoints": 0
+    },
+    "lora_seed17": {
+      "binary_log_loss_nats": 1.074203530495743,
+      "brier": 0.09804148606291671,
+      "candidate_panel_any_hit_coverage": 0.5192307692307693,
+      "coverage_eligible_checkpoints": 52,
+      "declared_checkpoints": 136,
+      "eligible_read_checkpoints": 52,
+      "empty_panel_checkpoints": 24,
+      "exact_top1_any_hit_over_declared_eligible": 0.46153846153846156,
+      "exact_top3_any_hit_over_declared_eligible": 0.5192307692307693,
+      "no_read_checkpoints": 84,
+      "scored_candidates": 254,
+      "scored_checkpoints": 112,
+      "status_counts": {
+        "completed": 136
+      },
+      "unavailable_panel_checkpoints": 0
+    }
+  },
+  "pairedComparisons": [
+    {
+      "baseline": "base_binary",
+      "metrics": {
+        "binary_log_loss_nats_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            0.2737813323351342,
+            0.8801013437954636
+          ],
+          "estimate": 0.6173906517440809,
+          "families": 6,
+          "paired_trials": 103,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "brier_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.08081357720985588,
+            0.02154676207067337
+          ],
+          "estimate": -0.029607874071910425,
+          "families": 6,
+          "paired_trials": 103,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        }
+      },
+      "treatment": "lora_seed17"
+    }
+  ],
+  "replayTiming": {
+    "base_binary": {
+      "declaredCheckpoints": 136,
+      "liveLatencyMeasured": false,
+      "meanReplayWallMs": 628.2584900367651
+    },
+    "lora_seed17": {
+      "declaredCheckpoints": 136,
+      "liveLatencyMeasured": false,
+      "meanReplayWallMs": 891.3495583161806
+    }
+  },
+  "probabilitySemantics": "next_batch_invocation_membership",
+  "rawScoreSemantics": "autoregressive_binary_conditional",
+  "interpretation": "Checkpoint-mean binary log loss for membership anywhere in the next authoritative batch, not full-action cross-entropy or true conditional entropy",
+  "limitations": [
+    "At most three preselected candidates; panel coverage is reported separately",
+    "Partition labels alone do not verify fresh held-out tasks or a preregistered freeze",
+    "Missing predictions remain declared failures without invented probabilities",
+    "Paired loss differences use jointly scored checkpoints only",
+    "Task success, physical execution work and prediction hit rate are separate outcomes",
+    "Three-candidate top-3 hit rate measures panel coverage, not ranking improvement",
+    "Timing is prediction replay wall time, not live task latency",
+    "Failures before dispatch retain their denominator but have no fabricated compiled prompt"
+  ],
+  "allDevelopmentInputsVerified": true,
+  "allObservedComparableInputsMatched": true,
+  "goalConditioningEvaluated": false,
+  "nativeTaskAccuracyMeasured": false,
+  "heldoutClaim": false,
+  "liveLatencyMeasured": false,
+  "parentE31FailedAttemptRetained": true,
+  "exploratoryDiagnostic": {
+    "sourceSha256": "c8c34b5f1721303b9e19653cf0de60e62269e83f914aa51ff083aa94183db342",
+    "postHocDevelopmentOnly": true,
+    "rawUncalibratedScores": true,
+    "jointlyScoredCheckpoints": 103,
+    "jointlyScoredCandidates": 243,
+    "baseScoreOrientationCountsAtHalf": {
+      "false_negative": 19,
+      "false_positive": 15,
+      "score_tie": 1,
+      "true_negative": 207,
+      "true_positive": 1
+    },
+    "trainedScoreOrientationCountsAtHalf": {
+      "false_negative": 15,
+      "false_positive": 5,
+      "true_negative": 218,
+      "true_positive": 5
+    },
+    "trainedWrongLabelScoreMedians": {
+      "falseNegative": 0.9999977396748938,
+      "falsePositive": 0.99937366589013
+    },
+    "worsenedFamilyLossCount": 5,
+    "familyCount": 6,
+    "trainedTop10CandidateLossContributionShare": 0.6881683168714048,
+    "lossFloorHitCountBothConditions": 0,
+    "top1TransitionsAll52Eligible": {
+      "failed_or_empty_to_failed_or_empty": 1,
+      "failed_or_empty_to_hit": 7,
+      "hit_to_hit": 6,
+      "hit_to_miss": 3,
+      "miss_to_hit": 11,
+      "miss_to_miss": 24
+    },
+    "newRuntimeThreshold": false,
+    "recalibrationPerformed": false,
+    "primaryResultsAndFailureDenominatorsChanged": false,
+    "definitions": {
+      "binaryLoss": "Original C8 -log(max(1e-12, recorded score for the actual binary membership)); mean over panel candidates, then checkpoints.",
+      "falsePositiveFalseNegative": "Exploratory orientation of the recorded binary score around0.5; ties are separate. This is not a changed runtime admission threshold or a calibrated decision rule.",
+      "highConfidenceDiagnostic": "Continuous wrong-label score summaries and counts at the existing loss floor; no new high-confidence cutoff or recalibration.",
+      "lossConcentration": "Candidate losses weighted by inverse panel size before shares, preserving the original checkpoint-mean objective.",
+      "familyDifference": "Mean paired checkpoint difference within each original development family; each contributes one-sixth to the existing paired estimate.",
+      "Top1": "Highest recorded score using unchanged exact-identity tie break, evaluated over all52 eligible read checkpoints with missing predictions retained as misses."
+    },
+    "limitations": [
+      "Post hoc explanation on development data only; this diagnostic is not an additional hypothesis test or preregistered finding.",
+      "Recorded raw scores are autoregressive binary conditionals, not verified independent marginal probabilities.",
+      "Failed predictions retain their original denominators and receive no invented probability or loss. The jointly scored subset is reported separately.",
+      "No raw task, tool arguments, candidate identity, checkpoint text, or private annotation is emitted.",
+      "No model call, recalibration, changed threshold, new confidence interval, held-out access, or scientific configuration change."
+    ]
+  },
+  "sourceObservationSha256": "f77fe6e6985df83630f65bca54733cc9a7ef0f382da54e31a6bc79e8d74328a9",
+  "sourceAggregateDraftSha256": "98fabf3c570f9401363b15c023566397bf83f8a9d1c47c3121d855f42211887d"
+}

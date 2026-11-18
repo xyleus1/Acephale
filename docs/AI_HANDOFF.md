@@ -1,5 +1,30 @@
 # Working on Acephale
 
+## Retained development comparison and E34 preparation, 2026-11-18
+
+The closed compatible base-versus-seed17 neutral comparison is mixed: Top-1
+9/52 to 24/52, completed predictions 127/136 to 136/136, but paired binary loss
++0.617391 nats, 95% family-bootstrap interval [+0.273781, +0.880101]. The paired
+Brier interval includes zero. Preserve all nine base failures and the separate
+E31 partial goal-condition failure. See [STATE.md](STATE.md) and the
+[aggregate evidence](experiments/retained-neutral-development-2026-11-18.json).
+The exploratory score decomposition uses development data only; it does not fit
+calibration, change admission thresholds or establish held-out/native performance.
+
+E34's full replay declaration was created by the unchanged offline validator:
+SHA-256 `dc488b50ba4baeb950ee9aa9029e0c0b701ea3ef4df931f556e1d4377d74d0ec`.
+It retains all 746 prefixes, three conditions, both saved seeds and E31/E32/E33
+provenance. No scientific stage has run. The next A06 infrastructure canary failed
+its original 600-second prelaunch bound without a provider launch request or GPU.
+Its reservation is retained, and both controller jobs were observed closed.
+Actual physical qualifications remain mandatory. The separate operator source
+`e05634b07aa57993adba6aea9bd82db793df2424` and frozen experiment inputs are unchanged
+by this report update or its Windows test-fixture repair.
+
+The public Windows fixture now publishes each PID through a complete temporary
+file and atomic rename. Preserve the original broad-suite failure and its scope;
+a targeted regression pass does not turn that earlier suite into an all-green run.
+
 ## E31 partial results retained; E33 stopped before GPU launch, 2026-11-18
 
 E31 completed strict export/evaluation for both saved seeds and the first

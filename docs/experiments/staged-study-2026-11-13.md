@@ -1,7 +1,75 @@
-# Staged study, November 13, 2026
+# Staged study, November 13-18, 2026
 
 This record separates actual GPU observations from software validation. The
 experiment is a custom tau-compatible pilot, not an official full benchmark.
+
+## Retained development comparison, November 18
+
+Latest closed result: development ranking improved, binary log loss worsened.
+The [aggregate JSON](retained-neutral-development-2026-11-18.json) retains exact
+scores, denominators, intervals and source hashes. Earlier stages below remain
+historical observations, with their original failures intact.
+
+This comparison evaluates the neutral tool-candidate predictor, using the base
+Qwen/Qwen3.5-0.8B model and its saved seed17 LoRA adapter. It uses 136 development
+checkpoints from six families, with 52 checkpoints eligible for a next read. The
+unchanged C8 scorer verified the same declared checkpoints, candidate panels and
+comparable compiled inputs. These are retained prediction replays, not live agent
+tasks, held-out results, or a test of goal conditioning.
+
+| Metric | Base predictor | Seed17 LoRA |
+|---|---:|---:|
+| Completed prediction records | 127/136 | 136/136 |
+| Exact tool-and-arguments Top-1 hit | 9/52 (17.3%) | 24/52 (46.2%) |
+| Top-3 hit from returned predictions | 20/52 (38.5%) | 27/52 (51.9%) |
+| Candidate-panel hit coverage | 27/52 (51.9%) | 27/52 (51.9%) |
+| Binary log loss, nats, lower is better | 0.454718 | 1.074204 |
+| Brier score, lower is better | 0.138886 | 0.098041 |
+| Checkpoints / candidate probabilities scored | 103 / 243 | 112 / 254 |
+| Mean recorded replay wall time | 628.3 ms | 891.3 ms |
+
+Top-1 hit rate increased by 28.8 percentage points on this development set. The
+underlying candidate-panel coverage was unchanged; the Top-3 result also reflects
+whether predictions completed. Completion counts do not measure task success.
+Missing predictions remain failures, without invented probabilities.
+
+On the 103 jointly scored checkpoints, the equal-family mean paired log-loss
+difference was **+0.617391 nats**, with a 95% family-bootstrap interval of
+**[+0.273781, +0.880101]**. The paired Brier difference was **-0.029608**, with
+interval **[-0.080814, +0.021547]**. Both use six families, 2,000 bootstrap samples
+and seed 42. The Brier interval includes zero. The condition means above use their
+own scored denominators; they are not substitutes for the paired estimates.
+
+The loss is checkpoint-mean binary membership loss: whether each candidate's exact
+invocation occurs anywhere in the next authoritative batch. Decoder probabilities
+condition on preceding emitted tokens. This is neither full-action cross-entropy
+nor true conditional entropy. Replay wall time increased here, but historical
+replay measurements do not establish a controlled difference in live task latency.
+
+The result is mixed: improved development ranking and completion, worse binary log
+loss, and no demonstrated live speedup. It does not establish improvement over
+PASTE, Salesforce Speculate with Memory, or native tau-bench task accuracy. E31's
+partial goal-condition failure remains a separate reported attempt. Full paired
+goal-conditioned replay and native evaluation remain required.
+
+Exploratory diagnostic, raw uncalibrated development scores only: on the 103
+jointly scored checkpoints (243 candidates), score orientation around 0.5 yielded
+fewer false positives (15 to 5) and false negatives (19 to 15), but trained errors
+had much more extreme wrong-label scores: medians 0.99937367 and 0.99999774,
+respectively. The ten largest weighted candidate contributions accounted for
+68.8% of trained loss; loss worsened in five of six families, with no contributions
+clipped at the existing loss floor. Across all 52 eligible checkpoints, the net
+15 extra Top-1 hits comprise seven recovered missing/failed predictions plus
+11 ranking improvements minus three regressions. This post hoc decomposition
+does not change the primary results or failure denominators. No calibration was
+fit on development data and no runtime threshold was changed.
+
+Provenance: model revision `2fc06364715b967f1860aea9cf38778875588b17`;
+analysis source `c8a662c97c5daae33d4868d7e50494d8355fbc2c`; closed
+`prediction-report.json` SHA-256
+`527e5fa2854f6d7ba7c0ca923a16ba73874cbbadee72799a992c237a49d9904f`.
+
+Exploratory diagnostic SHA-256: `c8c34b5f1721303b9e19653cf0de60e62269e83f914aa51ff083aa94183db342`.
 
 ## Observed smoke result
 

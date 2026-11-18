@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-18: Publish the mixed retained comparison without tuning on development
+
+Report the compatible neutral-predictor comparison with its original development
+split, missing predictions, paired loss denominators and family intervals. Better
+Top-1 hit rate does not erase worse binary log loss or establish goal-conditioning,
+native success or live latency gains. Keep the raw-score error decomposition
+explicitly exploratory. It cannot supply new development-fitted calibration or
+a changed runtime threshold for the frozen experiment.
+
+Retain A06's prelaunch deadline failure and undispatched reservation separately
+from scientific outcomes. Offline controller/source checks cannot replace actual
+physical qualification. Fix the Windows PID-publication race only in its test
+fixture; leave the experiment operator, models, financial holds and gates intact.
+
 ## 2026-11-18: Retain E31 and predeclare a complete new replay attempt
 
 Keep E31's numerical success, partial replay, all semantic prediction failures

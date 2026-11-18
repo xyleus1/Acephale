@@ -1,5 +1,43 @@
 # Acephale engineering log
 
+## Retained comparison, canary failure and fixture repair, 2026-11-18
+
+The unchanged C8 analysis command closed successfully in 14.618 seconds with no
+stderr, model calls or new evaluation trials. Its complete compatible base replay
+and E31 neutral replay share the declared development checkpoints and observed
+compiled inputs. The [report](experiments/staged-study-2026-11-13.md#retained-development-comparison-november-18)
+keeps the improved ranking/completion and worse binary loss together, with the
+103-checkpoint paired intervals and all original failures. Report SHA-256:
+`527e5fa2854f6d7ba7c0ca923a16ba73874cbbadee72799a992c237a49d9904f`;
+independent observation:
+`f77fe6e6985df83630f65bca54733cc9a7ef0f382da54e31a6bc79e8d74328a9`.
+The separate raw-score diagnostic is post hoc and development-only; no calibration
+or threshold was changed. Its SHA-256 is
+`c8c34b5f1721303b9e19653cf0de60e62269e83f914aa51ff083aa94183db342`.
+
+A06's root preparation closed successfully, but subsequent canary dispatch failed
+the original 600-second setup/hard bound while performing its final admission
+checks. No provider launch request occurred and no instance identifier existed.
+Qualification remained false. Orderly cancellation retained the original financial
+reservation and recorded exact-name absence. Both controller workflow jobs were
+then observed completed/cancelled. These records do not establish physical recovery
+qualification, GPU termination or cleanup of every historical resource.
+Failure receipt SHA-256:
+`7834d06db3ffd151772683a940b8e949eda296c0200687718e1d807e8cc0aba9`;
+undispatched cancellation:
+`84b04899e1c0f1f3adbc92b0729f3b507f710872dc8a681ebd746d078362f001`;
+independent workflow closure:
+`b22bdf3a3f937de7e9fba7e859bda06ca4e5b3726a8d3f73832fda596b9f41bb`.
+
+The broad research pytest run on operator commit `e05634b` retained 648 passes,
+one failure and 23 skips. The failed Windows owner-crash test could read an empty
+PID file between file creation and writing, before its owner-crash assertion.
+The fixture now writes a sibling temporary file before renaming it into place.
+Only the fixture changes; production process ownership and drain code do not.
+The original failure remains recorded, and the frozen operator is untouched.
+The actual owner-crash regression passed against this public worktree: one test,
+2.45 seconds. No broad suite was repeated for this fixture/documentation update.
+
 ## E31 numerical qualification passed; replay stopped, 2026-11-18
 
 Strict export/evaluation completed for both retained predictors without optimizer

@@ -1,25 +1,40 @@
 # Current state
 
-Updated November 18, 2026 (UTC). Acephale has two trained predictor adapters and
-measured development prediction results. The complete goal-conditioned replay
-and paired native evaluation are unfinished; no held-out task-accuracy or live
-latency improvement has been established.
+Updated November 18, 2026 (UTC). The saved predictor improved exact Top-1 hits on
+the development replay, but binary log loss worsened. Complete goal-conditioned
+replay and paired native evaluation are unfinished; no held-out task-accuracy or
+live latency improvement has been established.
 
 ## Measured results
 
-E31's closed neutral replay uses the trained seed17 predictor without inferred
-goals. On the original six-family development partition:
+The unchanged scorer compared the compatible base neutral predictor with E31's
+saved seed17 LoRA predictor on 136 checkpoints from six development families.
+Both use the same candidate panels; 52 checkpoints have an eligible next read.
 
-- 136 checkpoints completed; 52 had an eligible next read.
-- Exact tool-and-full-argument Top-1: 24/52 (46.15%). Top-3: 27/52 (51.92%).
-- Raw binary log loss: 1.074203530495743 nats. Brier: 0.09804148606291671.
-- Losses average within each of 112 nonempty scored panels, then across panels;
-  these contain 254 candidate probabilities. The other 24 panels are empty.
+| Measurement | Base | Seed17 LoRA |
+| --- | ---: | ---: |
+| Completed predictions | 127/136 | 136/136 |
+| Exact tool-and-full-argument Top-1 | 9/52 (17.3%) | 24/52 (46.2%) |
+| Top-3 from returned predictions | 20/52 (38.5%) | 27/52 (51.9%) |
+| Candidate-panel coverage | 27/52 | 27/52 |
+| Binary log loss, nats | 0.454718 | 1.074204 |
+| Brier score | 0.138886 | 0.098041 |
+| Scored checkpoints / probabilities | 103 / 243 | 112 / 254 |
+| Mean recorded replay wall time | 628.3 ms | 891.3 ms |
 
-These are development prediction metrics, not held-out or native task accuracy.
-The probabilities are autoregressive binary conditionals, not a complete action
-distribution; the loss is not true entropy. Fit and calibration scores remain
-separate. No paired goal-conditioned result is available.
+Across 103 jointly scored checkpoints, the equal-family paired loss difference
+is +0.617391 nats, 95% family-bootstrap interval [+0.273781, +0.880101]. The paired
+Brier difference is -0.029608, interval [-0.080814, +0.021547], which includes zero.
+Both intervals use six families and 2,000 samples. Failures stay in the declared
+denominators; missing scores receive no invented probabilities. The loss measures
+autoregressive binary membership scores, not true entropy or full-action loss.
+
+These are development prediction results without inferred goals. Historical replay
+timing does not establish live latency. See the
+[report and exploratory error analysis](experiments/staged-study-2026-11-13.md#retained-development-comparison-november-18)
+and [aggregate evidence](experiments/retained-neutral-development-2026-11-18.json).
+Fit/calibration and held-out results remain separate; no paired goal-conditioned
+result is available.
 
 E31 retained all 746 neutral rows: 745 completed and one context-window failure.
 The selected-goal condition stopped at its 2,400-second bound with 314 completed,
@@ -53,26 +68,22 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
-E32 failed registration before dispatch. E33's separate full replay was
-predeclared at 06:54:10 UTC, but launch exited 1 at 07:26:55 UTC before a provider
-launch request, GPU allocation or model execution. Its three bounded initial
-admission attempts did not converge. A secondary cleanup check failed because
-no instance identifier existed. Independent closure subsequently confirmed the
-exact provider name absent, local task disabled with no owner, and both jobs in
-the main workflow completed/cancelled. Original errors and undispatched holds
-remain retained; this is absence verification, not a claim of GPU termination or
-cleanup of every historical resource. The static controller remains retained.
+E32 failed registration and E33 failed prelaunch admission; neither produced
+model results. Their original errors, declarations and holds remain retained.
+E34 has a fresh full-replay declaration, with unchanged saved predictors and
+scientific contracts, but no scientific execution result.
 
-The original sealer exit 1 and separate fresh CLI/registrar successes are recorded
-in [ENGINEERING_LOG.md](ENGINEERING_LOG.md). Neither E32 nor E33 produced prediction
-or native results. The reviewed parallel wrapper and phase parser repair are
-[documented separately](experiments/operator-patches/README.md); offline tests
-establish no model gains. Earlier operational evidence remains in the
-[prior state](https://github.com/xyleus1/Acephale/blob/c3c7509c21aadd2e8d866e88ab84c539604ce64a/docs/STATE.md).
+The subsequent A06 infrastructure canary reached its original 600-second bound
+before any provider launch request or GPU allocation. It failed qualification;
+independent records confirm the exact provider name absent and both controller
+jobs completed/cancelled. Its undispatched reservation remains retained. This is
+a prelaunch infrastructure failure, not a model result or verified GPU termination.
+Both actual controller qualifications are still required before research launch.
+Detailed evidence and original failures remain in [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Resolve the prelaunch admission timing failure before a new declared attempt.
+1. Complete both actual controller qualifications within their original bounds.
 2. Qualify both saved predictors, complete all 746 prefixes in all three replay
    conditions for each seed, and fit fresh calibration and audited reliability.
 3. Measure native prefetch opportunities and run the original 36 paired development
