@@ -1,0 +1,63 @@
+name: Serving image CPU preflight
+
+on:
+  push:
+    branches: [codex/serving-image-preflight-20261118]
+    paths:
+      - .github/workflows/serving-image-preflight.yml
+      - research/acephale/scripts/serving_image_preflight.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: serving-image-preflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image-interface:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Remove expendable preinstalled runner toolchains
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          for directory in /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL; do
+            if [ -d "$directory" ] && [ ! -L "$directory" ]; then
+              sudo rm -rf -- "$directory"
+            fi
+          done
+      - name: Inspect the immutable serving image on CPU
+        timeout-minutes: 24
+        run: >-
+          /usr/bin/python3 research/acephale/scripts/serving_image_preflight.py
+          --output preflight-results/metadata.json
+          --owner .serving-image-preflight-owner.json
+      - name: Drain only this probe's containers
+        if: always()
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          if [ -f .serving-image-preflight-owner.json ]; then
+            /usr/bin/python3 research/acephale/scripts/serving_image_preflight.py \
+              --cleanup --output preflight-results/cleanup.json \
+              --owner .serving-image-preflight-owner.json
+          fi
+      - name: Retain small metadata receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: serving-image-cpu-preflight
+          path: |
+            preflight-results/metadata.json
+            preflight-results/cleanup.json
+          retention-days: 3
+          if-no-files-found: error
+          include-hidden-files: false
+
