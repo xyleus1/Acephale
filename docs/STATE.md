@@ -1,11 +1,12 @@
 # Current state
 
-Current continuation, November 18, 2026 (UTC): E28 closed without a GPU after
-GitHub rejected its controller jobs. The user restored the GitHub budget, and
-a fresh controller pair has now started and returned valid acknowledgements.
-Count v5 is the prospective four-slot evaluation continuation after v4 exhaustion.
-Its activation and the next live study remain separate from source verification.
-No new trained-replay or paired native score follows from this preparation.
+Current operator candidate, November 18, 2026 (UTC): acknowledgement threshold is
+10 seconds with unchanged 20-second polling, and count v6 permits four additional
+slots after v5 exhaustion while retaining prior holds and limits. Fresh physical
+qualification of both independent controllers is required before research; local
+verification is not qualification or a completed benchmark. Actual study results
+and the latest closed execution attempt are recorded in the
+[research status](https://github.com/xyleus1/Acephale/blob/44f7404b90fa7ff263b6658f7af2be383a1d2a65/docs/STATE.md).
 
 Historical diagnostics:
 

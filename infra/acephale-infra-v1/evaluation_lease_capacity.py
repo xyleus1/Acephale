@@ -18,7 +18,7 @@ EXTENDED_LIMIT = 6
 
 
 def capacity_path(ledger_path: Path, *, version: int = 1) -> Path:
-    if type(version) is not int or version not in (1, 2, 3, 4, 5):
+    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6):
         raise ValueError("Unknown evaluation lease-count capacity version")
     return Path(str(ledger_path.resolve()) + f".evaluation-lease-capacity-v{version}.json")
 
@@ -120,6 +120,10 @@ def effective_limit(ledger: dict, funding: dict, *, canonical_digest=digest) -> 
                 or parent.get("contentHash") != canonical_digest({k: v for k, v in parent.items() if k != "contentHash"})
                 or not 0 <= consumed <= original):
             raise ValueError("Money-only funding must retain the original evaluation lease-count horizon")
+        successor = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=6)
+        if successor.exists():
+            value = validate_funding6_successor(read(successor), ledger, funding, canonical_digest=canonical_digest)
+            return original - consumed + 3 * RECOVERY_SLOTS, value
         extension = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=5)
         if extension.exists():
             value = validate_funding6_extension(read(extension), ledger, funding, canonical_digest=canonical_digest)
@@ -731,6 +735,146 @@ def record_funding6_extension(ledger_path: Path, reason: str, *, controller=None
             "financialCeilingsChanged": False, "gpuHoursChanged": False, "existingReservationsChanged": False,
             "existingDeadlinesChanged": False, "modelContractsChanged": False}
         value = validate_funding6_extension({**body, "contentHash": controller._budget_digest(body)}, ledger, funding,
+                                           canonical_digest=controller._budget_digest)
+        if (protected_files() != set(before) or any(sha(path) != expected for path, expected in before.items())
+                or journal_identity() != journal_before):
+            raise ValueError("Original authorities, sources or journal stat changed during count continuation")
+        controller.write_new(output, value)
+        return value
+
+
+SUCCESSOR_PROFILE = "acephale-evaluation-lease-capacity-v6"
+
+
+def validate_funding6_successor(value: dict, ledger: dict, funding: dict, *, canonical_digest=digest) -> dict:
+    """Validate v5's exhausted prefix before admitting four separately bound leases."""
+    parent_path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=5)
+    parent = read(parent_path)
+    prefix_count = parent["baselineCounts"]["leases"] + RECOVERY_SLOTS
+    historical = {**ledger, "leases": ledger["leases"][:prefix_count]}
+    validate_funding6_extension(parent, historical, funding, canonical_digest=canonical_digest)
+    body = {key: item for key, item in value.items() if key != "contentHash"}
+    inherited = ("fundingHash", "fundingSha256", "fundingPolicyHash", "planHash",
+                 "originalCountFundingHash", "originalCountFundingSha256",
+                 "gpuHourCapacityHash", "gpuHourCapacitySha256", "infrastructureBindingHash",
+                 "infrastructureLedgerPathHash", "studyLedgerPathHash")
+    if (type(value.get("version")) is not int or value["version"] != 6
+            or value.get("profile") != SUCCESSOR_PROFILE or value.get("contentHash") != canonical_digest(body)
+            or value.get("parentCapacityHash") != parent["contentHash"]
+            or value.get("parentCapacitySha256") != sha(parent_path)
+            or value.get("parentSourceCommit") != parent["sourceCommit"]
+            or any(value.get(key) != parent[key] for key in inherited)
+            or any(type(value.get(key)) is not int or value[key] != expected for key, expected in (
+                ("originalMaximumNewLeases", 16), ("effectiveOriginalMaximumNewLeases", 28),
+                ("consumedBeforeFunding6", parent["consumedBeforeFunding6"]),
+                ("baseMaximumNewLeases", parent["effectiveMaximumNewLeases"]),
+                ("effectiveMaximumNewLeases", parent["effectiveMaximumNewLeases"] + RECOVERY_SLOTS),
+                ("additionalLeases", RECOVERY_SLOTS)))
+            or value.get("evaluationOnly") is not True or value.get("optimizerPermitted") is not False
+            or value.get("leaseCountAuthorityChanged") is not True
+            or any(value.get(key) is not False for key in ("financialCeilingsChanged", "gpuHoursChanged",
+                   "existingReservationsChanged", "existingDeadlinesChanged", "modelContractsChanged"))
+            or value.get("authorizationSource") != "explicit_user_instruction"
+            or not isinstance(value.get("authorizationReason"), str) or not value["authorizationReason"].strip()
+            or len(value["authorizationReason"]) > 1024
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("originalSliceSha256", ""))):
+        raise ValueError("Count continuation requires the exact v5 parent and four unchanged-finance slots")
+    recorded = value.get("recordedAt")
+    if (type(recorded) not in (int, float) or not math.isfinite(recorded) or recorded < parent["recordedAt"]):
+        raise ValueError("Count continuation cannot predate its parent")
+    counts = value.get("baselineCounts")
+    if (type(counts) is not dict or set(counts) != {"leases", "overheads", "trainingWindows"}
+            or any(type(counts[key]) is not int or counts[key] < 0 for key in counts)
+            or counts["leases"] != prefix_count):
+        raise ValueError("Count continuation requires the exhausted v5 horizon")
+    for field, count in counts.items():
+        rows = ledger.get(field, [])
+        if type(rows) is not list or len(rows) < count:
+            raise ValueError("Count continuation cannot truncate retained history")
+        projection = _stable_history(rows[:count]) if field in {"leases", "overheads"} else rows[:count]
+        if canonical_digest(projection) != value.get("baselineHashes", {}).get(field):
+            raise ValueError("Count continuation cannot change retained holds, identities or deadlines")
+    if len(ledger.get("trainingWindows", [])) != counts["trainingWindows"]:
+        raise ValueError("Count continuation never permits optimizer windows")
+    states = value.get("baselineStates")
+    if type(states) is not list or len(states) != prefix_count:
+        raise ValueError("Count continuation requires every prior lifecycle identity")
+    for old, current in zip(states, ledger["leases"][:prefix_count], strict=True):
+        if (set(old) != {"id", "status", "instanceId"} or old["id"] != current["id"]
+                or old["status"] not in {"terminated", "launch_unknown"}
+                or (old["status"] == "launch_unknown" and old["instanceId"] is not None)
+                or (old["status"] == "terminated" and
+                    (current.get("status") != "terminated" or current.get("instanceId") != old["instanceId"]))):
+            raise ValueError("Count continuation requires closed work and retained unresolved ownership")
+    suffix = ledger["leases"][prefix_count:]
+    if len(suffix) > RECOVERY_SLOTS:
+        raise ValueError("Count continuation permits only four additional evaluation leases")
+    for row in suffix:
+        at = row.get("reservedAt")
+        if (row.get("evaluationLeaseCapacityHash") != value["contentHash"]
+                or row.get("infrastructureFundingSupplementHash") != value["fundingHash"]
+                or row.get("gpuHourCapacityAddendumHash") != value["gpuHourCapacityHash"]
+                or type(at) not in (int, float) or not math.isfinite(at) or at < recorded):
+            raise ValueError("New lease must bind the exact prospective continuation authority")
+    return value
+
+
+def record_funding6_successor(ledger_path: Path, reason: str, *, controller=None, source_probe=None) -> dict:
+    """Create v6 after v5 is exhausted, retaining every old reservation and authority."""
+    if controller is None:
+        import control as controller
+    source_probe = source_probe or controller.committed_source
+    ledger_path = ledger_path.resolve()
+    with controller.ledger_lock(ledger_path), controller.budget_digest_scope():
+        output = capacity_path(ledger_path, version=6)
+        if output.exists():
+            raise ValueError("Count continuation cannot be overwritten")
+        ledger = controller.checked_bound_ledger(ledger_path)
+        funding = controller.infrastructure_funding(ledger)
+        maximum, gpu = controller.effective_gpu_hour_capacity(ledger)
+        if funding is None or funding["version"] != 6 or gpu is None or gpu["version"] != 5 or maximum != 300:
+            raise ValueError("Exact existing funding6 and GPU5 authority required")
+        journal = Path(ledger["plan"]["studyLedgerPath"]).resolve()
+
+        def protected_files():
+            result = {ledger_path, Path(__file__).resolve(), Path(controller.__file__).resolve()}
+            result.update(path for path in journal.parent.glob(journal.name + ".*.json") if path.is_file())
+            result.update(path for path in ledger_path.parent.glob(ledger_path.name + ".*.json") if path.is_file())
+            return result
+
+        def journal_identity():
+            info = journal.stat()
+            return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+        before = {path: sha(path) for path in protected_files()}
+        journal_before = journal_identity()
+        parent_path = capacity_path(ledger_path, version=5)
+        parent = validate_funding6_extension(read(parent_path), ledger, funding,
+                                           canonical_digest=controller._budget_digest)
+        counts = {key: len(ledger.get(key, [])) for key in ("leases", "overheads", "trainingWindows")}
+        hashes = {key: controller._budget_digest(_stable_history(ledger.get(key, []))
+                   if key in {"leases", "overheads"} else ledger.get(key, [])) for key in counts}
+        inherited = ("fundingHash", "fundingSha256", "fundingPolicyHash", "planHash",
+                     "originalCountFundingHash", "originalCountFundingSha256",
+                     "gpuHourCapacityHash", "gpuHourCapacitySha256", "infrastructureBindingHash",
+                     "infrastructureLedgerPathHash", "studyLedgerPathHash")
+        body = {"version": 6, "profile": SUCCESSOR_PROFILE,
+            **{key: parent[key] for key in inherited},
+            "parentCapacityHash": parent["contentHash"], "parentCapacitySha256": before[parent_path],
+            "parentSourceCommit": parent["sourceCommit"], "originalSliceSha256": before[ledger_path],
+            "originalMaximumNewLeases": 16, "effectiveOriginalMaximumNewLeases": 28,
+            "consumedBeforeFunding6": parent["consumedBeforeFunding6"],
+            "baseMaximumNewLeases": parent["effectiveMaximumNewLeases"],
+            "effectiveMaximumNewLeases": parent["effectiveMaximumNewLeases"] + RECOVERY_SLOTS,
+            "additionalLeases": RECOVERY_SLOTS, "baselineCounts": counts, "baselineHashes": hashes,
+            "baselineStates": [{key: row.get(key) for key in ("id", "status", "instanceId")} for row in ledger["leases"]],
+            "recordedAt": controller.time.time(), "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+            "authorizationSource": "explicit_user_instruction", "authorizationReason": reason.strip(),
+            "evaluationOnly": True, "optimizerPermitted": False, "leaseCountAuthorityChanged": True,
+            "financialCeilingsChanged": False, "gpuHoursChanged": False, "existingReservationsChanged": False,
+            "existingDeadlinesChanged": False, "modelContractsChanged": False}
+        value = validate_funding6_successor({**body, "contentHash": controller._budget_digest(body)}, ledger, funding,
                                            canonical_digest=controller._budget_digest)
         if (protected_files() != set(before) or any(sha(path) != expected for path, expected in before.items())
                 or journal_identity() != journal_before):

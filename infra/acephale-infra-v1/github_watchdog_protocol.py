@@ -18,7 +18,8 @@ SOURCE_NAMES = ("lambda_gpu_watchdog.py", "github_watchdog_protocol.py", "github
 STATE_PATH = "control/owner-state.json"
 ACK_PATH = "control/ack.json"
 POLL_SECONDS = 20
-ACK_SECONDS = 40
+# Stay below the 20s poll: last_ack records CAS completion, so 40s often waits 60s.
+ACK_SECONDS = 10
 JOB_MINUTES = 350
 CONTROLLER_SECONDS = 330 * 60
 CLEANUP_SECONDS = 345 * 60

@@ -1,5 +1,23 @@
 # Working on Acephale
 
+## Controller acknowledgement cadence and count v6, 2026-11-18
+
+The controller changes only `ACK_SECONDS` from 40 to 10; `POLL_SECONDS` stays 20.
+The worker records `last_ack` after the compare-and-swap response, so the old
+threshold can defer an acknowledgement to the third poll, about 60 seconds.
+Signed identity, admission freshness, cleanup and hard-deadline checks remain
+unchanged. This source change requires fresh physical qualification of both
+independent controllers before research; older qualification does not cover it.
+
+After the four v5 slots are consumed and closed, the creation-only
+`evaluation_lease_capacity.record_funding6_successor` writer adds four count-v6
+slots. It validates the exact v5 parent and preserves every earlier reservation,
+hold, deadline, monetary/GPU-hour limit and optimizer restriction. The original
+funding5 horizon becomes 28, minus slots consumed before funding6. Physical
+canaries and research reservations both consume slots. Bind a fresh committed-
+source financial port and current authority; local tests do not activate them
+or establish benchmark completion.
+
 ## Count continuation v5, 2026-11-18
 
 After all four count-v4 slots have been consumed and closed, the creation-only

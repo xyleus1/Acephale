@@ -1,5 +1,31 @@
 # Acephale engineering log
 
+## Shorter acknowledgement cadence and finite count continuation, 2026-11-18
+
+The worker timestamps `last_ack` after its compare-and-swap response. With the
+40-second acknowledgement threshold and 20-second polling, delayed completion
+can produce 60-second acknowledgement intervals. The prospective change lowers
+only `ACK_SECONDS` to 10 and leaves polling, identity, expiry and admission rules
+unchanged. In ten deterministic paired scenarios, the old worker converged in
+9/10 and the candidate in 10/10; the tested steady acknowledgement intervals were
+60 versus 20 seconds. These synthetic clocks/transports do not establish the
+historical failure's exact cause, reliable live operation or API rate-limit behavior.
+More frequent acknowledgements increase GitHub write traffic.
+
+Two repository-native delayed-response regressions passed, covering 0.3 and 6
+seconds. Count-v6 verification passed three focused cases, including the real
+frozen execution reader accepting diagnostic/export/evaluate and rejecting
+training. It also checks parent binding, retained holds, four-slot exhaustion
+across canary/research purposes, concurrent-authority rejection and unchanged
+financial/GPU-hour limits. The initial broad count test run was interrupted;
+only the completed focused run is reported as passed.
+
+Count v6 preserves the entire v5 validator/writer implementation and adds an
+exact-parent four-slot successor. No old reservation or failed attempt is
+released. Both controllers still need fresh physical cleanup qualification
+under the new committed source before research. These offline checks establish
+neither fresh physical qualification nor a finished benchmark.
+
 ## 2026-11-18: Count-v5 continuation
 
 Added the v5 reader and creation-only writer to the existing lease-count module.

@@ -1,5 +1,21 @@
 # Acephale decisions
 
+## 2026-11-18: Refresh acknowledgements sooner without widening admission
+
+Set `ACK_SECONDS` to 10 while retaining 20-second polling and every existing
+identity, freshness, expiry and cleanup check. Acknowledgement timing starts
+after the compare-and-swap response; the previous 40-second threshold could
+therefore skip a poll and yield 60-second intervals. The deterministic timing
+grid supports this prospective change within its tested delays, not every live
+schedule. Accept the additional metadata-write traffic and require new physical
+qualification of both independent controllers before research allocation.
+
+Count capacity v6 adds four prospective slots only after v5 exhaustion. Preserve
+all parent files, consumed slots, unknown holds, monetary/GPU-hour limits and
+optimizer denial. Count physical canaries and research equally; do not refund
+undispatched reservations or reset the journal. A source commit, count sidecar,
+controller qualification and actual benchmark completion remain separate facts.
+
 ## 2026-11-18: Retain the exhausted count parent when continuing evaluation
 
 Use a new count-v5 sidecar for four prospective evaluation slots after v4 is

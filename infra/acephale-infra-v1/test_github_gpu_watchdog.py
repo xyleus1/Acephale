@@ -303,6 +303,30 @@ class GitHubWatchdogTests(unittest.TestCase):
             other.cycle()
         self.assertEqual(len(self.provider.calls), before)
 
+    def assert_acknowledges_each_poll(self, response_seconds):
+        original = self.store.cas
+        acknowledgments = []
+
+        def delayed_response(branch, path, record, prior_sha=None):
+            result = original(branch, path, record, prior_sha)
+            if path == p.ACK_PATH:
+                acknowledgments.append(record["payload"]["verifiedAt"])
+                self.now += response_seconds
+            return result
+
+        self.store.cas = delayed_response
+        for instant in (1100, 1120, 1140):
+            self.now = instant
+            self.w.cycle()
+        self.assertEqual(acknowledgments, [1100, 1120, 1140])
+        self.assertEqual([call[0] for call in self.provider.calls], ["GET", "GET", "GET"])
+
+    def test_unchanged_owner_ack_each_poll_after_delayed_cas(self):
+        self.assert_acknowledges_each_poll(0.3)
+
+    def test_unchanged_owner_ack_each_poll_after_slow_cas(self):
+        self.assert_acknowledges_each_poll(6)
+
     def test_rate_reset_blocks_github_only_until_real_reset(self):
         store = GitHubStore("owner/repo", "private", clock=lambda: self.now)
         error = urllib.error.HTTPError("https://api.github.com", 429, "limited",
