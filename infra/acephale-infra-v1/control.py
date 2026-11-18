@@ -612,12 +612,27 @@ class LambdaClient:
         return value["data"]
 
 
-def quote(client: Any, region: str, now: float | None = None, hardware: str = "a100-40gb-v1") -> dict[str, Any]:
+class CapacityUnavailable(ValueError):
+    """A well-formed provider observation reports no capacity in this region."""
+
+
+def quote(client: Any, region: str, now: float | None = None, hardware: str = "a100-40gb-v1",
+          *, require_capacity: bool = True) -> dict[str, Any]:
+    if type(require_capacity) is not bool:
+        raise ValueError("Capacity selection must be explicit")
     selected = hardware_profile(hardware)
     kinds = client.request("GET", "/instance-types")
+    if type(kinds) is not dict:
+        raise ValueError("Malformed provider instance-type metadata")
     item = kinds.get(selected["instanceType"])
-    if not item or region not in {value["name"] for value in item.get("regions_with_capacity_available", [])}:
+    if type(item) is not dict or not item:
         raise ValueError("Requested hardware profile region has no reported capacity")
+    if require_capacity:
+        regions = item.get("regions_with_capacity_available")
+        if type(regions) is not list or any(type(value) is not dict or not isinstance(value.get("name"), str) for value in regions):
+            raise ValueError("Requested hardware profile region has no reported capacity: malformed observation")
+        if region not in {value["name"] for value in regions}:
+            raise CapacityUnavailable("Requested hardware profile region has no reported capacity")
     instance_type = item["instance_type"]
     cents = finite_number(instance_type["price_cents_per_hour"], "price", 1)
     if instance_type["name"] != selected["instanceType"] or instance_type["specs"]["gpus"] != 1 or instance_type.get("architecture", "x86_64") != "x86_64":
@@ -629,10 +644,13 @@ def quote(client: Any, region: str, now: float | None = None, hardware: str = "a
     if not compatible:
         raise ValueError("Required GPU Base 24.04 image unavailable")
     image = max(compatible, key=lambda value: (value["created_time"], value["id"]))
-    return {"profile": PROFILE, "quotedAt": time.time() if now is None else now, "region": region,
+    result = {"profile": PROFILE, "quotedAt": time.time() if now is None else now, "region": region,
             "hardwareProfile": hardware, "hardwareProfileHash": digest(selected),
             "instanceType": instance_type["name"], "hourlyUsd": cents / 100,
             "imageId": image["id"], "imageFamily": image["family"], "specs": instance_type["specs"]}
+    if not require_capacity:
+        result["capacityChecked"] = False
+    return result
 
 
 @contextlib.contextmanager
@@ -2201,7 +2219,7 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
                   *, now: float | None = None, budget=study_budget, purpose: str = "research",
                   recovery_controller_id: str | None = None, access_amendment: Path | None = None,
                   routing_amendment: Path | None = None, unresolved_fence: Path | None = None,
-                  setup_seconds: int = 1800) -> dict[str, Any]:
+                  setup_seconds: int = 1800, require_capacity: bool = True) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
     current = time.time() if now is None else now
@@ -2222,7 +2240,7 @@ def prepare_lease(client: Any, ledger_path: Path, hours: float, extra_allowance_
         if access_amendment or route:
             verify_access_key(client, access)
         inspection = budget(plan, "inspect")
-        current_quote = quote(client, region, current, plan["hardwareProfile"])
+        current_quote = quote(client, region, current, plan["hardwareProfile"], require_capacity=require_capacity)
         if route:
             verify_quote(route, current_quote)
         validate_firewall(client, access["firewallRulesetId"], region)
@@ -2321,11 +2339,80 @@ def observe_termination(client: Any, ledger_path: Path, lease_id: str) -> dict:
         return lease.copy()
 
 
+def _wait_for_launch_capacity(client, ledger_path, lease, region, hardware, seconds,
+                              not_after, progress, cancelled, ledger_sha256):
+    """Wait only for a GET observation; the funded row and one POST stay unchanged."""
+    import copy
+
+    started = finite_number(time.time(), "capacity wait clock")
+    until = min(started + seconds, not_after, lease["setupDeadline"] - 15, lease["deadline"] - 15)
+    previous = started
+
+    def guard():
+        nonlocal previous
+        current = finite_number(time.time(), "capacity wait clock")
+        if current < previous:
+            raise ValueError("Capacity wait clock moved backwards")
+        previous = current
+        if cancelled is not None and cancelled():
+            raise InterruptedError("Provider capacity wait cancelled")
+        if current >= until:
+            raise TimeoutError("Original provider capacity wait window expired")
+        if sha256(ledger_path) != ledger_sha256:
+            raise ValueError("Funded ledger changed during capacity wait")
+        return current
+
+    def tick():
+        guard()
+        progress(copy.deepcopy(lease), not_after=until, ledger_sha256=ledger_sha256)
+        return guard()
+
+    class ObservedClient:
+        def request(self, method, path, payload=None):
+            if method != "GET" or path not in {"/instance-types", "/images"} or payload is not None:
+                raise ValueError("Capacity wait permits only quote observations")
+            tick()
+            try:
+                return client.request(method, path)
+            finally:
+                tick()
+
+    while True:
+        tick()
+        try:
+            observed = quote(ObservedClient(), region, hardware=hardware)
+        except CapacityUnavailable as error:
+            if type(error) is not CapacityUnavailable:
+                raise
+            observed = None
+        tick()
+        if observed is not None:
+            if (any(observed[key] != lease["quote"][key] for key in
+                    ("region", "instanceType", "imageId", "hardwareProfileHash"))
+                    or observed["hourlyUsd"] > lease["quote"]["hourlyUsd"]):
+                raise ValueError("Provider quote changed after reservation; no launch attempted")
+            return observed
+        next_poll = min(time.time() + 30, until)
+        while guard() < next_poll:
+            time.sleep(max(0, min(10, next_poll - time.time())))
+            tick()
+
+
 def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path,
            *, now: float | None = None, budget=study_budget, unresolved_fence: Path | None = None,
-           reconciliation_heartbeat=None, cancelled=None) -> dict[str, Any]:
+           reconciliation_heartbeat=None, cancelled=None, capacity_wait_seconds: int = 0,
+           capacity_progress=None, capacity_not_after: float | None = None) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
+    if type(capacity_wait_seconds) is not int or not 0 <= capacity_wait_seconds <= 900:
+        raise ValueError("Capacity wait must be an integer from zero to 900 seconds")
+    waiting = capacity_wait_seconds > 0
+    if waiting:
+        if not callable(capacity_progress) or not callable(reconciliation_heartbeat):
+            raise ValueError("Capacity wait requires a live owner and final reconciliation heartbeat")
+        capacity_not_after = finite_number(capacity_not_after, "capacity wait deadline")
+    elif capacity_progress is not None or capacity_not_after is not None:
+        raise ValueError("Capacity wait ports require an explicit positive wait allowance")
     current = time.time() if now is None else now
     with ledger_lock(ledger_path):
         ledger = checked_bound_ledger(ledger_path)
@@ -2356,7 +2443,7 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         region = route["region"] if route else plan["region"]
         if "accessAmendment" in lease or route:
             verify_access_key(client, access)
-        current_quote = quote(client, region, current, plan["hardwareProfile"])
+        current_quote = quote(client, region, current, plan["hardwareProfile"], require_capacity=not waiting)
         if route:
             verify_quote(route, current_quote)
         if any(current_quote[key] != lease["quote"][key] for key in ("region", "instanceType", "imageId", "hardwareProfileHash")) or current_quote["hourlyUsd"] > lease["quote"]["hourlyUsd"]:
@@ -2367,8 +2454,18 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
             if not callable(reconciliation_heartbeat) or (cancelled is not None and not callable(cancelled)):
                 raise ValueError("Explicit reconciliation heartbeat and cancellation ports required")
             import provider_launch_recovery as recovery
-            baseline = recovery.prepare(client, lease, cancelled)
+            baseline = None if waiting else recovery.prepare(client, lease, cancelled)
+        capacity_ledger_sha = sha256(ledger_path) if waiting else None
         budget(plan, "inspect")
+        if waiting:
+            # Funds are already reserved. Hold the same ledger lock throughout,
+            # retain fresh owner/source checks, then obtain final launch evidence.
+            current_quote = _wait_for_launch_capacity(client, ledger_path, lease, region,
+                plan["hardwareProfile"], capacity_wait_seconds, capacity_not_after,
+                capacity_progress, cancelled, capacity_ledger_sha)
+            if route:
+                verify_quote(route, current_quote)
+            baseline = recovery.prepare(client, lease, cancelled)
         pulse = None
         if recovery:
             def refresh(current_lease, phase, *, not_after):
@@ -2382,6 +2479,8 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
             expected_state = lambda row, stamp: watchdog_payload(ledger, row, stamp)
             pulse = recovery.pulse(refresh, lease, "before_post", enrollments, expected_state,
                                    digest, cancelled)
+        if waiting and time.time() >= capacity_not_after:
+            raise TimeoutError("Capacity admission cutoff expired during final launch checks")
         lease["watchdogs"] = enrollments
         if fence is not None:
             lease["unresolvedPredecessor"].update(launchFence=fence, launchReceiptSha256=sha256(unresolved_fence))
@@ -2393,6 +2492,8 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         try:
             if recovery:
                 recovery.heartbeat_fresh(pulse, lease, cancelled)
+            if waiting and time.time() >= capacity_not_after:
+                raise TimeoutError("Capacity admission cutoff expired before provider POST")
             result = client.request("POST", "/instance-operations/launch", payload)
             ids = result.get("instance_ids", []) if type(result) is dict else []
             if type(ids) is not list or len(ids) != 1 or not isinstance(ids[0], str) or not ids[0]:

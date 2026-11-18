@@ -1,5 +1,26 @@
 # Acephale decisions
 
+## 2026-11-18: Check availability at final dispatch
+
+Provider capacity is transient and a successful GET cannot reserve a machine.
+Requiring it before slow source, financial and controller preparation caused a
+funded attempt to fail at a later quote without launching a GPU. Explicit
+preparation metadata quotes now separate identity/price validation from physical
+availability. Defaults retain their earlier behavior.
+
+The optional final wait holds the existing funded reservation and ledger lock.
+It checks unchanged bytes, cancellation and original bounds while the adapter
+maintains the owner. No funds are reserved, released or increased in that wait.
+After readiness, normal current recovery inventory and final admission evidence
+are obtained. A later capacity race can still fail the single POST; that failure
+and the original financial hold remain recorded. This is an operational change,
+not a model, hardware or evaluation-method change.
+
+Cross-language provenance fixtures control the checker clock after Node loads,
+then test the actual 3,001 ms stale boundary. Interpreter startup time must not
+turn a valid provenance fixture into a stale one; production still uses its real
+clock and unchanged 3,000 ms limit.
+
 ## 2026-11-18: Allow a longer setup window for new evaluation leases
 
 Evaluation-only research may explicitly reserve up to 7,200 seconds for setup.

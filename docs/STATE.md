@@ -1,5 +1,18 @@
 # Current state
 
+Prospective source separates metadata/price quotes during preparation from a
+bounded capacity wait in final launch admission. The default remains immediate
+capacity-required quoting. The optional path preserves the original reservation,
+deadlines, controller protocol and single POST. No actual launch or new benchmark
+result is claimed by this change.
+
+Focused admission/default regressions and type checking passed. Node coverage
+includes 319 distinct passed tests and two database-dependent skips. The full
+research run had six timing-related failures; four passed unchanged in isolation,
+and two passed after a test-only clock correction with explicit stale rejection.
+The original failures and 23 skips remain reported; there was no final full-suite
+rerun after that correction.
+
 The completion-envelope source adds prospective funding7 ($2,150 total,
 $1,350 infrastructure: $1,000 compute and $350 associated charges), GPU6
 (350 reserved hours) and count8 (eight additional slots). The original count

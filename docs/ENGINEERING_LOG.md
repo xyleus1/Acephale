@@ -1,5 +1,42 @@
 # Acephale engineering log
 
+## Prospective final capacity admission, 2026-11-18
+
+Added explicit metadata quotes and an optional bounded wait within the existing
+launch transaction, after financial inspection. The quote marks metadata-only
+observations without asserting capacity. A distinct `CapacityUnavailable`
+exception identifies only a well-formed negative observation; malformed data,
+price/identity changes and authentication errors fail immediately.
+
+The wait preserves the funded row and lock, checks raw ledger bytes and original
+deadlines, and calls the owner-progress port around each provider GET and between
+sleep chunks of at most ten seconds. This does not promise a ten-second wall-clock
+heartbeat during blocking network operations. It polls at thirty-second intervals for at most
+900 seconds, clipped by the caller's absolute cutoff and setup/hard deadlines.
+Final recovery inventory, fence and heartbeat checks remain required, followed
+by one POST. No actual provider operation is part of this implementation.
+
+Validation used Node 22.23.4 and the existing Python environment, with heavy
+suites run sequentially. The focused capacity/control/recovery run passed
+93 tests and eight subtests. Four later deadline cases and one clock-jump case
+passed after the corresponding narrow hardening changes. All five qualified
+controller files remained byte-identical.
+
+`npm run check` passed. `npm test` passed 316 tests and skipped five; three frozen
+native financial-port integrations were then enabled with the exact retained
+runtime/analysis roots and all passed. The two remaining skips require real
+PostgreSQL/pgvector services.
+
+Research pytest initially reported 643 passed, six failed and 23 skipped. One
+native-loader timeout and three persistent-probe startup timeouts passed in an
+isolated run without changing their sources or deadlines. Two cross-language
+guard tests again rejected fixture heartbeats aged by Node startup. Following
+the existing serving-fixture approach, those two tests now control the child's
+clock and explicitly verify rejection at 3,001 ms; both passed. Production's
+3,000 ms freshness rule and the subprocess timeout are unchanged. Preserve the
+initial and isolated failures; the full research suite was not rerun after this
+test-only fix. These checks are not live latency or benchmark measurements.
+
 ## Prospective evaluation setup admission, 2026-11-18
 
 Added a 7,200-second upper bound for explicitly funded evaluation-only research

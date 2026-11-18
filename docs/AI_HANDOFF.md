@@ -1,5 +1,33 @@
 # Working on Acephale
 
+## Capacity admission, 2026-11-18
+
+Preparation may explicitly request `quote(..., require_capacity=False)` and
+`prepare_lease(..., require_capacity=False)`. These still validate the exact
+hardware, image and price, and mark the quote `capacityChecked: false`. Existing
+callers retain capacity-required behavior.
+
+For a new, funded lease, `launch` accepts an optional `capacity_wait_seconds`
+from 1 to 900, an absolute `capacity_not_after`, and a `capacity_progress` callback.
+The wait runs after normal inspection under the same ledger lock. The callback
+must keep the sole owner alive and check current source and financial inputs;
+it receives a copy of the original lease, `not_after`, and `ledger_sha256`.
+It runs before and after each quote GET and between sleep chunks of at most ten
+seconds. Blocking network and owner operations retain their own timeouts.
+Only an explicit, well-formed no-capacity observation is polled. Fresh recovery
+inventory and the existing final fence/heartbeat checks follow availability.
+There is still one launch POST and no retry of a rejected or uncertain POST.
+The 900-second maximum is an initial operational limit, not a scientific limit.
+
+No historical lease or deadline changes. This source does not provision a host
+or establish a benchmark result. The private adapter must implement and test the
+owner callback before opting in; the default wait is zero.
+
+Validation retains the initial research-suite timing failures. Four failed cases
+passed unchanged in isolation; two cross-language fixture cases passed after
+controlling their child clock and adding an explicit 3,001 ms stale check. Do not
+describe this as one all-green full-suite run or weaken runtime freshness limits.
+
 ## Finite completion envelope, 2026-11-18
 
 The current source supports append-only funding7, GPU6 and count8. Activate in

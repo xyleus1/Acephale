@@ -227,11 +227,21 @@ def test_actual_node_checker_accepts_python_guard_provenance(tmp_path, provider)
     _, provenance = (lambda_fixture if provider == "lambda" else fixture)(tmp_path)
     publish(tmp_path, 1, provenance, True, {"remoteInstanceId": provenance["expectedInstanceId"]})
     script = """const fs=require('node:fs'); const path=require('node:path');
+const assert=require('node:assert/strict');
 const {nativeSplitGuard}=require('./services/acephale-runtime/infra-split-guard.ts');
 const directory=process.argv[1];
 const config=JSON.parse(fs.readFileSync(path.join(directory,'configuration.json'),'utf8'));
 const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));
-console.log(JSON.stringify(nativeSplitGuard(config,manifest,path.join(directory,'configuration.json'))()));"""
+// Test provenance and the real freshness boundary independently of process startup.
+const originalNow=Date.now;
+let now=JSON.parse(fs.readFileSync(path.join(directory,'0000000000000001.json'),'utf8')).observedAtUnixMs;
+Date.now=()=>now;
+try {
+console.log(JSON.stringify(nativeSplitGuard(config,manifest,path.join(directory,'configuration.json'))()));
+now+=3001;
+assert.throws(()=>nativeSplitGuard(config,manifest,path.join(directory,'configuration.json'))(), /heartbeat is stale/);
+} finally { Date.now=originalNow; }
+"""
     result = subprocess.run([node, "--import", "tsx", "-e", script, str(tmp_path)],
                             cwd=Path(__file__).resolve().parents[3], capture_output=True, text=True, timeout=20,
                             env={**os.environ, "ACEPHALE_HOST_STATUS_FILE": str(tmp_path)})
