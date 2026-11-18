@@ -1,11 +1,16 @@
 # Current state
 
-Updated November 18, 2026 (UTC). E30's scheduled study handoff succeeded at
-02:09:11 UTC; the launch process exited zero. It continues from the saved seed
-17/29 predictor checkpoints without rerunning either optimizer. The reviewed
-read-only SSH connection-attempt correction is included; scientific models and
-numerical gates remain unchanged. Trained-replay and native benchmark scores
-remain pending. A successful handoff does not establish benchmark completion.
+Updated November 18, 2026 (UTC). E30 completed strict export and main evaluation
+for both saved predictor seeds, without rerunning either optimizer. Serving then
+stopped during the baseline resolver observation: the container could not find
+the `python` executable and returned OCI exit 127. Numerical acceptance, trained
+replay and native trials did not follow; native task accuracy remains unmeasured.
+The partial serving archive was verified with 190 files. Cleanup is confirmed:
+the provider instance is absent, local tasks are disabled and no owners remain.
+
+E30's scheduled handoff had succeeded at 02:09:11 UTC with launch exit code zero.
+The reviewed read-only SSH connection-attempt correction was included; scientific
+models, numerical gates and the saved seed 17/29 checkpoints remain unchanged.
 
 Previously, E29 stopped before evaluation: an SSH connection
 timed out during read-only verification of uploaded inputs. Nineteen uploads had

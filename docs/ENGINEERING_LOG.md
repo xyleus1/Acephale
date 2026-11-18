@@ -1,5 +1,19 @@
 # Acephale engineering log
 
+## E30 export completed, serving interpreter missing, 2026-11-18
+
+Strict export and main evaluation completed for saved seeds 17 and 29 without
+optimizer execution. The baseline-before resolver observation then failed
+because `python` was not available on the serving container PATH (OCI exit 127). This occurred
+before numerical acceptance; trained-replay and native task scores remain
+unmeasured. The partial serving archive was verified with 190 files. Successful
+export/main artifacts and the failed serving observation remain retained.
+
+Independent provider absence and local task drain are verified: tasks disabled,
+zero owners, original deadlines and unresolved holds unchanged. The joint cleanup
+receipt has SHA-256
+`a11e32b90d59c5d59fd9d72c63143dff96aadd3f1f843e453bd450335b3c2f34`.
+
 ## E30 scheduled handoff confirmed, 2026-11-18
 
 E30's scheduled study handoff succeeded at 02:09:11 UTC; the launch process

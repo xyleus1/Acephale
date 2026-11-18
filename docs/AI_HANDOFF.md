@@ -1,5 +1,20 @@
 # Working on Acephale
 
+## E30 serving interpreter failure, 2026-11-18
+
+Strict export and main evaluation completed for both saved predictor seeds;
+neither optimizer was rerun. Serving stopped at the baseline resolver observation
+because `python` was not available on the serving container PATH (OCI exit 127), before
+numerical acceptance. The partial serving archive was verified with 190 files.
+Trained-replay and native task scores remain unmeasured. Preserve the successful
+export/main artifacts and the failed serving attempt; this is not a failed
+numerical gate. Models and numerical tolerances stay fixed.
+
+Joint cleanup is verified: independent provider absence, disabled local tasks and
+zero remaining owners. Existing deadlines and unresolved holds are unchanged.
+Closure receipt SHA-256:
+`a11e32b90d59c5d59fd9d72c63143dff96aadd3f1f843e453bd450335b3c2f34`.
+
 ## E30 scheduled handoff confirmed, 2026-11-18
 
 E30's actual scheduled study handoff succeeded at 02:09:11 UTC with launch exit
