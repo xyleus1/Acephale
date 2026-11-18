@@ -309,7 +309,7 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(lease["setupDeadline"], lease["deadline"])
 
     def test_invalid_setup_allowance_cannot_create_reservation(self):
-        for seconds in (False, 0, 119, 3601, 1800.0, float("nan"), "3600"):
+        for seconds in (False, 0, 119, 3601, 7200, 1800.0, float("nan"), "3600"):
             before = control.read_json(self.ledger)
             reserved = self.budget_calls.count("reserve")
             with self.subTest(seconds=seconds), self.assertRaises(ValueError):

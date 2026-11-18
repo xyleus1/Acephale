@@ -1,5 +1,14 @@
 # Working on Acephale
 
+## Prospective evaluation setup allowance, 2026-11-18
+
+The normal lease constructor now accepts an explicit setup allowance up to 7,200
+seconds only for research with verified evaluation-only funding. Existing leases,
+the 1,800-second default, other purposes' 3,600-second limit and all monetary,
+GPU-hour, count and hard-deadline checks are unchanged. Bind the new committed
+operator and native financial port before using it. Keep the independently
+qualified controller files unchanged. This patch is not a benchmark result.
+
 ## Prospective count v7, 2026-11-18
 
 `evaluation_lease_capacity.record_funding6_followup` creates a count-v7 sidecar

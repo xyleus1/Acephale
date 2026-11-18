@@ -2065,8 +2065,8 @@ def reserve_overhead(path: Path, reservation_id: str, maximum_usd: float, *,
 def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: float, extra_allowance_usd: float,
                   now: float, *, unresolved_fence: dict | None = None, setup_seconds: int = 1800,
                   purpose: str = "research", recovery_controller_id: str | None = None) -> dict[str, Any]:
-    if type(setup_seconds) is not int or not 120 <= setup_seconds <= 3600:
-        raise ValueError("Setup allowance must be an integer from 120 to 3600 seconds")
+    if type(setup_seconds) is not int or not 120 <= setup_seconds <= 7200:
+        raise ValueError("Setup allowance must be an integer from 120 to 7200 seconds")
     hours = finite_number(hours, "session hours", 0.01)
     allowance = finite_number(extra_allowance_usd, "tax/storage/export allowance", 0)
     rate = finite_number(current_quote["hourlyUsd"], "hourly quote", 0.01)
@@ -2098,6 +2098,9 @@ def reserve_lease(ledger: dict[str, Any], current_quote: dict[str, Any], hours: 
     charges = sum(row["reservedUsd"] - row.get("reservedComputeUsd", 0) for row in leases + ledger.get("overheads", []))
     infrastructure_cap, compute_cap, associated_cap = infrastructure_caps(ledger)
     funding = infrastructure_funding(ledger)
+    if setup_seconds > 3600 and (purpose != "research" or not funding
+                                 or funding["policy"].get("evaluationOnly") is not True):
+        raise ValueError("Setup above 3600 seconds requires evaluation-only research funding")
     if funding and now < _budget_authorized_at(funding):
         raise ValueError("Provider reservation cannot predate its financial authority")
     lease_capacity = None
@@ -2597,7 +2600,7 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--hours", type=float, required=True)
     prepare.add_argument("--extra-allowance-usd", type=float, required=True)
     prepare.add_argument("--setup-seconds", type=int, default=1800,
-                         help="Prospective setup allowance, 120-3600 seconds, bounded by the funded lease")
+                         help="Prospective setup allowance, 120-3600 seconds (7200 for evaluation-only research), bounded by the funded lease")
     prepare.add_argument("--purpose", choices=["research", "cleanup_canary"], default="research")
     prepare.add_argument("--recovery-controller-id")
     prepare.add_argument("--access-amendment", type=Path)

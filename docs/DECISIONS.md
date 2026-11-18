@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-18: Allow a longer setup window for new evaluation leases
+
+Evaluation-only research may explicitly reserve up to 7,200 seconds for setup.
+The normal funding reader must verify evaluation-only authority; other purposes
+retain the 3,600-second maximum and the default remains 1,800 seconds. Setup is
+still clipped to the funded lease deadline. This changes no existing reservation,
+hard stop, financial capacity, training permission, or watchdog protocol.
+
+E35 spent about 17 minutes between reservation and foundation dispatch, followed
+by about 11 minutes of foundation and image work. Its next stage could not fit
+the original diagnostic allowance. Preserve that failed attempt and its original
+deadlines. Reserve a realistic setup window before the next lease is created;
+do not shorten numerical checks to make a late stage fit.
+
 ## 2026-11-18: Add one finite count successor after v6 exhaustion
 
 Count v7 adds four evaluation-only slots using the same append-only writer and

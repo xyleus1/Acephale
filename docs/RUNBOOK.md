@@ -1,5 +1,14 @@
 # Acephale research runbook
 
+## Reserve enough setup time before evaluation
+
+For a new evaluation-only research lease, `prepare-lease --setup-seconds 7200`
+uses the normal validated funding and reservation path. Other purposes permit
+at most 3,600 seconds; the default is 1,800. Count controller startup, host
+preparation, image work and diagnostic stages from reservation time. The setup
+deadline remains clipped to the funded hard deadline. Never alter the deadline
+of an existing lease to recover an expired setup window.
+
 ## Continuing after count-v6 exhaustion
 
 The prospective `evaluation_lease_capacity.record_funding6_followup` writer adds

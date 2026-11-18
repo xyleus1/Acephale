@@ -1,5 +1,16 @@
 # Current state
 
+E35 reached the GPU and completed foundation and image preparation. Diagnostic
+execution stopped before dispatch because too little of the original one-hour
+setup window remained. It produced no new model or native benchmark scores.
+Automatic provider termination and an independent absence check succeeded;
+the managed task closed with failure. Retain the attempt and all prior charges.
+
+The prospective operator below allows an explicit setup window up to two hours
+for new evaluation-only research leases. Focused tests passed; existing lease
+deadlines and scientific limits remain unchanged. The next run must also account
+for parent phase deadlines before admitting child work.
+
 Prospective operator source, November 18, 2026 (UTC): count v7 adds four finite
 evaluation slots only after the count-v6 horizon has been consumed and closed.
 The original funding5 horizon becomes 32, minus slots consumed before funding6.

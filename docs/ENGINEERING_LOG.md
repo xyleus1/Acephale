@@ -1,5 +1,23 @@
 # Acephale engineering log
 
+## Prospective evaluation setup admission, 2026-11-18
+
+Added a 7,200-second upper bound for explicitly funded evaluation-only research
+setup. The existing funding validator determines eligibility; training and
+cleanup-canary requests retain their old limit. Setup still cannot exceed the
+new lease's funded deadline, and no existing row is edited.
+
+Tests cover the normal funding chain, exact preservation of prior artifacts and
+financial bounds, short-lease clipping, invalid types and bounds, canary denial,
+active-owner rejection, and the session limit. The initial check passed 38
+existing control tests and seven subtests; ten new cases encountered the local
+pytest temporary-directory permission error before test execution. The rerun
+uses a fresh explicit temporary directory and retains that initial failure.
+The ten new cases then passed in 172.55 seconds. Two subsequent focused cases
+passed in 3.81 seconds with eight subtests, covering the added 7,200-second
+unfunded rejection and actual version-one training funding. All eleven new
+evaluation-setup tests have passed; no provider or real journal was used.
+
 ## Prospective count-v7 reader and writer, 2026-11-18
 
 Added one finite four-slot successor to count v6. Existing v1-v6 validation and
