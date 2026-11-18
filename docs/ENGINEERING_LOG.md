@@ -1,5 +1,15 @@
 # Acephale engineering log
 
+## E30 scheduled handoff confirmed, 2026-11-18
+
+E30's scheduled study handoff succeeded at 02:09:11 UTC; the launch process
+exited zero. Its retained handoff receipt has SHA-256
+`bbe79aea5863b6fb8459753c1c945b63712a3bf468a5521806edc4b6ae1dd7dd`.
+This attempt includes the reviewed read-only SSH connection-attempt and
+exception-preservation patch. Scientific models, numerical gates and the saved
+seed 17/29 checkpoints remain unchanged; neither optimizer is rerun. No trained
+replay or native benchmark score is established by this handoff observation.
+
 ## Input verification transport failure, 2026-11-18
 
 E29 stopped before evaluation dispatch. Nineteen uploads succeeded, then an SSH
@@ -8,8 +18,8 @@ log exists. The subsequent missing-export exception obscured the earlier
 transport failure; it is not a numerical-admission result. The retained diagnosis
 has SHA-256
 `3af9f744ca1d7352cf2e6012257ae203c3040fd2f231aca857c3a68812614f5e`.
-Trained-replay and native benchmark scores remain pending. A bounded retry for
-the read-only transport check is being prepared in isolation, retaining the
+Trained-replay and native benchmark scores remained pending. A bounded retry for
+the read-only transport check was prepared in isolation, retaining the
 original failure and unchanged frozen models, scientific code and gates.
 Cleanup subsequently closed: independent provider observation confirmed absence,
 and local tasks were disabled with zero remaining owners. The joint closure

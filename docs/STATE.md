@@ -1,6 +1,13 @@
 # Current state
 
-Updated November 18, 2026 (UTC). E29 stopped before evaluation: an SSH connection
+Updated November 18, 2026 (UTC). E30's scheduled study handoff succeeded at
+02:09:11 UTC; the launch process exited zero. It continues from the saved seed
+17/29 predictor checkpoints without rerunning either optimizer. The reviewed
+read-only SSH connection-attempt correction is included; scientific models and
+numerical gates remain unchanged. Trained-replay and native benchmark scores
+remain pending. A successful handoff does not establish benchmark completion.
+
+Previously, E29 stopped before evaluation: an SSH connection
 timed out during read-only verification of uploaded inputs. Nineteen uploads had
 succeeded, but no evaluation log was created. A subsequent missing-export error
 was secondary to the transport failure. Trained-replay and native benchmark
@@ -10,9 +17,9 @@ with no remaining owners.
 
 E29's scheduled handoff had succeeded at 01:01:08 UTC with launch exit code zero,
 and foundation setup subsequently completed. The saved seed 17/29 predictor
-checkpoints remain intact; neither completed optimizer is rerun. A bounded retry
-for read-only transport verification is being prepared without changing frozen
-models, scientific code or numerical gates.
+checkpoints remain intact; neither completed optimizer is rerun. Its transport
+failure and verified cleanup remain retained alongside the separate
+[connection-attempt correction](experiments/operator-patches/README.md#read-only-ssh-connection-attempts-2026-11-18).
 
 On November 17, E28's controller jobs were rejected by GitHub
 Actions before any job step or GPU dispatch. Both checks reported failed account

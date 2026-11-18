@@ -1,5 +1,17 @@
 # Working on Acephale
 
+## E30 scheduled handoff confirmed, 2026-11-18
+
+E30's actual scheduled study handoff succeeded at 02:09:11 UTC with launch exit
+code zero. Handoff receipt SHA-256:
+`bbe79aea5863b6fb8459753c1c945b63712a3bf468a5521806edc4b6ae1dd7dd`.
+Continue from the saved seed 17/29 predictors; neither completed optimizer is
+rerun. The reviewed transport correction adds connection attempts only to the
+read-only input-verification SSH invocation and preserves the primary exception.
+Scientific models and numerical gates remain fixed. Trained-replay and native
+scores are pending; record outcomes only from actual closed scientific artifacts.
+Preserve E29's failed attempt and verified cleanup below.
+
 ## Input verification transport failure, 2026-11-18
 
 E29 stopped before evaluation when an SSH connection timed out during read-only
@@ -9,8 +21,8 @@ the transport diagnosis. Retained observation SHA-256:
 `3af9f744ca1d7352cf2e6012257ae203c3040fd2f231aca857c3a68812614f5e`.
 There is no host evaluation result or numerical-admission failure from this
 attempt. Trained-replay and native scores remain pending. Preserve the saved
-predictors and the prior handoff/setup evidence. A bounded retry for the read-only
-transport check is being prepared separately; frozen models and gates stay fixed.
+predictors and the prior handoff/setup evidence. The separate read-only transport
+correction preserves frozen models and gates.
 Managed cleanup and independent provider absence are verified; local tasks are
 disabled with no remaining owners. Joint closure receipt SHA-256:
 `afd7bfb7f4c95c72262958fb06850ed703fbcb552076f81ac3fa0e8c17564816`.
