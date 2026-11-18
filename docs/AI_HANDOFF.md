@@ -1,5 +1,18 @@
 # Working on Acephale
 
+## Deterministic serving-guard fixture, 2026-11-18
+
+The serving compatibility test now controls `Date.now()` after loading its
+synthetic heartbeat. It checks the valid receipt at that timestamp, then advances
+3,001 milliseconds and requires stale-heartbeat rejection. The original clock is
+restored in `finally`; production freshness checks and the 30-second subprocess
+timeout are unchanged. The focused case passed.
+
+The separate setup-operator broad research run retained 645 passes, four failures
+and 23 skips. Follow-up checks are recorded in [ENGINEERING_LOG.md](ENGINEERING_LOG.md);
+they do not replace that result. A local loader diagnostic completed normally, but
+did not explain earlier 30- and 90-second timeouts. No benchmark score changes.
+
 ## Retained development comparison and E34 preparation, 2026-11-18
 
 The closed compatible base-versus-seed17 neutral comparison is mixed: Top-1

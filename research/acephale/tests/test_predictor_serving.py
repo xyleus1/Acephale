@@ -171,12 +171,20 @@ def test_qualified_guard_admits_only_declared_base_and_adapter_pair_with_current
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {nativeSplitGuard,predictionSplitGuard}=require('./services/acephale-runtime/infra-split-guard.ts');
 const dir=process.argv[1], read=name=>JSON.parse(fs.readFileSync(path.join(dir,name+'.json')));
+// This tests receipt compatibility and freshness, not Node startup latency.
+const originalNow=Date.now;
+let now=read('0000000000000001').observedAtUnixMs;
+Date.now=()=>now;
+try {
 assert(nativeSplitGuard(read('configuration'),read('manifest'),path.join(dir,'configuration.json'))());
 assert.throws(()=>nativeSplitGuard({...read('configuration'),splitGuardPath:undefined},read('manifest'),path.join(dir,'configuration.json')));
 const profile={trainedPredictor:read('manifest').predictor.trainedPredictor}, configPath=path.join(dir,'configuration.json');
 assert(predictionSplitGuard(profile,read('configuration').predictorBaseUrl,configPath)());
 assert.throws(()=>predictionSplitGuard(profile,read('configuration').predictorBaseUrl));
 assert.throws(()=>predictionSplitGuard(profile,'http://127.0.0.1:19999',configPath));
+now+=3001;
+assert.throws(()=>nativeSplitGuard(read('configuration'),read('manifest'),configPath)(), /heartbeat is stale/);
+} finally { Date.now=originalNow; }
 """
     result = subprocess.run(["node", "--import", "tsx", "-e", script, str(tmp_path)], cwd=ROOT, text=True,
                             capture_output=True, timeout=30, check=False, env={**os.environ, "ACEPHALE_HOST_STATUS_FILE": str(tmp_path)})

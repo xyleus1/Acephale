@@ -1,5 +1,35 @@
 # Acephale engineering log
 
+## Serving fixture clock and retained validation failures, 2026-11-18
+
+The serving-guard compatibility fixture previously timestamped its synthetic
+heartbeat before starting Node. Module startup could consume the three-second
+freshness allowance before the assertions ran. The fixture now controls
+`Date.now()` inside its child process, tests the current receipt, advances by
+3,001 milliseconds and asserts rejection as stale. A `finally` block restores
+the clock. Runtime code, the freshness limit and model qualification are unchanged.
+
+The broad research suite on setup-operator source `ff641276` recorded 645 passes,
+four failures and 23 skips. A pinned-Node rerun of the four failures recorded two
+passes and two failures. The subsequent two-case fixture check recorded one pass
+and one failure: the corrected serving-clock case passed in 29.834 seconds; the
+auxiliary development configuration loader still exceeded a temporary 90-second
+test timeout. That timeout edit was reverted. The original 30-second failures
+and all follow-up results remain retained. No broad suite was repeated for this
+test-only change. Raw JUnit SHA-256 values, in that order:
+
+- `7f8492493c668c497f45d792a69972c683aa29855da3c2534f1fcdfb9fe9735f`
+- `1c610577b7fc7b0ad804b14e25d2e6f0b7725992d16131c080a730db9f389e43`
+- `bb0f8b291e23beadb53607a0c2a77d1542088ee0228281003ecdd9ea5216b412`
+
+One instrumented diagnostic then loaded the same failed configuration using
+Node 22.23.4 with network requests denied. `require` took 18.430 seconds;
+configuration validation resolved 1.607 seconds later and the process exited
+normally without stderr. The transient `MessagePort` handle was absent after
+validation. This did not reproduce the timeout or establish its cause, and is
+not a model or benchmark latency measurement. Diagnostic receipt SHA-256:
+`0b05146a48dcd6a153c7cbef1522cea9fc9f24cf9fc31dc0e001313e1ad9bd0c`.
+
 ## Retained comparison, canary failure and fixture repair, 2026-11-18
 
 The unchanged C8 analysis command closed successfully in 14.618 seconds with no

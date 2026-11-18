@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-18: Test heartbeat freshness with a controlled fixture clock
+
+Keep the production three-second freshness rule. The compatibility fixture uses
+a controlled clock so subprocess startup does not determine whether its synthetic
+receipt is stale, and explicitly checks rejection at 3,001 milliseconds. Restore
+the clock after the assertions. Retain failed broad-suite results separately from
+the focused pass. Do not retain a larger subprocess timeout as a fix when the
+loader timeout remains unexplained; the temporary change was reverted.
+
 ## 2026-11-18: Publish the mixed retained comparison without tuning on development
 
 Report the compatible neutral-predictor comparison with its original development
