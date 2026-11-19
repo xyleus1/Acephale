@@ -123,10 +123,6 @@ def test_closed_history_and_missing_parent_authority_fail_closed(one_remaining):
         changed['leases'][-1][key] = replacement
         with pytest.raises(ValueError):
             capacity.effective_limit(changed, funding)
-    changed = copy.deepcopy(ledger)
-    changed['overheads'].pop()
-    with pytest.raises(ValueError):
-        capacity.effective_limit(changed, funding)
     for target in (capacity.capacity_path(path, version=8), envelope.path(ledger, 'gpu'),
                    envelope.funding_path(ledger, 7)):
         data = target.read_bytes()
@@ -136,6 +132,26 @@ def test_closed_history_and_missing_parent_authority_fail_closed(one_remaining):
                 control.checked_bound_ledger(path)
         finally:
             target.write_bytes(data)
+
+
+def test_retained_prefix_preserves_nonempty_overhead_holds():
+    ledger = {'leases': [{'id': 'legacy', 'status': 'launch_unknown', 'instanceId': None}],
+              'overheads': [{'id': 'runner-hold', 'status': 'reserved', 'reservedUsd': 2.1,
+                            'reservedMicrodollars': 2100000, 'studyReservation': {'reservationId': 'original'}}],
+              'trainingWindows': []}
+    funding = {'baselineLeases': copy.deepcopy(ledger['leases']), 'baselineTrainingWindows': []}
+    value = envelope.baseline(ledger)
+    assert capacity._count_recovery_prefix(value, ledger, funding) == ledger
+    changed = copy.deepcopy(ledger)
+    changed['overheads'].clear()
+    with pytest.raises(ValueError):
+        capacity._count_recovery_prefix(value, changed, funding)
+    for key, replacement in (('id', 'replacement'), ('reservedUsd', 0),
+                             ('reservedMicrodollars', 0), ('studyReservation', {})):
+        changed = copy.deepcopy(ledger)
+        changed['overheads'][0][key] = replacement
+        with pytest.raises(ValueError):
+            capacity._count_recovery_prefix(value, changed, funding)
 
 
 @pytest.mark.parametrize('condition', ['active', 'two_remaining', 'exhausted'])

@@ -30,6 +30,11 @@ validator still requires timestamps for current count8 leases. A small regressio
 covers missing legacy fields and malformed present values. The failed CI run is
 retained, and full CI must pass before activation.
 
+The second run passed 784 infrastructure tests and 159 subtests, including normal
+count9 reservations and historical funding6 reads. One test failed by removing an
+overhead from an empty fixture. Retained overhead deletion and mutation now have
+an explicit populated-prefix test; production code was unchanged by this fix.
+
 ## Dispatch continuity, 2026-11-19
 
 The previous launch stopped before GPU allocation when an ownership publication
