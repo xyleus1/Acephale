@@ -6,9 +6,12 @@ The Node suite at `c33f46e` had 313 passes, four skips and one timeout cancellat
 The unchanged deadline CLI case passed in isolation; no production failure cause
 was established. Its fixture now handles early service exit and test abort, emits
 phase diagnostics, and drains its owned child. Both deadlines and production code
-are unchanged. All three stop-mode cases and the TypeScript/schema check passed;
-the full Node rerun is pending. Research pytest separately passed 667 with 23
-environment-specific skips. Preserve the original failed suite and skip scope.
+are unchanged. All three stop-mode cases and `npm run check` passed. The full
+`npm test` rerun at `25d7283` passed 314 tests with four skips, no failures and no
+cancellations. The skips cover two PostgreSQL integrations and two frozen native
+financial-port integrations. Research pytest separately passed 667 with 23
+environment-specific skips on unchanged research source. Preserve the original
+cancelled suite; these checks add no GPU qualification or benchmark result.
 
 ## Current continuation: E41 closed before GPU dispatch, 2026-11-19
 

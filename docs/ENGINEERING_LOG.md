@@ -12,8 +12,12 @@ The fixture now races inference startup against service exit and test cancellati
 records its phase on failure, and terminates and drains its owned CLI child before
 cleanup. The 15-second test limit, one-second service deadline and production
 runtime are unchanged. All three affected stop-mode cases passed in one focused
-run, and the TypeScript/schema check passed. Full Node verification of this
-fixture change is pending. The original cancelled run remains retained.
+run, and `npm run check` passed. The full `npm test` rerun at `25d7283`, using
+Node 22.23.4, then completed in 150.449 seconds: 314 passed, four skipped, no
+failures and no cancellations. Two PostgreSQL integrations and two frozen native
+financial-port integrations were skipped. The original cancelled run remains
+retained. Research source was unchanged from its separate 667-pass, 23-skip run;
+these software checks establish no new GPU qualification or benchmark result.
 
 ## E41 owner continuity failure and verified cleanup, 2026-11-19
 
