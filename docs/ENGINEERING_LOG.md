@@ -1,5 +1,28 @@
 # Acephale engineering log
 
+## Count-only recovery, 2026-11-19
+
+E45 failed before provider dispatch because three bounded final observations did
+not converge. Automatic cancellation retained its hold, the local task closed,
+and both controller pairs were independently observed completed/cancelled. This
+attempt produced no GPU or benchmark result.
+
+Added a creation-only count9 writer and normal reader/CLI integration. The writer
+requires one unused count8 slot and closed current work, preserves that slot and
+adds seven. Historical count8 rows and prospective count9 rows are validated
+separately against their original authority. All funding, GPU-hour, session,
+optimizer, hold and deadline checks remain in the ordinary admission path.
+
+The focused suite covers the complete retained authority chain, eight local
+reservation constructions, exhaustion, tampering, missing parents and races.
+Its first Windows run reached the 600-second capture limit under memory pressure.
+It printed failures and passes but produced no JUnit report or observed test exit;
+this is an incomplete failed run, not a passing result. Source review identified
+and corrected a historical funding6-reader regression, with a dedicated test.
+The draft pull request runs the existing full Linux CI before activation. No
+actual authority file, paid reservation, provider call or new benchmark result
+is part of this work.
+
 ## Dispatch continuity, 2026-11-19
 
 The previous launch stopped before GPU allocation when an ownership publication

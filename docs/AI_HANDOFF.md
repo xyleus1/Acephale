@@ -1,5 +1,27 @@
 # Working on Acephale
 
+## Count-only recovery, 2026-11-19
+
+The prospective count9 writer retains the complete closed count8 prefix and its
+one unused slot, then adds seven slots. Eight future leases are available after
+activation, including failed or undispatched reservations; termination never
+returns a slot. The new sidecar binds the exact count8 bytes and creator, current
+funding7/GPU6, closed lifecycle identities and unchanged financial history.
+
+Use `record-evaluation-count-recovery` from the separately reviewed committed
+operator. It requires exactly one unused parent slot, rejects active post-funding7
+work and cannot overwrite an existing count9 file. The normal reader validates
+older rows under count8 and new rows under count9. Money, cumulative GPU hours,
+hourly/session limits, optimizer restrictions, existing holds and deadlines stay
+unchanged. Private operational bindings must explicitly distinguish historical
+count8 from this successor before use. This source change creates no authority,
+reservation, provider instance or benchmark result.
+
+Validation is pending the draft pull request's existing Linux CI. The initial
+local focused run timed out after 600 seconds with partial failures and passes;
+no completed test result is claimed. The reviewed historical-reader correction
+and its regression test must pass along with the full existing suite before use.
+
 ## Dispatch continuity, 2026-11-19
 
 The optional `launch_progress` context runs inside the existing ledger lock.

@@ -1385,7 +1385,7 @@ def effective_gpu_hour_capacity(ledger: dict) -> tuple[float, dict | None]:
     original_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
     funding7_exists = bool(journal and Path(str(Path(journal).resolve()) + ".infrastructure-funding-v7.json").exists())
     if original_path and not funding7_exists and any(Path(str(Path(original_path).resolve()) + suffix).exists() for suffix in
-            (".gpu-hour-capacity-v6.json", ".evaluation-lease-capacity-v8.json")):
+            (".gpu-hour-capacity-v6.json", ".evaluation-lease-capacity-v8.json", ".evaluation-lease-capacity-v9.json")):
         raise ValueError("Completion capacity requires its funding7 authority")
     if funding7_exists:
         from evaluation_completion import gpu_capacity
@@ -2800,6 +2800,9 @@ def main(argv: list[str] | None = None) -> int:
     envelope.add_argument("--ledger", type=Path, required=True)
     envelope.add_argument("--kind", choices=["gpu", "count"], required=True)
     envelope.add_argument("--authorization-reason", required=True)
+    count_recovery = commands.add_parser("record-evaluation-count-recovery")
+    count_recovery.add_argument("--ledger", type=Path, required=True)
+    count_recovery.add_argument("--authorization-reason", required=True)
     training_capacity = commands.add_parser("record-training-window-capacity-addendum")
     training_capacity.add_argument("--ledger", type=Path, required=True)
     training_capacity.add_argument("--authorization-reason", required=True)
@@ -2911,6 +2914,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "record-evaluation-completion":
         from evaluation_completion import record
         value = record(args.ledger, args.kind, args.authorization_reason)
+    elif args.command == "record-evaluation-count-recovery":
+        from evaluation_lease_capacity import record_funding7_recovery
+        value = record_funding7_recovery(args.ledger, args.authorization_reason)
     elif args.command == "record-training-window-capacity-addendum":
         value = record_training_window_capacity_addendum(args.ledger, args.authorization_reason, args.operational_history)
     elif args.command == "training-window-headroom":
