@@ -189,6 +189,17 @@ def test_recording_cannot_predate_verified_closed_history(one_remaining):
     assert not capacity.capacity_path(path, version=9).exists()
 
 
+def test_retained_lifecycle_uses_existing_timestamps_without_inventing_history():
+    rows = [{}, {'reservedAt': NOW}, {'reservedAt': NOW + 1, 'terminationVerifiedAt': NOW + 3}]
+    assert capacity._latest_retained_lifecycle({'leases': rows}) == NOW + 3
+    for field in ('reservedAt', 'terminationVerifiedAt'):
+        for invalid in (None, True, float('inf'), float('nan'), 'unknown'):
+            with pytest.raises(ValueError):
+                capacity._latest_retained_lifecycle({'leases': [*rows, {field: invalid}]})
+    with pytest.raises(ValueError):
+        capacity._latest_retained_lifecycle({'leases': [{}]})
+
+
 def test_normal_session_money_gpu_and_optimizer_limits_remain(one_remaining, tmp_path):
     path, ledger, funding, *_ = one_remaining
     extend_count(path)

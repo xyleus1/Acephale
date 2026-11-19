@@ -1066,9 +1066,11 @@ def _count_recovery_prefix(value: dict, ledger: dict, funding: dict) -> dict:
 
 def _latest_retained_lifecycle(ledger: dict) -> float:
     import control
-    return max(max(control.finite_number(row["reservedAt"], "retained reservation timestamp"),
-                   control.finite_number(row.get("terminationVerifiedAt", row["reservedAt"]),
-                                         "retained closure timestamp")) for row in ledger["leases"])
+    # Older retained rows may omit timestamps. Parent authority validation still
+    # requires reservation timestamps for every current count8 lease.
+    return max(control.finite_number(row[field], "retained lifecycle timestamp")
+               for row in ledger["leases"] for field in ("reservedAt", "terminationVerifiedAt")
+               if field in row)
 
 
 def validate_funding7_recovery(value: dict, ledger: dict, funding: dict) -> dict:

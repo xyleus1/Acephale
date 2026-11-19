@@ -23,6 +23,13 @@ The draft pull request runs the existing full Linux CI before activation. No
 actual authority file, paid reservation, provider call or new benchmark result
 is part of this work.
 
+The first Linux CI run passed 776 infrastructure tests and 159 subtests but failed
+eight new cases because the lifecycle timestamp reader assumed a field absent
+from valid legacy rows. It now uses only present finite timestamps; the parent
+validator still requires timestamps for current count8 leases. A small regression
+covers missing legacy fields and malformed present values. The failed CI run is
+retained, and full CI must pass before activation.
+
 ## Dispatch continuity, 2026-11-19
 
 The previous launch stopped before GPU allocation when an ownership publication
