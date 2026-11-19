@@ -1,6 +1,21 @@
 # Working on Acephale
 
-## Current continuation: E43 final proof aged, 2026-11-19
+## Current continuation: E44 preparation needs memory relief, 2026-11-19
+
+The E44 source migration passed 26 namespace and 29 operational checks. Normal
+context preparation, metadata routing and one quote succeeded. The pool command
+then raised `MemoryError` during local authority validation, before its request
+write or first reservation. Its eight request/hold/allocation outputs were absent
+and infrastructure ledger bytes unchanged. No GPU, model or native trial started;
+no owned experiment jobs or GPU resources remain active.
+
+After host memory relief, resume the separately reviewed pool-only capture with
+the unchanged allocator and command. Preserve the successful preparation and
+original failure artifacts; do not replay the entire sequence. Normal freshness
+and authority checks still apply. The retry has not run. Do not change runtime
+logic, saved weights or scientific settings to work around this memory failure.
+
+## Retained E43 final proof expiry, 2026-11-19
 
 E43 passed its final acknowledgment gate, then repeated source/hash checks aged
 the proof beyond the unchanged 30-second owner bound. It never sent the provider

@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-19: Preserve completed preparation after a memory failure
+
+E44's pool preparation failed before its request or first reservation. Retain
+that failure, the successful context/route/quote preparation and all existing
+holds. After host memory relief, retry only the unchanged pool command through
+its separate capture, with normal freshness and authority checks intact. Do not
+replay the whole preparation sequence or alter runtime and scientific settings.
+Raw infrastructure ledger equality is not a native financial-journal comparison;
+no live execution or benchmark result follows from this recovery preparation.
+
 ## 2026-11-19: Keep audit I/O outside final dispatch freshness
 
 Combine exact mutable-state checks with the existing final full source guard

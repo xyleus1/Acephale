@@ -1,5 +1,32 @@
 # Acephale engineering log
 
+## E44 preparation stopped on host memory, 2026-11-19
+
+The source migration passed 26 namespace and 29 operational cases; nine
+PowerShell sources parsed successfully. An initial draft used the wrong path for
+a retained historical native-budget manifest and was rejected before writing
+outputs. The corrected projection preserves that historical identity. Initial
+temporary-fixture errors remain retained alongside the final passes. Models,
+weights, scientific source, current operator and qualified controllers are
+unchanged; the migration binds the reviewed final-dispatch repair below.
+
+Normal context preparation, metadata routing and one quote completed. The pool
+command then exited with `MemoryError` while reading nested authority history.
+Its traceback places the failure before the request write and first reservation.
+All eight pool request/hold/allocation artifacts were absent, and raw infrastructure
+ledger hashes matched the earlier route observation. The native financial journal
+was not independently compared; infrastructure byte equality does not establish
+that broader claim. Existing holds and all failed artifacts remain retained.
+
+A separate pool-only retry capture passed source review. It keeps the same
+allocator, interpreter and four command arguments, rechecks absent outputs and
+retains a new attempt record. It neither repeats context/route/quote preparation
+nor retries automatically. Execution is pending host memory relief; no allocator,
+garbage-collection or runtime change is justified by this observation. No GPU,
+model or native trial ran, and no owned experiment jobs or GPU resources remain
+active. This documentation update used only privacy, formatting and diff checks;
+no runtime tests were repeated.
+
 ## E43 final observation and retry defects, 2026-11-19
 
 E43 completed source checks, registration and signed controller handoff. Its

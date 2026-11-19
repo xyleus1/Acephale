@@ -68,6 +68,17 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
+E44 passed 26 namespace and 29 operational-source checks. Normal credential-context
+preparation, metadata routing and one quote completed. Pool preparation then
+raised `MemoryError` in local authority validation, before writing a pool request
+or reserving new holds. The infrastructure ledger bytes were unchanged. No GPU,
+model execution or new native score resulted; no owned experiment jobs or GPU
+resources remain active. The unchanged pool-only retry is reviewed but has not
+run, pending host memory relief. Saved weights and the scientific design remain
+unchanged.
+
+### Retained E43 failure and repair
+
 E43 stopped before the provider POST after its final acknowledgment gate passed.
 The repeated checks after that gate exhausted the owner's 30-second proof bound.
 The predecessor fence still had time remaining when cancellation completed; the
