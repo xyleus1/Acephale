@@ -1,5 +1,26 @@
 # Working on Acephale
 
+## Dispatch continuity, 2026-11-19
+
+The optional `launch_progress` context runs inside the existing ledger lock.
+It receives the actual complete validation result, brackets provider GETs with
+owner progress, and closes its validated reader before any ledger mutation or
+unlock. The adapter verifies exact owned transitions before publishing unknown
+or active state. It may not change financial fields, deadlines or another row.
+
+`study_budget(..., progress=...)` supports inspection only. It polls the owned
+Node child every 15 seconds within the original 180-second deadline and drains
+that child on interruption. Provider recovery can accept the original failure
+timestamp so an added proof cannot restart its 300-second allowance. The recovery
+module now belongs to the explicit controller source closure. Reviewed source
+pins must match before adoption; current bytes cannot replace an expected pin.
+
+The private composed launch tests passed 28 cases in an independent run. They
+use controlled clocks and external transports, not measured cloud latency.
+Repository regression results will be recorded in the engineering log. No new
+GPU launch or benchmark score is established by this source change. Keep frozen
+models, saved adapters, family splits and all failed attempts unchanged.
+
 ## Capacity admission, 2026-11-18
 
 Preparation may explicitly request `quote(..., require_capacity=False)` and

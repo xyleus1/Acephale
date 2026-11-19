@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import fixture from "../research/acephale/examples/infra-manifest-v2.fixture.json";
 import { hash, copy } from "../src/lib/acephale/canonical";
@@ -277,7 +277,7 @@ for (const runtimeFailure of [false, true]) test(`native gateway ${runtimeFailur
   }
 });
 
-for (const stopMode of ["signal", "deadline", "deadline-cli"] as const) test(`native ${stopMode} stop cancels active inference despite rejected OTLP`, { timeout: 15000 }, async () => {
+for (const stopMode of ["signal", "deadline", "deadline-cli"] as const) test(`native ${stopMode} stop cancels active inference despite rejected OTLP`, { timeout: 15000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), "infra-native-stop-"));
   const { configuration, artifacts } = configured();
   configuration.maximumLifetimeSeconds = stopMode === "signal" ? 10 : 1;
@@ -285,9 +285,26 @@ for (const stopMode of ["signal", "deadline", "deadline-cli"] as const) test(`na
   let started!: () => void, cancelled!: () => void, responds = 0, lateResponse = false;
   const actorStarted = new Promise<void>(resolve => { started = resolve; });
   const actorCancelled = new Promise<void>(resolve => { cancelled = resolve; });
+  let child: ChildProcessWithoutNullStreams | undefined, childClosed: Promise<void> | undefined;
+  let running: Promise<unknown> | undefined;
+  let phase = "fixture setup", lastRequest = "", stdout = "", stderr = "";
+  const diagnostic = () => JSON.stringify({ stopMode, phase, lastRequest,
+    childExitCode: child?.exitCode ?? null, childSignal: child?.signalCode ?? null, stdout, stderr });
+  let interrupt!: () => void;
+  const interrupted = new Promise<never>((_, reject) => {
+    interrupt = () => {
+      context.diagnostic(diagnostic());
+      reject(new Error(`Native stop fixture interrupted during ${phase}`, { cause: context.signal.reason }));
+    };
+  });
+  void interrupted.catch(() => {});
+  context.signal.addEventListener("abort", interrupt, { once: true });
+  if (context.signal.aborted) interrupt();
+  const wait = <T>(operation: Promise<T>) => Promise.race([operation, interrupted]);
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const server = createServer((req, res) => {
     req.resume(); req.on("end", () => {
+      lastRequest = req.url ?? "";
       res.setHeader("content-type", "application/json");
       if (req.url === "/ready") res.end('{"ready":true}');
       else if (req.url === "/next") res.end(JSON.stringify({ runId: "run", boundaryId: "pending", public: {
@@ -317,20 +334,29 @@ for (const stopMode of ["signal", "deadline", "deadline-cli"] as const) test(`na
     await writeFile(join(directory, "manifest.json"), JSON.stringify(artifacts.manifest));
     await writeFile(join(directory, "checkpoint.json"), JSON.stringify({ fixture: true }));
     const output = join(directory, "output");
-    const running = stopMode === "deadline-cli" ? new Promise<unknown>((resolve, reject) => {
-      const child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("./acephale-infra-native.ts", import.meta.url)), join(directory, "config.json"), output],
+    context.signal.throwIfAborted();
+    phase = "waiting for actor inference";
+    running = stopMode === "deadline-cli" ? new Promise<unknown>((resolve, reject) => {
+      child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("./acephale-infra-native.ts", import.meta.url)), join(directory, "config.json"), output],
         { windowsHide: true, env: { ...process.env, ACEPHALE_GATEWAY_URL: url, ACEPHALE_GATEWAY_TOKEN: "x".repeat(32) } });
-      let stdout = "", stderr = "";
+      const ownedChild = child;
+      childClosed = new Promise<void>(closed => { ownedChild.once("close", () => { closed(); }); });
       child.stdout.on("data", chunk => { stdout += chunk; }); child.stderr.on("data", chunk => { stderr += chunk; });
       child.once("error", reject); child.once("close", code => {
         try { assert.equal(code, 1, stderr); resolve(JSON.parse(stdout)); } catch (error) { reject(error); }
       });
     }) : runInfraNativeService(join(directory, "config.json"), output,
       { gatewayUrl: url, gatewayToken: "x".repeat(32), signal: controller.signal });
-    await actorStarted; if (stopMode === "signal") controller.abort();
-    assert.deepEqual(await running, { decisions: 0, aborted: true });
+    await wait(Promise.race([actorStarted, running.then(() => {
+      throw new Error("Native service exited before actor inference started");
+    })]));
+    if (stopMode === "signal") controller.abort();
+    phase = "waiting for service shutdown";
+    assert.deepEqual(await wait(running), { decisions: 0, aborted: true });
     assert.equal(lateResponse, false); assert.equal(responds, 0);
-    await actorCancelled;
+    phase = "waiting for actor connection cancellation";
+    await wait(actorCancelled);
+    phase = "checking artifacts";
     const events = (await readFile(join(output, "events.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     const failed = events.findIndex(event => event.type === "model_cancelled"), closed = events.findIndex(event => event.type === "infra_native_service_closed");
     assert.ok(failed >= 0 && closed > failed);
@@ -340,8 +366,14 @@ for (const stopMode of ["signal", "deadline", "deadline-cli"] as const) test(`na
     assert.equal((await stat(join(output, "telemetry-export-receipt.json"))).isFile(), true);
     const receipt = JSON.parse(await readFile(join(output, "telemetry-export-receipt.json"), "utf8"));
     assert.equal(receipt.observabilityStatus, "incomplete"); assert.ok(receipt.failed > 0);
+  } catch (error) {
+    context.diagnostic(diagnostic()); throw error;
   } finally {
+    context.signal.removeEventListener("abort", interrupt);
     controller.abort(); timers.forEach(clearTimeout); server.closeAllConnections();
+    if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await childClosed;
+    if (running) await Promise.allSettled([running]);
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     await rm(directory, { recursive: true, force: true });
   }

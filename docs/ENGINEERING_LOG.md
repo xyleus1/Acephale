@@ -1,5 +1,39 @@
 # Acephale engineering log
 
+## Dispatch continuity, 2026-11-19
+
+The previous launch stopped before GPU allocation when an ownership publication
+exceeded its existing freshness limit during validation. Adoption and earlier
+renewals succeeded. Its reservation remains closed with its hold retained.
+
+Added a lock-scoped progress port around launch validation and provider reads,
+plus cooperative progress during the original bounded budget inspection. The
+adapter verifies exact owned ledger transitions, invalidates readers before
+mutation and unlock, and preserves the original recovery start. Full financial
+validation and all owner, acknowledgement, subprocess and recovery bounds remain.
+The existing recovery module is explicitly included in the source closure.
+
+An independent composed run passed 28 tests. It covers actual local validators,
+signed controller acknowledgements, Windows file guards, failed transitions and
+parent/child handoff with controlled clocks and external transports. These are
+operational tests, not benchmark or live latency results. The separate bounded
+budget helper passed 22 independent tests before integration.
+
+Also imported the native-stop fixture repair: wait for actual service exit or
+test cancellation while waiting for inference, retain phase diagnostics, and
+drain the owned child in cleanup. The existing test and service deadlines remain.
+
+The first local Node run reported 314 passed, five skipped, one failure and one
+cancelled test. The failure came from the new checkout's missing Python virtual
+environment; after installing the pinned lock, its document-data tests passed.
+The cancelled CLI test reached its 15-second limit without a gateway request.
+In isolation it instead exited cleanly at the service deadline before inference,
+so that test still failed its intended active-inference assertion. Diagnostics
+and both failures remain retained. Observed host memory pressure is a possible
+contributor, not a proven explanation. No test or service deadline was increased.
+Type/schema checking passed; remaining regression and CI results are recorded
+separately from this source commit.
+
 ## Prospective final capacity admission, 2026-11-18
 
 Added explicit metadata quotes and an optional bounded wait within the existing

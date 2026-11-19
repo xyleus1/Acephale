@@ -701,7 +701,55 @@ def load_plan(path: Path) -> dict[str, Any]:
     return value
 
 
-def study_budget(plan: dict[str, Any], operation: str, lease: dict[str, Any] | None = None) -> dict[str, Any]:
+def _inspect_budget_with_progress(command, progress):
+    """Keep the caller responsive while the same bounded inspection runs."""
+    progress()
+    deadline = time.monotonic() + 180
+    try:
+        process = subprocess.Popen(command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, shell=False)
+    except (OSError, subprocess.SubprocessError):
+        raise RuntimeError("Original study budget operation uncertain; reservations retained") from None
+    completed = False
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("Original study budget operation uncertain; reservations retained")
+            try:
+                stdout, stderr = process.communicate(timeout=min(15, remaining))
+            except subprocess.TimeoutExpired:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Original study budget operation uncertain; reservations retained")
+                # The callback remains on the caller's thread and may cancel.
+                progress()
+                continue
+            except (OSError, subprocess.SubprocessError):
+                raise RuntimeError("Original study budget operation uncertain; reservations retained") from None
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Original study budget operation uncertain; reservations retained")
+            progress()
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Original study budget operation uncertain; reservations retained")
+            completed = True
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    finally:
+        if not completed:
+            try:
+                if process.poll() is None:
+                    process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                raise RuntimeError("Original study budget operation uncertain; reservations retained") from None
+
+def study_budget(plan: dict[str, Any], operation: str, lease: dict[str, Any] | None = None,
+                 *, progress=None) -> dict[str, Any]:
+    if progress is not None and (operation != "inspect" or not callable(progress)):
+        raise ValueError("Cooperative progress is allowed only for study-budget inspection")
     request = {"provider": "lambda", "operation": operation, "ledgerPath": plan["studyLedgerPath"],
                "checkpointPath": plan["studyCheckpointPath"], "checkpointHash": plan["studyCheckpointHash"],
                "sliceLedgerPath": plan["infrastructureLedgerPath"], "deploymentHash": digest(plan)}
@@ -710,11 +758,15 @@ def study_budget(plan: dict[str, Any], operation: str, lease: dict[str, Any] | N
     with tempfile.TemporaryDirectory(prefix="acephale-lambda-budget-") as directory:
         request_path = Path(directory) / "request.json"
         write_new(request_path, request)
-        try:
-            result = subprocess.run(["node", "--import", "tsx", "scripts/acephale-aws-budget.ts", str(request_path)],
-                                    cwd=ROOT, text=True, capture_output=True, timeout=180, check=False, shell=False)
-        except (OSError, subprocess.SubprocessError):
-            raise RuntimeError("Original study budget operation uncertain; reservations retained") from None
+        if progress is None:
+            try:
+                result = subprocess.run(["node", "--import", "tsx", "scripts/acephale-aws-budget.ts", str(request_path)],
+                                        cwd=ROOT, text=True, capture_output=True, timeout=180, check=False, shell=False)
+            except (OSError, subprocess.SubprocessError):
+                raise RuntimeError("Original study budget operation uncertain; reservations retained") from None
+        else:
+            result = _inspect_budget_with_progress(
+                ["node", "--import", "tsx", "scripts/acephale-aws-budget.ts", str(request_path)], progress)
         if result.returncode:
             raise RuntimeError("Original study budget operation rejected; reservations retained")
         return json.loads(result.stdout)
@@ -2006,7 +2058,7 @@ def committed_source(initial_commit: str) -> str:
 
 def controller_source_files() -> list[dict]:
     return [{"path": name, "sha256": sha256(HERE / name)} for name in
-            ("control.py", "evaluation_lease_capacity.py", "provider_routing.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py",
+            ("control.py", "evaluation_lease_capacity.py", "provider_routing.py", "provider_launch_recovery.py", "unresolved_launch.py", "lambda_gpu_watchdog.py", "lambda_watchdog_deploy.py",
              "github_watchdog_protocol.py", "github_watchdog_store.py", "github_gpu_watchdog.py", "github_watchdog_admission.py",
              "versions.json", "hardware-profiles.json", "training-window-capacity-v1.json")]
 
@@ -2401,7 +2453,8 @@ def _wait_for_launch_capacity(client, ledger_path, lease, region, hardware, seco
 def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path,
            *, now: float | None = None, budget=study_budget, unresolved_fence: Path | None = None,
            reconciliation_heartbeat=None, cancelled=None, capacity_wait_seconds: int = 0,
-           capacity_progress=None, capacity_not_after: float | None = None) -> dict[str, Any]:
+           capacity_progress=None, capacity_not_after: float | None = None,
+           launch_progress=None) -> dict[str, Any]:
     from provider_routing import checked_route, verify_quote
 
     if type(capacity_wait_seconds) is not int or not 0 <= capacity_wait_seconds <= 900:
@@ -2413,11 +2466,37 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         capacity_not_after = finite_number(capacity_not_after, "capacity wait deadline")
     elif capacity_progress is not None or capacity_not_after is not None:
         raise ValueError("Capacity wait ports require an explicit positive wait allowance")
+    if launch_progress is not None and not callable(launch_progress):
+        raise TypeError('Launch progress must be a lock-scoped context manager factory')
     current = time.time() if now is None else now
-    with ledger_lock(ledger_path):
+    with ledger_lock(ledger_path), (launch_progress(ledger_path) if launch_progress
+                                  else contextlib.nullcontext()) as progress:
         ledger = checked_bound_ledger(ledger_path)
         plan = ledger["plan"]
         lease = next(item for item in ledger["leases"] if item["id"] == lease_id)
+        if progress is not None:
+            import copy
+            validated_sha = sha256(ledger_path)
+            progress.validated(copy.deepcopy(ledger), copy.deepcopy(lease), validated_sha)
+            if sha256(ledger_path) != validated_sha:
+                raise ValueError("Launch progress changed the validated ledger")
+            original_client = client
+
+            class ObservedClient:
+                def request(self, method, path, payload=None):
+                    if method == "GET" and progress.active:
+                        before = sha256(ledger_path)
+                        progress.tick()
+                        if sha256(ledger_path) != before:
+                            raise ValueError("Launch progress changed the retained ledger")
+                    result = original_client.request(method, path, payload)
+                    if method == "GET" and progress.active:
+                        progress.tick()
+                        if sha256(ledger_path) != before:
+                            raise ValueError("Provider read changed the retained ledger")
+                    return result
+
+            client = ObservedClient()
         if lease["status"] != "reserved" or not lease.get("studyReservation") or current >= lease["setupDeadline"]:
             raise ValueError("Only an unattempted, funded lease within setup window can launch")
         fence = None
@@ -2481,6 +2560,11 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
                                    digest, cancelled)
         if waiting and time.time() >= capacity_not_after:
             raise TimeoutError("Capacity admission cutoff expired during final launch checks")
+        if progress is not None:
+            before = sha256(ledger_path)
+            progress.invalidate()
+            if sha256(ledger_path) != before:
+                raise ValueError("Closing launch progress changed the retained ledger")
         lease["watchdogs"] = enrollments
         if fence is not None:
             lease["unresolvedPredecessor"].update(launchFence=fence, launchReceiptSha256=sha256(unresolved_fence))
@@ -2489,6 +2573,7 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
         payload = {"region_name": region, "instance_type_name": current_quote["instanceType"],
                    "ssh_key_names": [access["sshKeyName"]], "name": lease["name"], "image": {"id": current_quote["imageId"]},
                    "firewall_rulesets": [{"id": access["firewallRulesetId"]}]}
+        launch_failure, recovery_proof = None, None
         try:
             if recovery:
                 recovery.heartbeat_fresh(pulse, lease, cancelled)
@@ -2500,10 +2585,12 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
                 from provider_launch_recovery import UncertainProviderResponse
                 raise UncertainProviderResponse("AmbiguousLaunchResponse")
             lease["instanceId"] = ids[0]
+            launched_instance_id = ids[0]
             if recovery:
                 recovery.heartbeat_fresh(pulse, lease, cancelled)
             lease["status"] = "active"
         except Exception as error:
+            reconciliation_started = time.time()
             lease["status"] = "launch_unknown"
             lease["launchFailure"] = {"errorType": type(error).__name__,
                                       "httpStatus": getattr(error, "http_status", None),
@@ -2512,19 +2599,49 @@ def launch(client: Any, ledger_path: Path, lease_id: str, watchdog_receipt: Path
             category = getattr(error, "uncertainty_category", None)
             if category is not None:
                 lease["launchFailure"]["uncertaintyCategory"] = category
+            launch_failure = dict(lease["launchFailure"])
             atomic_json(ledger_path, ledger)
             if not recovery or not isinstance(error, recovery.UncertainProviderResponse):
                 raise
+            if progress is not None:
+                uncertain_sha = sha256(ledger_path)
+                progress.uncertain(copy.deepcopy(ledger), copy.deepcopy(lease), uncertain_sha,
+                                   failure=launch_failure)
+                if sha256(ledger_path) != uncertain_sha:
+                    raise ValueError("Uncertain launch progress changed the committed ledger")
+                # Validate a real two-controller proof for this exact own
+                # transition before the unchanged recovery full-read phases.
+                # The old proof's +105s cap still applies to this publication.
+                pulse = recovery.pulse(progress.uncertain_heartbeat, lease, "uncertain_response",
+                    enrollments, expected_state, digest, cancelled, previous=pulse)
             try:
                 recovered_id, proof = recovery.reconcile(client, lease, payload, baseline, refresh,
-                    enrollments, expected_state, digest, cancelled, pulse)
+                    enrollments, expected_state, digest, cancelled, pulse,
+                    **({"started_at": reconciliation_started} if progress is not None else {}))
             except BaseException as recovery_error:
+                if progress is not None:
+                    try:
+                        progress.invalidate()
+                    except BaseException as cleanup_error:
+                        recovery_error.add_note("Launch progress cleanup also failed: " + type(cleanup_error).__name__)
+                        raise recovery_error from None
                 lease["launchRecoveryFailure"] = {"errorType": type(recovery_error).__name__,
                     "observedAt": time.time(), "responseBodyRetained": False, "reservationReleased": False}
                 atomic_json(ledger_path, ledger)
                 raise
             lease.update(instanceId=recovered_id, status="active", launchRecovery=proof)
+            launched_instance_id = recovered_id
+            recovery_proof = copy.deepcopy(proof) if progress is not None else None
+        if progress is not None:
+            progress.invalidate()
         atomic_json(ledger_path, ledger)
+        if progress is not None:
+            committed_sha = sha256(ledger_path)
+            progress.committed(copy.deepcopy(ledger), copy.deepcopy(lease), committed_sha,
+                               instance_id=launched_instance_id, failure=launch_failure,
+                               recovery=recovery_proof)
+            if sha256(ledger_path) != committed_sha:
+                raise ValueError("Active launch progress changed the committed ledger")
         return lease.copy()
 
 
