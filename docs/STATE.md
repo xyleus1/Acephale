@@ -1,5 +1,12 @@
 # Current state
 
+The prospective dispatch repair maintains owner progress through validated
+launch work and bounded budget inspection. Its 28 composed tests passed an
+independent run. Repository regression is being completed before deployment.
+The last attempt failed before GPU allocation; no new trained replay or paired
+native score is available. Frozen models, saved adapters and evaluation inputs
+remain unchanged.
+
 Prospective source separates metadata/price quotes during preparation from a
 bounded capacity wait in final launch admission. The default remains immediate
 capacity-required quoting. The optional path preserves the original reservation,

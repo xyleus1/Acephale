@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-19: Keep launch ownership live inside validated transactions
+
+Long validation and inspection phases need progress within the existing lock.
+The optional progress port reuses a completed full validation only while its
+immutable source window and ledger lock remain held. Each new transaction still
+runs the full validator. Readers are invalidated before mutation and cannot
+escape the context. Publication after an owned transition requires exact
+provider evidence and an otherwise unchanged ledger.
+
+Inspection uses one bounded child process with same-thread progress callbacks.
+Uncertain provider recovery retains the original failure timestamp and existing
+limits. This changes operational scheduling, not research methods, task scoring,
+model weights, reservations, deadlines or the one-POST rule.
+
 ## 2026-11-18: Check availability at final dispatch
 
 Provider capacity is transient and a successful GET cannot reserve a machine.

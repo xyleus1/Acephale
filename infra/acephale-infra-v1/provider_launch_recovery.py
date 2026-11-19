@@ -119,8 +119,13 @@ def observable_identity(row, lease, payload, old_ids):
             "status": row["status"]}
 
 
-def reconcile(client, lease, payload, baseline, refresh, enrollments, expected_state, digest, cancelled, previous):
-    started = guard(lease, cancelled)
+def reconcile(client, lease, payload, baseline, refresh, enrollments, expected_state, digest, cancelled, previous,
+              *, started_at=None):
+    current = guard(lease, cancelled)
+    if started_at is not None and (type(started_at) not in (int, float)
+            or not math.isfinite(started_at) or not 0 <= started_at <= current):
+        raise ValueError("Original finite reconciliation start required")
+    started = current if started_at is None else started_at
     until = min(started + 300, lease["setupDeadline"] - 15, lease["deadline"] - 15)
     pulses = [pulse(refresh, lease, "uncertain_response", enrollments, expected_state, digest,
                     cancelled, until=until, previous=previous)]
