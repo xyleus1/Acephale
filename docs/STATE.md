@@ -68,11 +68,16 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
-E44 passed 26 namespace and 29 operational-source checks. After host memory
-headroom recovered, the unchanged pool-only retry succeeded. The static controller
-pair is live, the source inventory and current-review artifact are complete, and
-sealing is running. No GPU, model execution or new native score has resulted.
+E44 reached an active GPU at 10:21 UTC on November 19. The root controller and
+launcher both exited successfully, and the managed foundation stage was dispatched
+at 10:26 UTC. The final dispatch proof passed on its first attempt under the
+unchanged freshness bounds. This establishes real infrastructure dispatch; no new
+model score, paired native result or live performance gain is available yet.
 Saved weights and the scientific design remain unchanged.
+
+Preparation passed 26 namespace and 29 operational-source checks. The unchanged
+pool-only retry succeeded after host memory headroom recovered, followed by
+controller startup, source inventory, review and sealing.
 
 The first pool attempt raised `MemoryError` in local authority validation, before
 writing a pool request or reserving new holds. Infrastructure ledger bytes were

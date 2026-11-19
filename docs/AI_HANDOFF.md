@@ -1,20 +1,24 @@
 # Working on Acephale
 
-## Current continuation: E44 sealing is running, 2026-11-19
+## Current continuation: E44 GPU and managed foundation active, 2026-11-19
 
-The E44 source migration passed 26 namespace and 29 operational checks. The
-unchanged pool-only retry succeeded after host memory headroom recovered. The
-static controller pair is live, source inventory and the current-review artifact
-are complete, and sealing is running. No GPU, model or native trial has started.
-Continue from the actual sealing outcome through the existing execution recipe;
-do not repeat completed preparation or start a second launcher.
+The root controller exited zero at 10:17 UTC and the launcher exited zero at
+10:26 UTC. The GPU became active at 10:21 UTC, and the managed foundation stage
+was dispatched at 10:26 UTC. A local observation confirmed the managed sequence
+and a recent heartbeat. Continue observing that existing sequence through its
+normal lifecycle; do not repeat preparation or start a second launcher.
+
+The final dispatch proof passed on attempt one with 4,916 immutable pins and
+seven membership sets. The actual launch returned with an active lease and no
+error. This is infrastructure progress, not a new model score, paired native
+result or measured task-latency improvement. Frozen scientific inputs are intact.
 
 Retain the first pool attempt's `MemoryError`: it occurred during local authority
 validation before the request write or first reservation, with eight outputs
 absent and infrastructure ledger bytes unchanged. The retry preserved the
 completed context, metadata-route and quote work, allocator and command. The
 original current-review process exit was not observed; an independent structural
-check of its complete artifact passed. The sealer performs its own validation.
+check of its complete artifact passed. Sealing and launch subsequently completed.
 Saved weights, scientific settings and normal authority checks remain unchanged.
 
 ## Retained E43 final proof expiry, 2026-11-19

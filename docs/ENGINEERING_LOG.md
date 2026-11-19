@@ -1,6 +1,22 @@
 # Acephale engineering log
 
-## E44 recovered pool preparation and entered sealing, 2026-11-19
+## E44 reached GPU dispatch and the managed foundation stage, 2026-11-19
+
+The root controller exited zero at 10:17:03 UTC. The GPU became active at
+10:21:13 UTC, and the launcher exited zero at 10:26:19 UTC without stderr. The
+foundation stage was dispatched at 10:26:17 UTC. A local observation at 10:26:27
+UTC confirmed the managed foundation entry and heartbeat sequence 19, aged
+13.25 seconds. No new model score, paired native score or live performance gain
+has been established.
+
+The final dispatch proof used one attempt, 4,916 immutable pins and seven
+membership sets. Its last exact check followed gate return by 0.010012 seconds;
+that interval is not gate-to-POST latency. The owner age was 19.3784 seconds,
+leaving 10.6216 seconds under the unchanged 30-second bound; the fence had 47.5771
+seconds remaining. The launch returned with runtime lease status active and no
+error. The actual lease and managed-stage observations establish dispatch, rather
+than treating a successful freshness gate alone as proof of a provider POST.
+The retained dense-membership stress failure below remains a scaling limitation.
 
 The source migration passed 26 namespace and 29 operational cases; nine
 PowerShell sources parsed successfully. An initial draft used the wrong path for
@@ -24,15 +40,14 @@ interpreter and four command arguments, rechecked absent outputs and retained a
 new attempt record. It did not repeat context/route/quote preparation or retry
 automatically. No allocator, garbage-collection or runtime change was made.
 
-The static controller pair is now live. The source inventory contains 6,633
+The static controller pair started successfully. The source inventory contains 6,633
 entries, and the complete current-review artifact contains 7,668 unique pins.
 The original review process exit was not observed after its tool output was lost.
 A separate structural check completed with exit zero; that establishes artifact
 completeness and binding consistency, not the original process exit or a fresh
-rehash of every pin. The normal sealer is running and performs its own validation.
-No GPU, model execution or new native score has resulted. This documentation
-update used only privacy, formatting and diff checks; no runtime tests were
-repeated.
+rehash of every pin. The normal sealer and subsequent launch completed through
+their own checks. This documentation update used only local artifact inspection,
+privacy, formatting and diff checks; no runtime tests were repeated.
 
 ## E43 final observation and retry defects, 2026-11-19
 

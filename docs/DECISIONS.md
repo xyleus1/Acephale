@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-19: Separate successful dispatch from research results
+
+E44's active GPU, successful launcher exit and managed foundation entry establish
+real dispatch after the retained infrastructure failures. Keep that observation
+separate from model qualification, task reward and live latency. The first-attempt
+final proof passed under unchanged freshness bounds; neither this success nor
+local fixture timings erase the dense-membership stress failure. Continue the
+existing managed sequence with frozen inputs and report its actual outputs.
+
 ## 2026-11-19: Preserve completed preparation after a memory failure
 
 E44's pool preparation failed before its request or first reservation. Retain
