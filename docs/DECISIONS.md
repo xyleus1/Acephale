@@ -1,5 +1,23 @@
 # Acephale decisions
 
+## 2026-11-19: Keep audit I/O outside final dispatch freshness
+
+Combine exact mutable-state checks with the existing final full source guard
+after the actual controller acknowledgment and API reads. Preserve the locked
+transaction, immutable file handles and public dispatch freshness checks. Avoid
+another full source traversal or audit-file write between that final gate and
+the provider request. Record the gate outcome separately from the dispatch
+outcome afterward; a verified observation alone does not prove a provider POST.
+
+Only natural observation aging can retry within the existing three-attempt bound.
+Use distinct exclusive-create attempt files; source, ledger, owner and cancellation
+failures remain terminal. Do not extend the 30-second proof or 120-second owner
+limits. Thirty-three focused cases and one observed-layout composition passed;
+the separate dense-membership stress case failed safely before this gate and
+remains recorded. Continue with the observed sparse membership design, preserving
+the normal runtime checks. These local results do not certify arbitrary scaling,
+a future source closure's timing, live success or scientific gains.
+
 ## 2026-11-19: Reuse validation only inside the current locked transaction
 
 The final dispatch fence can read a guarded copy of its already validated ledger

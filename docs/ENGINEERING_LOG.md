@@ -1,5 +1,54 @@
 # Acephale engineering log
 
+## E43 final observation and retry defects, 2026-11-19
+
+E43 completed source checks, registration and signed controller handoff. Its
+final fence observation used 23.718 seconds of the current owner's 30-second
+dispatch interval, leaving 6.282 seconds. The reconciliation gate returned after
+its own final source guard and freshness check. The first additional guard/hash
+check then rejected the proof. The failure instant was not recorded, but normal
+cancellation completed 10.461 seconds before the predecessor fence expired;
+absent a clock reversal, the exhausted condition was owner age. No provider POST,
+GPU instance, model execution or native result followed. Local and independent
+controller cleanup completed; all holds and prior failed evidence remain.
+
+Three offline regressions reproduce the post-gate age failure, a retry pulse
+filename collision and a stale proof file left by receipt-time expiry. The
+previous composition suite never exercised retry two. The new prospective code
+combines exact checks into the gate's last full source guard, defers audit I/O
+until after public dispatch, and gives each bounded attempt distinct artifacts.
+It retains the ledger lock, immutable handles, actual ACK/API checks, original
+30/120-second bounds and one provider request. Source/path changes after any last
+check remain a TOCTOU limitation; held files do not freeze directory membership.
+Thirty-three focused cases passed. A separate 7,175-file stress fixture failed
+before the changed final gate: a renewal reached owner age 122.977 seconds and
+made no provider POST. Its five membership sets covered 7,173 generated files.
+Post-cleanup metadata for the actual configuration identified 4,452 distinct
+locked inputs and seven membership sets with 17/7/2/8/13/13/8 entries. The repeated
+sets share paths: 4,408 preserved inputs plus 47 financial paths overlap at three
+files. The 117,382,836 bytes span path depths six through ten. The current ledger
+was 5,189,468 bytes; the saved final fence was 83,489 bytes.
+
+A separate observed-layout test passed with native exit zero in 122.71 seconds.
+Its disposable files matched those sizes, depths, overlaps and repeated sets;
+it copied no original contents. Every real atomic ledger write retained the
+observed byte size through valid JSON whitespace padding. Measured guard, hash,
+read, write and handle costs were charged to the same fixture clock, alongside
+an injected 50 seconds per full validation. It made one simulated provider POST,
+returned an active lease and released readers, handles and locks. Gate return to
+POST took 0.105580 seconds locally, with no intervening full-tree guard or audit
+write; the required exact hashes and ledger write remained.
+
+The final candidate has 33 focused passes, one observed-layout pass and one dense
+stress failure, all retained. Fixture creation took 55.778 seconds separately
+from 63.591 seconds of dispatch wall time. Nested timing totals overlap and must
+not be summed. Synthetic transports, padded JSON and injected validation cost
+do not model every production workload; a future source closure is unmeasured.
+The repair's source review accepts the observed sparse membership design, not
+arbitrary scaling. No live latency or task-accuracy gain is established. Combined
+verification SHA-256:
+`86472878af8cc02cda60b084f2f9f322a9d49d2f962ec019ead6f17fe2d2e029`.
+
 ## E42 final-fence expiry and scoped ledger repair, 2026-11-19
 
 E42 passed root handoff, adoption and budget inspection, but failed before the

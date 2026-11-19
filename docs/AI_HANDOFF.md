@@ -1,6 +1,27 @@
 # Working on Acephale
 
-## Current continuation: E42 closed before provider launch, 2026-11-19
+## Current continuation: E43 final proof aged, 2026-11-19
+
+E43 passed its final acknowledgment gate, then repeated source/hash checks aged
+the proof beyond the unchanged 30-second owner bound. It never sent the provider
+POST. Normal cancellation retained every hold with no instance; local cleanup
+disabled the task and closed owned processes. Independent GitHub readback
+confirmed four completed/cancelled jobs. No model or native score resulted.
+
+The prospective repair combines exact checks into the gate's last full source
+guard and defers audit I/O until the public dispatch operation exits. Natural-age
+retries remain bounded to three with distinct exclusive-create artifacts;
+integrity errors remain terminal. The saved models and scientific protocol stay
+unchanged. Thirty-three focused cases and one separate observed-layout case
+passed. The latter retained 4,452 locked inputs, sparse membership sets, measured
+filesystem costs and an injected 50 seconds per full validation. It made one
+simulated provider request and released its readers, handles and locks. The dense
+7,175-file stress case still failed before the changed gate, so the final count is
+34 passes and one failure. Preserve both results. Acceptance covers the observed
+sparse membership design, not arbitrary scaling or an unmeasured future source
+closure. A successful live dispatch and native evaluation remain outstanding.
+
+## Retained E42 failure before provider launch, 2026-11-19
 
 E42 reached final dispatch preparation, then its owner renewal failed after a
 confirmation GET returned: the prior heartbeat had reached the unchanged

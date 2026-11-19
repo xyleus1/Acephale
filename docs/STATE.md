@@ -68,6 +68,27 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
+E43 stopped before the provider POST after its final acknowledgment gate passed.
+The repeated checks after that gate exhausted the owner's 30-second proof bound.
+The predecessor fence still had time remaining when cancellation completed; the
+failure was distinct from E42's 120-second owner-renewal failure below. No GPU,
+model execution or new native score resulted. Normal cleanup disabled the task,
+closed owned processes and cancelled the unstarted lease. Independent GitHub
+readback confirmed all four controller jobs completed/cancelled.
+
+A prospective repair combines exact checks with the gate's final full source
+guard, moves audit writes after dispatch and fixes creation-only retry filenames.
+It preserves freshness limits and the single provider request. Thirty-three
+focused cases and one separate test of the observed 4,452-file layout passed.
+The latter charged measured filesystem work and an injected 50 seconds per full
+validation, made one simulated provider request and verified cleanup. A separate
+7,175-file stress fixture exhausted the owner window before the changed gate;
+its dense directory-membership layout differs from the real configuration. That
+failure remains recorded: 34 of 35 distinct candidate cases passed. These local
+checks establish neither live success nor a benchmark gain.
+
+### Retained E42 failure
+
 E42 passed root handoff, adoption, budget inspection and later owner renewals,
 then failed before the provider launch POST. The final fence collector repeated
 a full ledger validation. Its next renewal was rejected after a confirmation GET
