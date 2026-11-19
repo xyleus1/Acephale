@@ -1,5 +1,18 @@
 # Acephale decisions
 
+## 2026-11-19: Preserve current and historical export provenance separately
+
+Teach the export path the actual capacity6/funding7 schema while retaining the
+complete capacity5/funding6 ancestry. Carry every parent file and exact hash
+through preparation, upload and archive verification. Keep older descriptor
+behavior and the controller's live financial checks unchanged. Offline fixture
+passes establish compatibility coverage, not model execution or task success.
+
+Install this reviewed source successor before the next run's first snapshot or
+operational binding. Archive the original bytes and retain the original namespace
+application and declaration as historical evidence. Record the new source mapping
+explicitly; do not silently rewrite immutable receipts or the failed E44 attempt.
+
 ## 2026-11-19: Match host setup validation to existing evaluation authority
 
 Permit the approved two-hour provider setup interval in the host validator only

@@ -1,6 +1,31 @@
 # Working on Acephale
 
-## Current continuation: E44 foundation failed after GPU dispatch, 2026-11-19
+## Current continuation: E45 compatibility repairs, 2026-11-19
+
+E45 has not launched. The foundation repair retains the reviewed 31-case result
+described below. Before execution, the downstream audit found that the export
+path could not read the actual GPU-capacity6/funding7 receipt. Four private export
+helpers now preserve that current pair and recursively validate capacity5/funding6
+and every earlier ancestor. The same files and hashes survive configuration,
+upload, remote retention and closed-archive verification. Live authority remains
+with the existing controller and native financial port.
+
+Forty-five distinct offline cases passed across targeted runs: 37 ancestry,
+legacy and adversarial cases, three integration cases, and five source-overlay
+cases. Retain the initial fixture failures: missing synthetic readiness/completion
+metadata and an insufficient simulated phase interval. The corrected cases change
+fixtures only. Actual retained provider and authority records are used; readiness,
+model completion and execution timing are explicitly synthetic. No model export,
+native trial or new score was produced.
+
+Operational source review and application remain pending. Apply the reviewed
+operational sources first, then the export-source overlay, then take the first
+staged snapshot. Archive the original source bytes and preserve the original
+namespace application and declaration receipts. Do not modify the failed E44
+attempt, repeat an optimizer, or report operational-suite success before its
+actual verification closes.
+
+## Retained E44 foundation failure after GPU dispatch, 2026-11-19
 
 The root controller exited zero at 10:17 UTC and the launcher exited zero at
 10:26 UTC. The GPU became active at 10:21 UTC, and foundation was dispatched at

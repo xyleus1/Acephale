@@ -68,6 +68,16 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
+E45 is still being prepared; it has not launched a new GPU or evaluation. The
+foundation setup repair passed 31 focused tests. A downstream export audit then
+found another compatibility gap: the retained provider receipt uses GPU-capacity
+revision 6 and funding revision 7, while the export path stopped at revisions 5
+and 6. The four-file repair carries the complete ancestry through preparation,
+upload, remote evidence retention and archive verification. Forty-five distinct
+offline cases passed across targeted runs. Initial fixture failures remain
+recorded. Source and operational application are pending; these checks add no
+model score, native reward or live latency result.
+
 E44 reached an active GPU at 10:21 UTC on November 19. The root controller and
 launcher both exited successfully, and the managed foundation stage was dispatched
 at 10:26 UTC. Foundation then failed with `IncompletePhase` at 10:27 UTC: its host

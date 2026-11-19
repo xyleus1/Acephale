@@ -1,5 +1,40 @@
 # Acephale engineering log
 
+## E45 export provenance compatibility, 2026-11-19
+
+The next-run audit found an independent downstream blocker before dispatch.
+The actual E44 provider receipt binds GPU-capacity6 and funding7, but export
+preparation searched only capacities1 through5. The descriptor, generic upload
+preparer and remote/archive consumers also lacked the extra ancestry level.
+The four-file repair validates the actual capacity6 schema and funding7 policy,
+then recursively checks the unchanged historical capacity5/funding6 chain.
+It does not grant financial authority, change model settings or alter deadlines.
+The separate foundation setup repair retains its 31 focused passes.
+
+The first export suite passed 37 ancestry, legacy and resealed-mutation cases;
+two integration fixtures failed because they omitted synthetic readiness and
+model-completion metadata. Both passed after fixture correction. A new generic
+preparer case then failed because its simulated historical clock left too little
+time under the unchanged phase limit; it passed after correcting that fixture.
+Five final source-overlay cases passed, including refusal after operational
+binding and preservation of an original error when diagnostic writing fails.
+There are 45 distinct passing cases across these targeted runs, not a single
+clean initial suite. All failed records remain retained.
+
+The integration cases use the actual retained provider receipt, six capacity
+records, five funding records and a historical base authorization. They exercise
+real preparation/upload binding, remote evidence copying, the archive's capacity
+validation code and tar membership/hash checks. Readiness, model completion and
+execution timing are explicitly synthetic; no live financial admission, full
+GPU host check, model export or native trial occurred.
+
+The reviewed successor covers 13 source files across both partitions: four
+implementation changes in each plus five dependent source-pin updates. A separate
+reconstruction reproduced the hash closure. Application will archive the original
+bytes and preserve the original namespace receipt, before the first staged
+snapshot or operational binding. Operational/source application is still pending;
+there is no new GPU launch, benchmark score or live performance claim.
+
 ## E44 closure and foundation compatibility repair, 2026-11-19
 
 The integrated owner closed with failure and verified provider termination.
