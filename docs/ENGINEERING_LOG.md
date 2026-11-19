@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## Finite workload planning, 2026-11-19
+
+Individual phase admission checks did not detect that a combined schedule could
+exceed its independent controllers' lifetime. Added a pure planner using declared
+duration caps, a dependency graph, exclusive resource assignments and actual
+controller start times. It rejects missing setup/export/drain paths, unqualified
+work, duplicate scientific units and work that ends at or beyond its deadline.
+
+Fourteen tests passed in the integrated module. Independent review also exercised
+three additional resource and clock cases. These are controlled timing fixtures,
+not measured throughput. The planner's result is conditional on complete, correct
+caller inputs; it cannot establish controller independence, artifact provenance,
+financial permission or task completion. Existing launch behavior is unchanged
+until the separate continuation adapter integrates it.
+
 ## Count-only recovery, 2026-11-19
 
 E45 failed before provider dispatch because three bounded final observations did

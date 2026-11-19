@@ -1,5 +1,20 @@
 # Working on Acephale
 
+## Finite workload planning, 2026-11-19
+
+`infra/acephale-infra-v1/finite_work_plan.py` checks a declared work graph against
+actual controller start times, the original lease ceiling and phase deadlines.
+It accounts for shared resources, qualification, export, drain and admission
+margins. Fourteen focused tests pass. This is a planning library, not a new
+reservation or launch path; the existing operator does not call it automatically.
+
+The current evaluation reached strict export and first-seed serving qualification.
+Replay is running. Its combined declared phase caps exceed one controller window,
+so a separate checkpoint continuation is being developed. Do not change a live
+deadline, discard failed rows or treat an unfinished attempt as completed. Reuse
+requires verified closed artifacts, original owner cleanup and unchanged task
+identities. The continuation adapter and its independent review are still pending.
+
 ## Count-only recovery, 2026-11-19
 
 The prospective count9 writer retains the complete closed count8 prefix and its
