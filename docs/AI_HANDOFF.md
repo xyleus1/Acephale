@@ -1,5 +1,30 @@
 # Working on Acephale
 
+## Current continuation: E42 closed before provider launch, 2026-11-19
+
+E42 reached final dispatch preparation, then its owner renewal failed after a
+confirmation GET returned: the prior heartbeat had reached the unchanged
+120-second expiry. The collector had repeated a full ledger validation immediately
+before that renewal. Missing failed-stage diagnostics prevent attributing the
+delay to validation or network work. No GPU, model execution or native score
+resulted. Normal cleanup recorded a terminated reservation with no instance and
+confirmed exact-name absence; a separate GitHub observation confirmed all four
+controller jobs completed/cancelled. Retain every hold and earlier failed attempt.
+
+The accepted repair uses the existing guarded transaction reader only for the
+final fence's duplicate ledger read, under the same original lock, exact ledger
+bytes and immutable input window. Other collectors retain their full validator.
+Fresh owner, ACK, API, membership and deadline checks remain; expired owners cannot
+be revived. Failed progress publications now retain the existing safe diagnostic.
+Fifteen reader tests and 13 actual collector/Publisher/launch composition tests
+passed with local transports, including one-POST uncertain-response recovery and
+cleanup. The initial composition run's test-exception mismatch remains recorded.
+The immutable-file guard passed 24 focused cases. The same 13 composed cases then
+passed with that final guard; this is a dependency rerun, not 13 new cases.
+The local guard microbenchmark is synthetic and does not establish a live speedup
+or explain E42's unmeasured failure interval. Live execution is still pending.
+Keep saved weights, datasets, seeds, scoring and benchmark labels unchanged.
+
 ## Native stop fixture verification, 2026-11-19
 
 The Node suite at `c33f46e` had 313 passes, four skips and one timeout cancellation.
@@ -13,10 +38,10 @@ financial-port integrations. Research pytest separately passed 667 with 23
 environment-specific skips on unchanged research source. Preserve the original
 cancelled suite; these checks add no GPU qualification or benchmark result.
 
-## Current continuation: E41 closed before GPU dispatch, 2026-11-19
+## Retained E41 failure before GPU dispatch, 2026-11-19
 
-Use this section and [STATE.md](STATE.md) for current execution status; the dated
-entries below retain earlier observations. Both physical controller qualifications
+This section retains the E41 observation; use [STATE.md](STATE.md) for current
+execution status. Both physical controller qualifications
 succeeded after the A06 failure. E41 then completed root handoff, launcher adoption
 and initial owner renewals, but its budget-inspection publication failed at
 compare-and-swap readback with the prior heartbeat aged 120.249 seconds. No provider

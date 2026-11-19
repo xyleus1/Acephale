@@ -68,31 +68,33 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
-E41 stopped before any provider launch request, GPU allocation, model execution
-or native evaluation. Its root handoff, launcher adoption and initial owner
-renewals succeeded. A later budget-inspection renewal failed at compare-and-swap
-readback because the prior heartbeat was 120.249 seconds old, beyond the unchanged
-120-second bound. The 83.582-second interval from retained initial enrollment to
-that publication attempt included two full financial validations and provider
-checks; their individual durations were not measured.
+E42 passed root handoff, adoption, budget inspection and later owner renewals,
+then failed before the provider launch POST. The final fence collector repeated
+a full ledger validation. Its next renewal was rejected after a confirmation GET
+returned because the previous owner had reached the unchanged 120-second expiry.
+The failed attempt's stage timings were not saved, so the evidence cannot separate
+validation time from network time or establish which dominated.
 
-Cleanup closed the reservation as terminated with no instance identifier.
-Normal cleanup confirmed the exact provider name absent; an independent GitHub
-query confirmed all four controller jobs completed/cancelled. Every financial hold
-remains retained; actual billed charges are unknown. Both physical controller qualifications had
-already succeeded before E41. The earlier A06 failure remains historical evidence,
-not the current qualification blocker.
+No GPU allocation, model execution or native evaluation occurred. Normal cleanup
+recorded a terminated reservation with no instance identifier and confirmed the
+exact provider name absent. A separate GitHub observation confirmed four
+completed/cancelled controller jobs. All financial holds remain; billed charges
+are unknown. Earlier failures and scientific results remain retained.
 
-A repair covering owner continuity through the complete dispatch path is in
-progress and has not been validated. Saved weights, scientific contracts and
-earlier results remain unchanged; neither optimizer ran again. Retain every
-failed attempt and its original evidence. See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
+The accepted final-fence repair reads the already validated ledger through the
+existing transaction reader under the same lock and immutable input window. It
+also records failed renewal diagnostics. Fifteen reader tests and 13 composed
+tests passed, including the actual fence collector and one mocked provider POST.
+The immutable-file guard passed 24 focused cases, and the same 13 composed cases
+passed again with that guard. A successful live run remains outstanding. These
+tests establish no benchmark gain; local guard timing is not live latency. Saved
+weights and scientific contracts are unchanged; neither optimizer ran again.
+See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Implement and validate owner continuity across the complete launch path,
-   including budget inspection, final dispatch and managed heartbeat handoff.
-   Preserve the original freshness, ownership and deadline checks.
+1. Validate the repaired live launch and managed heartbeat handoff. Preserve original
+   freshness, ownership, deadlines and fail-closed cleanup.
 2. Qualify both saved predictors, complete all 746 prefixes in all three replay
    conditions for each seed, and fit fresh calibration and audited reliability.
 3. Measure native prefetch opportunities and run the original 36 paired development

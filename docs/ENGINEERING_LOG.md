@@ -1,5 +1,59 @@
 # Acephale engineering log
 
+## E42 final-fence expiry and scoped ledger repair, 2026-11-19
+
+E42 passed root handoff, adoption and budget inspection, but failed before the
+provider launch POST. After its accepted sequence-11 publication, the final fence
+collector ran another full ledger validation, then attempted a renewal. A
+confirmation GET returned before the prior-owner liveness check rejected it at
+the original 120-second expiry. The accepted publication was recorded at heartbeat
+age 11.910 seconds; the collector directory was created at age 14.701 seconds,
+leaving 105.299 seconds to expiry. The failed publication's stage timings were not
+persisted. Those observations do not establish the duration of the repeated
+validation, the failed GET, or which component dominated.
+
+No GPU allocation, model execution or native evaluation followed. Normal cleanup
+recorded termination without an instance and confirmed exact-name absence.
+A separate GitHub observation confirmed four completed/cancelled jobs; the earlier
+local closure itself did not assert controller retirement. All holds remain and
+billed charges are unknown. Closure SHA-256:
+`21f926c3d28045646c0824f1b1170a6951b601f3593a3329e58f4728fbeefa26`;
+independent terminal observation:
+`d09973ceadbfbc9843e9fad74fc7f924469dced84c3918b0bc70bcd8ff6983d7`.
+
+The private repair gives the final collector a deep copy from its existing
+transaction reader. The original full validation, ledger lock, exact-byte checks,
+immutable input handles and reader invalidation remain. No decision survives
+unlock, mutation or expiry. Fresh owner/ACK/API evidence, financial holds, the
+single provider POST and cleanup rules are unchanged. Other collection paths
+still use the full validator. Failed progress publications now retain diagnostics.
+
+Fifteen reader tests passed. Thirteen composed cases then passed in 15.44 seconds
+using the real collector, signed watchdog evidence, Publisher, transaction reader
+and public launch on temporary fixtures. They cover duplicate validation cost,
+invalid snapshots, cancellation, stale ACK/API observations, delayed confirmation,
+one-POST launch/recovery and handle cleanup. The first run retained ten passes and
+one fixture assertion failure: slow API reads correctly triggered an earlier
+owner-expiry exception than the test expected. Only that expectation changed;
+two cases were added. These are simulated clocks and transports, not live latency
+or benchmark results. The final immutable-file guard passed 24 focused cases,
+including opened-handle identity, noninheritance, acquisition races, path changes
+and cleanup. The same 13 composition cases then passed in 21.42 seconds with the
+final guard. They retain full post-acquisition byte hashes and financial membership
+checks. These are dependency checks, not additional scientific trials. No saved
+weights or scientific contracts changed; live execution remains pending.
+
+The controlled-clock composition fixture removes a deliberately injected
+100-second duplicate validation while preserving the outer full validator. That
+is a test of scoped reuse, not a measured runtime saving. Separately, a paired
+microbenchmark used the same 2,580 disposable Windows files: median guard checks
+were 0.945218 versus 0.463746 seconds (eight per implementation); acquisition
+including its initial check was 2.903186 versus 1.843562 seconds (four each).
+Full post-acquisition hashes remained. This was one host with changing cache and
+load, so the numbers establish neither production bounds, end-to-end gains nor
+E42 causality. Earlier guard tests had temporary-directory name collisions;
+those results remain retained, followed by the corrected 24-case pass.
+
 ## Native stop fixture cleanup, 2026-11-19
 
 The public Node suite at `c33f46e` retained 313 passes, four skips and one

@@ -1,5 +1,23 @@
 # Acephale decisions
 
+## 2026-11-19: Reuse validation only inside the current locked transaction
+
+The final dispatch fence can read a guarded copy of its already validated ledger
+while the original ledger lock, immutable input handles and exact ledger bytes
+remain valid. Keep full validation at transaction entry; other collectors retain
+their full reader. Invalidate the scoped reader on mutation, error or exit. Fresh
+owner, controller and provider observations remain mandatory, and an expired
+owner cannot be renewed. Record failed publication stage diagnostics before
+propagating the original error.
+
+Use one no-follow stat per immutable-file check and compare acquisition identity
+with the actual held handle through Python's file-descriptor stat representation.
+Reject unusable identities, preserve exact membership checks and retain the full
+post-acquisition hash check. Keep existing sharing restrictions, ownership,
+deadlines and cleanup. The Windows fixture improvements and composed launch
+tests do not establish live latency or model gains. Preserve E42's failure and
+all earlier evidence; saved weights and scientific contracts remain unchanged.
+
 ## 2026-11-18: Test heartbeat freshness with a controlled fixture clock
 
 Keep the production three-second freshness rule. The compatibility fixture uses
