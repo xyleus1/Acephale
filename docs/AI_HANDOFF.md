@@ -1,5 +1,30 @@
 # Working on Acephale
 
+## Current continuation: E41 closed before GPU dispatch, 2026-11-19
+
+Use this section and [STATE.md](STATE.md) for current execution status; the dated
+entries below retain earlier observations. Both physical controller qualifications
+succeeded after the A06 failure. E41 then completed root handoff, launcher adoption
+and initial owner renewals, but its budget-inspection publication failed at
+compare-and-swap readback with the prior heartbeat aged 120.249 seconds. No provider
+launch request, GPU allocation, model execution or native evaluation followed.
+
+The reservation is terminated with no instance identifier. Normal cleanup confirmed
+exact-name provider absence; an independent GitHub query confirmed four
+completed/cancelled controller jobs.
+Keep all holds and failed artifacts; actual billed charges are unknown. Both saved
+predictors and all scientific contracts remain unchanged. Do not repeat optimizers
+or turn infrastructure failures into task trials.
+
+The complete dispatch-continuity repair is in progress and unvalidated. Earlier
+adoption tests stopped before the public launch/budget path, so their passes do
+not establish end-to-end continuity. Validate the composed path through budget
+inspection, capacity admission, provider dispatch/recovery and the managed child
+handoff without extending freshness or deadlines. The 83.582-second gap before
+the failed publication includes two full validations and provider checks; no
+per-component timing attribution is available. Preserve the existing mixed
+development results and custom tau-compatible study limitations.
+
 ## Deterministic serving-guard fixture, 2026-11-18
 
 The serving compatibility test now controls `Date.now()` after loading its

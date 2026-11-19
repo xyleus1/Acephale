@@ -1,5 +1,44 @@
 # Acephale engineering log
 
+## E41 owner continuity failure and verified cleanup, 2026-11-19
+
+Both physical controller qualifications had succeeded before E41; the earlier
+A06 qualification failure remains retained. E41's root process exited zero,
+and the launcher completed adoption, initial publication and two progress
+renewals. The later budget-inspection publication failed during exact
+compare-and-swap readback. It began at prior-owner age 112.872 seconds and was
+rejected at 120.249 seconds. The returned CAS observation is retained; it was
+not accepted as a successful renewal. The 120-second owner limit is unchanged.
+
+Initial enrollment was retained at owner age 29.289 seconds. The subsequent
+83.582-second interval to publication start contains the public launch's full
+financial validation, provider/security checks and a second full validation in
+the budget callback. Those component durations were not measured separately.
+The earlier adoption repair passed its actual handoff boundary, but its focused
+composition test stopped before this public launch path. No live performance
+or benchmark gain follows from that repair.
+
+No provider launch POST, GPU allocation, model execution or native trial occurred.
+Normal cancellation recorded a terminated reservation with no instance identifier.
+Normal cleanup confirmed the exact provider name absent. An independent GitHub
+query confirmed both controller pairs, four jobs, completed/cancelled. All financial
+holds remain; actual billed charges are unknown. Closure SHA-256:
+`5e2fb283f7055fc106b97791b1599f4c7b684036c1882c9a497d4ce393597e40`;
+independent controller observation:
+`d937fd0823af60f1d3b07f5cb397f14b9ea8a8e998068cb2c69f38b7d02833a1`.
+
+After cleanup, one unchanged, read-only ledger validation under `cProfile` took
+50.65 seconds and recorded 20.4 million function calls. Recursive funding-chain
+checks, JSON decoding and canonical hashing dominated. The ledger stayed unchanged.
+This instrumented diagnostic includes profiler overhead; it is neither a measured
+component duration from the failed launch nor a benchmark latency result.
+
+A full dispatch-continuity repair is in progress and unvalidated. Its verification
+must cover budget inspection, capacity/final dispatch, uncertain-response recovery
+and parent-to-child heartbeat transfer together. No expiry extension or renewed
+expired owner is accepted. Saved predictor weights, models, datasets, seeds and
+scoring stay fixed; no optimizer repeats and no new scientific result is claimed.
+
 ## Serving fixture clock and retained validation failures, 2026-11-18
 
 The serving-guard compatibility fixture previously timestamped its synthetic

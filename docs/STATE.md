@@ -1,6 +1,6 @@
 # Current state
 
-Updated November 18, 2026 (UTC). The saved predictor improved exact Top-1 hits on
+Updated November 19, 2026 (UTC). The saved predictor improved exact Top-1 hits on
 the development replay, but binary log loss worsened. Complete goal-conditioned
 replay and paired native evaluation are unfinished; no held-out task-accuracy or
 live latency improvement has been established.
@@ -68,22 +68,31 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
-E32 failed registration and E33 failed prelaunch admission; neither produced
-model results. Their original errors, declarations and holds remain retained.
-E34 has a fresh full-replay declaration, with unchanged saved predictors and
-scientific contracts, but no scientific execution result.
+E41 stopped before any provider launch request, GPU allocation, model execution
+or native evaluation. Its root handoff, launcher adoption and initial owner
+renewals succeeded. A later budget-inspection renewal failed at compare-and-swap
+readback because the prior heartbeat was 120.249 seconds old, beyond the unchanged
+120-second bound. The 83.582-second interval from retained initial enrollment to
+that publication attempt included two full financial validations and provider
+checks; their individual durations were not measured.
 
-The subsequent A06 infrastructure canary reached its original 600-second bound
-before any provider launch request or GPU allocation. It failed qualification;
-independent records confirm the exact provider name absent and both controller
-jobs completed/cancelled. Its undispatched reservation remains retained. This is
-a prelaunch infrastructure failure, not a model result or verified GPU termination.
-Both actual controller qualifications are still required before research launch.
-Detailed evidence and original failures remain in [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
+Cleanup closed the reservation as terminated with no instance identifier.
+Normal cleanup confirmed the exact provider name absent; an independent GitHub
+query confirmed all four controller jobs completed/cancelled. Every financial hold
+remains retained; actual billed charges are unknown. Both physical controller qualifications had
+already succeeded before E41. The earlier A06 failure remains historical evidence,
+not the current qualification blocker.
+
+A repair covering owner continuity through the complete dispatch path is in
+progress and has not been validated. Saved weights, scientific contracts and
+earlier results remain unchanged; neither optimizer ran again. Retain every
+failed attempt and its original evidence. See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Complete both actual controller qualifications within their original bounds.
+1. Implement and validate owner continuity across the complete launch path,
+   including budget inspection, final dispatch and managed heartbeat handoff.
+   Preserve the original freshness, ownership and deadline checks.
 2. Qualify both saved predictors, complete all 746 prefixes in all three replay
    conditions for each seed, and fit fresh calibration and audited reliability.
 3. Measure native prefetch opportunities and run the original 36 paired development
