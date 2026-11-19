@@ -1,5 +1,18 @@
 # Acephale decisions
 
+## 2026-11-19: Renew genuine ownership at expensive validation boundaries
+
+Use four explicit publications around expensive preflight work. Preserve the
+signed initial admission, fresh validation after unlock, original lifetimes and
+the final dispatch proof. The reviewed full-size 80-second cases pass with
+conditional timing margins; they do not prove live readiness or OS child startup.
+Proceed through the existing live checks with those limitations recorded.
+
+Do not add a cross-call pure-hash scope or a larger immutable-window handoff
+rewrite. The real two-read diagnostic showed no cache benefit: 38.647 seconds
+fresh versus 41.953 shared. Keep every normal authority check and record local
+timing variability instead of claiming an unmeasured optimization.
+
 ## 2026-11-19: Keep current count recovery separate from historical authority
 
 Count9 carries one unused count8 slot plus seven new slots. Its normal reader

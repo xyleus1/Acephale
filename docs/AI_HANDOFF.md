@@ -18,10 +18,15 @@ Actual post-activation full validation took 78.172 seconds. The 80-second
 derivative failed before the budget/final gate: the unlocked initial transition
 entered full validation with owner age 32.846 seconds, returned at 112.846, then
 crossed 121.261 during publication. Zero provider requests occurred and all readers
-and locks closed. Preserve this failure. A source-only repair must renew the live
-owner before expensive reads while preserving the signed initial admission,
-normal validation after unlock, and the fresh final gate. Startup remains a
-separate timing path; the dispatch composition does not qualify it.
+and locks closed. Preserve this failure. The selected runtime adds four genuine
+renewals: before leaving initial admission, before nested full reads, before the
+post-inspection read, and before startup configuration. The signed initial
+admission, normal validation after unlock and fresh final gate are unchanged.
+Seven focused cases and separate full-size dispatch/adoption cases passed.
+Adoption left only 1.941 seconds under its original lifetime; retain that limit.
+Real fresh/shared-cache reads then took 38.647/41.953 seconds, so no cache or
+caller change was selected. OS child startup and live readiness still require
+their normal observed gates. Apply only the final source package with this runtime.
 
 Render the fresh namespace using the actual count9 sidecar, new operator/native
 port, reviewed runtime/collector and unchanged guarded reader/window. Preserve

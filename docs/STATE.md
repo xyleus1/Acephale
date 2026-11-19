@@ -83,8 +83,13 @@ The real count activation subsequently measured 78.172 seconds for full ledger
 validation. A new 80-second composition failed during the initial launch handoff:
 the prior owner reached 121.261 seconds during publication, beyond its unchanged
 120-second lifetime. It made zero provider requests and released its readers and
-locks. A scoped heartbeat-renewal repair is under review before live dispatch.
-Fresh source rendering is in progress; these checks produce no benchmark score.
+locks. The scoped renewal repair subsequently passed seven focused cases and
+separate full-size dispatch and adoption cases at the same 80-second delay.
+Adoption retained only 1.941 seconds of margin, so this is conditional evidence,
+not general timing assurance. Two later normal ledger reads took 38.647 and
+41.953 seconds; sharing the existing pure-hash cache did not help. No cache,
+caller or lifetime change was selected. Fresh source rendering is in progress;
+these checks produce no benchmark score or live-readiness claim.
 
 E45 failed before the provider launch request at 14:13 UTC on November 19. Its
 three bounded final observations did not converge. The first two reached the

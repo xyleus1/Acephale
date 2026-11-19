@@ -1,5 +1,31 @@
 # Acephale engineering log
 
+## Scoped renewal repair selected for the next launch, 2026-11-19
+
+The runtime now publishes a genuine owner heartbeat at four expensive boundaries:
+after initial admission before unlock, before a nested full validation, before
+the post-budget validation, and before heartbeat startup builds its configuration.
+It retains every full validation, the signed initial enrollment/fence, ordinary
+publication cadence, all expiry limits and the final fresh dispatch proof.
+
+Seven focused cases passed, including stale/cancelled/changed-source rejection
+and reader invalidation across unlock. The first run reached one simulated POST
+but failed a stale expected read count; its assertion was corrected and the
+failure retained. A separate 5,458-pin dispatch case with 80-second full reads
+passed with one simulated POST, owner age 19.511 seconds at final observation,
+and all readers/windows/locks closed. Actual local costs differ between samples;
+this does not establish an isolated performance gain or production equivalence.
+
+The separate adoption case used a signed stopped-root handoff initially aged
+18.037 seconds, an 80-second read and actual local guard costs. It passed at
+original-owner age 118.059 seconds, leaving only 1.941 seconds of its 120-second
+lifetime. This narrow conditional pass is retained explicitly. The diagnostic
+using two normal full validations under one pure-hash scope measured 38.647 and
+41.953 seconds, with unchanged ledger/source bytes and no observed benefit.
+No cache/caller/window rewrite was selected. Its initial diagnostic path error
+occurred before importing the validator and remains recorded. Continue with the
+reviewed renewal repair and all normal live gates; no new scientific score exists.
+
 ## Measured validation cost exposes an initial handoff gap, 2026-11-19
 
 After the normal ledger reader took 78.172 seconds, the unchanged private runtime
