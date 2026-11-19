@@ -1,5 +1,15 @@
 # Working on Acephale
 
+## Native stop fixture verification, 2026-11-19
+
+The Node suite at `c33f46e` had 313 passes, four skips and one timeout cancellation.
+The unchanged deadline CLI case passed in isolation; no production failure cause
+was established. Its fixture now handles early service exit and test abort, emits
+phase diagnostics, and drains its owned child. Both deadlines and production code
+are unchanged. All three stop-mode cases and the TypeScript/schema check passed;
+the full Node rerun is pending. Research pytest separately passed 667 with 23
+environment-specific skips. Preserve the original failed suite and skip scope.
+
 ## Current continuation: E41 closed before GPU dispatch, 2026-11-19
 
 Use this section and [STATE.md](STATE.md) for current execution status; the dated

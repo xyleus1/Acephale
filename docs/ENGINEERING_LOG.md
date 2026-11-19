@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## Native stop fixture cleanup, 2026-11-19
+
+The public Node suite at `c33f46e` retained 313 passes, four skips and one
+cancelled test: the native deadline CLI fixture reached its 15-second test limit.
+An unchanged isolated run passed, so the timeout's original phase remains unknown.
+The research Python suite separately passed 667 tests with 23 explicit skips;
+GPU, Linux, Docker and separately configured upstream paths were not verified.
+
+The fixture now races inference startup against service exit and test cancellation,
+records its phase on failure, and terminates and drains its owned CLI child before
+cleanup. The 15-second test limit, one-second service deadline and production
+runtime are unchanged. All three affected stop-mode cases passed in one focused
+run, and the TypeScript/schema check passed. Full Node verification of this
+fixture change is pending. The original cancelled run remains retained.
+
 ## E41 owner continuity failure and verified cleanup, 2026-11-19
 
 Both physical controller qualifications had succeeded before E41; the earlier
