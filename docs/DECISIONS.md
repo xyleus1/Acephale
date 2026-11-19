@@ -1,5 +1,17 @@
 # Acephale decisions
 
+## 2026-11-19: Check the complete work window before dispatch
+
+Plan from declared caps and actual controller start times. Account for resource
+contention and the export/drain path, and preserve strict admission margins.
+Maximum phase allowances are not estimates of actual runtime. A feasible graph
+does not grant execution permission or allow an existing deadline to change.
+
+Continuation must retain completed artifacts and failed outcomes under their
+original identities. A future work-unit runner may defer a unit before claiming
+it when its full window does not fit. A claimed or interrupted native unit cannot
+be replaced. The planner alone does not implement checkpoint reuse or dispatch.
+
 ## 2026-11-19: Add one finite count-only recovery envelope
 
 Keep count8 immutable and retain its one unused slot. Count9 adds seven slots

@@ -1,5 +1,20 @@
 # Acephale research runbook
 
+## Check a finite workload
+
+Build a `Plan` with `Stage` and `Controller` records from
+`infra/acephale-infra-v1/finite_work_plan.py`, then call `assess(plan)` before
+reserving or claiming work. Supply observed controller starts, original deadlines,
+declared duration caps, all prerequisite/setup/export/drain stages, and exclusive
+resources. `tail_margin` is an admission guard, not repeated work. The returned
+intervals show resource serialization and the reasons a window cannot fit.
+
+An assessment is conditional on those inputs. Keep normal financial, ownership,
+freshness and source checks. This library is not yet wired into the existing
+launch CLI; do not use a successful assessment as permission to start a lease.
+Run its focused checks with `python -m unittest test_finite_work_plan` from the
+infrastructure directory.
+
 ## Recover finite count capacity after closed evaluation attempts
 
 From a reviewed clean committed operator, use
