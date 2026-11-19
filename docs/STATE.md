@@ -70,11 +70,13 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 E44 reached an active GPU at 10:21 UTC on November 19. The root controller and
 launcher both exited successfully, and the managed foundation stage was dispatched
-at 10:26 UTC. Foundation then failed with `IncompletePhase` at 10:27 UTC. Its
-managed entry reports repair pending and local ownership drained; remote drain
-is not yet confirmed. Export verification passed, but required stage evidence
-did not. No new model score, paired native result or live performance gain is
-available. Saved weights and the scientific design remain unchanged.
+at 10:26 UTC. Foundation then failed with `IncompletePhase` at 10:27 UTC: its host
+validator still capped provider setup at one hour, while the approved lease allows
+two hours. This configuration compatibility error occurred before the remote stage
+receipt, not during model evaluation. The managed entry reports local ownership
+drained and remote drain unconfirmed. Export verification passed, but required
+stage evidence did not. No new model score, paired native result or live
+performance gain is available. Saved weights and the scientific design are unchanged.
 
 The final dispatch proof passed on its first attempt under unchanged freshness
 bounds. Successful infrastructure dispatch does not establish foundation success.

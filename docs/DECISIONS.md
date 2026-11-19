@@ -11,6 +11,10 @@ existing managed sequence with frozen inputs and report its actual outputs.
 Foundation's subsequent `IncompletePhase` remains a failed stage despite that
 dispatch success. Confirm drain and use the existing recovery path before any
 continuation; verified export alone is not successful stage evidence.
+The conflicting one-hour host check and approved two-hour provider setup interval
+require a reviewed compatibility fix. Preserve the failed attempt and existing
+deadline and scientific identities; do not patch its bound files in place or
+interpret this validation failure as a model result.
 
 ## 2026-11-19: Preserve completed preparation after a memory failure
 

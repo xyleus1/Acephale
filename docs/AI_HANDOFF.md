@@ -7,6 +7,9 @@ The root controller exited zero at 10:17 UTC and the launcher exited zero at
 10:26 UTC. It then reported `IncompletePhase` at 10:27:23 UTC. The 10:27:42 local
 observation shows repair pending, local ownership drained and remote drain
 unconfirmed. Export verification passed, but required stage evidence did not.
+The foundation host validator rejects the approved 7,200-second provider setup
+interval because it retains a 3,600-second cap. It failed before the remote stage
+receipt; this is configuration compatibility, not a model-accuracy failure.
 Inspect the retained stage failure and finish the existing lifecycle's drain and
 recovery checks before continuing. Do not repeat preparation or start a second
 launcher based only on the earlier successful dispatch.
