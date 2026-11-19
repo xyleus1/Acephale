@@ -1,6 +1,6 @@
 # Acephale engineering log
 
-## E44 preparation stopped on host memory, 2026-11-19
+## E44 recovered pool preparation and entered sealing, 2026-11-19
 
 The source migration passed 26 namespace and 29 operational cases; nine
 PowerShell sources parsed successfully. An initial draft used the wrong path for
@@ -18,14 +18,21 @@ ledger hashes matched the earlier route observation. The native financial journa
 was not independently compared; infrastructure byte equality does not establish
 that broader claim. Existing holds and all failed artifacts remain retained.
 
-A separate pool-only retry capture passed source review. It keeps the same
-allocator, interpreter and four command arguments, rechecks absent outputs and
-retains a new attempt record. It neither repeats context/route/quote preparation
-nor retries automatically. Execution is pending host memory relief; no allocator,
-garbage-collection or runtime change is justified by this observation. No GPU,
-model or native trial ran, and no owned experiment jobs or GPU resources remain
-active. This documentation update used only privacy, formatting and diff checks;
-no runtime tests were repeated.
+A separate pool-only retry capture passed source review and then completed with
+exit zero after host memory headroom recovered. It used the same allocator,
+interpreter and four command arguments, rechecked absent outputs and retained a
+new attempt record. It did not repeat context/route/quote preparation or retry
+automatically. No allocator, garbage-collection or runtime change was made.
+
+The static controller pair is now live. The source inventory contains 6,633
+entries, and the complete current-review artifact contains 7,668 unique pins.
+The original review process exit was not observed after its tool output was lost.
+A separate structural check completed with exit zero; that establishes artifact
+completeness and binding consistency, not the original process exit or a fresh
+rehash of every pin. The normal sealer is running and performs its own validation.
+No GPU, model execution or new native score has resulted. This documentation
+update used only privacy, formatting and diff checks; no runtime tests were
+repeated.
 
 ## E43 final observation and retry defects, 2026-11-19
 
