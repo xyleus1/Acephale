@@ -68,15 +68,24 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
-E45 is still being prepared; it has not launched a new GPU or evaluation. The
-foundation setup repair passed 31 focused tests. A downstream export audit then
-found another compatibility gap: the retained provider receipt uses GPU-capacity
-revision 6 and funding revision 7, while the export path stopped at revisions 5
-and 6. The four-file repair carries the complete ancestry through preparation,
-upload, remote evidence retention and archive verification. Forty-five distinct
-offline cases passed across targeted runs. Initial fixture failures remain
-recorded. Source and operational application are pending; these checks add no
-model score, native reward or live latency result.
+E45 failed before the provider launch request at 14:13 UTC on November 19. Its
+three bounded final observations did not converge. The first two reached the
+exact dispatch check with owner records aged 33.716 and 39.064 seconds, exceeding
+the unchanged 30-second limit; the third timed out in collection. Their last
+exact checks took 0.372 and 0.237 seconds. These observations locate the first two
+failures before those checks, not in a slow final source traversal.
+
+Automatic cancellation confirmed that no provider request was attempted and no
+instance existed. Local work is drained and disabled, all four controller jobs
+are independently confirmed completed/cancelled, and every financial hold is
+retained. No GPU, model evaluation or native trial ran in E45.
+
+The foundation and export compatibility repairs were applied before E45's
+sealed launch. The next repair separates predecessor-fence collection from final
+research-owner publication, removing an enrollment whose observations were then
+discarded and fetched again. It retains the actual acknowledgment/API gate and
+all freshness limits. Composed timing tests and independent review are in
+progress; the repair has not been applied or used for a live dispatch.
 
 E44 reached an active GPU at 10:21 UTC on November 19. The root controller and
 launcher both exited successfully, and the managed foundation stage was dispatched
@@ -157,8 +166,9 @@ See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Complete the next run with the reviewed foundation-validator repair. Preserve
-   the successful dispatch path, original authority checks and failed-attempt history.
+1. Validate and apply the final-observation sequencing repair, then complete a
+   fresh two-part evaluation. Preserve all authority checks and failed attempts;
+   extend only the bounded lease-count allowance needed for completion.
 2. Qualify both saved predictors, complete all 746 prefixes in all three replay
    conditions for each seed, and fit fresh calibration and audited reliability.
 3. Measure native prefetch opportunities and run the original 36 paired development

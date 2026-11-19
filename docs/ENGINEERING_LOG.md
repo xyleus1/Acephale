@@ -1,5 +1,28 @@
 # Acephale engineering log
 
+## E45 final-observation failure and verified closure, 2026-11-19
+
+The launcher failed before provider POST after three bounded observation
+attempts. The first two owner ages at the exact check were 33.716 and 39.064
+seconds; their final guards took 0.372 and 0.237 seconds. The third attempt timed
+out during collection. Preserve its missing diagnostic attribution rather than
+assuming the same cause. Cancellation verified no provider POST and no instance.
+Local work is disabled/drained; independent API observations confirmed all four
+controller jobs completed/cancelled. All holds remain recorded.
+
+Source review found duplicate research enrollment: the fence collector fetched
+owner acknowledgments and job observations, but final observation retained only
+its owner record and fetched acknowledgments/jobs again. The prospective repair
+maintains actual owner liveness during predecessor collection, then publishes a
+fresh owner and runs the unchanged final gate once. Initial enrollment and all
+freshness bounds remain. Independent composition tests use delayed responses and
+the actual 5,458-pin/seven-set layout. Review and tests are in progress; no new
+live dispatch or benchmark result follows from this candidate.
+
+E45's earlier foundation/export/source-pin repairs, entry check, inventory,
+seal, task registration and controller readiness completed. Those preparation
+successes do not change the final failure or establish scientific completion.
+
 ## E45 export provenance compatibility, 2026-11-19
 
 The next-run audit found an independent downstream blocker before dispatch.
@@ -30,10 +53,10 @@ GPU host check, model export or native trial occurred.
 
 The reviewed successor covers 13 source files across both partitions: four
 implementation changes in each plus five dependent source-pin updates. A separate
-reconstruction reproduced the hash closure. Application will archive the original
-bytes and preserve the original namespace receipt, before the first staged
-snapshot or operational binding. Operational/source application is still pending;
-there is no new GPU launch, benchmark score or live performance claim.
+reconstruction reproduced the hash closure. Subsequent application archived the
+original bytes and preserved the original namespace receipt before the first
+staged snapshot and operational binding. E45 later failed at final observation
+before provider launch, as recorded above. No benchmark result followed.
 
 ## E44 closure and foundation compatibility repair, 2026-11-19
 

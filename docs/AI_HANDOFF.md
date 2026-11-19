@@ -1,9 +1,37 @@
 # Working on Acephale
 
-## Current continuation: E45 compatibility repairs, 2026-11-19
+## Current continuation: E45 closed before provider launch, 2026-11-19
 
-E45 has not launched. The foundation repair retains the reviewed 31-case result
-described below. Before execution, the downstream audit found that the export
+E45's launcher exited one at 14:13 UTC after three final observations failed to
+converge. Attempts one and two presented owner records aged 33.716 and 39.064
+seconds at the exact check, above the unchanged 30-second limit. Their final
+checks took 0.372 and 0.237 seconds. Attempt three timed out inside collection;
+its missing stage timings do not establish the same cause.
+
+The cancellation record confirms no provider request and exact-name absence.
+Local tasks are disabled and drained; all four dedicated controller jobs were
+independently observed completed/cancelled at 14:21 UTC. All financial holds and
+immutable failure artifacts remain. No GPU or new scientific result exists.
+
+The reviewed foundation/export repairs and downstream source-pin correction
+were applied before sealing E45. Do not rerun its launcher or modify sealed
+sources. A separate prospective repair collects the predecessor fence while
+maintaining real sole-owner liveness, then publishes a fresh research owner and
+runs the existing exact acknowledgment/API gate once. Preserve initial enrollment,
+all freshness/deadline limits, source and ledger guards, and the one-request rule.
+Independent composed tests include delayed controller responses and the actual
+5,458-source-pin/seven-financial-set shape; validation is still in progress.
+
+The closed history leaves one count slot, insufficient for both partitions.
+A separate isolated public change is being prepared for an append-only count
+successor with eight future slots. Funding, GPU-hour, hourly and session limits
+remain unchanged; every admission still checks them. No successor authority or
+new reservation has been created. Apply only after source tests and review.
+
+## Retained E45 compatibility preparation, 2026-11-19
+
+Before E45 launched, the foundation repair retained the reviewed 31-case result
+described below. The downstream audit then found that the export
 path could not read the actual GPU-capacity6/funding7 receipt. Four private export
 helpers now preserve that current pair and recursively validate capacity5/funding6
 and every earlier ancestor. The same files and hashes survive configuration,
@@ -18,12 +46,11 @@ fixtures only. Actual retained provider and authority records are used; readines
 model completion and execution timing are explicitly synthetic. No model export,
 native trial or new score was produced.
 
-Operational source review and application remain pending. Apply the reviewed
-operational sources first, then the export-source overlay, then take the first
-staged snapshot. Archive the original source bytes and preserve the original
-namespace application and declaration receipts. Do not modify the failed E44
-attempt, repeat an optimizer, or report operational-suite success before its
-actual verification closes.
+This preparation subsequently passed review and was applied, with original bytes
+archived and original namespace/declaration receipts retained. E45 then completed
+entry verification, inventory, sealing and controller readiness before the
+separate final-observation failure above. Do not modify E44 or E45 artifacts or
+repeat either optimizer.
 
 ## Retained E44 foundation failure after GPU dispatch, 2026-11-19
 

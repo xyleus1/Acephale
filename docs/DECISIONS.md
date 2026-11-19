@@ -1,5 +1,21 @@
 # Acephale decisions
 
+## 2026-11-19: Publish final research readiness after predecessor collection
+
+Collect and verify the predecessor fence while keeping the genuine sole owner
+live. Then publish a fresh research-owner record and perform the existing exact
+acknowledgment/job gate once. Do not first collect research enrollment whose
+observations the final gate discards. Preserve initial enrollment, the 30-second
+final owner limit, all other freshness bounds, exact source/ledger checks,
+cancellation and the single provider-request rule. Validate the composed path
+with delayed controller responses before applying it to a fresh run.
+
+Preserve E45's three failed observations and verified undispatched closure.
+Prepare a separate append-only lease-count successor for eight future slots,
+retaining the one unused slot plus seven additional slots. This changes no
+funding, GPU-hour, hourly or session ceiling and releases no existing hold.
+Source support and review must precede authority creation or new admission.
+
 ## 2026-11-19: Preserve current and historical export provenance separately
 
 Teach the export path the actual capacity6/funding7 schema while retaining the
