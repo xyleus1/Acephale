@@ -18,7 +18,7 @@ EXTENDED_LIMIT = 6
 
 
 def capacity_path(ledger_path: Path, *, version: int = 1) -> Path:
-    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7, 8):
+    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7, 8, 9):
         raise ValueError("Unknown evaluation lease-count capacity version")
     return Path(str(ledger_path.resolve()) + f".evaluation-lease-capacity-v{version}.json")
 
@@ -105,7 +105,12 @@ def validate(value: dict, ledger: dict, funding: dict, *, canonical_digest=diges
 
 
 def effective_limit(ledger: dict, funding: dict, *, canonical_digest=digest) -> tuple[int, dict | None]:
+    ledger_path = ledger.get("plan", {}).get("infrastructureLedgerPath")
+    successor = capacity_path(Path(ledger_path), version=9) if ledger_path else None
     if funding["version"] == 7:
+        if successor is not None and successor.exists():
+            value = validate_funding7_recovery(read(successor), ledger, funding)
+            return value["effectiveMaximumNewLeases"], value
         from evaluation_completion import count_limit
         return count_limit(ledger, funding)
     original = funding["policy"]["maximumNewLeases"]
@@ -1027,4 +1032,164 @@ def record_funding6_followup(ledger_path: Path, reason: str, *, controller=None,
                 or journal_identity() != journal_before):
             raise ValueError("Original authorities, sources or journal stat changed during count continuation")
         controller.write_new(output, value)
+        return value
+
+
+COUNT_RECOVERY_POLICY = "src/lib/acephale/contracts/evaluation-count-recovery-v1.json"
+
+
+def _count_recovery_prefix(value: dict, ledger: dict, funding: dict) -> dict:
+    """Keep closed lifecycle identities and all retained financial fields exact."""
+    import control
+    import evaluation_completion as completion
+
+    sizes = value.get("baselineCounts")
+    if (type(sizes) is not dict or set(sizes) != set(completion.FIELDS)
+            or any(type(n) is not int or n < 0 or n > len(ledger.get(field, [])) for field, n in sizes.items())
+            or sizes["leases"] < len(funding["baselineLeases"])
+            or sizes["trainingWindows"] != len(funding["baselineTrainingWindows"])):
+        raise ValueError("Count9 requires the complete retained prefix")
+    prefix = {**ledger, **{field: ledger[field][:count] for field, count in sizes.items()}}
+    for field in completion.FIELDS:
+        if control._budget_digest(completion.projection(prefix[field], field)) != value.get("baselineHashes", {}).get(field):
+            raise ValueError("Count9 cannot change historical holds or deadlines")
+    states = [{key: row.get(key) for key in ("id", "status", "instanceId")} for row in prefix["leases"]]
+    if (value.get("baselineStates") != states
+            or any(row["status"] not in {"terminated", "launch_unknown"}
+                   or (row["status"] == "launch_unknown" and row["instanceId"] is not None) for row in states)
+            or any(row["status"] != "terminated" for row in states[len(funding["baselineLeases"]):])):
+        raise ValueError("Count9 requires closed work and unchanged unresolved ownership")
+    if len(ledger["trainingWindows"]) != sizes["trainingWindows"]:
+        raise ValueError("Count9 does not authorize optimizer windows")
+    return prefix
+
+
+def _latest_retained_lifecycle(ledger: dict) -> float:
+    import control
+    # Older retained rows may omit timestamps. Parent authority validation still
+    # requires reservation timestamps for every current count8 lease.
+    return max(control.finite_number(row[field], "retained lifecycle timestamp")
+               for row in ledger["leases"] for field in ("reservedAt", "terminationVerifiedAt")
+               if field in row)
+
+
+def validate_funding7_recovery(value: dict, ledger: dict, funding: dict) -> dict:
+    """Retain count8's closed prefix and admit eight finite prospective leases."""
+    import control
+    import evaluation_completion as completion
+
+    if funding.get("version") != 7:
+        raise ValueError("Count9 requires unchanged funding7")
+    approved = control.read_json(control.ROOT / COUNT_RECOVERY_POLICY)
+    prefix = _count_recovery_prefix(value, ledger, funding)
+    sizes = value["baselineCounts"]
+    parent_limit, parent = completion.count_limit(prefix, funding)
+    _, gpu = completion.gpu_capacity(ledger, funding)
+    if parent is None or parent["version"] != 8 or gpu["version"] != 6:
+        raise ValueError("Count9 requires the complete count8 and GPU6 ancestry")
+    consumed = sizes["leases"] - len(funding["baselineLeases"])
+    unused = parent_limit - consumed
+    if unused != 1:
+        raise ValueError("Count9 requires exactly one retained unused parent slot")
+    parent_path = capacity_path(Path(ledger["plan"]["infrastructureLedgerPath"]), version=8)
+    expected = {"version": 9, "profile": "acephale-evaluation-lease-capacity-v9",
+        "policyHash": control._budget_digest(approved), "fundingHash": funding["contentHash"],
+        "fundingSha256": sha(completion.funding_path(ledger, 7)), "fundingPolicyHash": funding["policyHash"],
+        "planHash": ledger["planHash"], "financialBindingHash": control._financial_binding_hash(ledger),
+        "parentCapacityHash": parent["contentHash"], "parentCapacitySha256": sha(parent_path),
+        "parentSourceCommit": parent["sourceCommit"], "gpuHourCapacityHash": gpu["contentHash"],
+        "gpuHourCapacitySha256": sha(completion.path(ledger, "gpu")),
+        "parentMaximumNewLeases": parent_limit, "consumedParentLeases": consumed,
+        "latestRetainedLifecycleAt": _latest_retained_lifecycle(prefix),
+        "inheritedUnusedLeases": 1, "additionalLeases": 7, "prospectiveLeaseLimit": 8,
+        "effectiveMaximumNewLeases": parent_limit + 7,
+        "effectiveOriginalMaximumNewLeases": parent["effectiveOriginalMaximumNewLeases"] + 7,
+        "evaluationOnly": True, "optimizerPermitted": False, "leaseCountAuthorityChanged": True,
+        "financialCeilingsChanged": False, "gpuHoursChanged": False, "existingReservationsChanged": False,
+        "existingDeadlinesChanged": False, "modelContractsChanged": False,
+        "authorizationSource": "explicit_user_instruction"}
+    if (any(type(value.get(key)) is not type(item) or value[key] != item for key, item in expected.items())
+            or value.get("contentHash") != control._budget_digest({k: v for k, v in value.items() if k != "contentHash"})
+            or not re.fullmatch(r"[a-f0-9]{40}", value.get("sourceCommit", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", value.get("originalSliceSha256", ""))
+            or not isinstance(value.get("authorizationReason"), str)
+            or not value["authorizationReason"].strip() or len(value["authorizationReason"]) > 1024):
+        raise ValueError("Count9 must bind exact parent, policy, source and unchanged authority")
+    recorded = control.finite_number(value.get("recordedAt"), "count9 timestamp")
+    if recorded < max(parent["recordedAt"], gpu["recordedAt"], expected["latestRetainedLifecycleAt"]):
+        raise ValueError("Count9 cannot predate its parent or retained leases")
+    suffix = ledger["leases"][sizes["leases"]:]
+    if len(suffix) > 8:
+        raise ValueError("Count9 finite lease count exceeded")
+    for row in suffix:
+        if (row.get("evaluationLeaseCapacityHash") != value["contentHash"]
+                or control.finite_number(row.get("reservedAt"), "count9 reservation timestamp") < recorded):
+            raise ValueError("New leases must bind prospective count9")
+    return value
+
+
+def record_funding7_recovery(ledger_path: Path, reason: str, *, source_probe=None, budget=None) -> dict:
+    """Append count9 once; preserve money, GPU hours and every existing reservation."""
+    import control
+    import evaluation_completion as completion
+
+    source_probe = source_probe or control.committed_source
+    budget = budget or control.study_budget
+    ledger_path = ledger_path.resolve()
+    with control.ledger_lock(ledger_path), control.budget_digest_scope():
+        ledger = control.checked_bound_ledger(ledger_path)
+        funding = control.infrastructure_funding(ledger)
+        if not funding or funding.get("version") != 7:
+            raise ValueError("Count9 requires unchanged funding7")
+        target = capacity_path(ledger_path, version=9)
+        if target.exists():
+            raise ValueError("Count9 authority cannot be overwritten")
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
+            raise ValueError("Count9 requires an explicit bounded authorization reason")
+        parent_limit, parent = completion.count_limit(ledger, funding)
+        _, gpu = completion.gpu_capacity(ledger, funding)
+        consumed = len(ledger["leases"]) - len(funding["baselineLeases"])
+        if (parent is None or parent_limit - consumed != 1
+                or any(row["status"] != "terminated" for row in ledger["leases"][len(funding["baselineLeases"]):])):
+            raise ValueError("Count9 requires closed work and exactly one retained unused parent slot")
+        parent_path = capacity_path(ledger_path, version=8)
+        journal = Path(ledger["plan"]["studyLedgerPath"]).resolve()
+
+        def protected():
+            return {ledger_path, Path(__file__).resolve(), Path(control.__file__).resolve(), Path(completion.__file__).resolve(),
+                    control.ROOT / COUNT_RECOVERY_POLICY, control.ROOT / completion.POLICY_FILE,
+                    *(p for p in journal.parent.glob(journal.name + ".*.json") if p.is_file()),
+                    *(p for p in ledger_path.parent.glob(ledger_path.name + ".*.json") if p.is_file())}
+
+        def journal_identity():
+            info = journal.stat()
+            return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+        before = {p: sha(p) for p in protected()}
+        journal_before = journal_identity()
+        body = {"version": 9, "profile": "acephale-evaluation-lease-capacity-v9",
+            "policyHash": control._budget_digest(control.read_json(control.ROOT / COUNT_RECOVERY_POLICY)),
+            "fundingHash": funding["contentHash"], "fundingSha256": sha(completion.funding_path(ledger, 7)),
+            "fundingPolicyHash": funding["policyHash"], "planHash": ledger["planHash"],
+            "financialBindingHash": control._financial_binding_hash(ledger),
+            "parentCapacityHash": parent["contentHash"], "parentCapacitySha256": sha(parent_path),
+            "parentSourceCommit": parent["sourceCommit"], "gpuHourCapacityHash": gpu["contentHash"],
+            "gpuHourCapacitySha256": sha(completion.path(ledger, "gpu")),
+            "parentMaximumNewLeases": parent_limit, "consumedParentLeases": consumed,
+            "latestRetainedLifecycleAt": _latest_retained_lifecycle(ledger),
+            "inheritedUnusedLeases": 1, "additionalLeases": 7, "prospectiveLeaseLimit": 8,
+            "effectiveMaximumNewLeases": parent_limit + 7,
+            "effectiveOriginalMaximumNewLeases": parent["effectiveOriginalMaximumNewLeases"] + 7,
+            "evaluationOnly": True, "optimizerPermitted": False, "leaseCountAuthorityChanged": True,
+            "financialCeilingsChanged": False, "gpuHoursChanged": False, "existingReservationsChanged": False,
+            "existingDeadlinesChanged": False, "modelContractsChanged": False,
+            "authorizationSource": "explicit_user_instruction", "authorizationReason": reason.strip(),
+            "originalSliceSha256": before[ledger_path], "recordedAt": control.time.time(),
+            "sourceCommit": source_probe(ledger["plan"]["sourceCommit"]),
+            "originalJournalEvidence": budget(ledger["plan"], "inspect"), **completion.baseline(ledger)}
+        value = validate_funding7_recovery({**body, "contentHash": control._budget_digest(body)}, ledger, funding)
+        if (protected() != set(before) or any(sha(p) != digest for p, digest in before.items())
+                or journal_identity() != journal_before):
+            raise ValueError("Original count authorities, sources or journal changed during authorization")
+        control.write_new(target, value)
         return value

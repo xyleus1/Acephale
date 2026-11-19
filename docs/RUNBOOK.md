@@ -1,5 +1,19 @@
 # Acephale research runbook
 
+## Recover finite count capacity after closed evaluation attempts
+
+From a reviewed clean committed operator, use
+`python infra/acephale-infra-v1/control.py record-evaluation-count-recovery --ledger <configured-ledger> --authorization-reason <reason>`.
+The command creates count9 once only when count8 has exactly one unused slot and
+all work since the funding7 baseline has terminated. It preserves that slot and
+adds seven, without changing money, GPU hours, existing holds or deadlines.
+
+Retain the original count8 sidecar and every failed reservation. Regenerate the
+current source-bound native port and bind the new authority explicitly in the
+private operator before dispatch; do not relabel historical count8 receipts.
+Each future lease still requires the complete normal financial, capacity,
+ownership and deadline admission. Source tests do not activate this authority.
+
 ## Activate the finite completion envelope
 
 Use a reviewed, clean committed operator. Keep the sole original journal and

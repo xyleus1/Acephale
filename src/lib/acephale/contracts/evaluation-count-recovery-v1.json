@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "profile": "acephale-evaluation-count-recovery-policy-v1",
+  "fundingVersion": 7,
+  "gpuCapacityVersion": 6,
+  "countCapacityVersion": 9,
+  "parentCountCapacityVersion": 8,
+  "inheritedUnusedLeases": 1,
+  "additionalLeases": 7,
+  "prospectiveLeaseLimit": 8,
+  "evaluationOnly": true,
+  "optimizerPermitted": false,
+  "financialCeilingsChanged": false,
+  "gpuHoursChanged": false,
+  "existingReservationsChanged": false,
+  "existingDeadlinesChanged": false,
+  "modelContractsChanged": false
+}

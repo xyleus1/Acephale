@@ -1,5 +1,16 @@
 # Current state
 
+E45 stopped before provider dispatch when three bounded final observations did
+not converge. The reserved lease was closed without an instance; its financial
+hold remains. The local task is disabled and both exact controller pairs were
+independently observed completed/cancelled. No new GPU execution or benchmark
+score resulted from that attempt.
+
+Prospective count9 source preserves the remaining count8 slot and adds seven,
+allowing eight future leases after separate activation from a reviewed operator.
+It changes no money, GPU-hour ceiling, model, data or deadline. This branch has
+not created that authority or made another reservation. Validation is in progress.
+
 The prospective dispatch repair maintains owner progress through validated
 launch work and bounded budget inspection. Its 28 composed tests passed an
 independent run. Repository regression is being completed before deployment.

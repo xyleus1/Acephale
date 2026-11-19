@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-19: Add one finite count-only recovery envelope
+
+Keep count8 immutable and retain its one unused slot. Count9 adds seven slots
+after the complete current work has closed, yielding eight prospective leases.
+Every reservation consumes a slot even if provider dispatch never occurs. The
+writer validates and records the exact closed prefix, parent source and bytes,
+funding7 and GPU6 before creating a new sidecar. Earlier unresolved holds remain
+unchanged; they do not become new launch permission.
+
+This changes lease-count authority only. Existing monetary allocations, the
+350-hour GPU ceiling, per-session limits, frozen models, data and task definitions
+remain intact. No capacity is activated by implementation or unit tests, and a
+new sidecar does not replace normal current admission for each lease.
+
 ## 2026-11-19: Keep launch ownership live inside validated transactions
 
 Long validation and inspection phases need progress within the existing lock.
