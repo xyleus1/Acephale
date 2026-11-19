@@ -1,6 +1,14 @@
 # Acephale engineering log
 
-## E44 reached GPU dispatch and the managed foundation stage, 2026-11-19
+## E44 foundation failed after successful GPU dispatch, 2026-11-19
+
+Foundation reported `IncompletePhase` at 10:27:23 UTC. The local observation at
+10:27:42 UTC showed its managed entry in repair-pending state, local ownership
+drained and remote drain unconfirmed. Export verification passed, but required
+stage evidence did not. The cause is under inspection; these observations do
+not establish remote cleanup or a successful foundation stage. No new benchmark
+result was produced. The earlier successful GPU dispatch remains valid evidence
+of that infrastructure milestone only.
 
 The root controller exited zero at 10:17:03 UTC. The GPU became active at
 10:21:13 UTC, and the launcher exited zero at 10:26:19 UTC without stderr. The

@@ -1,12 +1,15 @@
 # Working on Acephale
 
-## Current continuation: E44 GPU and managed foundation active, 2026-11-19
+## Current continuation: E44 foundation failed after GPU dispatch, 2026-11-19
 
 The root controller exited zero at 10:17 UTC and the launcher exited zero at
-10:26 UTC. The GPU became active at 10:21 UTC, and the managed foundation stage
-was dispatched at 10:26 UTC. A local observation confirmed the managed sequence
-and a recent heartbeat. Continue observing that existing sequence through its
-normal lifecycle; do not repeat preparation or start a second launcher.
+10:26 UTC. The GPU became active at 10:21 UTC, and foundation was dispatched at
+10:26 UTC. It then reported `IncompletePhase` at 10:27:23 UTC. The 10:27:42 local
+observation shows repair pending, local ownership drained and remote drain
+unconfirmed. Export verification passed, but required stage evidence did not.
+Inspect the retained stage failure and finish the existing lifecycle's drain and
+recovery checks before continuing. Do not repeat preparation or start a second
+launcher based only on the earlier successful dispatch.
 
 The final dispatch proof passed on attempt one with 4,916 immutable pins and
 seven membership sets. The actual launch returned with an active lease and no

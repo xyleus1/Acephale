@@ -8,6 +8,9 @@ separate from model qualification, task reward and live latency. The first-attem
 final proof passed under unchanged freshness bounds; neither this success nor
 local fixture timings erase the dense-membership stress failure. Continue the
 existing managed sequence with frozen inputs and report its actual outputs.
+Foundation's subsequent `IncompletePhase` remains a failed stage despite that
+dispatch success. Confirm drain and use the existing recovery path before any
+continuation; verified export alone is not successful stage evidence.
 
 ## 2026-11-19: Preserve completed preparation after a memory failure
 
