@@ -10,9 +10,18 @@ unconfirmed. Export verification passed, but required stage evidence did not.
 The foundation host validator rejects the approved 7,200-second provider setup
 interval because it retains a 3,600-second cap. It failed before the remote stage
 receipt; this is configuration compatibility, not a model-accuracy failure.
-Inspect the retained stage failure and finish the existing lifecycle's drain and
-recovery checks before continuing. Do not repeat preparation or start a second
-launcher based only on the earlier successful dispatch.
+The integrated owner subsequently verified provider termination. Independent
+provider readback confirmed absence, both local tasks are disabled and drained,
+and all four controller jobs are completed/cancelled. Remote process drain was
+unconfirmed before provider removal and must not be relabeled successful.
+
+E45 source preparation uses a reviewed one-file host-validator repair. It allows
+7,200 seconds only when the original lease and provider receipt retain the exact
+approved evaluation funding/capacity tuple. Legacy 3,600-second setup, the separate
+1,800-second phase, identities and original deadlines remain checked. Thirty-one
+focused tests passed, including the actual E44 inputs with a controlled historical
+clock and invalid authority/deadline cases. Independent review passed; the repair
+has not run on a new host. Do not modify E44's bound files or repeat its failed stage.
 
 The final dispatch proof passed on attempt one with 4,916 immutable pins and
 seven membership sets. The actual launch returned with an active lease and no

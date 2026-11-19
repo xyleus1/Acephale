@@ -1,5 +1,25 @@
 # Acephale engineering log
 
+## E44 closure and foundation compatibility repair, 2026-11-19
+
+The integrated owner closed with failure and verified provider termination.
+A separate provider inventory read confirmed the instance absent after that
+owner exited. Both local tasks were disabled and drained without finding live
+owned processes. Independent GitHub readback confirmed all four controller jobs
+completed/cancelled. Full read-only ledger validation retained all reservations
+and found two remaining evaluation slots. The earlier incomplete export and
+unconfirmed remote process drain remain recorded; resource removal is separate.
+
+The private host-validator candidate changes only setup-window admission. The
+existing one-hour limit remains unless the hash-bound original research lease
+and provider receipt agree on the exact approved evaluation funding/capacity
+tuple, which permits two hours. The 30-minute foundation phase and all original
+identity/deadline checks remain. The real validator and unchanged bootstrap loader
+passed 31 tests in 3.72 seconds, including reproducing E44's failure and accepting
+its unchanged inputs under a controlled historical clock. Independent source
+review passed without rerunning tests. The next attempt remains in preparation;
+this repair establishes no model result or live performance gain.
+
 ## E44 foundation failed after successful GPU dispatch, 2026-11-19
 
 Foundation reported `IncompletePhase` at 10:27:23 UTC. The local observation at

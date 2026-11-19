@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-19: Match host setup validation to existing evaluation authority
+
+Permit the approved two-hour provider setup interval in the host validator only
+for the exact evaluation authority retained by both the original lease and provider
+receipt. Preserve the legacy one-hour limit, the separate 30-minute foundation
+phase and all identity/deadline checks. Apply the reviewed repair to a fresh run
+after verified cleanup; do not alter or retry E44's bound failed stage. Retain
+its failure, incomplete export and unconfirmed remote process drain alongside the
+subsequent provider absence and local/controller closure evidence.
+
 ## 2026-11-19: Separate successful dispatch from research results
 
 E44's active GPU, successful launcher exit and managed foundation entry establish

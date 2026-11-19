@@ -78,6 +78,15 @@ drained and remote drain unconfirmed. Export verification passed, but required
 stage evidence did not. No new model score, paired native result or live
 performance gain is available. Saved weights and the scientific design are unchanged.
 
+Automatic provider cleanup completed, and a later independent provider read
+confirmed the exact instance absent. Both local tasks are disabled and drained;
+all four controller jobs are independently confirmed completed/cancelled. The
+unconfirmed remote process drain remains recorded separately from provider removal.
+The host-validator repair passed 31 focused tests and independent source review.
+It accepts two-hour setup only for the exact approved evaluation authority, while
+retaining the legacy one-hour limit and the separate 30-minute foundation phase.
+The next attempt is in source preparation; no new evaluation has started.
+
 The final dispatch proof passed on its first attempt under unchanged freshness
 bounds. Successful infrastructure dispatch does not establish foundation success.
 
@@ -138,8 +147,8 @@ See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Validate the repaired live launch and managed heartbeat handoff. Preserve original
-   freshness, ownership, deadlines and fail-closed cleanup.
+1. Complete the next run with the reviewed foundation-validator repair. Preserve
+   the successful dispatch path, original authority checks and failed-attempt history.
 2. Qualify both saved predictors, complete all 746 prefixes in all three replay
    conditions for each seed, and fit fresh calibration and audited reliability.
 3. Measure native prefetch opportunities and run the original 36 paired development
