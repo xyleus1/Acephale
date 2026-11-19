@@ -1,5 +1,19 @@
 # Acephale decisions
 
+## 2026-11-19: Keep current count recovery separate from historical authority
+
+Count9 carries one unused count8 slot plus seven new slots. Its normal reader
+validates the count8 parent against the parent's exact recorded ledger prefix,
+then validates the current suffix separately. Historical creator receipts and
+pool source identities remain historical; they are not relabeled as the new
+operator. Keep native port14 and add source-bound port15. The public writer and
+full reader have completed successfully; do not repeat authority creation.
+
+The independent review of a timing repair is bounded by its measured conditions.
+A later 78.172-second full validation exceeds the composition test's 50-second
+injection, so inspect where full reads occur relative to live-owner renewal before
+dispatch. Preserve all freshness limits and retain every failed observation.
+
 ## 2026-11-19: Publish final research readiness after predecessor collection
 
 Collect and verify the predecessor fence while keeping the genuine sole owner

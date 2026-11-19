@@ -68,6 +68,21 @@ Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
 ## Latest execution status
 
+The count-capacity recovery is now active through the normal public writer and
+full reader. It retains the one unused slot and adds seven; money, GPU-hour
+limits, old reservations and the ledger bytes are unchanged. The exact committed
+operator passed CI: 316 Node tests, 642 research tests, two Docker permission
+tests and 786 infrastructure tests, with 69 total skips and 159 passing subtests.
+The earlier two CI failures remain recorded. No new GPU has been requested.
+
+The final-observation repair passed its independent source review and 29 distinct
+focused/composition cases across targeted runs. The actual-size synthetic test
+retains 5,458 pins and seven financial sets; its original failure and fixture
+corrections remain recorded. It used 50 seconds per injected full validation.
+The real count activation subsequently measured 78.172 seconds for full ledger
+validation, so the remaining timing path is under review before live dispatch.
+Fresh source rendering is in progress; these checks produce no benchmark score.
+
 E45 failed before the provider launch request at 14:13 UTC on November 19. Its
 three bounded final observations did not converge. The first two reached the
 exact dispatch check with owner records aged 33.716 and 39.064 seconds, exceeding
@@ -84,8 +99,7 @@ The foundation and export compatibility repairs were applied before E45's
 sealed launch. The next repair separates predecessor-fence collection from final
 research-owner publication, removing an enrollment whose observations were then
 discarded and fetched again. It retains the actual acknowledgment/API gate and
-all freshness limits. Composed timing tests and independent review are in
-progress; the repair has not been applied or used for a live dispatch.
+all freshness limits. The repair has not been applied or used for a live dispatch.
 
 E44 reached an active GPU at 10:21 UTC on November 19. The root controller and
 launcher both exited successfully, and the managed foundation stage was dispatched

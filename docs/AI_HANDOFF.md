@@ -1,5 +1,30 @@
 # Working on Acephale
 
+## Current continuation: verified count recovery and fresh source preparation
+
+The normal count9 writer completed successfully, followed by the normal full
+reader. Eight future slots remain. Funding7, GPU6, prior authority files, all
+holds and the ledger bytes are unchanged. Do not invoke the creation-only writer
+again. The new clean bound operator is commit
+`d7e9fd92c162b39f5b95fdddf738cd73275aea2d`, with native financial port15; keep
+the old operator and historical port14 intact. Full CI passed on that commit.
+
+The final-order runtime and collector passed independent source review with
+29 distinct final cases across targeted runs. Preserve both original fixture
+failures and the first actual-size composition failure. The corrected composition
+passed with 5,458 pins, seven sets and a 50-second injected full validation;
+it does not establish an arbitrary scaling bound or autonomous controller timing.
+Actual post-activation full validation took 78.172 seconds. Review the remaining
+full-read/owner-refresh path before spending another launch attempt.
+
+Render the fresh namespace using the actual count9 sidecar, new operator/native
+port, reviewed runtime/collector and unchanged guarded reader/window. Preserve
+historical creator8 and the retained pool's old source identity. The actual
+three-file compatibility projection is produced and awaiting independent review.
+Source-only operational helpers retain all freshness limits, exact source checks
+and creation-only application. No new lease, controller or GPU has started.
+Continue through both evaluation partitions and the automatic report finalizer.
+
 ## Current continuation: E45 closed before provider launch, 2026-11-19
 
 E45's launcher exited one at 14:13 UTC after three final observations failed to
@@ -22,11 +47,9 @@ all freshness/deadline limits, source and ledger guards, and the one-request rul
 Independent composed tests include delayed controller responses and the actual
 5,458-source-pin/seven-financial-set shape; validation is still in progress.
 
-The closed history leaves one count slot, insufficient for both partitions.
-A separate isolated public change is being prepared for an append-only count
-successor with eight future slots. Funding, GPU-hour, hourly and session limits
-remain unchanged; every admission still checks them. No successor authority or
-new reservation has been created. Apply only after source tests and review.
+The closed history left one count slot, insufficient for both partitions. The
+subsequent append-only recovery is recorded above. No new reservation has been
+created; every future admission still checks financial and operational authority.
 
 ## Retained E45 compatibility preparation, 2026-11-19
 

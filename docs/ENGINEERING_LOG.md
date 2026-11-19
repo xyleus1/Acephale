@@ -1,5 +1,29 @@
 # Acephale engineering log
 
+## Count recovery activated after full CI, 2026-11-19
+
+The first CI run exposed eight failures on legacy fixture rows without
+`reservedAt`. The reader now checks the latest present finite lifecycle timestamp
+without inventing missing timestamps; existing ancestry and chronology checks
+remain. The second CI run exposed one empty-list test-fixture error, corrected
+with an actual populated-prefix mutation/deletion case. Production code was
+unchanged by that second correction. Both failed runs remain retained.
+
+The final commit passed 316 Node tests, 642 research tests, two Docker permission
+tests and 786 infrastructure tests, with 69 skips and 159 passing subtests.
+Type, lint, CLI and real pgvector checks also passed. The normal count9 writer
+then exited zero and full validation confirmed eight prospective slots, unchanged
+funding/GPU limits, unchanged ledger bytes and retained financial holds. The writer
+took 198.969 seconds and subsequent full ledger validation took 78.172 seconds.
+
+The private final-order repair has 29 distinct final passing cases across focused
+and composed runs, including a corrected actual-size synthetic launch. Initial
+fixture failures and the first composed failure remain recorded. The composed
+test used 50 seconds per full validation, below the new observed 78.172 seconds;
+the actual call path is being checked before dispatch. Actual count9/native15
+compatibility sources are rendered, with independent review and fresh namespace
+application pending. No new model or native evaluation result was produced.
+
 ## E45 final-observation failure and verified closure, 2026-11-19
 
 The launcher failed before provider POST after three bounded observation
