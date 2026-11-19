@@ -14,8 +14,14 @@ The final-order runtime and collector passed independent source review with
 failures and the first actual-size composition failure. The corrected composition
 passed with 5,458 pins, seven sets and a 50-second injected full validation;
 it does not establish an arbitrary scaling bound or autonomous controller timing.
-Actual post-activation full validation took 78.172 seconds. Review the remaining
-full-read/owner-refresh path before spending another launch attempt.
+Actual post-activation full validation took 78.172 seconds. The 80-second
+derivative failed before the budget/final gate: the unlocked initial transition
+entered full validation with owner age 32.846 seconds, returned at 112.846, then
+crossed 121.261 during publication. Zero provider requests occurred and all readers
+and locks closed. Preserve this failure. A source-only repair must renew the live
+owner before expensive reads while preserving the signed initial admission,
+normal validation after unlock, and the fresh final gate. Startup remains a
+separate timing path; the dispatch composition does not qualify it.
 
 Render the fresh namespace using the actual count9 sidecar, new operator/native
 port, reviewed runtime/collector and unchanged guarded reader/window. Preserve

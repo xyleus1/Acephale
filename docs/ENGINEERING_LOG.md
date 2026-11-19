@@ -1,5 +1,18 @@
 # Acephale engineering log
 
+## Measured validation cost exposes an initial handoff gap, 2026-11-19
+
+After the normal ledger reader took 78.172 seconds, the unchanged private runtime
+was tested with an 80-second injected full read, the same 5,458-pin/seven-set
+shape, controlled transports and actual local guard costs. It failed before the
+budget/final gate. The owner aged from 21.025 seconds at initial-pair exit to
+32.846 before the full read, 112.846 afterward, and 121.261 during the next
+publication. The unchanged 120-second check rejected renewal before its PUT.
+The test made zero provider requests and released all readers, windows and locks.
+It completed with a real nonzero exit; neither a timeout nor fixture seeding
+explains this failure. The original passing 50-second case remains valid only
+within its recorded conditions. A scoped renewal repair is being prepared.
+
 ## Count recovery activated after full CI, 2026-11-19
 
 The first CI run exposed eight failures on legacy fixture rows without

@@ -80,7 +80,10 @@ focused/composition cases across targeted runs. The actual-size synthetic test
 retains 5,458 pins and seven financial sets; its original failure and fixture
 corrections remain recorded. It used 50 seconds per injected full validation.
 The real count activation subsequently measured 78.172 seconds for full ledger
-validation, so the remaining timing path is under review before live dispatch.
+validation. A new 80-second composition failed during the initial launch handoff:
+the prior owner reached 121.261 seconds during publication, beyond its unchanged
+120-second lifetime. It made zero provider requests and released its readers and
+locks. A scoped heartbeat-renewal repair is under review before live dispatch.
 Fresh source rendering is in progress; these checks produce no benchmark score.
 
 E45 failed before the provider launch request at 14:13 UTC on November 19. Its
