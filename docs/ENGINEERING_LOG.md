@@ -1,13 +1,43 @@
 # Acephale engineering log
 
+## Accepted helper04 retained-proof renewal, 2026-11-20
+
+Helper04 passed independent source review for the E52 renewal gap described
+below. After an unchanged full validator succeeds and its temporary hooks are
+restored, the helper checks the original mutex, current owner and typed ledger
+reader against the returned full result before refreshing the retained proof.
+The prior proof must remain valid, including after overlapping replacement
+handles are acquired. A failed validation or expired prior proof cannot create
+a new generation. The runtime source remains byte-identical to helper03's runtime.
+
+The accepted source binding SHA-256 is
+`b535a82a16206b7d87a4cce52f30070245d2bce57660824af81838aa92b11b42`;
+the independent review SHA-256 is
+`4f0ebd730246ce853747bdedbdc571a78a315566d85cbc83216449767afb50b9`.
+Earlier source bindings, failed E52 receipts and unknown exit/drain fields remain
+unchanged. No time limit, financial validation, scientific input or model changed.
+
+Accepted evidence includes three independent boundary checks and paired
+helper03/helper04 rehearsals through the original collector path. With the same
+synthetic ledger and controlled validation, clock and transport fixtures,
+helper03 expires its first retained proof. Helper04 retains completed generations:
+the always-pending case reaches the original bounded collector failure, and the
+converging case returns after two pending attempts. Initial fixture failures are
+retained. These are synthetic checks, not live timing, provider admission or
+scientific results; no tests were rerun for this documentation update.
+
+The live outcome is not yet established. The study remains at 3/12 closed
+scientific components, with no new seed29 replay or paired native results claimed.
+
 ## Retained preflight failure and verified cleanup, 2026-11-20
 
 E52 completed controller handoff but stopped before provider dispatch. Three
 ordinary full validations completed; only generation 1 produced a retained
 liveness record. The first 600-second record expired during the second joint
 controller collection. The owner heartbeat and overall capacity deadline had
-not expired. A future fix must refresh from an actual successful full validation
-while the prior proof remains valid, preserving all original limits and checks.
+not expired. The accepted helper04 repair above refreshes from an actual
+successful full validation while the prior proof remains valid, preserving all
+original limits and checks. It does not change this failed attempt's outcome.
 
 The original read-only closure observer exited zero and drained. Each controller
 run received one cancellation request; subsequent GET observations confirmed all

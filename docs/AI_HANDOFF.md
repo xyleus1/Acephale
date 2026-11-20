@@ -1,10 +1,19 @@
 # Working on Acephale
 
-The latest E52 attempt stopped before provider dispatch. Nested full validations
+The retained E52 attempt stopped before provider dispatch. Nested full validations
 updated completion metadata but left the first retained liveness generation in
 use until its 600-second expiry. Provider absence, local closure and all four
 terminal controller jobs are independently recorded; the outer launch's unknown
-exit/drain fields remain unknown. A narrow future renewal fix is under test.
+exit/drain fields remain unknown.
+
+Helper04 has passed independent source review. It refreshes a retained proof only
+after a successful full validation, under the original mutex, while the prior
+proof remains valid. It rechecks that validity after acquiring the replacement
+handles and cannot revive an expired proof. Time limits, financial checks and
+scientific inputs are unchanged. The [acceptance record](ENGINEERING_LOG.md#accepted-helper04-retained-proof-renewal-2026-11-20)
+binds the exact source and independent review, with synthetic fixture limits.
+The live outcome remains unestablished: only 3/12 scientific components are
+closed, with no new seed29 replay or paired native result claimed.
 Do not rerun E52, extend its clocks, or claim new scientific results. Continue
 from the latest private root record and preserve the three closed components.
 
