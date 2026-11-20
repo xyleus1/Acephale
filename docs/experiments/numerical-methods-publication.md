@@ -1,60 +1,114 @@
 # Numerical-methods attachment
 
-This attachment reports the observed serving configuration and fixed numerical
-qualification probes alongside a completed study. It copies observations; it does
-not rerun models, compute scores, change a scientific manifest or revise a gate.
-The frozen aggregate projector remains the authority for final report closure.
+This attachment reports observed serving configurations and fixed numerical
+qualification probes alongside the study report. It copies observations without
+rerunning models, computing scores, changing scientific manifests or revising
+gates. This document describes the release procedure, not a completed run. See
+[current state](../STATE.md) for measured results and remaining work, and
+[methods](../METHODS.md) for the frozen experiment.
 
-## Required completed artifacts
+## Current component-based publication
 
-The private run must contain all of the following before extraction:
+The accepted `prospective-component-publication-02` operator package handles
+scientific components completed under different physical owners. Its
+`component_publication.py` retains the original aggregate allowlist and scoring
+formulas. `component_numerical.py` follows each component's actual numerical
+provenance. These operator sources and their independent reviews are pinned in
+private execution receipts; they are not interchangeable with an unreviewed copy.
 
-- `final-report-01/report/report.json`, its completed finalization receipt, the
-  owner and execution results, verified cleanup and drained finalizer children.
-- The existing three-file aggregate publication bundle: `aggregate-results.json`,
-  `methods-and-limitations.md` and `publication-manifest.json`.
-- Four closed occurrence checkpoints and phase receipts: `seed17_01`,
-  `seed29_01`, `seed17_02`, `seed29_02`. Each checkpoint must hash-bind its phase
-  receipt; each phase receipt must hash-bind the numerical companions.
-- For every occurrence: verified serving completion, policy, effective Compose,
-  tuned configuration, before/after attestation, diagnostic receipt, both complete
-  three-request diagnostic reports, inventory, deployment and the original proof.
-- The numerical companions for qualification, replay, calibration and applicable
-  native input/output stages, with their original parent and scientific-file
-  bindings. The existing numerical reader validates these locally.
+Publication requires all twelve original components: export; replay, analysis and
+opportunity profiling for each of seeds 17 and 29; two development segments;
+held-out selection; and two held-out segments. A closed component can contain
+failed or censored predictions and trials. Those rows and their declared
+denominators remain in the report.
 
-There must be exactly 20 companions: qualification for all four occurrences;
-replay/calibration and opportunity inputs/outputs for both `-01` occurrences;
-development inputs/outputs for `seed29-01` and `seed17-02`; heldout inputs/outputs
-for `seed17-02` and `seed29-02`. A closed phase without a required pair is rejected.
+The required evidence is:
 
-Use the reviewed source hashes from the execution/publication receipts for
-`project_public_aggregates.py`, `numerical_policy_binding.py` and
-`serving_precision.py`. Do not replace an expected hash with a newly calculated
-hash merely to admit changed source. The aggregate reader also requires the exact
-clean frozen analysis checkout. Use the research Python environment containing
-the pinned canonical JSON dependency.
+- The actual latest closed component index, each owner's original execution and
+  cleanup records, provider termination or local exit evidence, and local process
+  and task closure. Failed earlier attempts retain their original status.
+- An accepted final-index handoff under an existing physically closed owner,
+  the immutable financial snapshot used by the report, and the completed
+  finalizer output containing `report/report.json`. Both the report assembler
+  and summary renderer must have actual successful exits and drained processes.
+- For every recorded physical qualification: serving completion, policy,
+  effective Compose, tuned configuration, before/after attestation, diagnostic
+  receipt, both three-request reports, inventory, deployment and original proof.
+- Every applicable numerical companion and its exact parent and scientific-file
+  references. Native outputs must reference their inputs; inputs must reference
+  the current qualification and adopted calibration. The adoption must bind the
+  original scientific component. Replay and analysis retain their original
+  qualification, replay and calibration chains.
 
-```powershell
-python research/acephale/scripts/project_numerical_methods.py `
-  --projector <reviewed-private-projector.py> `
-  --projector-sha256 <reviewed-projector-sha256> `
-  --binding-sha256 <reviewed-binding-reader-sha256> `
-  --precision-sha256 <reviewed-precision-source-sha256> `
-  --publication <completed-aggregate-bundle-directory> `
-  --output <new-attachment-directory>
+Qualifications are grouped by physical owner and original serving occurrence.
+The current procedure has no fixed owner or companion count. It retains recorded
+qualifications even when an owner produced no scientific output. Offline analysis
+uses its verified historical replay derivation and claims neither current serving
+nor a new numerical observation. Missing companions are rejected rather than
+replaced by a count-based assumption.
+
+Use the exact reviewed source hashes from the execution and publication receipts,
+the frozen analysis checkout and the pinned research Python environment. Never
+replace an expected hash with a newly calculated one to admit changed source.
+The accepted reporter explicitly handles interrupted grading while preserving
+original scoring formulas, all calibration rows, unknown requests and their
+reservations. It does not relabel the interrupted original command as successful.
+
+The execution order is:
+
+1. Validate the actual closed index with the accepted final-report handoff.
+2. Run the component finalizer with the source-bound reporter and summary
+   renderer, immutable financial snapshot and original study bindings. Preserve
+   the assembler and renderer's actual process receipts.
+3. Fill a new `publication-input.template.json` instance with the handoff index,
+   handoff result and completed report directory. Hash that input; retain the
+   original template.
+4. From the accepted operator package, stage a new private bundle:
+
+```text
+<research-python> -B component_publication.py --configuration <actual-input.json> --configuration-sha256 <actual-sha256> --output <new-private-bundle> --figures
 ```
 
-The command writes only `numerical-methods.json` and
-`numerical-methods-manifest.json` in a new destination. The latter binds the
-extractor, attachment bytes and original publication manifest. The attachment
-binds the original complete report SHA256/content hash, reader source hashes,
-four phase receipts, companion hashes and observed numerical artifact hashes.
-The original aggregate bundle is unchanged. Inputs are rehashed before output.
+The destination must be a new direct child of that package. The publisher checks
+the twelve components, actual report and renderer closure, original aggregate
+allowlist, numerical chains and source hashes. It uses the scalar diagnostic
+projection from the reviewed
+[numerical extractor](../../research/acephale/scripts/project_numerical_methods.py)
+and the existing [study plotter](../../research/acephale/scripts/plot_study_report.py).
+It does not open the live financial journal or dispatch models.
+
+The completed bundle contains `aggregate-results.json`, `public-provenance.json`,
+`numerical-methods.json`, `Acephale-results.md`, `methods-and-limitations.md`, and
+twelve figure files: native and paired views for development and held-out, each
+in PNG, PDF and SVG. The figure manifest and final `publication-manifest.json`
+bind the actual files and source identities. The final manifest is written last;
+a partial directory or failed figure process is not a publishable bundle.
+
+Public projection retains approved hashes, counts, enums and scalar observations.
+It aliases physical owners and sanitizes interrupted-grading provenance. Raw
+responses, private paths and identifiers do not enter the aggregate allowlist.
+Review the staged text and figures before copying manifest-listed files to the
+public repository; this command performs no public copy or Git push.
+
+## Historical four-occurrence procedure
+
+The earlier whole-run extractor expected four closed checkpoints and phase
+receipts: `seed17_01`, `seed29_01`, `seed17_02` and `seed29_02`. Its fixed graph had
+exactly 20 companions: qualification for all four; replay/calibration and
+opportunity inputs/outputs for both `-01` occurrences; development inputs/outputs
+for `seed29-01` and `seed17-02`; and held-out inputs/outputs for `seed17-02` and
+`seed29-02`.
+
+That standalone `project_numerical_methods.py` command produced a separate
+`numerical-methods-manifest.json` alongside its attachment. Its source remains
+retained for reproducibility and supplies the current scalar diagnostic
+projection. Its four-checkpoint admission and fixed 20-companion assumption do
+not describe the current split-owner release procedure. Keep historical artifacts
+unchanged; use the component publisher for the current study.
 
 ## Measurements and interpretation
 
-Each occurrence has a fixed baseline of three requests followed by three
+Each recorded qualification has a fixed baseline of three requests followed by three
 configured requests. The configured proof is always response zero. Every
 configured response must pass the original top-token and 0.01 conditional
 probability gate. A baseline numerical failure remains in the attachment; other
@@ -84,10 +138,11 @@ accuracy, native task accuracy or end-to-end latency measurements.
 
 ## Final publication checklist
 
-- Run the unchanged final reporter and aggregate projector only after actual
-  scientific closure, export and verified cleanup.
-- Generate this attachment from those same closed artifacts. Review its four
-  occurrences and all six rows per occurrence, including any baseline failures.
+- Run the accepted report adapter and original aggregate projection only after
+  all twelve scientific components and their physical owners have closed.
+- Generate this attachment from those same artifacts. Review every recorded
+  physical qualification and its six diagnostic rows, including baseline
+  failures, along with every component's complete companion graph.
 - Render the existing study figures, inspect the actual PNG/PDF/SVG outputs and
   retain the figure manifest. Do not infer live speedup from diagnostic timing.
 - Report native task success, logical actor calls, physical environment work,
