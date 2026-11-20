@@ -10,6 +10,8 @@ held-out task-accuracy or live latency improvement has been established.
 All three conditions retained all 746 original prefixes, including failures.
 These prefixes span fitting, calibration and development; the following numbers
 are an operational diagnostic, not a held-out generalization estimate.
+The 266 eligible prefixes have a read in the next authoritative tool batch. A hit
+means the predicted tool and every argument match an invocation in that batch.
 
 | Measurement | Neutral, fixed panel | Goals, fixed panel |
 | --- | ---: | ---: |
