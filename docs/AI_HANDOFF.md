@@ -1,5 +1,31 @@
 # Working on Acephale
 
+## Current continuation: closed seed17 replay, 2026-11-20
+
+Read the first section of [STATE.md](STATE.md). E47 exported all three original
+746-row seed17 conditions and then stopped in deterministic grading preparation.
+The owner remains incomplete. Only strict export and replay are closed; no
+grading batch, seed29 replay or paired native trial was executed in that owner.
+Its provider, local processes and four controller jobs are closed. Preserve all
+earlier failures and unknown financial holds.
+
+The public [aggregate diagnostic](experiments/retained-seed17-replay-2026-11-20.json)
+contains mixed fitting/calibration/development counts, not held-out scores.
+Goal-fixed and goal-selected each failed 412/746 predictions. The small paired
+loss improvement on surviving rows cannot establish end-to-end superiority.
+
+Private recovery work verifies retained components and runs the original grading
+commands under a separately bounded local owner. Verification setup and grading
+runtime need distinct finite allowances on this memory-constrained workstation.
+Keep competing journal writers stopped until that owner is actually drained.
+Then continue seed29 and the original paired native schedule through independently
+closed work units. Do not rerun optimizers, replace failed rows, or publish a
+finished study before native execution and final report closure.
+
+The sections below preserve earlier operational history; they are not the current
+launch instruction. Use the private latest root continuation record for exact
+immutable paths, hashes, source reviews and actual process identities.
+
 ## Current continuation: verified count recovery and fresh source preparation
 
 The normal count9 writer completed successfully, followed by the normal full

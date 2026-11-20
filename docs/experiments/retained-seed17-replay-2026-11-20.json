@@ -1,0 +1,200 @@
+{
+  "schema_version": "acephale-retained-replay-observation-v1",
+  "observed_date_utc": "2026-11-20",
+  "status": "partial_study_closed_replay",
+  "scope": "All 746 frozen fitting, calibration and development prefixes; no held-out prefixes",
+  "predictor_training_seed": 17,
+  "heldout_claim": false,
+  "native_actor_trials": 0,
+  "live_latency_claim": false,
+  "optimizer_repeated": false,
+  "original_owner_status": "incomplete",
+  "replay_completed_and_drained": true,
+  "condition_completion": {
+    "neutral-fixed": {
+      "declared": 746,
+      "completed": 745,
+      "failed": 1,
+      "not_dispatched": 0
+    },
+    "goals-fixed": {
+      "declared": 746,
+      "completed": 334,
+      "failed": 412,
+      "not_dispatched": 0
+    },
+    "goals-selected": {
+      "declared": 746,
+      "completed": 334,
+      "failed": 412,
+      "not_dispatched": 0
+    }
+  },
+  "failure_counts": {
+    "neutral-fixed": {
+      "common_predictor_window": 1
+    },
+    "goals-fixed": {
+      "output_length": 271,
+      "invalid_goal_probability_sum": 77,
+      "invisible_source_path": 62,
+      "invisible_source": 2
+    },
+    "goals-selected": {
+      "output_length": 271,
+      "invalid_goal_probability_sum": 77,
+      "invisible_source_path": 62,
+      "invisible_source": 2
+    }
+  },
+  "reports": {
+    "neutral-fixed": {
+      "conditions": {
+        "neutral": {
+          "binary_log_loss_nats": 1.0878923123635513,
+          "brier": 0.11140888665430268,
+          "candidate_panel_any_hit_coverage": 0.45864661654135336,
+          "coverage_eligible_checkpoints": 266,
+          "declared_checkpoints": 746,
+          "eligible_read_checkpoints": 266,
+          "empty_panel_checkpoints": 145,
+          "exact_top1_any_hit_over_declared_eligible": 0.4473684210526316,
+          "exact_top3_any_hit_over_declared_eligible": 0.45864661654135336,
+          "no_read_checkpoints": 480,
+          "scored_candidates": 1368,
+          "scored_checkpoints": 600,
+          "status_counts": {
+            "completed": 745,
+            "failed": 1
+          },
+          "unavailable_panel_checkpoints": 0
+        }
+      },
+      "heldout_claim": false,
+      "identical_candidate_panels": true,
+      "identical_checkpoint_sets": true,
+      "identical_observed_candidate_panels": true,
+      "interpretation": "Checkpoint-mean binary log loss for membership anywhere in the next authoritative batch, not full-action cross-entropy or true conditional entropy",
+      "limitations": [
+        "At most three preselected candidates; panel coverage is reported separately",
+        "Partition labels alone do not verify fresh held-out tasks or a preregistered freeze",
+        "Missing predictions remain declared failures without invented probabilities",
+        "Paired loss differences use jointly scored checkpoints only",
+        "Task success, physical execution work and prediction hit rate are separate outcomes"
+      ],
+      "paired_comparisons": [],
+      "prediction_manifest_hash": "514dffdc86516ac169e2bc230b0a897a666774d03b8fc7e51a5ca88750fc6774",
+      "probabilities": "recorded_raw_scores_no_evaluation_label_fitting",
+      "probability_semantics": "next_batch_invocation_membership",
+      "raw_score_semantics": "autoregressive_binary_conditional",
+      "schema_version": "acephale-fixed-panel-report-v3",
+      "source_dataset_hash": "9ddee2130c383b8c62b9459f219b62a45a1fddd866cf5bb89f74bcccfacf568b",
+      "test_partition_only": false
+    },
+    "goals-fixed": {
+      "conditions": {
+        "conditional": {
+          "binary_log_loss_nats": 0.9695626391977786,
+          "brier": 0.07721693001813149,
+          "candidate_panel_any_hit_coverage": 0.45864661654135336,
+          "coverage_eligible_checkpoints": 266,
+          "declared_checkpoints": 746,
+          "eligible_read_checkpoints": 266,
+          "empty_panel_checkpoints": 145,
+          "exact_top1_any_hit_over_declared_eligible": 0.20676691729323307,
+          "exact_top3_any_hit_over_declared_eligible": 0.20676691729323307,
+          "no_read_checkpoints": 480,
+          "scored_candidates": 491,
+          "scored_checkpoints": 230,
+          "status_counts": {
+            "completed": 334,
+            "failed": 412
+          },
+          "unavailable_panel_checkpoints": 0
+        },
+        "neutral": {
+          "binary_log_loss_nats": 1.1996269298337412,
+          "brier": 0.10761977550400385,
+          "candidate_panel_any_hit_coverage": 0.45864661654135336,
+          "coverage_eligible_checkpoints": 266,
+          "declared_checkpoints": 746,
+          "eligible_read_checkpoints": 266,
+          "empty_panel_checkpoints": 145,
+          "exact_top1_any_hit_over_declared_eligible": 0.20676691729323307,
+          "exact_top3_any_hit_over_declared_eligible": 0.20676691729323307,
+          "no_read_checkpoints": 480,
+          "scored_candidates": 491,
+          "scored_checkpoints": 230,
+          "status_counts": {
+            "completed": 334,
+            "failed": 412
+          },
+          "unavailable_panel_checkpoints": 0
+        }
+      },
+      "heldout_claim": false,
+      "identical_candidate_panels": true,
+      "identical_checkpoint_sets": true,
+      "identical_observed_candidate_panels": true,
+      "interpretation": "Checkpoint-mean binary log loss for membership anywhere in the next authoritative batch, not full-action cross-entropy or true conditional entropy",
+      "limitations": [
+        "At most three preselected candidates; panel coverage is reported separately",
+        "Partition labels alone do not verify fresh held-out tasks or a preregistered freeze",
+        "Missing predictions remain declared failures without invented probabilities",
+        "Paired loss differences use jointly scored checkpoints only",
+        "Task success, physical execution work and prediction hit rate are separate outcomes"
+      ],
+      "paired_comparisons": [
+        {
+          "baseline": "conditional",
+          "metrics": {
+            "binary_log_loss_nats_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.021042875518726176,
+                0.2650588958706717
+              ],
+              "estimate": 0.12599514734228773,
+              "families": 34,
+              "paired_trials": 230,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "brier_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.004601930967932061,
+                0.03414550745771094
+              ],
+              "estimate": 0.017338784360018303,
+              "families": 34,
+              "paired_trials": 230,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "neutral"
+        }
+      ],
+      "prediction_manifest_hash": "535096bc0c2ab6d018a563014da584eca537899ebb5fe9bf92b3015a3a722ecf",
+      "probabilities": "recorded_raw_scores_no_evaluation_label_fitting",
+      "probability_semantics": "next_batch_invocation_membership",
+      "raw_score_semantics": "autoregressive_binary_conditional",
+      "schema_version": "acephale-fixed-panel-report-v3",
+      "source_dataset_hash": "9ddee2130c383b8c62b9459f219b62a45a1fddd866cf5bb89f74bcccfacf568b",
+      "test_partition_only": false
+    }
+  },
+  "source_sha256": {
+    "neutral-fixed": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6",
+    "goals-fixed": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687",
+    "closed_replay_archive": "52ebcbc4e147371f2062624db632ec2877e1d1c6138a1bbc7ad1840b3e56db50"
+  },
+  "limitations": [
+    "This mixed-partition operational replay includes weight-fitting prefixes and is not a generalization estimate.",
+    "Within goals-fixed, neutral and conditional losses use the same 230 surviving scored checkpoints from 34 families. They do not compare against all 600 scored neutral-fixed checkpoints.",
+    "Failed predictions remain in declared hit-rate denominators. Missing probabilities are not imputed.",
+    "No new paired native task score, goal-teacher agreement, live latency gain or SOTA claim is available.",
+    "Grading preparation timed out after replay export. No grading batch was dispatched in the original owner; its failure remains retained."
+  ]
+}

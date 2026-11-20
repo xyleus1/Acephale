@@ -1,5 +1,26 @@
 # Acephale engineering log
 
+## Closed replay and retained grading-preparation failure, 2026-11-20
+
+E47 completed strict two-seed export and the three original seed17 replay
+conditions. Every condition retained all 746 declared rows. Neutral completed
+745; both goal conditions completed 334 and failed 412. The unchanged offline
+scorers completed against saved rows. Their sanitized aggregate and limitations
+are linked from STATE; neither scorer reran inference or measured live latency.
+
+The next deterministic grading-preparation command reached its original bound.
+No grading batch or teacher request was dispatched by that owner. The exact
+failure, outputs, original journal checkpoint and failed predictions remain
+retained. Subsequent observations independently confirmed provider removal,
+local process/task closure and completion of all four controller jobs.
+
+Recovery separates closed components from an incomplete whole owner. Prospective
+runtime integration, bounded local analysis and finite GPU work-unit adapters
+have focused tests and independent source reviews. Full original artifact
+verification subsequently passed, retaining only strict export and seed17 replay
+as completed components. Resumed grading is still pending. Source validation is
+not a benchmark score.
+
 ## Scoped renewal repair selected for the next launch, 2026-11-19
 
 The runtime now publishes a genuine owner heartbeat at four expensive boundaries:

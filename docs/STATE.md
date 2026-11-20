@@ -1,9 +1,41 @@
 # Current state
 
-Updated November 19, 2026 (UTC). The saved predictor improved exact Top-1 hits on
-the development replay, but binary log loss worsened. Complete goal-conditioned
-replay and paired native evaluation are unfinished; no held-out task-accuracy or
-live latency improvement has been established.
+Updated November 20, 2026 (UTC). Seed17's three-condition replay is closed. Goal
+prediction failures substantially reduced usable output and exact call hits.
+Grading, seed29 replay and the paired native evaluation remain unfinished. No
+held-out task-accuracy or live latency improvement has been established.
+
+## Closed seed17 replay
+
+All three conditions retained all 746 original prefixes, including failures.
+These prefixes span fitting, calibration and development; the following numbers
+are an operational diagnostic, not a held-out generalization estimate.
+
+| Measurement | Neutral, fixed panel | Goals, fixed panel |
+| --- | ---: | ---: |
+| Completed predictions | 745/746 | 334/746 |
+| Failed predictions | 1/746 | 412/746 |
+| Exact tool-and-full-argument Top-1 | 119/266 (44.7%) | 55/266 (20.7%) |
+| Top-3 from returned predictions | 122/266 (45.9%) | 55/266 (20.7%) |
+
+The goal-selected condition also completed 334 records and failed 412. Each goal
+condition retained 271 output-length failures, 77 invalid probability sums, 62
+invisible source paths and two invisible sources. The neutral failure exceeded
+the common predictor input window. No failed prediction was replaced.
+
+Within the goal-fixed run's 230 jointly scored surviving checkpoints, the
+equal-family neutral-minus-conditional binary log-loss difference is +0.125995
+nats, 95% family-bootstrap interval [+0.021043, +0.265059], across 34 families
+and 2,000 samples. Both rankings nevertheless have the same 55/266 Top-1 hits.
+This conditional loss improvement excludes missing probabilities and does not
+offset the full-run validity regression. It is neither full-action cross-entropy
+nor true entropy. See [exact aggregates and scope](experiments/retained-seed17-replay-2026-11-20.json).
+
+The original owner stopped in deterministic grading preparation after replay
+export. It dispatched no grading batches. Provider removal, local process drain
+and retirement of its four controller jobs are independently recorded. Recovery
+retains that failure and the saved replay; it does not rerun either optimizer or
+any completed prediction. No new paired native actor trial has run.
 
 ## Measured results
 
@@ -33,8 +65,8 @@ These are development prediction results without inferred goals. Historical repl
 timing does not establish live latency. See the
 [report and exploratory error analysis](experiments/staged-study-2026-11-13.md#retained-development-comparison-november-18)
 and [aggregate evidence](experiments/retained-neutral-development-2026-11-18.json).
-Fit/calibration and held-out results remain separate; no paired goal-conditioned
-result is available.
+Fit/calibration and held-out results remain separate. The closed mixed-partition
+goal-conditioned replay above is a different diagnostic population.
 
 E31 retained all 746 neutral rows: 745 completed and one context-window failure.
 The selected-goal condition stopped at its 2,400-second bound with 314 completed,
@@ -66,7 +98,7 @@ with zero delta under the unchanged 0.01/top-token gate. This is observed numeri
 compatibility, not task accuracy, general determinism or an isolated root cause.
 Runtime/training source: `5a36a8b3835820fe65b3615ead31fb6fb7bc9672`.
 
-## Latest execution status
+## Retained earlier execution status
 
 The count-capacity recovery is now active through the normal public writer and
 full reader. It retains the one unused slot and adds seven; money, GPU-hour
@@ -188,11 +220,12 @@ See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Validate and apply the final-observation sequencing repair, then complete a
-   fresh two-part evaluation. Preserve all authority checks and failed attempts;
-   extend only the bounded lease-count allowance needed for completion.
-2. Qualify both saved predictors, complete all 746 prefixes in all three replay
-   conditions for each seed, and fit fresh calibration and audited reliability.
+1. Finish seed17 grading preparation, its original grading batches and fresh
+   calibration/reliability using the closed replay. Preserve the original failed
+   preparation and every prediction failure.
+2. Qualify the saved seed29 predictor and complete its three replay conditions.
+   Use finite independently closed work units, retaining original rows, weights,
+   journal, failed attempts and scientific settings.
 3. Measure native prefetch opportunities and run the original 36 paired development
    slots across three arms. Choose whole held-out families using development costs
    alone, then run the predeclared paired schedule, up to 96 slots.
