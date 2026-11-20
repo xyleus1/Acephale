@@ -1,10 +1,12 @@
 # Working on Acephale
 
-The retained E52 attempt stopped before provider dispatch. Nested full validations
-updated completion metadata but left the first retained liveness generation in
-use until its 600-second expiry. Provider absence, local closure and all four
-terminal controller jobs are independently recorded; the outer launch's unknown
-exit/drain fields remain unknown.
+The latest E53 attempt stopped before provider dispatch with an `AttributeError`:
+the final observation read `RetainedState.pins`, but that metadata property was
+missing. Actual telemetry records seven completed full validations and seven
+retained generations. Independent observations confirmed provider absence, local
+closure and all four terminal controller jobs. The original unknown launch
+exit/drain fields and the first pending controller observation remain preserved.
+See the [sanitized failure record](experiments/retained-e53-launch-failure-2026-11-20.json).
 
 Helper04 has passed independent source review. It refreshes a retained proof only
 after a successful full validation, under the original mutex, while the prior
@@ -12,9 +14,13 @@ proof remains valid. It rechecks that validity after acquiring the replacement
 handles and cannot revive an expired proof. Time limits, financial checks and
 scientific inputs are unchanged. The [acceptance record](ENGINEERING_LOG.md#accepted-helper04-retained-proof-renewal-2026-11-20)
 binds the exact source and independent review, with synthetic fixture limits.
-The live outcome remains unestablished: only 3/12 scientific components are
-closed, with no new seed29 replay or paired native result claimed.
-Do not rerun E52, extend its clocks, or claim new scientific results. Continue
+E53 provides observed renewal evidence for helper04, but no successful provider
+admission. Helper05 has separate source approval for the inherited read-only
+`pins` property; its [callback checks](ENGINEERING_LOG.md#e53-pre-dispatch-interface-failure-and-verified-closure-2026-11-20)
+use synthetic financial and network evidence and do not establish live
+qualification. Runtime bytes, time limits, financial checks and science remain
+unchanged. Only 3/12 scientific components are closed, with no new seed29 replay
+or paired native result. Do not rerun E52 or E53 or extend their clocks. Continue
 from the latest private root record and preserve the three closed components.
 
 The [retained goal-error diagnostic](experiments/retained-seed17-goal-errors-2026-11-20.json)

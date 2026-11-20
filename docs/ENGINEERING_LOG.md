@@ -1,5 +1,41 @@
 # Acephale engineering log
 
+## E53 pre-dispatch interface failure and verified closure, 2026-11-20
+
+E53 completed root handoff and adoption. Its actual cleanup telemetry records
+seven successful full-validation generations and seven corresponding retained
+proofs. Ordinary admission validators ran again; financial decisions were not
+reused. This is observed renewal evidence for helper04 within a failed attempt,
+not successful provider admission or scientific completion.
+
+The original `before_post` callback then failed in `final_observation` while
+evaluating `len(self._dispatch_read_window.pins)`: the retained proof wrapper
+lacked that metadata property. The inner result preserves `AttributeError`;
+the outer helper preserves `ValueError` and unknown child exit/drain. No provider
+launch request or model call followed. Independent read-only observation confirmed
+the terminated null-instance reservation, provider absence and local drain,
+with every financial reservation and unresolved hold retained. Each controller
+run received one cancellation request. The first main GET remained pending and
+its failed outer receipt is preserved; later GET observations confirmed all four
+jobs completed/cancelled. The [sanitized aggregate](experiments/retained-e53-launch-failure-2026-11-20.json)
+binds these observations without private paths or credentials.
+
+Helper05 has independent source approval for only an inherited read-only `pins`
+metadata property. The property returns a detached union of the held pin maps;
+runtime bytes and all time, financial, ownership and scientific checks remain
+unchanged. Source binding SHA-256:
+`148c6dd97f209db03df1c410956ede3c4f083f9039f8feea0241cf727ebc3520`.
+Independent review SHA-256:
+`d6fe68cd5e66bd1c46bc43f63cfa7d94806f18c98ecdf49a9c355e371d8145fb`.
+Eleven focused author tests and four independent callback cases passed. The
+independent cases reproduce helper04's exact error, let helper05 reach one fake
+provider POST through the original callback and freshness checks, and reject
+two invalid cases before POST. Clocks, financial evidence and network evidence
+are synthetic; these checks do not qualify live provider execution. No tests
+were rerun for this documentation update, and E53's installed sources remain
+unchanged. Scientific completion remains 3/12, with no new seed29 replay, paired
+native result or live speedup established.
+
 ## Accepted helper04 retained-proof renewal, 2026-11-20
 
 Helper04 passed independent source review for the E52 renewal gap described
@@ -26,8 +62,9 @@ converging case returns after two pending attempts. Initial fixture failures are
 retained. These are synthetic checks, not live timing, provider admission or
 scientific results; no tests were rerun for this documentation update.
 
-The live outcome is not yet established. The study remains at 3/12 closed
-scientific components, with no new seed29 replay or paired native results claimed.
+The subsequent E53 attempt above records seven retained generations, then a
+separate interface failure before provider dispatch. The study remains at 3/12
+closed scientific components, with no new seed29 replay or paired native result.
 
 ## Retained preflight failure and verified cleanup, 2026-11-20
 

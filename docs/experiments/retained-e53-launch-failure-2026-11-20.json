@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "kind": "retained-launch-failure-diagnostic",
+  "attempt": "E53",
+  "date": "2026-11-20",
+  "scientificComponentsClosed": 3,
+  "scientificComponentsTotal": 12,
+  "providerLaunchRequestAttempted": false,
+  "newModelCalls": 0,
+  "newNativeTrials": 0,
+  "failure": {
+    "type": "AttributeError",
+    "message": "'RetainedState' object has no attribute 'pins'",
+    "stage": "Final observation in the original before_post callback",
+    "operation": "len(self._dispatch_read_window.pins)",
+    "outerFailureType": "ValueError",
+    "historicalMainExitStatusObserved": false,
+    "historicalMainExitCode": null,
+    "historicalMainProcessTreeDrained": null,
+    "innerExitCode": null,
+    "innerLocalOwnedProcessesDrained": null
+  },
+  "engineeringObservation": {
+    "completedFullValidationGenerations": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "retainedGenerations": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "recordedFullValidationSeconds": [
+      23.06084680557251,
+      32.94523882865906,
+      33.11984300613403,
+      18.179400205612183,
+      16.993780612945557,
+      17.94428062438965,
+      17.51718759536743
+    ],
+    "retainedGenerationLifetimeSeconds": 600,
+    "ownerHeartbeatLimitSeconds": 120,
+    "ordinaryAdmissionValidatorsReexecuted": true,
+    "financialDecisionsReused": false,
+    "retainedHandlesClosed": true,
+    "fullValidatorWrapperRestored": true,
+    "readHashDigestWrappersRestored": true,
+    "scope": "Observed liveness renewal in this failed attempt only; not successful provider admission or scientific completion."
+  },
+  "cleanup": {
+    "providerAbsent": true,
+    "instanceId": null,
+    "ledgerStatus": "terminated",
+    "localProcessesAndTasksClosed": true,
+    "controllerRunsClosed": 2,
+    "controllerJobsClosed": 4,
+    "allFinancialReservationsUnchanged": true,
+    "unknownFinancialHoldsRetained": true,
+    "initialPendingMainObservationRetained": true,
+    "historicalMainExitCode": null,
+    "historicalMainProcessTreeDrained": null
+  },
+  "prospectiveRepair": {
+    "name": "helper05",
+    "acceptedSourceOnly": true,
+    "change": "Inherited read-only pins metadata property; runtime bytes unchanged.",
+    "timeLimitsFinancialChecksAndScientificInputsChanged": false,
+    "authorFocusedTestsPassed": 11,
+    "independentSyntheticBoundaryTestsPassed": 4,
+    "oldFailureReproduced": true,
+    "newSyntheticProviderPostCount": 1,
+    "negativeCasesRejectBeforePost": 2,
+    "liveQualificationEstablished": false,
+    "limitation": "Synthetic clock, financial and network evidence substitute for live qualification; the original final observation and provider callback methods run in the fixture."
+  },
+  "interpretation": "Operational failure before model execution. Seven completed validation generations were retained, but an absent metadata property stopped the original pre-dispatch callback. Independent observations subsequently established closure without rewriting unknown historical exits or releasing holds. No benchmark result or live speedup is established.",
+  "evidenceSha256": {
+    "launchOuter": "84b795b69f5c235f6f382a838d28cddf755c7db58be4fa9cf2cff8c9be0fe51c",
+    "launchInner": "cbd4d4c65ed149218ce391f56ae972e653a5bfe8c8b071316df4bada0987bf67",
+    "rootCapture": "f53e445339a964f7646cada905b2e914ac8ef9d74844c712a7c83bbecc70fc77",
+    "validationLiveness": "95c2263ebc705b8129cbcdef2ebb43c71c439fdfea4a72d24ceb50b4e4805450",
+    "undispatchedCancellation": "2360c6593e5e9192016d788af932335e90533bfb8abc5bfd4283e611478c02bb",
+    "physicalClosure": "20feff6ea627925686576998e79ea10170cc508adc998249bb6c60d500fc5122",
+    "physicalClosureOuter": "d4a0bad176351fa4159a609c6dc92b21b511de967bfed729c04ded358be530be",
+    "mainControllerTerminal": "8b8df0580cdd7ab6a08dde8accf889bc04bcb88c332fac5deed358e21fb9df45",
+    "staticControllerTerminal": "d9bdc044ee36b302308e3e594d279e42ebeaeafd18cd360afbdec306bcfb169b",
+    "initialPendingMainObservationOuter": "6dfce347c25758251089357bff466ce3b9a66af2136937cdae09b75b5a0677c4",
+    "helper04SourceBinding": "b535a82a16206b7d87a4cce52f30070245d2bce57660824af81838aa92b11b42",
+    "helper04IndependentReview": "4f0ebd730246ce853747bdedbdc571a78a315566d85cbc83216449767afb50b9",
+    "helper05SourceBinding": "148c6dd97f209db03df1c410956ede3c4f083f9039f8feea0241cf727ebc3520",
+    "helper05IndependentReview": "d6fe68cd5e66bd1c46bc43f63cfa7d94806f18c98ecdf49a9c355e371d8145fb"
+  }
+}
