@@ -1,5 +1,29 @@
 # Acephale engineering log
 
+## Closed calibration and separate projection repair, 2026-11-20
+
+Seed17 calibration retains all 141 rows and records six teacher agreements:
+63 completed grades, 70 prediction misses, four context rejections and four
+interrupted failures. The failure-inclusive agreement is 4.26%; the original
+Wilson calculation yields a 0.019646 lower bound. Annotation audit used separate
+requests/prompts with the same teacher model and zero human reviews. The 24-call
+continuation has $0.309339 known usage; four original unresolved calls stay
+reserved. These are calibration diagnostics, not native reward or live latency.
+
+All seven analysis commands and the worker exited zero with actual drain.
+Projection then failed because RFC8785 rejects the integer range of Windows
+creation timestamps. The reviewed reader hashes a separate versioned identity
+payload with exact decimal strings, keeps raw launch/termination equality, and
+leaves scientific canonical hashing unchanged. Twelve focused tests and fourteen
+existing regressions passed; the focused suite also passed independent review.
+
+A separate projection-only process subsequently exited zero and drained, with
+scientific outputs unchanged, no model requests and no journal access. The old
+projection/supervisor failure remains recorded. The new closed analysis component
+and successor index are identified in the
+[immutable aggregate](experiments/retained-seed17-calibration-2026-11-20.json).
+The prior replay diagnostic is unchanged; the full paired study is not complete.
+
 ## Closed replay and retained grading-preparation failure, 2026-11-20
 
 E47 completed strict two-seed export and the three original seed17 replay

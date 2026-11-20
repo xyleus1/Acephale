@@ -1,0 +1,93 @@
+{
+  "schema_version": "acephale-retained-calibration-observation-v1",
+  "observed_date_utc": "2026-11-20",
+  "status": "partial_study_closed_seed17_analysis",
+  "scope": "Original reserved calibration cohort; goal agreement only",
+  "predictor_training_seed": 17,
+  "heldout_claim": false,
+  "native_task_reward_measured": false,
+  "live_latency_measured": false,
+  "original_denominator_retained": true,
+  "declared_rows": 141,
+  "retained_rows": 141,
+  "status_counts": {
+    "completed": 63,
+    "prediction_miss": 70,
+    "context_rejected": 4,
+    "failed": 4
+  },
+  "goal_agreement": {
+    "agreed": 6,
+    "denominator": 141,
+    "rate": 0.0425531914893617,
+    "failures_count_as_disagreement": true,
+    "completed_grades": 63,
+    "reliability_method": "reserved_calibration_full_cohort_wilson_lower_95",
+    "recorded_wilson_lower_95": 0.019646160425252017
+  },
+  "annotation_review": {
+    "model": "gpt-5.4-2026-03-05",
+    "protocol": "machine_audited_exploratory",
+    "independence": "separate_request_and_prompt_same_model",
+    "machine_reviews": 20,
+    "human_reviews": 0
+  },
+  "grading_continuation": {
+    "previously_unrequested_calls": 24,
+    "actual_api_dispatches": 24,
+    "completed": 24,
+    "agreed": 1,
+    "known_usage_microdollars": 309339,
+    "known_usage_usd": 0.309339,
+    "new_unresolved_requests": 0,
+    "is_total_grading_cost": false,
+    "is_total_study_cost": false
+  },
+  "original_grading_interruption": {
+    "original_command_succeeded": false,
+    "original_exit_code": null,
+    "unresolved_original_calls": 4,
+    "unknown_charges_remain_reserved": true,
+    "dispatched_requests_repeated": false
+  },
+  "local_analysis_closure": {
+    "completed_scientific_commands": 7,
+    "all_command_exit_codes_zero": true,
+    "all_command_processes_drained": true,
+    "initial_projection_failed": true,
+    "original_supervisor_succeeded": false,
+    "original_projection_failure_retained": true,
+    "projection_only_recovery": {
+      "verified": true,
+      "exit_code": 0,
+      "process_tree_drained": true,
+      "scientific_outputs_modified": false,
+      "model_calls_performed": false,
+      "journal_opened": false,
+      "repair": "Versioned lossless decimal-string encoding for local Windows process identity; global scientific canonical hashing unchanged"
+    },
+    "seed17_analysis_component_status": "closed"
+  },
+  "evidence_sha256": {
+    "grade_union_receipt": "4457a821e341aca24c48be9f3e128e6d7ea6d9a1ec6b69ddac42083ebd40400e",
+    "grade_rows": "d39c4f417eab32d5872d4ea546a5def3668285b3e2cacecc43f1a22a6f978afa",
+    "goal_reliability": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e",
+    "continuation_summary": "5fc134d00cadaeef8f7de118c3bad43831c3615b6910b898a88db684f60f0391",
+    "projection_process_closure": "b1dfc7b946864c6cbba8f6dbf4170cf0295e685df8931403ef8bfe6ce012d079",
+    "projection_recovery_receipt": "49da45256ed835696ce504d0ef1b28bdc0fa2738cb6e07deeea4a51dcda38b8d",
+    "closed_analysis_component": "647f23466bed49876e0901dda865c121e62e13916d83a3792ddbeccbfd7e511f",
+    "successor_evidence_index": "541f0ba9bf88133ab0842d2f3cd4d806a63335c8ff48b2a601d654565ad648a0",
+    "identity_reader": "e71da1f92d943e3f63f039e85c22d6ddf56b604f47550967c8109068bd67edac",
+    "identity_reader_review": "2910c5741eff3870c5c82f6983e6871e7841e006b6eec1954ab239b3507ddf89"
+  },
+  "limitations": [
+    "This is an interim calibration diagnostic, not a completed paired study or official benchmark score.",
+    "Missing predictions, context rejections and interrupted grading remain in the original 141-row denominator.",
+    "The Wilson value is the recorded calibration policy bound, not a held-out or family-clustered accuracy interval.",
+    "Same-model machine review is not independent human validation.",
+    "Continuation usage excludes earlier grading, unresolved charges, infrastructure and the rest of the study.",
+    "No task-reward, live-latency or superiority claim follows from these goal-agreement observations."
+  ],
+  "private_paths_included": false,
+  "raw_task_or_family_identifiers_included": false
+}

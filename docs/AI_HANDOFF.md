@@ -1,6 +1,31 @@
 # Working on Acephale
 
-## Current continuation: closed seed17 replay, 2026-11-20
+## Current continuation: closed seed17 calibration, 2026-11-20
+
+Seed17 analysis now has an actual closed component and successor index. The
+[sanitized calibration record](experiments/retained-seed17-calibration-2026-11-20.json)
+retains 141 rows: 63 completed, 70 prediction misses, four context rejections and
+four interrupted failures. Teacher agreement is 6/141 (4.26%); the recorded Wilson
+lower bound is 0.019646. There were no human reviews. This is machine-audited
+calibration evidence, not a held-out accuracy or live-latency result.
+
+The interrupted grading attempt remains unsuccessful. Only 24 previously
+unrequested calls were continued; known continuation usage is $0.309339. Four
+original unresolved calls remain reserved. Do not rerun those calls or settle
+their costs from this diagnostic.
+
+All seven scientific analysis commands closed successfully. Their first
+projection failed on a 64-bit Windows creation timestamp; its supervisor failure
+is retained. A separately observed projection-only recovery exited zero and
+drained, preserving the scientific outputs and closing the new evidence index.
+Do not relabel the failed supervisor as successful or repeat scientific commands.
+
+Continue with the original seed29 replay/calibration, opportunity profiles and
+paired native schedule through independently closed work units. Full publication
+still requires all twelve scientific components and actual report/render closure.
+Earlier entries below preserve prior state and are not current launch instructions.
+
+## Earlier continuation: closed seed17 replay, 2026-11-20
 
 Read the first section of [STATE.md](STATE.md). E47 exported all three original
 746-row seed17 conditions and then stopped in deterministic grading preparation.

@@ -1,9 +1,31 @@
 # Current state
 
-Updated November 20, 2026 (UTC). Seed17's three-condition replay is closed. Goal
-prediction failures substantially reduced usable output and exact call hits.
-Grading, seed29 replay and the paired native evaluation remain unfinished. No
-held-out task-accuracy or live latency improvement has been established.
+Updated November 20, 2026 (UTC). Seed17 replay and calibration are closed. Goal
+agreement is 6/141 (4.26%) with all failures retained. Seed29 replay and the paired
+native evaluation remain unfinished. No held-out task-accuracy or live latency
+improvement has been established.
+
+## Closed seed17 calibration
+
+All 141 calibration rows remain: 63 completed grades, 70 prediction misses,
+four context rejections and four interrupted grading failures. Six completed
+grades agreed with the teacher; the declared-cohort denominator stays 141.
+The recorded 95% Wilson lower bound used for goal reliability is 0.019646
+(1.96%). This is low calibration agreement, not a native task-reward score.
+
+Annotation review used separate requests and prompts with the same
+`gpt-5.4-2026-03-05` teacher model and zero human reviews. The continuation
+completed 24 previously unrequested grading calls for known usage of $0.309339.
+Four original interrupted calls remain unresolved and reserved. This amount is
+continuation cost only, not total grading or study cost. See the
+[calibration aggregate and evidence hashes](experiments/retained-seed17-calibration-2026-11-20.json).
+
+All seven local analysis commands exited zero and drained. The first evidence
+projection failed because a Windows process creation timestamp exceeded the
+canonical JSON integer range. A separate deterministic reader repair preserved
+the original failure and raw identities, then completed projection with an actual
+zero exit and process drain. It reran no scientific command or model request.
+The new index closes seed17 analysis; the complete study is still unfinished.
 
 ## Closed seed17 replay
 
@@ -222,15 +244,13 @@ See [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 ## Remaining work
 
-1. Finish seed17 grading preparation, its original grading batches and fresh
-   calibration/reliability using the closed replay. Preserve the original failed
-   preparation and every prediction failure.
-2. Qualify the saved seed29 predictor and complete its three replay conditions.
+1. Qualify the saved seed29 predictor and complete its three replay conditions
+   and its own calibration. Keep seed17's completed analysis immutable.
    Use finite independently closed work units, retaining original rows, weights,
    journal, failed attempts and scientific settings.
-3. Measure native prefetch opportunities and run the original 36 paired development
+2. Measure native prefetch opportunities and run the original 36 paired development
    slots across three arms. Choose whole held-out families using development costs
    alone, then run the predeclared paired schedule, up to 96 slots.
-4. Publish closed results, paired family intervals, physical/logical calls, live
+3. Publish closed results, paired family intervals, physical/logical calls, live
    latency, known/unknown costs and verified resource closure. Retain every failed
    attempt; do not select successful rows or relabel replay timing as live latency.
