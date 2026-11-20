@@ -1,5 +1,16 @@
 # Acephale engineering log
 
+## Offline analysis of retained goal failures, 2026-11-20
+
+Added a sanitized [count and evidence-hash artifact](experiments/retained-seed17-goal-errors-2026-11-20.json)
+from retained responses and existing grades. All 271 length failures remain
+invalid JSON after whitespace trimming; the other 141 rejected outputs fail
+probability or grounding validation. Teacher-reported omissions and unknown-label
+disagreements are separate from these output failures. The analysis makes zero
+model calls, regrades no rows and preserves 6/141 agreement and all original
+failures. It changes no methodology or implementation. Validation checks the JSON
+against the private aggregate, denominator arithmetic and public-field privacy.
+
 ## Closed calibration and separate projection repair, 2026-11-20
 
 Seed17 calibration retains all 141 rows and records six teacher agreements:

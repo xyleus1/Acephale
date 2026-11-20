@@ -5,6 +5,23 @@ agreement is 6/141 (4.26%) with all failures retained. Seed29 replay and the pai
 native evaluation remain unfinished. No held-out task-accuracy or live latency
 improvement has been established.
 
+## Retained goal-error analysis
+
+An [offline analysis of saved responses and grades](experiments/retained-seed17-goal-errors-2026-11-20.json)
+made zero model calls and regraded no rows. The 412 rejected goal outputs comprise
+271 length failures, 77 invalid probability sums, 62 invalid source paths and two
+unavailable source IDs. All 271 length failures remain invalid JSON after trimming
+whitespace; 255 have long whitespace tails. The implementation already requests
+strict JSON Schema. Underlying grounding diagnostics overlap the first-failure
+classes and cannot be added to that total.
+
+Of 57 completed semantic disagreements, 45 report missing constraints; eleven
+contradiction-only judgments concern the explicit no-request versus unknown
+convention. These are same-model teacher judgments with no human review. The
+original result remains 6/141, including prediction, context and interrupted-call
+failures. This is descriptive error analysis, not a new benchmark or a causal
+explanation of model behavior; methods, predictions and scores are unchanged.
+
 ## Closed seed17 calibration
 
 All 141 calibration rows remain: 63 completed grades, 70 prediction misses,

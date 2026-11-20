@@ -1,0 +1,150 @@
+{
+  "schema_version": "acephale-retained-goal-error-analysis-v1",
+  "observed_date_utc": "2026-11-20",
+  "scope": "Offline forensic description of retained seed17 goal-selected replay outputs and original calibration grades; fitting, calibration and development prefixes, no held-out rows",
+  "new_benchmark": false,
+  "heldout_claim": false,
+  "native_task_reward_measured": false,
+  "live_latency_measured": false,
+  "predictor_training_seed": 17,
+  "teacher_model": "gpt-5.4-2026-03-05",
+  "original_denominators_and_failures_retained": true,
+  "calibration": {
+    "agreed": 6,
+    "completed_only_descriptive_agreement": 0.09523809523809523,
+    "existing_full_cohort_agreement": 0.0425531914893617,
+    "existing_wilson_lower_95": 0.019646160425252017,
+    "human_reviews": 0,
+    "prediction_miss_first_failure": {
+      "Goal probabilities must sum to one": 13,
+      "Model response ended with length": 48,
+      "Source path is not visible": 9
+    },
+    "review_independence": "separate_request_and_prompt_same_model",
+    "rows": 141,
+    "status": {
+      "completed": 63,
+      "context_rejected": 4,
+      "failed": 4,
+      "prediction_miss": 70
+    },
+    "teacher_reason_mentions_unknown_disagreement": 11,
+    "teacher_structured_categories": {
+      "agreed": 6,
+      "contradiction_only": 11,
+      "missing_and_contradiction": 6,
+      "missing_only": 39,
+      "other_disagreement": 1
+    },
+    "unknown_mass_in_those_predictions": {
+      "0.03": 11
+    }
+  },
+  "interpretation": "First-failure classes are disjoint; reference diagnostics overlap. No repaired output is admitted or rescored.",
+  "kind": "acephale-retained-seed17-error-description-v1",
+  "length_failure_diagnostics": {
+    "complete_json_after_strip": 0,
+    "invalid_json_after_strip": 271,
+    "median_trailing_whitespace_characters": 957,
+    "median_whitespace_character_fraction": 0.810200668896321,
+    "output_token_counts": {
+      "1024": 271
+    },
+    "trailing_whitespace_at_least_64_characters": 255
+  },
+  "model_repository": "Qwen/Qwen3.5-0.8B",
+  "model_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+  "new_model_calls": 0,
+  "probability_failure_diagnostics": {
+    "hypothesis_counts": {
+      "2": 3,
+      "3": 74
+    },
+    "total_mass_maximum": 2.94,
+    "total_mass_median": 1.96,
+    "total_mass_minimum": 1.04
+  },
+  "regraded_rows": 0,
+  "replay": {
+    "admitted_hypothesis_counts": {
+      "1": 334
+    },
+    "failed_rows_with_no_candidate_response": 412,
+    "first_failure": {
+      "Goal probabilities must sum to one": 77,
+      "Model response ended with length": 271,
+      "Source is not visible": 2,
+      "Source path is not visible": 62
+    },
+    "goal_responses": 746,
+    "rows": 746,
+    "status": {
+      "completed": 334,
+      "failed": 412
+    }
+  },
+  "retained_reference_diagnostics_overlapping": {
+    "Goal probabilities must sum to one": {
+      "missing_path": 75,
+      "missing_source": 1,
+      "punctuation_in_path": 75,
+      "visible": 67
+    },
+    "Source is not visible": {
+      "missing_source": 2,
+      "visible": 2
+    },
+    "Source path is not visible": {
+      "missing_path": 62,
+      "punctuation_in_path": 61,
+      "visible": 50
+    }
+  },
+  "scientific_outputs_modified": false,
+  "serving": {
+    "contextWindow": 8192,
+    "enableThinking": false,
+    "inputBudget": 7168,
+    "outputCap": 1024,
+    "seed": 0,
+    "stream": true,
+    "temperature": 0,
+    "topP": 1
+  },
+  "interpretation_notes": [
+    "First-failure classes partition the 412 rejected goal outputs. Reference-path diagnostics overlap those classes and must not be added to the failure total.",
+    "All 271 length failures remain invalid JSON after whitespace trimming. Long whitespace tails suggest generation degeneration, but retained outputs do not isolate weights, decoding, or their interaction as the cause.",
+    "The other 141 rejected outputs are parseable JSON that fail probability or source-grounding validation. Probability mass ranges from 1.04 to 2.94, so these failures are not rounding noise.",
+    "The existing implementation requests strict JSON Schema and then checks probability mass and visible source resolution. No rejected goal output reached candidate generation.",
+    "All 334 admitted outputs contain one goal hypothesis. Multiple simultaneously requested outcomes are not supposed to be separate competing hypotheses.",
+    "Teacher-reported missing constraints occur in 45 of 57 completed semantic disagreements. Eleven contradiction-only judgments concern an explicit no-request hypothesis versus the rubric's unknown label; this is partly a representation/rubric mismatch.",
+    "The completed-only 6/63 fraction is selection-biased descriptive context. It does not replace the original failure-inclusive 6/141 calibration result.",
+    "The teacher and annotation reviewer use separate requests/prompts to the same model, with zero human reviews. Their judgments are not independently adjudicated ground truth.",
+    "The four interrupted grading calls remain failures with unresolved original charges. They are not semantic disagreements and were not retried.",
+    "Compact source handles, deterministic probability construction, explicit unknown labels and joint-request coverage are hypotheses for a future experiment. This diagnostic changes no contract, weights, calibrated output or benchmark score."
+  ],
+  "evidence_sha256": {
+    "retained_aggregate": "26c4ef074e031acd69fb4c9999583d4055e0516017f913b79ba95d44f75caa60",
+    "private_provenance": "f18d62f5fe98ace54107385ebdec896e8520217632a1db99a34760073532e61b",
+    "private_analysis_report": "1096af9185da636f7798b431f187167409a9604fcfb37eefe4c9805724faddef",
+    "analysis_source": "8020c6bc46b793251b54e3ee97ff7d99fc13b89dd2ef072584f81af6a809ae19",
+    "goal_validator": "e6f8207da362eae7b18393fb47ed7aea82b908112f7e09cef2124f962287b8a3",
+    "grade_receipt": "4457a821e341aca24c48be9f3e128e6d7ea6d9a1ec6b69ddac42083ebd40400e",
+    "grader": "9394438a196fde839a737aa7b4ff05f5b289ce58eae32c1ed20e52736ee158e0",
+    "grades": "d39c4f417eab32d5872d4ea546a5def3668285b3e2cacecc43f1a22a6f978afa",
+    "manifest": "9432dc8ba2878834822816182c9a8d5f41a4fb4cd28bd6b2dcec2e84954a35c8",
+    "model_port": "314dc6002ddb637d25995a2645b7dea66eaa89cc8bc40fd0943670b7ff42605e",
+    "predictions": "02548ba365ca71577119591a80c67a241085ce2b28dd0584ae0fba3147ffe74a",
+    "predictor": "53a682386ce8eee4316117203c439c124ff7dafe78f66fd45f944096d6d04830",
+    "public_sources": "3d85a1991d96b0775a761f5e783c85b16ac450be80fa225cf06fb0f1c83a8fb5",
+    "reliability": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e",
+    "replay_receipt": "76450914a7aafc9f9fa008e024866c793db5130c76fa234136050cb864e66a88",
+    "responses": "288205fb51b4fb046b0a5c4c9baa142433c6b26d16a653ebf95d6efa2af1f865",
+    "teacher_batch_1": "6d69a6ac0a57cc92510fb5fda9318494863703ffe5429497ad1bb876f2e62fce",
+    "teacher_batch_2": "c6ba4a53910311abb2327c79c99f289965c6e771978916d8baa547018026602d",
+    "teacher_continuation": "63dfa19df5eabd33da7b4e6df5321f429d740776922b72536f3b9991a5c8da25"
+  },
+  "private_paths_included": false,
+  "raw_task_or_family_identifiers_included": false,
+  "input_bytes_unchanged_after_analysis": true
+}

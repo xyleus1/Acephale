@@ -1,5 +1,12 @@
 # Working on Acephale
 
+The [retained goal-error diagnostic](experiments/retained-seed17-goal-errors-2026-11-20.json)
+describes saved seed17 outputs and grades with zero new model calls or regrading.
+Keep its overlapping reference diagnostics separate from the 412 disjoint first
+failures. Preserve the original 6/141 agreement denominator, four interrupted
+calls and same-model/no-human review limitation. This analysis changes no method
+or scientific artifact and establishes no task-reward or live-latency result.
+
 ## Current continuation: closed seed17 calibration, 2026-11-20
 
 Seed17 analysis now has an actual closed component and successor index. The
