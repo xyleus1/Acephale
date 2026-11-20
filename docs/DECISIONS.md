@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-20: Refresh liveness only from completed validation
+
+E52 exposed a nested-validation path that completed new full checks but retained
+an older 600-second proof. Fix the missed renewal boundary in a separate future
+source version. Require the original mutex, current owner, unchanged exact
+ledger and a still-valid prior proof through overlapping handle acquisition.
+Do not revive expired proofs, increase lifetimes, cache financial decisions or
+change scientific settings. Keep the failed attempt and independently verified
+cleanup as evidence; tests do not establish successful live dispatch.
+
 ## 2026-11-19: Renew genuine ownership at expensive validation boundaries
 
 Use four explicit publications around expensive preflight work. Preserve the

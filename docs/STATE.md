@@ -5,6 +5,13 @@ agreement is 6/141 (4.26%) with all failures retained. Seed29 replay and the pai
 native evaluation remain unfinished. No held-out task-accuracy or live latency
 improvement has been established.
 
+The latest seed29 launch attempt stopped before any provider launch request.
+Its first retained validation window expired even though two later full
+validations had completed. Independent observations confirmed provider absence,
+local process closure and completion of all four controller jobs. The original
+failure and cost reservations remain recorded. This adds no model predictions or
+native task results. See the [failure record](experiments/retained-e52-launch-failure-2026-11-20.json).
+
 ## Retained goal-error analysis
 
 An [offline analysis of saved responses and grades](experiments/retained-seed17-goal-errors-2026-11-20.json)

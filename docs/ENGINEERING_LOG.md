@@ -1,5 +1,20 @@
 # Acephale engineering log
 
+## Retained preflight failure and verified cleanup, 2026-11-20
+
+E52 completed controller handoff but stopped before provider dispatch. Three
+ordinary full validations completed; only generation 1 produced a retained
+liveness record. The first 600-second record expired during the second joint
+controller collection. The owner heartbeat and overall capacity deadline had
+not expired. A future fix must refresh from an actual successful full validation
+while the prior proof remains valid, preserving all original limits and checks.
+
+The original read-only closure observer exited zero and drained. Each controller
+run received one cancellation request; subsequent GET observations confirmed all
+four jobs completed. No model requests or scientific components were added, and
+all financial holds remain. The [sanitized record](experiments/retained-e52-launch-failure-2026-11-20.json)
+retains timing and evidence hashes without private paths or credentials.
+
 ## Offline analysis of retained goal failures, 2026-11-20
 
 Added a sanitized [count and evidence-hash artifact](experiments/retained-seed17-goal-errors-2026-11-20.json)

@@ -1,5 +1,13 @@
 # Working on Acephale
 
+The latest E52 attempt stopped before provider dispatch. Nested full validations
+updated completion metadata but left the first retained liveness generation in
+use until its 600-second expiry. Provider absence, local closure and all four
+terminal controller jobs are independently recorded; the outer launch's unknown
+exit/drain fields remain unknown. A narrow future renewal fix is under test.
+Do not rerun E52, extend its clocks, or claim new scientific results. Continue
+from the latest private root record and preserve the three closed components.
+
 The [retained goal-error diagnostic](experiments/retained-seed17-goal-errors-2026-11-20.json)
 describes saved seed17 outputs and grades with zero new model calls or regrading.
 Keep its overlapping reference diagnostics separate from the 412 disjoint first

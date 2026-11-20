@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "retained-launch-failure-diagnostic",
+  "attempt": "E52",
+  "date": "2026-11-20",
+  "scientificComponentsClosed": 3,
+  "scientificComponentsTotal": 12,
+  "providerLaunchRequestAttempted": false,
+  "newModelCalls": 0,
+  "newNativeTrials": 0,
+  "failure": {
+    "type": "ValueError",
+    "message": "Prepared adoption cancelled, regressed or exceeded its original bounds",
+    "retainedGeneration": 1,
+    "retainedLifetimeSeconds": 600,
+    "expiredBySecondsAtPendingReceipt": 0.8204407691955566,
+    "ownerHeartbeatAgeSecondsAtPendingReceipt": 52.7802619934082,
+    "ownerHeartbeatLimitSeconds": 120,
+    "capacityTimeRemainingSecondsAtPendingReceipt": 1713.4695007801056,
+    "completedFullValidationGenerations": [
+      1,
+      2,
+      3
+    ],
+    "retainedGenerations": [
+      1
+    ]
+  },
+  "cleanup": {
+    "providerAbsent": true,
+    "localProcessesAndTasksClosed": true,
+    "controllerRunsClosed": 2,
+    "controllerJobsClosed": 4,
+    "allFinancialReservationsUnchanged": true,
+    "historicalMainExitCode": null,
+    "historicalMainProcessTreeDrained": null
+  },
+  "interpretation": "Operational failure before model execution. Later full validations completed without refreshing the retained liveness generation. This is not a benchmark result; the future fix remains unqualified for live dispatch.",
+  "evidenceSha256": {
+    "launchOuter": "f5d2a38b350e767e1fcec8a59dca435521f4e2aa6ed7c07d4c5a1c29c3f1927c",
+    "validationLiveness": "97602126ba0a5da01e16708195d9051ecaf502464be7c80b5f3a82d51c6978e4",
+    "pendingObservation": "744997334bfbd0b2bf9d350739f5a35750b0884aad668a89a4b71e7ae5b50208",
+    "lastOwnerPublication": "8ce44f6e731db0584a28c1f379169e77f8960ab5a13557e9375645be17e12f54",
+    "undispatchedCancellation": "6326fd258f9989e4c23aec14f6c518660b687e89d9f3657e876496e106d7f344",
+    "physicalClosure": "2c8683f19e7caf0c79eef05d6cd1933ef617e67ffc374db144df9b1fbb760b00",
+    "mainControllerTerminal": "d3626b56d8f18b2e17664611b6a3ea53c2d21c7e1dd3044b2350a8b0a9ea1713",
+    "staticControllerTerminal": "9ae78762e140da0b84dac827d157e1af39547904501bd4aa9b2db4568212eaa6"
+  }
+}
