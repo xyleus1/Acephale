@@ -1,0 +1,33 @@
+{
+  "kind": "acephale-frozen-protocol-concurrency-findings-v1",
+  "status": "source-audit-paused-for-first-science-continuation",
+  "existingReplayConcurrency": {
+    "helper": {
+      "path": "/srv/acephale/workspaces/operator/cloud-replay-02/same_host_trained_replay.py",
+      "sha256": "6a5b5fbbb87efce5e36245b22be6e985f546483bb19e0fa8414e05542e960d35"
+    },
+    "conditionWorkers": 3,
+    "conditionNames": [
+      "neutral-fixed",
+      "goals-selected",
+      "goals-fixed"
+    ],
+    "sameQualifiedGpuHostRequiredByAcceptedRuntime": true,
+    "conditionCheckpointLoop": "ordered serial within each condition",
+    "nativeEpisodes": 0,
+    "noNewShardDispatchAuthorized": true
+  },
+  "nativeSegmentDependency": {
+    "source": {
+      "path": "/srv/acephale/workspaces/operator/science-source/services/acephale-runtime/infra-cohort-reservations.ts",
+      "sha256": "63490d59c18784e029fe218bb58c56cd99f811aa5da22dcb69fe647bd59ad256"
+    },
+    "earlierSegmentGate": "earlier declared segment claim markers; not earlier scientific result values",
+    "frozenSegmentValidator": "input run IDs must exactly equal one declared whole segment",
+    "pairedBlockAtomicity": "never divide the three-arm block",
+    "noImmediatelyAdmissibleArbitraryBlockSubset": true
+  },
+  "timingLimitation": "Frozen native runner iterates trials serially. Current model request carries no per-trial cache salt; timing/cache equivalence of new host-level sharding has not been demonstrated. Existing within-run perRunConcurrency2/globalConcurrency4 must not be interpreted as four trial workers.",
+  "scientificSourcesChanged": false,
+  "scientificExecutionPerformed": false
+}

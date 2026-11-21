@@ -1,0 +1,44 @@
+{
+  "kind": "acephale-retained-results-transcription-v1",
+  "acceptedAnalysis": {
+    "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/projection-recovery-01/component.json",
+    "sha256": "647f23466bed49876e0901dda865c121e62e13916d83a3792ddbeccbfd7e511f"
+  },
+  "sources": [
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/analysis/output-receipt.json",
+      "sha256": "7239396b17228841e95fb0f499011c30f5e6fce695ad16473c959220cda22796"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/analysis/goal-reliability/goal-reliability.json",
+      "sha256": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/commands/neutral-fixed-score/result.json",
+      "sha256": "8e8cce53618edf4ce90febc3e877c1957a95ca5bf5b53ab28be8f8d70bda20c5"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/analysis/neutral-fixed-score/manifest.json",
+      "sha256": "8b7ef2a63d672e1c2bedc9578cb332dead746373c58c3834f2c1dac141f66a05"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/analysis/neutral-fixed-score/prediction-report.json",
+      "sha256": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/commands/goals-fixed-score/result.json",
+      "sha256": "ee52de34a09028901c6765633a59f9565e4fcc34a35a009188c4fc88015be61b"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/analysis/goals-fixed-score/manifest.json",
+      "sha256": "3ce3d7dfe4c7ce2f118ef658664a1fbeb3cd61b972e437bf2a74a318814b32dc"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/analysis/goals-fixed-score/prediction-report.json",
+      "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687"
+    }
+  ],
+  "statisticsRecomputed": false,
+  "nativeOutcomesClaimed": false,
+  "createdAt": "2026-11-21T23:12:12.309356+00:00"
+}

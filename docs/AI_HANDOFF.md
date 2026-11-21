@@ -801,3 +801,8 @@ though the actual frozen-checkout test had passed locally. Apply the same explic
 prerequisite marker to the wrapper. Test logic and production source are unchanged;
 retain the local configured-reader result and report CI's missing checkout as a
 skip, never a pass. The running evaluation keeps its original committed source.
+
+
+## 2026-11-21: native profiling recovery and paper draft
+
+Preserved the frozen scientific source and prior accepted components. Added source snapshots for the native Python environment, path/guard recovery and separate numerical-evidence filenames; failed generations remain in AWS. The latest profiler failure is an unresolved Windows provenance-path translation, with no model requests. Added the editable paper, accepted seed17 subset analysis with failure denominators, and an isolated AWS PDF renderer. See infra/aws-continuation/RECOVERY_STATUS.md; this is not final study completion.

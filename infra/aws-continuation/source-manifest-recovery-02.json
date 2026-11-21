@@ -1,0 +1,305 @@
+{
+  "kind": "acephale-publication-snapshot-v1",
+  "createdAt": "2026-11-21T23:43:36.531127+00:00",
+  "scientificSource": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+  "frozenExecutionRootsModified": false,
+  "files": [
+    {
+      "path": "paper/README.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/README.md",
+        "versionId": "KfkIZJz.e2GJq1fRg0KaKfFus3gRVxuB"
+      },
+      "sha256": "b557e4d5f269b20a01b9d93009fe5458cd3c2e9ba1c6cea77796785bf52b56ee"
+    },
+    {
+      "path": "paper/analysis-plan.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/analysis-plan.md",
+        "versionId": "5uxN_NCHyM8DCOezhKmXfWMGXFAs.TAO"
+      },
+      "sha256": "63ee9ddc1e5c0394cf8ae9a69fcd52484733b354f892b7b1aeda0c5f2c2c2e5d"
+    },
+    {
+      "path": "paper/evidence-register.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/evidence-register.json",
+        "versionId": "d3qGVxw5Vi_IQM.QmuPo1NRgrsf2Lqc1"
+      },
+      "sha256": "5a1cb7f1568ea35f17ee85ff800ab9aaa4944b8693f955eac9ad2ac98e50d2a3"
+    },
+    {
+      "path": "paper/figures/layouts.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/figures/layouts.json",
+        "versionId": "v6qBJsS.FEOs7J7N8oAetfrv1dOmHzyb"
+      },
+      "sha256": "4b94ddc0e1ebe855f5e6aa1660380c5bba2dc21d46b8768c12de05aba6142c4d"
+    },
+    {
+      "path": "paper/figures/method-flow.svg",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/figures/method-flow.svg",
+        "versionId": "DC5emeYuqj5OberDwiqRE6gYeD2uRBwI"
+      },
+      "sha256": "84e10baa466be63ab76793fc71273fb2f207ab15d5751c85e3a78be3cac01e36"
+    },
+    {
+      "path": "paper/manuscript.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/manuscript.md",
+        "versionId": "njQc_vaPpHhuRe16x1.qH4NT_46Q0do1"
+      },
+      "sha256": "5bfa442672cee0ecf88884f54fb41444ea4fe68f70b970edef99416b8e13368b"
+    },
+    {
+      "path": "paper/methods.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/methods.md",
+        "versionId": "jPyszjfV_AXO_6nz3yf9GmKSZmhP.VJ0"
+      },
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "path": "paper/references.bib",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/references.bib",
+        "versionId": "eSGqFDNKD.3pM6Ssp7nYImlWMakCyLjJ"
+      },
+      "sha256": "d61d74e232591e80074f1d3db171eba26c135f00910b58806238cb254cd3aade"
+    },
+    {
+      "path": "paper/related-work.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/related-work.md",
+        "versionId": "nO7qCcDPt8S.UVGJvnAgon9etf9_ODme"
+      },
+      "sha256": "425e7931be817ac530606b3516e8b85d3331d4789a8fdd14ff0f61546ab1cfa2"
+    },
+    {
+      "path": "paper/results-status.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/results-status.md",
+        "versionId": "PVC134pP_kFyoxyLs81k9IyblEIma6Z6"
+      },
+      "sha256": "c0dc634dd5159b0fc9ddcde39bf04723916b9a8c1eb56c77626870e1424d545b"
+    },
+    {
+      "path": "paper/retained-results-evidence-01.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/retained-results-evidence-01.json",
+        "versionId": "j4FdcD.laJjope7zSnbarUKvWK3hIFFq"
+      },
+      "sha256": "ddbc886faf2c2d0a0f64d0737d050d71748880f876988530515fc55d09395b9d"
+    },
+    {
+      "path": "paper/retained-results.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/retained-results.md",
+        "versionId": "ktk5_5X4kqaiwPxgWnaz6A_0By2DReyQ"
+      },
+      "sha256": "31490907b27dd25dd10abb8b3c4e0b4b07636c74bcf74b97a979bd06d08624c1"
+    },
+    {
+      "path": "paper/sources/INFRA_NATIVE_PROFILE.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/sources/INFRA_NATIVE_PROFILE.md",
+        "versionId": "qxO2FZZVe7qsGzgUlyGlsL9T2s4_MjiX"
+      },
+      "sha256": "b26e463027ee01ee0984582437dce208b4f96d4fa58943b1926f95c1c4d25a50"
+    },
+    {
+      "path": "paper/sources/METHODS.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/sources/METHODS.md",
+        "versionId": "swjP6V21QAne1PNoEh1ZRF0qWYitYFgB"
+      },
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "path": "paper/sources/continuation-dag.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/sources/continuation-dag.json",
+        "versionId": "K2tf85kDBzBWR5QbTpFGMDz61SoTEVxZ"
+      },
+      "sha256": "be5ac0328d8a934186793ae546ff2f1669a651718d97121ac8bbd80e8d228be5"
+    },
+    {
+      "path": "paper/sources/findings.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/sources/findings.json",
+        "versionId": "66Fajjl1r6a1uVZnawIdQdJjhaWeJ5aP"
+      },
+      "sha256": "9595e812eaf4e901311dccd5e802ab3b9f036bcb6487987e324275f8a0415351"
+    },
+    {
+      "path": "paper/sources/seed17-goal-reliability.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-goal-reliability.json",
+        "versionId": "2za824X0IomPUhq6ATCFSWYDHz1N4Rke"
+      },
+      "sha256": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e"
+    },
+    {
+      "path": "paper/sources/seed17-goals-fixed-score-command-result.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-goals-fixed-score-command-result.json",
+        "versionId": "FOSYi2Cf8SH.2E1bgdGHfhucgiBl9Nii"
+      },
+      "sha256": "ee52de34a09028901c6765633a59f9565e4fcc34a35a009188c4fc88015be61b"
+    },
+    {
+      "path": "paper/sources/seed17-goals-fixed-score-manifest.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-goals-fixed-score-manifest.json",
+        "versionId": "F593V58pMiWJHGOQCTTx6qPvJkDC4VNg"
+      },
+      "sha256": "3ce3d7dfe4c7ce2f118ef658664a1fbeb3cd61b972e437bf2a74a318814b32dc"
+    },
+    {
+      "path": "paper/sources/seed17-goals-fixed-score-report.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-goals-fixed-score-report.json",
+        "versionId": "7tEd.hW4bfiVBEcUw4oLFY_BcMHFBKEr"
+      },
+      "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687"
+    },
+    {
+      "path": "paper/sources/seed17-neutral-fixed-score-command-result.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-neutral-fixed-score-command-result.json",
+        "versionId": "a9COIBpn1xq9aOuVTKPzmLI07XuPrAyw"
+      },
+      "sha256": "8e8cce53618edf4ce90febc3e877c1957a95ca5bf5b53ab28be8f8d70bda20c5"
+    },
+    {
+      "path": "paper/sources/seed17-neutral-fixed-score-manifest.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-neutral-fixed-score-manifest.json",
+        "versionId": "UE.QIl2ADdvae8j1nWl05WoQM4.jme71"
+      },
+      "sha256": "8b7ef2a63d672e1c2bedc9578cb332dead746373c58c3834f2c1dac141f66a05"
+    },
+    {
+      "path": "paper/sources/seed17-neutral-fixed-score-report.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/sources/seed17-neutral-fixed-score-report.json",
+        "versionId": "f97A.FsdxgR3mQfso6h85S4iv9WpRvIJ"
+      },
+      "sha256": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6"
+    },
+    {
+      "path": "paper/sources/staged-study-2026-11-13.md",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/sources/staged-study-2026-11-13.md",
+        "versionId": "hj21rzJfZuyrlVRyQnLPp1oT797y.l_T"
+      },
+      "sha256": "8f07b9847c22a79f8b457dd831630d4441ccd033c65c7b5b0808ee4150a26d33"
+    },
+    {
+      "path": "paper/sources/vllm-lora-coverage-01-findings.json",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/sources/vllm-lora-coverage-01-findings.json",
+        "versionId": "sis_KxsVx.ReXnIGRZ5gNOiMiG8Na6Rp"
+      },
+      "sha256": "87eecb101df44a6ae2435e0af7665a7cb7322212221c150f2f0aa08c6cefe876"
+    },
+    {
+      "path": "paper/tables/costs.csv",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/tables/costs.csv",
+        "versionId": "ttOj4UCd0PtTrjjwvEPwTFxp2I.VyWP6"
+      },
+      "sha256": "2194af38f6ed5256f4ff3b7bf59545f4ce2bf4503f461ce7517ebcef7d145979"
+    },
+    {
+      "path": "paper/tables/native.csv",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/tables/native.csv",
+        "versionId": "atIXhgia_hn_h6BcKLf7l66drZM7ABkD"
+      },
+      "sha256": "8b40656bd87a2943b95d58b584b2f530b040a248d1a38f853b11cdcd847a5a2f"
+    },
+    {
+      "path": "paper/tables/opportunity.csv",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/tables/opportunity.csv",
+        "versionId": "vWBZDf.xSc2dz9V5fAoApdpJkqVTXlDg"
+      },
+      "sha256": "cf8bbc0114154f837419514998212bf6c21f8556dc7c3a247642f84629fe44fe"
+    },
+    {
+      "path": "paper/tables/replay.csv",
+      "source": {
+        "key": "audit/report/manuscript-aws-01/update-02/tables/replay.csv",
+        "versionId": "qxnsUTzvr5E2Jg3XuJ28hFhNzTNlRfRu"
+      },
+      "sha256": "cad07c3208df73fa9782dd802214d7bd9a92cd6e792e9901babf354fa7231774"
+    },
+    {
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-05/continuation.py",
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-05/continuation.py",
+      "sha256": "48cc4259750df1ea3f99fca239cc332f571622ea5ce2e21edea060d834c99ef1"
+    },
+    {
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-05/worker.py",
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-05/worker.py",
+      "sha256": "4cc8ea7ed5eed09280313f3551d22d09f96684a0b283e625e91ef3b469942314"
+    },
+    {
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-05/reuse_preparation.py",
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-05/reuse_preparation.py",
+      "sha256": "acb1af5fe8bbd55f934804d125e33ab69b4c769f99b64e1e8b731b9f0295cf42"
+    },
+    {
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-05/test_recovery.py",
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-05/test_recovery.py",
+      "sha256": "7e335e047ccec7b2427030de6547e23d8d0ad4458a34722df769cb68c2d48aea"
+    },
+    {
+      "path": "infra/aws-continuation/sources/operator/native-evidence-recovery-05/native_evidence.py",
+      "source": "/srv/acephale/workspaces/operator/native-evidence-recovery-05/native_evidence.py",
+      "sha256": "85f4f5fbfed8b5933659b414040426e7aa35faa79a9a58795d1d441fe9a98362"
+    },
+    {
+      "path": "infra/aws-continuation/sources/operator/native-evidence-recovery-05/closure_adapter_02.py",
+      "source": "/srv/acephale/workspaces/operator/native-evidence-recovery-05/closure_adapter_02.py",
+      "sha256": "1efeca74d84c8b767c2ed8e69987cd7ce8dd02bcd5c49fb13835286daf77279a"
+    },
+    {
+      "path": "infra/aws-continuation/sources/operator/native-profile-environment-04/prepare_environment.py",
+      "source": "/srv/acephale/workspaces/operator/native-profile-environment-04/prepare_environment.py",
+      "sha256": "72f7cdcc144168645107a3ead1a1eff529a7559f640ed27bba909ca61e83fc44"
+    },
+    {
+      "path": "paper/rendering/render.py",
+      "source": "/srv/acephale/workspaces/root/paper-render-01/render.py",
+      "sha256": "e694908e40cab017552e173bc3b4cabedbe00601abcb26b3fc72696e4cd68d6e"
+    },
+    {
+      "path": "paper/rendering/requirements.lock",
+      "source": "/srv/acephale/workspaces/root/paper-render-01/requirements.lock",
+      "sha256": "47a2c966f903f566fcd7b17d1bb949bde74ac456d146e37819c34db0f4737d22"
+    },
+    {
+      "path": "infra/aws-continuation/RECOVERY_STATUS.md",
+      "source": "current observed AWS state",
+      "sha256": "ff0c29a2ac8fbe515fb7217fe6de2d4e3a676dbffbe7d3cf8241125c9591366d"
+    },
+    {
+      "path": "docs/AI_HANDOFF.md",
+      "source": "publication update",
+      "sha256": "a692f8e9a314af3e599775c520bc3ac7ed52e8feb7900aea14c00961c6d1d4a4"
+    },
+    {
+      "path": "docs/ENGINEERING_LOG.md",
+      "source": "publication update",
+      "sha256": "b57983d778a525113028df1d9edf624cb25d7f12023ea0389bb44408aa95408c"
+    },
+    {
+      "path": "docs/DECISIONS.md",
+      "source": "publication update",
+      "sha256": "1f8bb9a2132be50477ba25ade61cb6982cb2594d02ad5c2033f8059524ad377f"
+    }
+  ]
+}

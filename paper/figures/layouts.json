@@ -1,0 +1,57 @@
+{
+  "kind": "acephale-manuscript-figure-layouts-v1",
+  "syntheticDataUsed": false,
+  "figures": [
+    {
+      "id": "figure1",
+      "title": "Prediction, admission and authoritative consumption",
+      "file": "method-flow.svg",
+      "status": "methods diagram"
+    },
+    {
+      "id": "figure2",
+      "title": "Replay quality",
+      "panels": [
+        "log loss paired differences",
+        "Brier paired differences",
+        "coverage and failures"
+      ],
+      "source": "tables/replay.csv",
+      "status": "awaiting accepted report values"
+    },
+    {
+      "id": "figure3",
+      "title": "Opportunity components",
+      "panels": [
+        "p10 tool/lead benefits",
+        "p90 contention/prediction/scheduling/validation costs",
+        "failure counts"
+      ],
+      "source": "tables/opportunity.csv",
+      "status": "awaiting accepted closure",
+      "captionConstraint": "Admission heuristic, not task speedup."
+    },
+    {
+      "id": "figure4",
+      "title": "Paired native outcomes",
+      "panels": [
+        "reward/pass1",
+        "episode latency",
+        "physical reads and overhead"
+      ],
+      "source": "tables/native.csv",
+      "status": "awaiting complete paired blocks",
+      "captionConstraint": "Show actual denominators; separate development and heldout."
+    },
+    {
+      "id": "figure5",
+      "title": "Completion and expenditure",
+      "panels": [
+        "planned versus observed flow",
+        "AWS versus hosted API cost"
+      ],
+      "source": "tables/costs.csv",
+      "status": "awaiting final exports"
+    }
+  ]
+}

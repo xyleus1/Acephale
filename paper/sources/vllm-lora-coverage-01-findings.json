@@ -1,0 +1,166 @@
+{
+  "actualSourceProvenance": "Read-only docker cp from actual Ohio predictor using same exact pinned image; manifest files and archive bytes checked on controller.",
+  "auditExecutionNotes": [
+    "Initial metadata-only AST fixture assumed unannotated packed map and causal-class-local mapper; stopped before output, corrected to actual annotated conditional model shape. Successful exact mapper/header coverage SSMc1e54263. No production changes."
+  ],
+  "conclusion": "No demonstrated loader defect; actual source has a complete name and packed-projection route for all retained seed29 adapter targets. The observed cross-engine numerical failure remains unexplained.",
+  "externalContext": {
+    "limitedRelevance": "Old0.18.1 missing-target warning report closed after correction; not evidence of the same defect in actual0.32 source.",
+    "url": "https://github.com/vllm-project/vllm/issues/38085"
+  },
+  "facts": [
+    {
+      "evidence": {
+        "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/target-coverage.json",
+        "sha256": "82739c8d2ec37cfe2a8415bbc7d1b6b24946b0efe464c4d69bb54ca6332cce31"
+      },
+      "finding": "372 F32 tensors form186 A/B target pairs; all12 target suffixes have explicit runtime routes; exact source mapper/parser applied to names yields114 packed runtime groups."
+    },
+    {
+      "finding": "Qwen3.5 sets gqa_interleaved_layout=False; source packed order b,a matches forward split_ba; qkv plus z expansion uses exact output row widths rather than silently discarding projections.",
+      "sourceLines": {
+        "lora/layers/column_parallel_linear.py": [
+          270,
+          345
+        ],
+        "qwen3_5.py": [
+          149,
+          154,
+          481,
+          483
+        ],
+        "qwen_gdn_linear_attn.py": [
+          651,
+          699,
+          995,
+          1033
+        ]
+      }
+    },
+    {
+      "finding": "Loader drops stacking from name mapper before parsing adapter names, preserves target names, then packs matched children. No unexpected target suffix in retained header.",
+      "sourceLines": {
+        "lora/model_manager.py": [
+          825,
+          898
+        ],
+        "lora/worker_manager.py": [
+          106,
+          150
+        ]
+      }
+    },
+    {
+      "finding": "Actual source constructs A_log in float32. Original reference contract already requires BF16 autocast with FP32 A_log; runtime BF16 LoRA is explicit in predictor artifact. No dtype change recommended.",
+      "sourceLines": {
+        "qwen_gdn_linear_attn.py": [
+          552,
+          563
+        ]
+      }
+    },
+    {
+      "evidence": {
+        "path": "/srv/acephale/workspaces/operator/g7-l40s-comparison-01/comparison.json",
+        "sha256": "24c632732f32f5a0e3951847465230506f5e8f4f2fdb0665a604c3f5e048a4d8"
+      },
+      "finding": "Same configured binary probability0.21206880435710532 across all3 G7 and all3 L40S requests, reference0.23370635691404026, difference0.021637552556934947 exceeds frozen0.01 gate. Raw logprobs differ by common offset across hardware; binary gap is identical-1.3125."
+    }
+  ],
+  "files": [
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/manifest.json",
+      "sha256": "029847f4544f4d7843bef6ba2c312ab85ae72ec84d82cbcbb2870c85e2673437"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/extra-manifest.json",
+      "sha256": "7cdbc34e2ca078286c257172e58e71b9f873f4b39eaa1d34eaf0e394b089d166"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/target-coverage.json",
+      "sha256": "82739c8d2ec37cfe2a8415bbc7d1b6b24946b0efe464c4d69bb54ca6332cce31"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/seed29-safetensors-header.json",
+      "sha256": "927d6f7b233eff89c242db54bedb252a30981c5fd08d845f0e6d20ae1f453a42"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/g7-split_k1-diagnostic.json",
+      "sha256": "a5e0b37bef934491946d51269044dbd3ae27b4d7b9889bf9e43d4e6fc6be5ccd"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/g7-baseline-diagnostic.json",
+      "sha256": "6611e307ff938dd9f7593f66536a007a7db986a6fca1bb8823e8b1c402b8e88b"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/qwen3_5.py",
+      "sha256": "ea7e71303c902b9678e85ff3e9a75a7ab6e69b5770605d540ad6ab1084e18187"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/qwen_gdn_linear_attn.py",
+      "sha256": "3fbf257fef7f303b0082fdbedce4394df74b78ad9a594157079c89632b5c221e"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/lora/worker_manager.py",
+      "sha256": "7bd7e810de69cdca0caa4fc1a085d3652d841dd60840fe45a930bf8f7e077f7e"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/lora/model_manager.py",
+      "sha256": "93b0be475e6d7a8aaa11be0bd6ce132c986740f76e1a27757e579843585d3ed2"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/lora/lora_model.py",
+      "sha256": "8fa422bf787117d50855df341578bee95e361f6f33b06db6be785e933d580c0d"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/lora/lora_weights.py",
+      "sha256": "6a20abcaccd8135d49e11927058020c0ff132a3a401afa9a6808a8b4a6a8c0af"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image/lora/layers/column_parallel_linear.py",
+      "sha256": "cb0b0d33ba8ccb76e8ce7eff5c0467b548da4af2325a85cf70f1f9c45280e39a"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image-extra/model_executor__models__qwen3_vl.py",
+      "sha256": "cac3013e717c8d6299893a4e18964ea7ec3abbbf7373eed58045fab50da9028b"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/actual-image-extra/model_executor__models__utils.py",
+      "sha256": "4ab514070265ad06d8681f23c7976b726711f027fdf74dfcc3239c4b65bc1051"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-47/evaluation-stage-01/verified/main-run/seed29-export/artifacts/artifacts/adapter/adapter_config.json",
+      "sha256": "011e0a31d80cc881a375a1201e71c76d460960fedd6ad66068b5e96ad14db5bf"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-47/evaluation-stage-01/verified/main-run/seed29-export/artifacts/artifacts/adapter/adapter_model.safetensors",
+      "sha256": "ff5bafd8f5ee7b126fba3fa12620b6d9d0b3455d3e1a283de604e77ac96671ba"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-47/evaluation-stage-01/verified/main-run/seed29-export/artifacts/artifacts/training-manifest.json",
+      "sha256": "28aa33e7a5b181fbcfb132e65d24aff8ce0bc7d0939dd692446a3be85716a56b"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-47/evaluation-stage-01/verified/main-run/seed29-export/artifacts/artifacts/serving-probe.json",
+      "sha256": "318990f3ef5155925ae90c69f1c267de0c65b908ee0a3ddea4f6ffea29f64373"
+    },
+    {
+      "path": "/srv/acephale/workspaces/operator/g7-l40s-comparison-01/comparison.json",
+      "sha256": "24c632732f32f5a0e3951847465230506f5e8f4f2fdb0665a604c3f5e048a4d8"
+    }
+  ],
+  "gateChanged": false,
+  "image": "sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+  "kind": "acephale-actual-pinned-vllm-lora-source-audit-v1",
+  "noModelOrInferenceExecuted": true,
+  "notEstablished": [
+    "Actual live engine per-module tensor-value attestation",
+    "Whether numerical drift arises in LoRA kernels, GDN/attention kernels, accumulation/rounding, or another path",
+    "Whether a different GPU would pass the unchanged gate"
+  ],
+  "observedAt": "2026-11-21T21:01:23.155337+00:00",
+  "precisionChanged": false,
+  "scientificSourceChanged": false,
+  "serviceChanged": false,
+  "weightsChanged": false
+}

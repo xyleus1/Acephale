@@ -1,0 +1,312 @@
+{
+  "kind": "acephale-aws-frozen-study-continuation-plan-v1",
+  "sourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+  "analysisSourceCommit": "c8a662c97c5daae33d4868d7e50494d8355fbc2c",
+  "originalEvidenceIndex": {
+    "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/operational-catalogue-01/evidence-index.json",
+    "sha256": "cb6b999f37b30910596d61c0501f43ee2527b53b08f4297bbd4032667c8ef72b"
+  },
+  "frozenDesign": {
+    "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/closed-e47-components-01/frozen-design.json",
+    "sha256": "48abd961d193b598fa6c245c971035953b635b80d654a927b8f26d5f21cbdce5"
+  },
+  "scientificUnitCount": 12,
+  "closedUnitsRetained": {
+    "export": {
+      "path": "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\evaluation-only-continuation-47\\closed-e47-components-01\\components\\export.json",
+      "sha256": "64b601209da7e02c0ae2808c63d347905af52d83444c1c130e47b4c0c57a5acf"
+    },
+    "seed17/analysis": {
+      "path": "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\evaluation-only-continuation-47\\seed17-cpu-recovery-06\\owner\\projection-recovery-01\\component.json",
+      "sha256": "647f23466bed49876e0901dda865c121e62e13916d83a3792ddbeccbfd7e511f"
+    },
+    "seed17/replay": {
+      "path": "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\evaluation-only-continuation-47\\closed-e47-components-01\\components\\seed17-replay.json",
+      "sha256": "a7a0dd7e1027390823631fb50d1043865a7b42f46060101e3c4e57390a9e0639"
+    }
+  },
+  "remainingUnitCount": 9,
+  "unitJobs": [
+    {
+      "unitId": "seed29/replay",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/seed29-replay.json",
+        "sha256": "790531dc317572154a4fcda8b530a30328447a598fe8c874b352a3cad8296218"
+      },
+      "dependencies": [
+        "export"
+      ]
+    },
+    {
+      "unitId": "seed29/analysis",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/seed29-analysis.json",
+        "sha256": "1b291c9838138ef26c93e2ff3194ebd2e4bb7d7079ede723ebf4d34fed6e23e8"
+      },
+      "dependencies": [
+        "seed29/replay"
+      ]
+    },
+    {
+      "unitId": "seed17/opportunity",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/seed17-opportunity.json",
+        "sha256": "2eaa27c17c261b03754f90e8fb94aa918e4063847217668023742130ab1a6ac5"
+      },
+      "dependencies": [
+        "seed17/analysis"
+      ]
+    },
+    {
+      "unitId": "seed29/opportunity",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/seed29-opportunity.json",
+        "sha256": "136c41fd354eed7104a4de97852a1e3c719a62c2f54c5fb07dd44bb5cdc00c2a"
+      },
+      "dependencies": [
+        "seed29/analysis"
+      ]
+    },
+    {
+      "unitId": "development/1",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/development-1.json",
+        "sha256": "a89aaec1a48e210be1a15c133a0f8c62929c6874d44d7adf25b60ff2b311a62d"
+      },
+      "dependencies": [
+        "seed29/analysis",
+        "seed29/opportunity"
+      ]
+    },
+    {
+      "unitId": "development/2",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/development-2.json",
+        "sha256": "febc683311c7bf0a8950c351dc298cb7acfe030cfee4b3d8be25b048ffc240f7"
+      },
+      "dependencies": [
+        "development/1",
+        "seed17/analysis",
+        "seed17/opportunity"
+      ]
+    },
+    {
+      "unitId": "heldout/selection",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/heldout-selection.json",
+        "sha256": "12e63d171d043dcaa853455e75948a93c2463197927eb399259a1da2a3a4b752"
+      },
+      "dependencies": [
+        "development/1",
+        "development/2"
+      ]
+    },
+    {
+      "unitId": "heldout/1",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/heldout-1.json",
+        "sha256": "d69cf6bcdaeb398c8397510b09e1868f4afe7c5cf440751c627adc4411f25fba"
+      },
+      "dependencies": [
+        "heldout/selection",
+        "seed17/analysis",
+        "seed17/opportunity"
+      ]
+    },
+    {
+      "unitId": "heldout/2",
+      "packet": {
+        "path": "/srv/acephale/workspaces/report/continuation-03/jobs/heldout-2.json",
+        "sha256": "ffd3ae2b2bae15f5a25273235bbb646329377ce2367ac5900ab65f26127b83bd"
+      },
+      "dependencies": [
+        "heldout/1",
+        "heldout/selection",
+        "seed29/analysis",
+        "seed29/opportunity"
+      ]
+    }
+  ],
+  "finalReport": {
+    "path": "/srv/acephale/workspaces/report/continuation-03/final-report.json",
+    "sha256": "0188b7b66de300d8a784b8d559d9a9d90ddd5c80e16d4654df24d46c98836c00"
+  },
+  "topologicalOrder": [
+    "export",
+    "seed17/replay",
+    "seed29/replay",
+    "seed17/analysis",
+    "seed29/analysis",
+    "seed17/opportunity",
+    "seed29/opportunity",
+    "development/1",
+    "development/2",
+    "heldout/selection",
+    "heldout/1",
+    "heldout/2"
+  ],
+  "rootSchedulerOnly": true,
+  "claimProtocol": {
+    "key": "unit#<originalUnitId>",
+    "attemptIdImmutable": true,
+    "states": [
+      "queued",
+      "claimed",
+      "running",
+      "succeeded",
+      "failed",
+      "unknown"
+    ],
+    "conditionalPriorStateAndAttempt": true,
+    "automaticRetry": false,
+    "ttlRelease": false
+  },
+  "sourceBindings": [
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/operational-catalogue-01/evidence-index.json",
+      "sha256": "cb6b999f37b30910596d61c0501f43ee2527b53b08f4297bbd4032667c8ef72b"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/closed-e47-components-01/frozen-design.json",
+      "sha256": "48abd961d193b598fa6c245c971035953b635b80d654a927b8f26d5f21cbdce5"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/phase2-orchestration/downstream-context-20261115.json",
+      "sha256": "f349c4e25faf8dad4f1111f4483114188443796013e3dbae706d62463158e51b"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/evidence_routes.py",
+      "sha256": "fc577eb10a4e6680a6099560ecb882db5d2583020833d1e472af3ad86edbf688"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/unit_scientific_hooks.py",
+      "sha256": "e85cdb6149aaa8f7253b1cf4b49c75e9f2973eadcab3f47904fcd7c0c35b956c"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/unit_native.py",
+      "sha256": "301833dc5e1b8268ee2468cca76526ec65223dc12c7f36de60883ce34fd3a0e3"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/unit_replay.py",
+      "sha256": "0c4ab9b38ffde4f72235045c1d5ed43fb9241a5d9cb3669244399153acd1e08e"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/unit_analysis.py",
+      "sha256": "d853b41ea94114406981f318600e91de0a5be1c6ea6ec62bdfa5fe108dc167c9"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/unit_selection.py",
+      "sha256": "3e32fa0760b76a1043b15064111feac3f80ec9f0497897a22fce1ade5dbe424d"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-restart-55/continuation_hooks.py",
+      "sha256": "48f37806f3dfb3809922c7c351aeb7ae8da76f50ddc9068ff24c4867692a1bc3"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/paired-development-weight-groups-01/segments.json",
+      "sha256": "f6f39258eea0e0251095380a34971d9a31918324e1eef91b7502493921886be9"
+    },
+    {
+      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/paired-heldout-target-weight-groups-01/segments.json",
+      "sha256": "fae4aa952715445caeca51f4207080661b730c67426a0757e53ae9dc3f8ccd29"
+    }
+  ],
+  "protocol": {
+    "actorContext": "none",
+    "exposeEvidence": false,
+    "frozenMemory": true,
+    "sameCandidatePool": true,
+    "lookaheadHops": 1,
+    "rankedCandidates": 3,
+    "perRunConcurrency": 2,
+    "globalConcurrency": 4,
+    "startsPerRun": 12,
+    "deadlineMs": 5000,
+    "cachePolicy": "native-isolated-snapshot-lease-and-validated-promotion-v1",
+    "scheduleHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "annotationReview": {
+      "reviewProtocol": "machine_audited_exploratory",
+      "humanReviewCount": 0,
+      "machineReviewCount": 20,
+      "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+      "reviewerModel": "gpt-5.4-2026-03-05",
+      "reviewIndependence": "separate_request_and_prompt_same_model"
+    }
+  },
+  "priorQualifiedActorSettings": {
+    "repository": "Qwen/Qwen3.5-9B",
+    "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    "servedModel": "Qwen/Qwen3.5-9B",
+    "precision": "bfloat16",
+    "contextWindow": 32768,
+    "inputBudget": 28672,
+    "outputCap": 4096,
+    "temperature": 0,
+    "topP": 1,
+    "thinking": false,
+    "weightsFrozen": true
+  },
+  "priorQualifiedPredictorSettings": {
+    "repository": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "servedModel": "acephale-predictor-38397ed74eb5",
+    "precision": "bfloat16",
+    "contextWindow": 8192,
+    "inputBudget": 7168,
+    "outputCap": 1024,
+    "temperature": 0,
+    "topP": 1,
+    "thinking": false,
+    "weightsFrozen": true
+  },
+  "runtimeInfrastructure": {
+    "oldObservedNodeRuntimeImage": "sha256:5bcf50992eaa084f021f52a3185e6d0fb08d536e858c6fdc4f90eaf2dc6ec16e",
+    "imageArchiveLocated": false,
+    "nodeBaseImage": "node@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d",
+    "dockerfile": "infra/acephale-infra-v1/runtime.Dockerfile",
+    "modelImage": "vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+    "freshBuildIdentityMustNotRelabelPriorImage": true,
+    "freshDualServingAndNumericalQualificationRequired": true
+  },
+  "environmentPlan": {
+    "scienceSourceDirectory": "/srv/acephale/workspaces/operator/science-source",
+    "analysisSourceDirectory": "/srv/acephale/workspaces/report/analysis-source-c8",
+    "nodeExecutable": "/srv/acephale/workspaces/operator/tools/node-v22.23.4-linux-x64/bin/node",
+    "pythonRange": ">=3.12,<3.14",
+    "nativeUpstream": {
+      "repository": "https://github.com/sierra-research/tau2-bench.git",
+      "revision": "2174a603f6d014ef94473ffa95957f6ce27100db",
+      "verified_date": "2026-09-11",
+      "python": "3.12",
+      "environment": ".benchmarks/tau3",
+      "dependency_lock": "upstream uv.lock",
+      "extra_dependencies": [
+        "knowledge",
+        "voice"
+      ],
+      "supported_mode": "half_duplex",
+      "audited_actor": "llm_agent",
+      "domains": [
+        "airline",
+        "retail",
+        "telecom",
+        "banking_knowledge"
+      ],
+      "notes": "Native Results importer and isolated capture worker. No speculative benchmark execution yet. Public context capture precedes execution. Raw native results retain evaluator material outside model-facing trajectories. Upstream eagerly imports voice providers even for text runs, requiring its voice extra."
+    },
+    "nativePython": null,
+    "analysisPython": null
+  },
+  "readyCpuScientificJobsNow": [],
+  "blockedUntilRootBindings": [
+    "accepted AWS financial/location authority",
+    "live claimed EC2 lease and cloud guard/helper",
+    "exact frozen source byte-alignment receipts",
+    "fresh image build and qualified dual serving proof",
+    "analysis/native Python environments and frozen upstreamtau3",
+    "explicit cloud provenance/path adapters for protected native guard and reportowner"
+  ],
+  "noGpuModelProviderOrLedgerCallsPerformed": true,
+  "dispatchAuthorized": false,
+  "pcOrChatRequiredByScheduler": false
+}
