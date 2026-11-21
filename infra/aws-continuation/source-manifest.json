@@ -1,0 +1,114 @@
+{
+  "kind": "acephale-aws-operational-source-snapshot-v1",
+  "scientificSourceChanged": false,
+  "files": [
+    {
+      "source": "/srv/acephale/workspaces/report/full-dag-controller-07/controller.py",
+      "path": "infra/aws-continuation/sources/report/full-dag-controller-07/controller.py",
+      "sha256": "d911f47255018a771bb2e50408a2022de212c632c8629d72422fae898a13f2b0",
+      "bytes": 37168
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/calibration_adoption.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/calibration_adoption.py",
+      "sha256": "f3950a5dc484d8ac45ced3a79280e85844b7e0dd20d752e483e51ebfd06130e8",
+      "bytes": 29310
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/prepare_qualified_predictor.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/prepare_qualified_predictor.py",
+      "sha256": "593ba52ff53e65d8e400c66ef078eda778a3805a13b6379ece44df49001c57a8",
+      "bytes": 19642
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/test_regions.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/test_regions.py",
+      "sha256": "4a70a833f720f7810cfcf3cd8f4f5dd55ae416da97e24687a604fe9b901728e7",
+      "bytes": 4666
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/controller.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/controller.py",
+      "sha256": "63bfef50c5ee75c7d88b23cd4a3937c6baefc40c4a666fba3369f95a4a0d417a",
+      "bytes": 24979
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/worker.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/worker.py",
+      "sha256": "04eab0f4a64ffe4340c53e809447c0774ac3969d9002c2d5fe6db53ee0d16d1d",
+      "bytes": 41285
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/native_evidence.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/native_evidence.py",
+      "sha256": "63afaea8894018e935b0d4b877d84261129bd545334ec9f0ef459d9428a58948",
+      "bytes": 25442
+    },
+    {
+      "source": "/srv/acephale/workspaces/operator/regional-numerical-inputs-01/qualified_preparation.py",
+      "path": "infra/aws-continuation/sources/operator/regional-numerical-inputs-01/qualified_preparation.py",
+      "sha256": "e8cab769085192188e39aa3bcc26c3e13e599e557875680d73fbee71a7e2c328",
+      "bytes": 10341
+    },
+    {
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-01/continuation.py",
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-01/continuation.py",
+      "sha256": "1b50a140dc52dc9560b295dd8d95da480757e9640de62900d97d2ea13c2947ea",
+      "bytes": 17202
+    },
+    {
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-01/resume_preparation.py",
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-01/resume_preparation.py",
+      "sha256": "4d2bd3d315da3d5169b6845aa68a43f11868e9439e2b21aa0844e05248abed04",
+      "bytes": 4821
+    },
+    {
+      "source": "/srv/acephale/workspaces/report/pre-science-continuation-01/test_continuation_04.py",
+      "path": "infra/aws-continuation/sources/report/pre-science-continuation-01/test_continuation_04.py",
+      "sha256": "bfc347143bf28b48757b351d8840b353d89090fe55cda64d20f34f0e9b4149c0",
+      "bytes": 13983
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-01/node_agent.py",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-01/node_agent.py",
+      "sha256": "26e968e131723e03b5e9e62cff527eb36a0c9c1bde083e39b4352c8d033d674b",
+      "bytes": 7407
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-01/on-init-complete.sh",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-01/on-init-complete.sh",
+      "sha256": "4901158b43d450d1596e855b75514bfa6c73dd663d11691cbdf611ec895c7203",
+      "bytes": 11367
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-01/allocate_root_02.py",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-01/allocate_root_02.py",
+      "sha256": "3ef7825706f5e68e495c31eff1a5e8baa0e690c7df653809840fb4173b0096d8",
+      "bytes": 13895
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-01/publish_command_root.py",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-01/publish_command_root.py",
+      "sha256": "8673a4a98b52cdb680a200a80fa992f904f8ed71458ff5388acc7aa72f2e5af4",
+      "bytes": 4007
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-01/prepare_root.py",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-01/prepare_root.py",
+      "sha256": "5d03f3724998d356541ec120e01ddfd128218d03dc0cdb7973456a5a7c505d8c",
+      "bytes": 5172
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-01/test_protocol.py",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-01/test_protocol.py",
+      "sha256": "e44e6c070f2c0e8ff15b54636bb2f5e0eafc6f039903beca5e4e6e8680876c75",
+      "bytes": 6767
+    },
+    {
+      "source": "/srv/acephale/workspaces/review/hyperpod-a100-02/correct_empty_group_03.py",
+      "path": "infra/aws-continuation/sources/review/hyperpod-a100-02/correct_empty_group_03.py",
+      "sha256": "78f134b73f66a3a8f056371bc11119a2a7ac944381b54c71f09aea5e74ea7e22",
+      "bytes": 6088
+    }
+  ]
+}

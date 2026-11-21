@@ -1,5 +1,14 @@
 # Working on Acephale
 
+## AWS continuation, 2026-11-21
+
+The existing study now uses the persistent AWS controller and cloud-owned state.
+See [operational source snapshot](../infra/aws-continuation/README.md). These
+changes do not replace frozen models, benchmark settings or accepted results.
+Read the current private AWS handoff before dispatch; do not start a competing
+controller or local project job. Ohio qualification passed; its opportunity
+manifest still needs the documented metadata repair before measurement.
+
 ## Four additional evaluation dispatches, 2026-11-17
 
 Evaluation lease-count capacity v4 adds exactly four prospective slots after

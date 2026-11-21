@@ -1,5 +1,14 @@
 # Acephale engineering log
 
+## 2026-11-21: Preserve the AWS continuation sources
+
+Recorded the deployed controller, regional qualification metadata adapters,
+pre-science continuation and HyperPod allocation/node-control sources with exact
+hashes. The publication checkout is separate from the frozen execution roots.
+No checkpoint, credential, financial journal or scientific output is committed.
+Qualification is not benchmark completion; the current preparation failure and
+capacity limitations are retained in the snapshot notes.
+
 ## 2026-11-17: Prospective count-only recovery
 
 Added a creation-only funding6 count-v4 reader/writer to the existing evaluation

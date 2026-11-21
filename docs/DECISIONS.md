@@ -1,5 +1,15 @@
 # Acephale decisions
 
+## 2026-11-21: Keep cloud operations separate from frozen science
+
+Infrastructure corrections may resume a stopped preparation step in the same
+logical assignment only with preserved failed evidence and proof that no
+scientific measurement was dispatched. Do not repeat completed qualification or
+checkpoint work. Keep finite leases, exact assignment ownership, atomic accounting
+and independent cleanup while acquiring compatible capacity in parallel.
+The current user-authorized AWS credit envelope supersedes old project
+infrastructure allowances; scientific model/API contracts remain separate.
+
 ## 2026-11-17: Four bounded evaluation slots without another financial amendment
 
 The necessary-resource authorization permits an explicit four-lease count
