@@ -1,0 +1,50 @@
+{
+  "files": [
+    {
+      "bytes": 1574,
+      "path": "README.md",
+      "sha256": "79fba51436e1fa54ef42926f0c777ba9938bad7f84e2442b713c45c11f29e948"
+    },
+    {
+      "bytes": 36304,
+      "path": "development-original-report.json",
+      "sha256": "3b07d424fbeb348c7a425b2a307746e9ce0a15d4a6463f4ec7a1520e1c7105c8"
+    },
+    {
+      "bytes": 1428,
+      "path": "figure-data.json",
+      "sha256": "2293973a7724d02199353f35960256bc4b5fc84936eea4628acdb68cec977262"
+    },
+    {
+      "bytes": 29309,
+      "path": "output/development-reward-constraint-counts.pdf",
+      "sha256": "06395991ef8bf168698767486d4acb115c338588eaa8687084375665d7f4e3a2"
+    },
+    {
+      "bytes": 172726,
+      "path": "output/development-reward-constraint-counts.png",
+      "sha256": "5e56f9e3a78e55d03baa45f0a3059b74a9b38ee7dd46c3ea06a2cf87ef395669"
+    },
+    {
+      "bytes": 11064,
+      "path": "output/development-reward-constraint-counts.svg",
+      "sha256": "7b62e9521a888cf3020dbca7f76f1555d9ef97ab79f172569bb91aa58246e311"
+    },
+    {
+      "bytes": 4446,
+      "path": "plot_development.py",
+      "sha256": "766f35d5a3b2ae573c6793d715623e4fcd64f95f683af84013ba5860ef6f22d1"
+    },
+    {
+      "bytes": 662,
+      "path": "render-receipt.json",
+      "sha256": "e2458355f67913431771c191617cced5e7a154f190c6697532a7f453af61d5b6"
+    }
+  ],
+  "kind": "public-development-figure-binding-v1",
+  "privacyScan": "No private cloud/account/credential/filesystem markers in public text, SVG, JSON, source or extracted PDF text.",
+  "scientificAcceptanceAsserted": false,
+  "sourceReportSha256": "389f3c9a329a9952966ca591460ef00c4b5f07d9e5f2d21145eb0dac1b11f764",
+  "statisticsRecomputed": false,
+  "validationStatus": "unvalidated"
+}

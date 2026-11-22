@@ -1,0 +1,17 @@
+{
+  "kind": "public-source-bound-opportunity-count-projection-v1",
+  "originalEvidenceSha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c",
+  "scope": "Unchanged original summary counts only; private operational lineage locations omitted. No statistics recomputed.",
+  "summary": {
+    "acceptedPerformanceEstimate": false,
+    "allChildrenDrained": true,
+    "benchmarkClaim": false,
+    "completedMeasurements": 8,
+    "declaredProfileRows": 20,
+    "failureType": "actor_did_not_request_profiled_read",
+    "minimumCompletedRequired": 10,
+    "readyForAggregation": false,
+    "retainedProfileFailures": 12,
+    "unitCompleted": false
+  }
+}

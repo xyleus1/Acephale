@@ -1,0 +1,32 @@
+{
+  "ownerId": "seed17-cpu-recovery-06",
+  "commandId": "goals-fixed-score",
+  "command": [
+    "C:\\Users\\apexs\\acephale\\research\\acephale\\.venv\\Scripts\\python.exe",
+    "-I",
+    "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\phase2-orchestration\\source_bound_analysis_c8.py",
+    "C:\\Users\\apexs\\acephale-reliability-receipts",
+    "c8a662c97c5daae33d4868d7e50494d8355fbc2c",
+    "acephale.infra_cli",
+    "score-panel-replay",
+    "--bundle",
+    "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\next-phase-01\\auxiliary-attempt-02\\run\\import\\artifacts",
+    "--predictions",
+    "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\evaluation-only-restart-47\\downstream\\seed17-01\\replay\\verified\\output\\goals-fixed",
+    "--output",
+    "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\evaluation-only-continuation-47\\seed17-cpu-recovery-06\\owner\\analysis\\goals-fixed-score"
+  ],
+  "claim": {
+    "path": "C:\\Users\\apexs\\outputs\\acephale-staged-study-20261113\\evaluation-only-continuation-47\\seed17-cpu-recovery-06\\owner\\commands\\goals-fixed-score\\dispatch.json",
+    "sha256": "061407f23caf431a309cbb64534d8d935e84146af32c931cf04bd474c3a28fa3"
+  },
+  "completed": true,
+  "childCreated": true,
+  "localOwnedProcessesDrained": true,
+  "automaticRetryAllowed": false,
+  "processIdentity": {
+    "pid": 29504,
+    "creationFileTime": 134396155106978364
+  },
+  "exitCode": 0
+}

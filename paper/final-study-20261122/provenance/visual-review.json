@@ -1,0 +1,89 @@
+{
+  "kind": "final-link-repair-visual-equivalence-v1",
+  "all20RenderedPngsByteIdentical": true,
+  "pdfSha256": "1fb79fdf500916f5df4c37ec8508b1e7d27679e91e90eac6089bfaf8486d9618",
+  "reviewedPredecessorPdfSha256": "696874d34f355c021180fd86f7fbf4afbc488b71050d34caade00f65568bd6cb",
+  "rows": [
+    {
+      "page": "page-01.png",
+      "same": true
+    },
+    {
+      "page": "page-02.png",
+      "same": true
+    },
+    {
+      "page": "page-03.png",
+      "same": true
+    },
+    {
+      "page": "page-04.png",
+      "same": true
+    },
+    {
+      "page": "page-05.png",
+      "same": true
+    },
+    {
+      "page": "page-06.png",
+      "same": true
+    },
+    {
+      "page": "page-07.png",
+      "same": true
+    },
+    {
+      "page": "page-08.png",
+      "same": true
+    },
+    {
+      "page": "page-09.png",
+      "same": true
+    },
+    {
+      "page": "page-10.png",
+      "same": true
+    },
+    {
+      "page": "page-11.png",
+      "same": true
+    },
+    {
+      "page": "page-12.png",
+      "same": true
+    },
+    {
+      "page": "page-13.png",
+      "same": true
+    },
+    {
+      "page": "page-14.png",
+      "same": true
+    },
+    {
+      "page": "page-15.png",
+      "same": true
+    },
+    {
+      "page": "page-16.png",
+      "same": true
+    },
+    {
+      "page": "page-17.png",
+      "same": true
+    },
+    {
+      "page": "page-18.png",
+      "same": true
+    },
+    {
+      "page": "page-19.png",
+      "same": true
+    },
+    {
+      "page": "page-20.png",
+      "same": true
+    }
+  ],
+  "finalVisualReviewAccepted": true
+}

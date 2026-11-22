@@ -1,0 +1,22 @@
+{
+  "driverSha256": "0eae2e13770ccc44886985aef7883d6beede37ec89270447f9649f49f1a9cbb1",
+  "expectedSha256": "ff7d09f1e1bc3fbe09f90b5a69e9bd59de581dbf0a80970e1d107c67da082275",
+  "initialIsolatedImportAttemptDidNotExecuteEstimator": true,
+  "inputSha256": "c5b0fa39dfb6e9f564de7d485128dac54fb93ce9168e33fe3504f57f322bbc23",
+  "kind": "original-heldout-public-reproduction-check-v1",
+  "modelsCalled": false,
+  "newStatisticalValuesIntroduced": false,
+  "numericalSectionsMatched": true,
+  "originalScientificOutputsUnmodified": true,
+  "originalSourceFunctionsUnchanged": true,
+  "scientificAcceptanceAsserted": false,
+  "sectionsCompared": [
+    "nativeCompletionAndLiveLatency",
+    "knownConstraintCleanPairedDifferences",
+    "evaluatorInclusiveLatency",
+    "additionalArmMetrics",
+    "predictorSeedTrialCounts"
+  ],
+  "standardDocumentedPythonInvocation": true,
+  "studyComplete": false
+}

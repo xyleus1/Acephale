@@ -1,0 +1,32 @@
+{
+  "copiedOriginalMetricsSha256": "ac8f4a6122bd56335c51a3499c015e617c08bf62b1e4b2fd6078645d55441a17",
+  "heldoutReproductionCheckSha256": "cf78fe628dd5376a1594e07a61a263abbeaa681dad5731e51ab97959d64c0dfc",
+  "immutableHistoricalSubpackageMetadataRetained": true,
+  "kind": "public-final-research-delivery-provenance-v1",
+  "modelsCalledDuringPackaging": false,
+  "nativeReproduction": {
+    "development": {
+      "originalComputedReportSha256": "389f3c9a329a9952966ca591460ef00c4b5f07d9e5f2d21145eb0dac1b11f764",
+      "originalSelectedCount": 36,
+      "sourceBindingSha256": "749a682f382c4fda5065395a10ddaece20711498f4d899f1903a5ac29360b145"
+    },
+    "heldout": {
+      "originalComputedReportSha256": "7890553252ff27186f4fea82e3b6963dfb0ac321bad3e8fc9855048c3f441d93",
+      "originalSelectedCount": 96,
+      "sourceBindingSha256": "37502b5731e8f65e79b0fc834fb078eadf29435d6fe958135cb9877824a7fc27"
+    }
+  },
+  "newStatisticalValuesIntroduced": false,
+  "originalHeldoutReportSha256": "7890553252ff27186f4fea82e3b6963dfb0ac321bad3e8fc9855048c3f441d93",
+  "originalNumericalFunctionsReexecutedForPublicParityCheck": true,
+  "pages": 20,
+  "parentPublicCommit": "378bb2aedb361e3d04b2e3a582b6bd81b2a94181",
+  "pdfSha256": "1fb79fdf500916f5df4c37ec8508b1e7d27679e91e90eac6089bfaf8486d9618",
+  "renderingRunDuringPackaging": false,
+  "scientificAcceptanceAsserted": false,
+  "studyComplete": false,
+  "terminalCauseSha256": "34e4d7a3653c7dd0c392005696df27159f4326f4adfd8da008b11454b24dc586",
+  "validationStatus": "unvalidated",
+  "visualReviewCopiedByteExact": true,
+  "visualReviewSourceSha256": "3be9d4d86e25300a343e3ee8ae09c199cdf9f7196e43dd7c024d463e888ac1bd"
+}

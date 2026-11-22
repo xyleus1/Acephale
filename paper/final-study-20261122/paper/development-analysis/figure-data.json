@@ -1,0 +1,48 @@
+{
+  "exactSourceSections": [
+    "nativeCompletionAndLiveLatency.arms",
+    "additionalArmMetrics.<arm>.knownConstraintCleanPass1",
+    "additionalArmMetrics.<arm>.nativePass1FamilyBootstrap.families"
+  ],
+  "families": 6,
+  "kind": "copied-development-counts-v1",
+  "newStatisticsComputed": false,
+  "pairedBlocks": 12,
+  "publicReportSha256": "3b07d424fbeb348c7a425b2a307746e9ce0a15d4a6463f4ec7a1520e1c7105c8",
+  "rows": [
+    {
+      "arm": "base",
+      "constraintCleanRewardCompletions": 8,
+      "constraintViolations": 4,
+      "declaredRuns": 12,
+      "label": "Base",
+      "rewardCompletions": 12,
+      "speculativeStarts": 0,
+      "validTimingSamples": 0
+    },
+    {
+      "arm": "neutral_memory_prefetch",
+      "constraintCleanRewardCompletions": 9,
+      "constraintViolations": 3,
+      "declaredRuns": 12,
+      "label": "Neutral memory prefetch",
+      "rewardCompletions": 12,
+      "speculativeStarts": 0,
+      "validTimingSamples": 0
+    },
+    {
+      "arm": "acephale",
+      "constraintCleanRewardCompletions": 9,
+      "constraintViolations": 3,
+      "declaredRuns": 12,
+      "label": "Acephale",
+      "rewardCompletions": 12,
+      "speculativeStarts": 0,
+      "validTimingSamples": 0
+    }
+  ],
+  "scientificAcceptanceAsserted": false,
+  "sourceReportSha256": "389f3c9a329a9952966ca591460ef00c4b5f07d9e5f2d21145eb0dac1b11f764",
+  "studyComplete": false,
+  "validationStatus": "unvalidated"
+}

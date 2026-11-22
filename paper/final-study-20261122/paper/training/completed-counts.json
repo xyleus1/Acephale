@@ -1,0 +1,81 @@
+{
+  "interpretation": "Completed optimizer receipts were recovered after a receipt-writing failure, without optimizer rerun. Planning names and selected input counts are not substituted for actual completed dataset counts. Missing timing/loss/memory metrics remain null.",
+  "kind": "copied-completed-training-counts-v1",
+  "newTrainingOrStatisticsExecuted": false,
+  "rows": [
+    {
+      "completedReceiptStatus": "completed",
+      "counts": {
+        "calibration": 117,
+        "development": 112,
+        "test": 0,
+        "weight_fit": 1074
+      },
+      "elapsedSeconds": null,
+      "gradientChecks": 204,
+      "multitaskCoverage": {
+        "completeCheckpoints": 358,
+        "fittingFamilies": 24,
+        "positiveReadCheckpoints": 79,
+        "protocol": "native-multitask-v2"
+      },
+      "optimizerUpdates": 204,
+      "peakGpuBytes": null,
+      "postprocessingRecovery": {
+        "kind": "acephale-completed-optimizer-receipt-recovery-v1",
+        "optimizerRerun": false,
+        "originalFailureSha256": "238887ba747ee8b6169894aeeab3b198663ea4219578e49e052ac2d4e4cb07bc",
+        "originalReceiptWriteSucceeded": false,
+        "originalTrainerSourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+        "receiptHash": "dc94e6c6848bde7d2756c3db1c19b2ec61df21b86e3c677768d852fdbf64aac7"
+      },
+      "recipeEpochs": 3,
+      "recipeGradientAccumulation": 4,
+      "recipeMicroBatch": 4,
+      "seed": 17,
+      "sourceHashes": {
+        "dataset-manifest.json": "6eff58cc745e457da26a9f4e16a6a45ae16ddbf497e22110ecc1c792bf448f9b",
+        "training-manifest.json": "b3ec00297d99946acb7e2957372793a181cb5b07dfc081f2d6eefe750fb2a630",
+        "training-receipt.json": "6de2d85de3cab5ec0a4ad28996d065732fe444997c33734ae05ce8e5a233793e"
+      },
+      "trainingMetrics": null
+    },
+    {
+      "completedReceiptStatus": "completed",
+      "counts": {
+        "calibration": 117,
+        "development": 112,
+        "test": 0,
+        "weight_fit": 1074
+      },
+      "elapsedSeconds": null,
+      "gradientChecks": 204,
+      "multitaskCoverage": {
+        "completeCheckpoints": 358,
+        "fittingFamilies": 24,
+        "positiveReadCheckpoints": 79,
+        "protocol": "native-multitask-v2"
+      },
+      "optimizerUpdates": 204,
+      "peakGpuBytes": null,
+      "postprocessingRecovery": {
+        "kind": "acephale-completed-optimizer-receipt-recovery-v1",
+        "optimizerRerun": false,
+        "originalFailureSha256": "b827f28054a48ca0ca39249c6fc1073236f6d26689335d28422cd130b3f95288",
+        "originalReceiptWriteSucceeded": false,
+        "originalTrainerSourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+        "receiptHash": "985c8115bb8b767db8dd75cf28c77fc856c6cc959332c34d8e4ff50612e0ff7f"
+      },
+      "recipeEpochs": 3,
+      "recipeGradientAccumulation": 4,
+      "recipeMicroBatch": 4,
+      "seed": 29,
+      "sourceHashes": {
+        "dataset-manifest.json": "6eff58cc745e457da26a9f4e16a6a45ae16ddbf497e22110ecc1c792bf448f9b",
+        "training-manifest.json": "28aa33e7a5b181fbcfb132e65d24aff8ce0bc7d0939dd692446a3be85716a56b",
+        "training-receipt.json": "dd1bc89987c869a41ffd1738a9c0e11f84989baface2f738db43e455fcea0548"
+      },
+      "trainingMetrics": null
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "excluded": [
+    {
+      "reason": "Private operational locations in historical metadata; original bytes remain privately retained and are excluded from public payload.",
+      "relativeSourceName": "figures/seed17-opportunity-outcome.json",
+      "sourceSha256": "973bdf39616899691892ae2dcb9a5ba8ad8fa10489ce60c5498a9ced1799c7eb"
+    },
+    {
+      "reason": "Private operational locations in historical metadata; original bytes remain privately retained and are excluded from public payload.",
+      "relativeSourceName": "figures/seed17-retained-evidence.json",
+      "sourceSha256": "61477b92a86b0e72b73a0fc65ecde8362c4f6fadf9d033055e3022199a0f30fe"
+    },
+    {
+      "reason": "Private operational locations in historical metadata; original bytes remain privately retained and are excluded from public payload.",
+      "relativeSourceName": "sources/findings.json",
+      "sourceSha256": "9595e812eaf4e901311dccd5e802ab3b9f036bcb6487987e324275f8a0415351"
+    },
+    {
+      "reason": "Private operational locations in historical metadata; original bytes remain privately retained and are excluded from public payload.",
+      "relativeSourceName": "sources/vllm-lora-coverage-01-findings.json",
+      "sourceSha256": "87eecb101df44a6ae2435e0af7665a7cb7322212221c150f2f0aa08c6cefe876"
+    }
+  ],
+  "scientificResultInputsPreserved": true
+}

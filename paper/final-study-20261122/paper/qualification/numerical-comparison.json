@@ -1,0 +1,141 @@
+{
+  "artifactIdentity": {
+    "adapterHash": "74eada7e353246b0f3ff072b2071183e5ba4cb68f61d24315e181489ac1d1d82",
+    "adapterStorageDtype": "float32",
+    "base": {
+      "repository": "Qwen/Qwen3.5-0.8B",
+      "revision": "2fc06364715b967f1860aea9cf38778875588b17"
+    },
+    "baseWeightsHash": "af2e0a00ecea63f7ce82e25ebee0364280747b5de2d69259957305bba9e8c2b9",
+    "chatTemplateHash": "e9cb98e65623809a8a297af444986a3b417ecae1a19d519c0952eb1192abc5c1",
+    "runtimeLoraDtype": "bfloat16",
+    "servingProbeHash": "c6e3377d3986c55d5bbb2c48f4e335f0f3311ca9dcc8835f48c07dc429e469da",
+    "servingWeightsHash": "54f5c198552de9026532b00159c30ab1dcf3196f0ea2137513b9dc7b8f495eb7",
+    "tokenizerHash": "909f7b45317394a9b3a2c8c156d80da78ba2502e419b93ef335a4039be07cdbd"
+  },
+  "checkpointFileSha256FromRetainedProvenance": "ff5bafd8f5ee7b126fba3fa12620b6d9d0b3455d3e1a283de604e77ac96671ba",
+  "comparisons": {
+    "actorDeploymentSettingsEqual": true,
+    "entireOriginalTorchProbeEqual": true,
+    "entireTrainedPredictorArtifactEqual": true,
+    "predictorDeploymentSettingsEqual": true,
+    "requestSettingsEqual": true
+  },
+  "composeImageAndCommandsEqual": {
+    "actor": {
+      "command": true,
+      "image": true
+    },
+    "predictor": {
+      "command": true,
+      "image": true
+    }
+  },
+  "configuredAbsoluteDifferences": [
+    0.021637552556934947,
+    0.021637552556934947,
+    0.021637552556934947
+  ],
+  "configuredBothHardwareProbabilitiesAndDifferencesExactlyEqual": true,
+  "configuredProbabilities": [
+    0.21206880435710532,
+    0.21206880435710532,
+    0.21206880435710532
+  ],
+  "currentRawLogprobs": [
+    {
+      "one": -25.000070571899414,
+      "zero": -23.687570571899414
+    },
+    {
+      "one": -25.000070571899414,
+      "zero": -23.687570571899414
+    },
+    {
+      "one": -25.000070571899414,
+      "zero": -23.687570571899414
+    }
+  ],
+  "fixture": {
+    "binaryTokenIds": {
+      "one": 16,
+      "zero": 15
+    },
+    "fileSha256": "318990f3ef5155925ae90c69f1c267de0c65b908ee0a3ddea4f6ffea29f64373",
+    "gate": {
+      "maximumConditionalProbabilityDifference": 0.01,
+      "requireTopTokenMatch": true,
+      "version": 1
+    },
+    "inputHash": "c22f027e42322eddded415b2273e2607c4502e5b60045b483541cecdce36c394",
+    "inputTokenCount": 2630,
+    "kind": "acephale-lora-serving-probe",
+    "schemaVersion": 2,
+    "selection": {
+      "datasetManifestHash": "cc1256576acccc4b855ef5051d98b7c961c3396b4bbee0f8eeef7d855a13e962",
+      "eligibleRows": 358,
+      "familyId": "retail-composition-6e1476c48112",
+      "promptHash": "711d09a84cb4aec9dcb2a0beda1c79d9dc28176386f7c563ae7e1db705cd4d5c",
+      "promptTokens": 2630,
+      "rowId": "58be4e167123e2f9d3ede7503e779132a51b65db9da5f283a3aef49e03aa44d1:rank:neutral",
+      "rule": "shortest_complete_neutral_weight_fit_prompt_v1",
+      "trainingManifestHash": "51e72f894d58ff61f931927f042b906573d8723217dfe45025f523e26aeafcc2"
+    },
+    "topTokenId": 4754
+  },
+  "hardware": {
+    "currentHardware": {
+      "cpu": "Intel(R) Xeon(R) Platinum 8559C",
+      "driver": "620.70.06",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "gpuCount": 1,
+      "gpuMemoryBytes": 102641958912,
+      "instanceType": "g7e.2xlarge",
+      "provider": "aws",
+      "ramBytes": 66857336832
+    },
+    "priorHardware": {
+      "cpu": "AMD EPYC 7R13 Processor",
+      "driver": "620.70.06",
+      "gpu": "NVIDIA L40S",
+      "gpuCount": 1,
+      "gpuMemoryBytes": 48305799168,
+      "instanceType": "g6e.2xlarge",
+      "provider": "aws",
+      "ramBytes": 66502901760
+    }
+  },
+  "hardwareCauseEstablished": false,
+  "kind": "acephale-g7-l40s-preserved-numerical-comparison-v1",
+  "newInferencePerformed": false,
+  "observedAt": "2026-11-21T20:44:33.323647+00:00",
+  "originalGate": {
+    "maximumConditionalProbabilityDifference": 0.01,
+    "requireTopTokenMatch": true,
+    "version": 1
+  },
+  "priorRawLogprobs": [
+    {
+      "one": -25.250057220458984,
+      "zero": -23.937557220458984
+    },
+    {
+      "one": -25.250057220458984,
+      "zero": -23.937557220458984
+    },
+    {
+      "one": -25.250057220458984,
+      "zero": -23.937557220458984
+    }
+  ],
+  "rawLogprobsEqual": false,
+  "referenceConditionalOneProbability": 0.23370635691404026,
+  "referenceLogprobs": {
+    "one": -25.218812942504883,
+    "zero": -24.031312942504883
+  },
+  "runtimeAdapterImplementationEquivalenceAsserted": false,
+  "seed": 29,
+  "sourceSha256": "24c632732f32f5a0e3951847465230506f5e8f4f2fdb0665a604c3f5e048a4d8",
+  "status": "Failed unchanged numerical gate; cause unresolved; no new inference performed"
+}

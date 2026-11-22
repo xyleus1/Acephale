@@ -12,6 +12,8 @@ catalog and task limits stay fixed across the primary comparison arms. Goal
 conditioning affects the predictor and scheduler. It does not train the actor
 or guarantee improvements in task accuracy, logical tool-call count or latency.
 
+- [Paper PDF](paper/final-study-20261122/acephale-study.pdf)
+- [Editable paper, figures, result files and reproduction instructions](paper/final-study-20261122/README.md)
 - [Current results: retained native cohort, replay, and qualification failures](docs/RESULTS-20261122.md)
 - [Earlier pilot: base benchmark and failed predictor export](docs/experiments/predictor-lora-pilot-2026-11-10.md)
 - [Methods and experimental controls](docs/METHODS.md)
