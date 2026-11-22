@@ -1,7 +1,7 @@
 # AWS continuation implementation
 
 This directory records the operational sources used by the existing AWS study.
-The files are byte-for-byte snapshots, with their deployed paths and hashes in
+The original manifest lists byte-for-byte snapshots and deployed source hashes in
 `source-manifest.json`. The frozen scientific checkouts are separate and unchanged.
 
 Included changes cover the persistent DAG controller, region-aware qualification
@@ -27,3 +27,9 @@ Publication checks compile every copied Python source, check shell syntax,
 compare source hashes, scan for credential formats and run `git diff --check`.
 The deployment-specific tests remain alongside their source or in the private
 AWS evidence store. This archive does not claim a fresh full application test run.
+
+## Deployed owner handler snapshot, November 22
+
+See [the handler archive](sources/operator/direct-owner-handler-03/README.md)
+and [its sanitized source manifest](source-manifest-owner-handler-03.json).
+This separate snapshot contains no runtime authority or current assignment state.

@@ -824,3 +824,14 @@ skip, never a pass. The running evaluation keeps its original committed source.
 ## 2026-11-21: native profiling recovery and paper draft
 
 Preserved the frozen scientific source and prior accepted components. Added source snapshots for the native Python environment, path/guard recovery and separate numerical-evidence filenames; failed generations remain in AWS. The latest profiler failure is an unresolved Windows provenance-path translation, with no model requests. Added the editable paper, accepted seed17 subset analysis with failure denominators, and an isolated AWS PDF renderer. See infra/aws-continuation/RECOVERY_STATUS.md; this is not final study completion.
+
+## 2026-11-22: Deployed owner handler source snapshot
+
+Archived the deployed direct owner handler, its controller composition and the
+direct-mode guard under infra/aws-continuation. The new manifest distinguishes
+sanitized public copies from exact deployed source hashes. Runtime configuration,
+claims, credentials, reservations and financial journals remain private.
+The same controller adopts existing owner handles and retains terminal outcomes;
+this archive does not establish full-DAG autonomy or scientific acceptance.
+No live source, assignment, worker or model changed during publication.
+

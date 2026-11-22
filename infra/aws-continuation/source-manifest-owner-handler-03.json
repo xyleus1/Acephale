@@ -1,0 +1,69 @@
+{
+  "credentialsOrClaimStateIncluded": false,
+  "deployedSourceBindingSha256": "f0eb91e3d08edac49e5d8d732ac65b076482e80547b3cb6174ce81a6a0d52fb1",
+  "deploymentReceiptSha256": "10940dc57fa4981ffe343e97382b623520111dcf251e1be64ab04c4d3f9e085b",
+  "deploymentTestsRerun": false,
+  "deploymentValidationEvidenceSha256": [
+    "6f2da7b9009635017f117a2eff7d592223a700ad477334c7722df9d8d3d7e467",
+    "df36ae39d8b52c72e2a3d7f87eb892c4282bc1364fdf366ff83340333294625c"
+  ],
+  "files": [
+    {
+      "bytes": 41171,
+      "deployedSourceSha256": "87a34892cef40ea0661f4ad0fbd65f3cf9e00921d915a82ebda71c4500785103",
+      "gitBlobSha1": "c5bf1f10099a554d167348fa6bb683a74f730add",
+      "path": "infra/aws-continuation/sources/operator/direct-owner-handler-03/controller_with_scheduler.py",
+      "sanitizationOccurrences": {
+        "accountIdentifier": 1,
+        "deploymentRoot": 2,
+        "studyTablePrefix": 1
+      },
+      "sha256": "9a6f1040494bcb592bdcb9b77c0c8efe95ecf2bd74fa3084d9f4bc1e0f72c3d7",
+      "sourceLogicUnchangedExceptOperationalIdentityLiterals": true
+    },
+    {
+      "bytes": 26548,
+      "deployedSourceSha256": "b9573db281f5597ee906aac496c37e4a4410628bea2948b0de450702d6e8020b",
+      "gitBlobSha1": "9ce97246067599a377f3ace194dfa4c4c3592c4d",
+      "path": "infra/aws-continuation/sources/operator/direct-owner-handler-03/owner_handler.py",
+      "sanitizationOccurrences": {
+        "accountIdentifier": 0,
+        "deploymentRoot": 1,
+        "studyTablePrefix": 0
+      },
+      "sha256": "bb3ed859a2dd2a34f8f6488bb42b74c14a534fee735125e5bc20382fc06db033",
+      "sourceLogicUnchangedExceptOperationalIdentityLiterals": true
+    },
+    {
+      "bytes": 4483,
+      "deployedSourceSha256": "d8758f6fa9ec3d60b85276228d24836cd7e9104700466c652dd08fe2cadffc8b",
+      "gitBlobSha1": "767aeb195944110eb7e9758e062f0d38b98f9e61",
+      "path": "infra/aws-continuation/sources/operator/direct-mode-guard-01/direct_mode_guard.py",
+      "sanitizationOccurrences": {
+        "accountIdentifier": 0,
+        "deploymentRoot": 0,
+        "studyTablePrefix": 0
+      },
+      "sha256": "d8758f6fa9ec3d60b85276228d24836cd7e9104700466c652dd08fe2cadffc8b",
+      "sourceLogicUnchangedExceptOperationalIdentityLiterals": true
+    }
+  ],
+  "fullDAGAutonomyAsserted": false,
+  "kind": "acephale-sanitized-deployed-source-snapshot-v1",
+  "privateRuntimeConfigurationIncluded": false,
+  "redactionCategories": [
+    "deploymentRoot",
+    "accountIdentifier",
+    "studyTablePrefix"
+  ],
+  "scientificAcceptanceAsserted": false,
+  "scientificSourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+  "snapshot": "direct-owner-handler-03",
+  "standaloneInstaller": false,
+  "validationPerformedForThisPublication": [
+    "source SHA-256 matched recorded deployed binding",
+    "exact reverse-redaction byte comparison",
+    "Python syntax compilation without executing source",
+    "privacy scan of new payloads"
+  ]
+}
