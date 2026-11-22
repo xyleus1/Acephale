@@ -65,6 +65,8 @@ def render_markdown(text,styles):
             widths=[468/n]*n
             if n==6 and rows[0][0].getPlainText()=='Retained report / condition':
                 widths=[120]+[(468-120)/5]*5
+            if n==3 and rows[0][0].getPlainText()=='Unit state':
+                widths=[80,45,343]
             tbl=LongTable(rows,colWidths=widths,repeatRows=1,hAlign='LEFT')
             tbl.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#edf1f4')),('VALIGN',(0,0),(-1,-1),'TOP'),('LINEBELOW',(0,0),(-1,0),.7,colors.HexColor('#76818a')),('LINEBELOW',(0,1),(-1,-1),.25,colors.HexColor('#d6dce0')),('LEFTPADDING',(0,0),(-1,-1),6),('RIGHTPADDING',(0,0),(-1,-1),6),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]));flow.extend([tbl,Spacer(1,10)]);i=j
         elif t.type=='hr':flow.append(Spacer(1,12))
@@ -73,7 +75,7 @@ def render_markdown(text,styles):
 
 def page(canvas,doc):
     canvas.saveState();canvas.setFont('Body',8);canvas.setFillColor(colors.HexColor('#666666'))
-    canvas.drawString(72,758,'ACEPHALE  |  WORKING DRAFT - RESULTS INCOMPLETE');canvas.drawRightString(540,34,str(doc.page));canvas.restoreState()
+    canvas.drawString(72,758,'ACEPHALE  |  CURRENT RESULTS - STUDY INCOMPLETE');canvas.drawRightString(540,34,str(doc.page));canvas.restoreState()
 
 def main():
     global SOURCE_ROOT
@@ -98,7 +100,7 @@ def main():
             story.append(Paragraph(label,styles['H2']))
         story.extend(render_markdown(b.decode('utf-8'),styles))
     out=args.output/'acephale-working-manuscript.pdf'
-    SimpleDocTemplate(str(out),pagesize=(612,792),rightMargin=72,leftMargin=72,topMargin=56,bottomMargin=54,title='Acephale: source-grounded goal conditioning (working draft)',author='').build(story,onFirstPage=page,onLaterPages=page)
+    SimpleDocTemplate(str(out),pagesize=(612,792),rightMargin=72,leftMargin=72,topMargin=56,bottomMargin=54,title='Acephale: current results paper (incomplete study)',author='').build(story,onFirstPage=page,onLaterPages=page)
     doc=fitz.open(out);pages=[]
     for i,p in enumerate(doc):
         dest=args.output/('page-%02d.png'%(i+1));p.get_pixmap(matrix=fitz.Matrix(1.25,1.25)).save(dest);pages.append({'page':i+1,'textCharacters':len(p.get_text()),'render':str(dest)})

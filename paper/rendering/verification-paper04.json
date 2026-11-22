@@ -1,0 +1,33 @@
+{
+  "changedPage": 17,
+  "changedPageVisuallyInspected": true,
+  "extractor": {
+    "alteredSnapshotRefusedBeforeOutput": true,
+    "missingAcceptedReportRefusedBeforeOutput": true,
+    "originalInputSucceeded": true,
+    "source": {
+      "bytes": 2365,
+      "path": "paper/disposition/export_snapshot.py",
+      "sha256": "9752b3a499368e70eb57f02b875fa1eefae165278468ba841a3c4cde8616d1c9"
+    },
+    "statisticsRun": false
+  },
+  "figurePixelsOrDataChanged": false,
+  "independentMaterialAndPrivacyReviewPassed": true,
+  "kind": "acephale-paper04-public-verification-v1",
+  "pageBoundsPassed": true,
+  "pageCount": 17,
+  "pdf": {
+    "bytes": 305469,
+    "path": "paper/output/acephale-working-manuscript.pdf",
+    "sha256": "3c5918f022293c2e7663d82c636141eb11db4b85790d7d81f7bcf2905ccbb105"
+  },
+  "privateOriginalsPreserved": true,
+  "publicPdfHasAttachments": false,
+  "publicPrivacyScanPassed": true,
+  "renderedPages1To16ByteIdenticalToReviewedPrivatePaper": true,
+  "sourceProjection": "One absolute report-package location replaced with a descriptive name in analysis-plan; manuscript and scientific rules unchanged.",
+  "statisticsRecomputed": false,
+  "studyComplete": false,
+  "visualFinding": "Readable analysis-plan appendix; no clipping, overlap or private location."
+}

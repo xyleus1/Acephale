@@ -1,0 +1,165 @@
+{
+  "kind": "acephale-paper04-public-source-binding-v1",
+  "newPublicFiles": [
+    {
+      "bytes": 1854,
+      "path": "paper/INCORPORATE.md",
+      "sha256": "4da4028e098e8c9cf51f14644641e2649e99f841340f6731864993f04fab1356"
+    },
+    {
+      "bytes": 1565,
+      "path": "paper/PUBLICATION.md",
+      "sha256": "d528c18c50f12803bed7ee2e0bc2193dee71722289b4be542a2c0d94cd586af3"
+    },
+    {
+      "bytes": 3001,
+      "path": "paper/README.md",
+      "sha256": "a8181a0bc23ff810430ef231f2d28c599c6e368b1469a523c1ffea08e6982ef7"
+    },
+    {
+      "bytes": 2038,
+      "path": "paper/analysis-plan.md",
+      "sha256": "1fc71c6afea26bc733e243d264fe3dd3050dffc69d82d8fe482a5020006ae873"
+    },
+    {
+      "bytes": 949,
+      "path": "paper/disposition/README.md",
+      "sha256": "7edc1c04ea20d911279d80ea33f481880e2d6fbdcb79aa8885d933fc9a2e4416"
+    },
+    {
+      "bytes": 2365,
+      "path": "paper/disposition/export_snapshot.py",
+      "sha256": "9752b3a499368e70eb57f02b875fa1eefae165278468ba841a3c4cde8616d1c9"
+    },
+    {
+      "bytes": 6315,
+      "path": "paper/disposition/incomplete-report.json",
+      "sha256": "c34e754eace3e7e95c818701bedaf1e4c878458a6c6710fed8b5a4df9bfcd91c"
+    },
+    {
+      "bytes": 3381,
+      "path": "paper/disposition/manuscript-accepted-values.md",
+      "sha256": "f79f83dd571ea33ae3efb17b7c82b0d4cbf6be1ea1d524491152d21485e12097"
+    },
+    {
+      "bytes": 12718,
+      "path": "paper/disposition/recorded-accepted-values.json",
+      "sha256": "f8dd8fc722d6c8e23f6118775c15f2b21c37828e4eb056c789c1a0cc1593af62"
+    },
+    {
+      "bytes": 6315,
+      "path": "paper/disposition/recorded-snapshot.json",
+      "sha256": "c34e754eace3e7e95c818701bedaf1e4c878458a6c6710fed8b5a4df9bfcd91c"
+    },
+    {
+      "bytes": 20488,
+      "path": "paper/manuscript.md",
+      "sha256": "cc165be4b23fb0dc4338d49af40c98953325e841b3e0ea40d5a8ccf8bd1341e9"
+    },
+    {
+      "bytes": 305469,
+      "path": "paper/output/acephale-working-manuscript.pdf",
+      "sha256": "3c5918f022293c2e7663d82c636141eb11db4b85790d7d81f7bcf2905ccbb105"
+    },
+    {
+      "bytes": 1357,
+      "path": "paper/provenance/publication-paper04.json",
+      "sha256": "07926b875c82bb82fe5c7a7f9e9d1097ba7eea233ad4cd106d6d2f7b7453e35d"
+    },
+    {
+      "bytes": 7769,
+      "path": "paper/rendering/render.py",
+      "sha256": "ce9eab9d6c65a3de0ffd85d9b835c42ce028e9410ce694449637fd0c15542ee5"
+    },
+    {
+      "bytes": 1286,
+      "path": "paper/rendering/verification-paper04.json",
+      "sha256": "b58c8261aff420f7ef234827559fbe1b9ec276a9e5e4f43bab229e7d606d986c"
+    },
+    {
+      "bytes": 1350,
+      "path": "paper/results-status.md",
+      "sha256": "d5559be07887c8654d9c248cbd8de4d6f65fdd158e730128b076ba3ad1932ea1"
+    }
+  ],
+  "newZip": false,
+  "parentCommit": "21b4dcfa562f27678f929421c0f3f0eca76e29f2",
+  "privacyScope": "New public payload only; historical files in parent are not newly bundled.",
+  "privateOriginalPdfSha256": "9404423b042e68c04034a0c4f15b24334d36b8f495a99ddd74a5f93af540b6d3",
+  "privateOriginalSourceBindingSha256": "f8c069dae5d3a16345f74c3da9c121f1f19bb52368e0cade03065d892b2367c7",
+  "reusedParentFiles": [
+    {
+      "bytes": 21829,
+      "path": "paper/methods.md",
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "bytes": 2540,
+      "path": "paper/related-work.md",
+      "sha256": "b7a09a3ffbc1564f2b5d8c6879d69b18ba411cd1e2cc836cdca42fcfbcf33c44"
+    },
+    {
+      "bytes": 1010,
+      "path": "paper/references.bib",
+      "sha256": "d61d74e232591e80074f1d3db171eba26c135f00910b58806238cb254cd3aade"
+    },
+    {
+      "bytes": 3285,
+      "path": "paper/rendering/assemble.py",
+      "sha256": "479ca4cc9d90be9c0e55058fb19578bdb5a6ba6bbf7619247bde379443ffceef"
+    },
+    {
+      "bytes": 122,
+      "path": "paper/rendering/requirements.lock",
+      "sha256": "47a2c966f903f566fcd7b17d1bb949bde74ac456d146e37819c34db0f4737d22"
+    },
+    {
+      "bytes": 4776,
+      "path": "paper/plot_retained.py",
+      "sha256": "b07ddcab927c487f0b82eb9da5f7a8121e1e72c41697ce36e033cc33d55b9945"
+    },
+    {
+      "bytes": 2318,
+      "path": "paper/plot_profile_outcome.py",
+      "sha256": "6aaa8ce80f5a8c65e0875a78b65ff487d39951147229bc28c11f32a38dff4253"
+    },
+    {
+      "bytes": 1733,
+      "path": "paper/sources/seed17-neutral-fixed-score-report.json",
+      "sha256": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6"
+    },
+    {
+      "bytes": 2842,
+      "path": "paper/sources/seed17-goals-fixed-score-report.json",
+      "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687"
+    },
+    {
+      "bytes": 4254,
+      "path": "paper/sources/seed17-goal-reliability.json",
+      "sha256": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e"
+    },
+    {
+      "bytes": 132777,
+      "path": "paper/figures/seed17-retained-evidence.png",
+      "sha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88"
+    },
+    {
+      "bytes": 18058,
+      "path": "paper/figures/seed17-retained-evidence.svg",
+      "sha256": "f393e0a721afede8783f1ea1c1a709d16302e6886c03882d604595b522cff7c7"
+    },
+    {
+      "bytes": 59221,
+      "path": "paper/figures/seed17-opportunity-outcome.png",
+      "sha256": "d37580b9cf08164f9557ee6ed3b076e78d4361a2977f2f06826de0c83f1776ba"
+    },
+    {
+      "bytes": 49257,
+      "path": "paper/figures/seed17-opportunity-outcome.svg",
+      "sha256": "cd96393d352abbbff69ef466ef4192a73f10422e21b4ed2fd375f4945968e8a7"
+    }
+  ],
+  "scientificEdits": false,
+  "statisticsRecomputed": false,
+  "studyComplete": false
+}

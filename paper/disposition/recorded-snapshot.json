@@ -1,0 +1,195 @@
+{
+  "acceptedProofs": {
+    "export": {
+      "acceptanceSnapshot": {
+        "bytes": 11805,
+        "privateLocationOmitted": true,
+        "sha256": "22a89095579a355516f976fe4e07d9e28e2371a8645ff424a08f3826d0738ef7",
+        "sourceId": "dated-claim-observation"
+      },
+      "component": {
+        "privateLocationOmitted": true,
+        "sha256": "64b601209da7e02c0ae2808c63d347905af52d83444c1c130e47b4c0c57a5acf",
+        "sourceId": "export-accepted-component"
+      },
+      "historicalBytesPreserved": true
+    },
+    "seed17/analysis": {
+      "acceptanceSnapshot": {
+        "bytes": 11805,
+        "privateLocationOmitted": true,
+        "sha256": "22a89095579a355516f976fe4e07d9e28e2371a8645ff424a08f3826d0738ef7",
+        "sourceId": "dated-claim-observation"
+      },
+      "component": {
+        "privateLocationOmitted": true,
+        "sha256": "647f23466bed49876e0901dda865c121e62e13916d83a3792ddbeccbfd7e511f",
+        "sourceId": "seed17/analysis-accepted-component"
+      },
+      "historicalBytesPreserved": true
+    },
+    "seed17/replay": {
+      "acceptanceSnapshot": {
+        "bytes": 11805,
+        "privateLocationOmitted": true,
+        "sha256": "22a89095579a355516f976fe4e07d9e28e2371a8645ff424a08f3826d0738ef7",
+        "sourceId": "dated-claim-observation"
+      },
+      "component": {
+        "privateLocationOmitted": true,
+        "sha256": "a7a0dd7e1027390823631fb50d1043865a7b42f46060101e3c4e57390a9e0639",
+        "sourceId": "seed17/replay-accepted-component"
+      },
+      "historicalBytesPreserved": true
+    }
+  },
+  "claimObservation": {
+    "consistentIndividualReads": true,
+    "finishedAt": "2026-11-22T06:26:51.025505+00:00",
+    "readsAtomicAcrossRows": false,
+    "source": {
+      "bytes": 11805,
+      "privateLocationOmitted": true,
+      "sha256": "22a89095579a355516f976fe4e07d9e28e2371a8645ff424a08f3826d0738ef7",
+      "sourceId": "dated-claim-observation"
+    },
+    "startedAt": "2026-11-22T06:26:50.918350+00:00"
+  },
+  "completionMarkerProduced": false,
+  "heldoutPerformanceReported": false,
+  "kind": "acephale-incomplete-study-report-v1",
+  "missingResultsAreNotZero": true,
+  "negativeOutcome": {
+    "acceptedPerformanceEstimate": false,
+    "priorInfrastructureHistory": {
+      "distinctDeclaredCheckpointCount": 20,
+      "includedInScientificRowDenominator": false,
+      "independentScientificTrials": false,
+      "retainedPreModelErrorRecords": 40,
+      "sources": [
+        {
+          "bytes": 14811,
+          "privateLocationOmitted": true,
+          "sha256": "f1d81e953b0d3b5cb115a086a2480ac8cb2060782656728f1ca012e6252f2788",
+          "sourceId": "retained-pre-model-error-records-1"
+        },
+        {
+          "bytes": 14771,
+          "privateLocationOmitted": true,
+          "sha256": "f6c5cc3e5617cca343b745af6e4264ed08ca0ab318a61bda80e45051cf4dc15a",
+          "sourceId": "retained-pre-model-error-records-2"
+        }
+      ]
+    },
+    "recordedSummary": {
+      "acceptedPerformanceEstimate": false,
+      "allChildrenDrained": true,
+      "benchmarkClaim": false,
+      "completedMeasurements": 8,
+      "declaredProfileRows": 20,
+      "failureType": "actor_did_not_request_profiled_read",
+      "minimumCompletedRequired": 10,
+      "readyForAggregation": false,
+      "retainedProfileFailures": 12,
+      "unitCompleted": false
+    },
+    "source": {
+      "bytes": 23923,
+      "privateLocationOmitted": true,
+      "sha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c",
+      "sourceId": "failed-opportunity-evidence"
+    }
+  },
+  "operationalStateMutated": false,
+  "originalPrivateReportSha256": "76a640421f2195717b1759b33e9e59038ea6c16699c07704fb72665d8b49ab2c",
+  "publicProjection": true,
+  "reportStatus": "incomplete",
+  "scientificProtocolChanged": false,
+  "seedsAndHardwarePooled": false,
+  "statisticsRecomputed": false,
+  "studyComplete": false,
+  "unitCounts": {
+    "accepted": 3,
+    "derived-blocked": 4,
+    "failed": 1,
+    "pending": 4
+  },
+  "units": {
+    "development/1": {
+      "awaitingAcceptedDependencies": [
+        "seed29/analysis",
+        "seed29/opportunity"
+      ],
+      "observedClaimStatus": "absent",
+      "reason": "No accepted result.",
+      "state": "pending"
+    },
+    "development/2": {
+      "failedAncestors": [
+        "seed17/opportunity"
+      ],
+      "reason": "Frozen prerequisite failure propagates; no claim mutation.",
+      "state": "derived-blocked"
+    },
+    "export": {
+      "reason": "Permanent succeeded claim and retained accepted artifact proof.",
+      "state": "accepted"
+    },
+    "heldout/1": {
+      "failedAncestors": [
+        "seed17/opportunity"
+      ],
+      "reason": "Frozen prerequisite failure propagates; no claim mutation.",
+      "state": "derived-blocked"
+    },
+    "heldout/2": {
+      "failedAncestors": [
+        "seed17/opportunity"
+      ],
+      "reason": "Frozen prerequisite failure propagates; no claim mutation.",
+      "state": "derived-blocked"
+    },
+    "heldout/selection": {
+      "failedAncestors": [
+        "seed17/opportunity"
+      ],
+      "reason": "Frozen prerequisite failure propagates; no claim mutation.",
+      "state": "derived-blocked"
+    },
+    "seed17/analysis": {
+      "reason": "Permanent succeeded claim and retained accepted artifact proof.",
+      "state": "accepted"
+    },
+    "seed17/opportunity": {
+      "reason": "Permanent failed claim; no replacement or accepted performance imputed.",
+      "resultSha256": "63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c",
+      "state": "failed"
+    },
+    "seed17/replay": {
+      "reason": "Permanent succeeded claim and retained accepted artifact proof.",
+      "state": "accepted"
+    },
+    "seed29/analysis": {
+      "awaitingAcceptedDependencies": [
+        "seed29/replay"
+      ],
+      "observedClaimStatus": "absent",
+      "reason": "No accepted result.",
+      "state": "pending"
+    },
+    "seed29/opportunity": {
+      "awaitingAcceptedDependencies": [
+        "seed29/analysis"
+      ],
+      "observedClaimStatus": "absent",
+      "reason": "No accepted result.",
+      "state": "pending"
+    },
+    "seed29/replay": {
+      "awaitingAcceptedDependencies": [],
+      "observedClaimStatus": "absent",
+      "reason": "No accepted result.",
+      "state": "pending"
+    }
+  }
+}

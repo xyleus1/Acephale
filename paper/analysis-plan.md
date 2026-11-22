@@ -9,7 +9,7 @@ This maps the frozen protocol to presentation artifacts. It adds no estimator, s
 | Live outcomes and latency | Complete original paired blocks and selection receipt | Original native report | Figure 4 |
 | Completion and expenditure | Permanent claims, accepted closures, full journal exports | Original final report/accounting | Figure 5 |
 
-Use the unchanged report scripts under /srv/acephale/workspaces/report/report-source-aws-03/. Read already computed estimates and intervals from accepted reports. Do not implement a new bootstrap, alter confidence levels or change censoring treatment in plotting code.
+Use the unchanged report scripts under the frozen, source-bound report package. Read already computed estimates and intervals from accepted reports. Do not implement a new bootstrap, alter confidence levels or change censoring treatment in plotting code.
 
 Keep seed and deployment identities explicit. Fixed panels require common IDs and labels; selected-panel diagnostics are separate. Private labels join only after replay closure. Calibration uses the original training partition.
 

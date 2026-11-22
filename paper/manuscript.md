@@ -1,10 +1,10 @@
 # Source-grounded goal conditioning for speculative read execution in language-model agents
 
-**Working manuscript. Retained seed17 replay results and a failed opportunity profile are reported; the full study is incomplete.**
+**Current results paper - incomplete frozen study. Three accepted components, one failed component, four blocked descendants and four pending independent components. Status observed 22 November 2026, 06:26 UTC.**
 
 ## Abstract
 
-We study whether source-grounded representations of a user's requested outcome help an auxiliary predictor select useful read-only tool invocations while an unchanged language-model actor is generating. Acephale combines workflow and episodic memory with explicit argument binding, calibrated invocation scores and deployment-specific admission measurements. Speculative results remain isolated until the actor requests the exact invocation and validation succeeds. The frozen study separates common-panel replay, prefix-level opportunity profiling and paired native outcomes. In retained seed17 replay, 230 jointly scored checkpoints across 34 families yield an equal-family neutral-minus-goal-conditioned log-loss difference of 0.126 nats (95% bootstrap interval 0.021 to 0.265) and Brier difference of 0.0173 (0.0046 to 0.0341). However, each condition retained 412 failures among 746 declared checkpoints; these observed-subset estimates do not establish an all-checkpoint or heldout benefit. The study is an exploratory, machine-audited custom tau-compatible pilot, with zero human annotation reviews. The subsequent seed17 opportunity profile completed eight of twenty measurements and retained twelve profile failures, below the unchanged minimum of ten required for aggregation. No opportunity aggregate was accepted. Native task outcomes remain pending, and this draft makes no task-success or speedup claim.
+We study whether source-grounded representations of a user's requested outcome help an auxiliary predictor select useful read-only tool invocations while an unchanged language-model actor is generating. Acephale combines workflow and episodic memory with explicit argument binding, calibrated invocation scores and deployment-specific admission measurements. Speculative results remain isolated until the actor requests the exact invocation and validation succeeds. The frozen study separates common-panel replay, prefix-level opportunity profiling and paired native outcomes. In retained seed17 replay, 230 jointly scored checkpoints across 34 families yield an equal-family neutral-minus-goal-conditioned log-loss difference of 0.126 nats (95% bootstrap interval 0.021 to 0.265) and Brier difference of 0.0173 (0.0046 to 0.0341). However, each condition retained 412 failures among 746 declared checkpoints; these observed-subset estimates do not establish an all-checkpoint or heldout benefit. The study is an exploratory, machine-audited custom tau-compatible pilot, with zero human annotation reviews. The subsequent seed17 opportunity profile completed eight of twenty measurements and retained twelve profile failures, below the unchanged minimum of ten required for aggregation. No opportunity aggregate was accepted. The frozen dependency graph now has three accepted components, one failed component, four blocked descendants and four pending independent components. The unchanged full protocol cannot complete because of the failed prerequisite. This results paper makes no task-success or speedup claim.
 
 ## 1. Introduction
 
@@ -14,7 +14,7 @@ A user's requested outcome offers additional information about future reads. Its
 
 Acephale uses a frozen actor and a smaller auxiliary predictor. Goal hypotheses represent mutually exclusive interpretations of the complete requested outcome, including concurrent explicit objectives. Execution permission is checked independently. The actor receives a prefetched result only after asking for that invocation and passing validation. The mechanism does not change actor weights or claim an engine-level vLLM co-scheduler.
 
-The intended contributions are a goal-conditioned prediction and binding mechanism, deployment-bound admission measurements that account for benefits and overhead, and an evaluation separating replay, prefix profiling and paired native outcomes. Whether these mechanisms improve the declared endpoints remains to be determined by the completed frozen study.
+The intended contributions are a goal-conditioned prediction and binding mechanism, deployment-bound admission measurements that account for benefits and overhead, and an evaluation separating replay, prefix profiling and paired native outcomes. The retained evidence tests only part of that intended claim. The failed opportunity prerequisite prevents completion of the full frozen study; the remaining independent chain cannot substitute for the blocked native comparison.
 
 ## 2. System
 
@@ -44,7 +44,7 @@ Native reporting separates reward/pass1, constraints, two-trial consistency, log
 
 AWS infrastructure expenditure and hosted model API expenditure are separate accounting categories. Failed infrastructure attempts remain visible even when they generated no model requests. Historical components keep their original execution identities. Operational continuations retain earlier failed generations and the same permanent scientific assignment.
 
-## 5. Retained results, profile failure and pending outcomes
+## 5. Retained results, profile failure and study disposition
 
 ### 5.1 Retained seed17 replay and calibration
 
@@ -84,16 +84,37 @@ Two earlier operational executions had each recorded twenty failures before timi
 
 Sources: the versioned generation06 worker result SHA 63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c, the twenty-row measurements file SHA 41d8f3de2b114220b3789ddee28a43069582acd2cc67982ac22aa8ff16a7b6ed, and the closed profile receipt SHA cc83d0a8b16f7503e630c6bc1e8a3fd8fea582afe279c785b297cb7df7f98df6. [Exact source and row lineage](negative-outcome-evidence.json) retain all twenty outcomes and the same permanent assignment.
 
-### 5.3 Paired native evaluation
+### 5.3 Frozen dependency-graph disposition
 
-Development, selection and heldout outcomes remain unreported. The failed seed17 opportunity prerequisite blocks dependent development2, selection and heldout progression. The independent seed29 chain remains eligible to continue under its existing gates; this is a disposition, not a claim that it has completed. Planned counts are not completed counts. The final report must state actual dispatched, completed, failed, censored and eligible denominators for each arm and seed.
+A read-only claim observation on 22 November 2026 at 06:26 UTC confirmed the following disposition. Accepted and failed states come from the permanent claims. Blocking is derived from the unchanged prerequisite graph; it is not a newly written claim or a replacement failure label.
 
-## 6. Limitations
+| Unit state | Count | Components |
+|---|---:|---|
+| Accepted | 3 | Export; seed17 replay; seed17 analysis |
+| Failed | 1 | Seed17 opportunity profile |
+| Derived blocked | 4 | Development2; heldout selection; heldout1; heldout2 |
+| Pending | 4 | Seed29 replay; seed29 analysis; seed29 opportunity; development1 |
+
+The failed seed17 opportunity is required by development2 and heldout1; the remaining blocked components inherit that dependency. Thus the complete frozen benchmark is unavailable under the unchanged protocol, irrespective of additional GPU capacity. We report this as a negative and incomplete study outcome rather than silently dropping the prerequisite, replacing the failed profile, or reporting unobserved heldout scores.
+
+The four pending components form an independent continuation chain and may add accepted evidence under their existing gates. Even if all four succeed, the disposition would be seven accepted, one failed and four blocked components; it would not become a completed full study. No pending value is imputed as zero. Native outcomes and their actual dispatched, completed, failed, censored and eligible denominators remain unreported until accepted artifacts exist.
+
+The [incomplete-report sidecar](disposition/incomplete-report.json) binds the observation and derived reasons. Its reporting adapter emits studyComplete=false and copies accepted report values without recomputation. It does not change the scientific scheduler, claims, validators or full-study finalizer.
+
+## 6. Numerical diagnostics outside the scientific outcomes
+
+Separate serving diagnostics investigated a seed29 numerical-qualification mismatch. They are not replay scores, native task outcomes, or accepted study units. The original frozen probe probability is 0.23370635691404026, with an unchanged absolute-difference tolerance of 0.01 and a top-token requirement. A retained original baseline response was 0.21206880435710532; that baseline sequence was partial. Three requested cold/warm/cold checks of the beta-rounding candidate and the later beta-plus-KKT candidate each recorded 0.22270013882530884, with recorded error 0.011006218088731423, still above tolerance. Later Virginia session03 and Ohio session04 each recorded three trained checks at 0.21206880435710532, with error 0.021637552556934947. Their equal conditional probabilities do not imply identical raw logits, and none of these checks established qualification.
+
+The route evidence limits causal interpretation. Ohio's selected prefill backend was FlashInfer, which bypassed the modified Triton KKT source on that path. Virginia's startup selected Triton/FLA, but a startup record is not a per-request trace of every modified kernel. Installed source changes and compiled cache artifacts therefore do not prove execution of all proposed corrections. Cached-token telemetry was null; requested cold/warm/cold labels do not establish actual cache state. The separate HF reference result does not constitute a serving-engine qualification pass.
+
+The [first diagnostic note](notes/numerical-validation-20261122/README.md) and [follow-up record](notes/numerical-validation-20261122-followup/README.md) preserve exact source digests, settings, recorded comparisons and formal handbacks. Those handbacks recorded drained diagnostic processes and restored serving; they did not authorize scientific acceptance. We infer no task-accuracy, latency, throughput, complete root cause, or effective mathematical correction from these calls. These operational investigations do not revise the accepted seed17 statistics or the failed opportunity's denominator.
+
+## 7. Limitations
 
 This is a custom tau-compatible pilot, not an official complete benchmark score. Retrospective replay is not a causal actor intervention. Prefix profiling does not execute newly proposed actor actions and cannot establish task-level reward or speedup. Teacher agreement does not establish native success. The machine audit provides neither human review nor reviewer-model independence. The opportunity profile failed its minimum-completion gate; its eight completed measurements cannot support a selected-subset performance claim.
 
 Qualification and operational failure history constrain comparisons. Equal discrepancies across two GPU configurations do not identify a loader or numerical defect. No such causal diagnosis is asserted. Hardware transitions retain explicit provenance and must pass the original numerical gates.
 
-## 7. Reproducibility
+## 8. Reproducibility
 
-The scientific source, model revisions, input hashes, permanent identities, original validators and failed generations are retained. Editable writing files remain separate from execution roots. The accepted report and versioned journal exports govern the final completion declaration. Every outcome claim and figure requires its exact accepted source artifact before publication.
+The scientific source, model revisions, input hashes, permanent identities, original validators and failed generations are retained. Editable writing files remain separate from execution roots. The original full-study completion requirements remain unchanged. This paper is a separate incomplete-results delivery and emits no completion marker. Accepted report documents and the failed profile retain exact source hashes; the reporting sidecar preserves missing-result reasons. Every outcome claim and figure is tied to its accepted or explicitly failed source artifact. The independent seed29 incorporation commands are provided separately and cannot convert blocked or pending values into accepted results.

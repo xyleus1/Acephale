@@ -1,0 +1,23 @@
+{
+  "acceptedReportSha256": {
+    "seed17-goal-reliability.json": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e",
+    "seed17-goals-fixed-score-report.json": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687",
+    "seed17-neutral-fixed-score-report.json": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6"
+  },
+  "kind": "acephale-paper04-public-projection-v1",
+  "materialClaimsAudit": "Independent audit accepted private manuscript cc165be4; public privacy review recorded separately",
+  "newEditableArchive": false,
+  "originalMethodsBytesPreserved": true,
+  "originalPrivateDispositionSha256": "76a640421f2195717b1759b33e9e59038ea6c16699c07704fb72665d8b49ab2c",
+  "parentCommit": "21b4dcfa562f27678f929421c0f3f0eca76e29f2",
+  "privacyTransformations": [
+    "One absolute report-package location replaced in analysis-plan appendix",
+    "Current disposition location/administrative fields omitted; scientific values and source hashes retained",
+    "Portable documentation replaces private execution paths"
+  ],
+  "privatePdfSha256": "9404423b042e68c04034a0c4f15b24334d36b8f495a99ddd74a5f93af540b6d3",
+  "privateSourceBindingSha256": "f8c069dae5d3a16345f74c3da9c121f1f19bb52368e0cade03065d892b2367c7",
+  "scientificProtocolChanged": false,
+  "statisticsRecomputed": false,
+  "studyComplete": false
+}
