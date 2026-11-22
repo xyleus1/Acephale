@@ -1,59 +1,19 @@
 {
-  "kind": "acephale-editable-manuscript-evidence-v1",
-  "createdAt": "2026-11-21T22:39:38.039414+00:00",
-  "sourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
-  "sourceFiles": [
-    {
-      "path": "/srv/acephale/workspaces/operator/science-source/docs/METHODS.md",
-      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
-    },
-    {
-      "path": "/srv/acephale/workspaces/operator/science-source/docs/experiments/staged-study-2026-11-13.md",
-      "sha256": "8f07b9847c22a79f8b457dd831630d4441ccd033c65c7b5b0808ee4150a26d33"
-    },
-    {
-      "path": "/srv/acephale/workspaces/operator/science-source/docs/acephale/INFRA_NATIVE_PROFILE.md",
-      "sha256": "b26e463027ee01ee0984582437dce208b4f96d4fa58943b1926f95c1c4d25a50"
-    },
-    {
-      "path": "/srv/acephale/workspaces/report/continuation-03/continuation-dag.json",
-      "sha256": "be5ac0328d8a934186793ae546ff2f1669a651718d97121ac8bbd80e8d228be5"
-    },
-    {
-      "path": "/srv/acephale/workspaces/report/protocol-concurrency-audit-01/findings.json",
-      "sha256": "9595e812eaf4e901311dccd5e802ab3b9f036bcb6487987e324275f8a0415351"
-    },
-    {
-      "path": "/srv/acephale/workspaces/report/vllm-lora-coverage-01/findings.json",
-      "sha256": "87eecb101df44a6ae2435e0af7665a7cb7322212221c150f2f0aa08c6cefe876"
-    }
-  ],
-  "retainedComponents": [
-    {
-      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/closed-e47-components-01/components/export.json",
-      "sha256": "64b601209da7e02c0ae2808c63d347905af52d83444c1c130e47b4c0c57a5acf"
-    },
-    {
-      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/closed-e47-components-01/components/seed17-replay.json",
-      "sha256": "a7a0dd7e1027390823631fb50d1043865a7b42f46060101e3c4e57390a9e0639"
-    },
-    {
-      "path": "/srv/acephale/migration/raw/C/Users/apexs/outputs/acephale-staged-study-20261113/evaluation-only-continuation-47/seed17-cpu-recovery-06/owner/projection-recovery-01/component.json",
-      "sha256": "647f23466bed49876e0901dda865c121e62e13916d83a3792ddbeccbfd7e511f"
-    }
-  ],
-  "currentFailure": {
-    "path": "/srv/acephale/workspaces/report/pre-science-continuation-03/previous-result.json",
-    "sha256": "c39b25d023ffefebcb09cc9652eeb9a9a6a73241eca1720043255ffd171c72a3"
+  "acceptedRetainedComponents": 3,
+  "dependentWork": "development2/selection/heldout blocked",
+  "fullStudyCompleted": false,
+  "independentWork": "seed29 chain eligible under unchanged gates, completion unclaimed",
+  "kind": "acephale-paper-evidence-register-v3",
+  "nativePerformanceClaim": false,
+  "newEvidence": {
+    "bytes": 23923,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome-evidence.json",
+    "sha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c"
   },
-  "outcomeValuesTranscribed": true,
-  "remainingResultsPending": true,
-  "externalPrimarySources": [
-    "https://arxiv.org/abs/2603.18897v3",
-    "https://arxiv.org/abs/2607.12236v1"
-  ],
-  "retainedResultsEvidence": {
-    "path": "/srv/acephale/workspaces/report/manuscript-aws-01/retained-results-evidence-01.json",
-    "sha256": "ddbc886faf2c2d0a0f64d0737d050d71748880f876988530515fc55d09395b9d"
+  "newWholeUnitStatus": "failed profile",
+  "parent": {
+    "bytes": 2817,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-02/evidence-register.json",
+    "sha256": "5a1cb7f1568ea35f17ee85ff800ab9aaa4944b8693f955eac9ad2ac98e50d2a3"
   }
 }

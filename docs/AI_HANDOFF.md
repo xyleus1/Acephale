@@ -1,5 +1,14 @@
 # Working on Acephale
 
+## 2026-11-22: Retain the failed opportunity profile
+
+Paper03 now reports the actual seed17 opportunity generation06 disposition: 20 declared profile rows, 8 completed and 12 actor_did_not_request_profiled_read failures. The unchanged minimum is 10 completed measurements, so aggregation is rejected and the whole unit failed. The eight completed rows support descriptive records only, not an accepted latency, speedup or native score.
+
+Keep the earlier 40 pre-model errors separate from this 20-row scientific denominator. Preserve all original labels and failed evidence; this result does not authorize replacement trials. The post hoc tool-request inventory describes candidate alignment, not actor or customer-task correctness.
+
+Three retained components remain accepted. The independent seed29 chain may continue under existing gates; dependent development2, selection and heldout work remains blocked. External execution owns live operations. The updated working paper/PDF and exact provenance are linked in [paper publication](../paper/PUBLICATION.md); do not infer full-study completion from the rendered document.
+
+
 ## 2026-11-22: Retained-result paper02 publication
 
 The editable paper and reproducible figure sources are at [paper](../paper/PUBLICATION.md). This is a draft reporting the three retained accepted components, export, seed17/replay and seed17/analysis. New opportunity/native outcomes and the remaining DAG are pending accepted closure evidence.

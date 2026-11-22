@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-22: Report the opportunity gate failure without selected-success claims
+
+Retain all 20 declared profile outcomes and the unchanged minimum 10 completion rule. Eight completed rows and 12 profile failures do not yield an accepted opportunity aggregate; do not estimate a latency gain or native score from the selected eight or replace failed rows.
+
+Keep post hoc candidate-alignment inspection explicitly separate from the original labels and acceptance rule. A different tool request is not evidence of actor incorrectness or a failed customer task. Preserve the earlier 40 pre-model error records separately rather than adding them to the scientific denominator.
+
+Publish this negative outcome alongside the retained accepted replay evidence in a visibly incomplete working paper. Original methods, scientific bytes, trial identities and statistical criteria remain fixed; operational authority stays with the external execution owner.
+
+
 ## 2026-11-22: Retained-result paper02 publication
 
 Report the retained observed subset with its actual denominators and original estimator. Do not treat prediction-completed status as a scored checkpoint, subtract means from unmatched cohorts, or interpret binary next-batch invocation membership as full-action entropy or native task success.

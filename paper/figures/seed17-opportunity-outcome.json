@@ -1,0 +1,37 @@
+{
+  "counts": {
+    "acceptedPerformanceEstimate": false,
+    "allChildrenDrained": true,
+    "benchmarkClaim": false,
+    "completedMeasurements": 8,
+    "declaredProfileRows": 20,
+    "failureType": "actor_did_not_request_profiled_read",
+    "minimumCompletedRequired": 10,
+    "readyForAggregation": false,
+    "retainedProfileFailures": 12,
+    "unitCompleted": false
+  },
+  "files": [
+    {
+      "bytes": 59221,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.png",
+      "sha256": "d37580b9cf08164f9557ee6ed3b076e78d4361a2977f2f06826de0c83f1776ba"
+    },
+    {
+      "bytes": 49257,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.svg",
+      "sha256": "cd96393d352abbbff69ef466ef4192a73f10422e21b4ed2fd375f4945968e8a7"
+    },
+    {
+      "bytes": 25363,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.pdf",
+      "sha256": "906a72bf68c661ef47976405b6163c5af273bf939f35b9ad1c75fe4ec7a7f6dd"
+    }
+  ],
+  "kind": "acephale-paper-count-figure-v1",
+  "source": {
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome-evidence.json",
+    "sha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c"
+  },
+  "statisticalEstimationPerformed": false
+}

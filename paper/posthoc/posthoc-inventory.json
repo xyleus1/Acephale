@@ -1,0 +1,1191 @@
+{
+  "all20RowsActorToolsExecutedFalse": true,
+  "all20RowsBaselineConcurrentSemanticAgreement": true,
+  "createdAtUtc": "2026-11-22T00:35:14.173324+00:00",
+  "denominator": {
+    "earlierStartupRowsExcluded": 40,
+    "generation06Rows": 20,
+    "originalCompleted": 8,
+    "originalFailed": 12
+  },
+  "failedRowsPublicObservables": {
+    "baselineConcurrentSemanticAgreement": 12,
+    "differentToolInBothResponses": 12,
+    "groupedToolPairs": [
+      {
+        "profiledTool": "get_user_details",
+        "requestedTool": "get_reservation_details",
+        "rows": 9
+      },
+      {
+        "profiledTool": "search_direct_flight",
+        "requestedTool": "get_reservation_details",
+        "rows": 1
+      },
+      {
+        "profiledTool": "search_direct_flight",
+        "requestedTool": "get_user_details",
+        "rows": 2
+      }
+    ],
+    "noToolCallInEitherResponse": 0,
+    "sameToolArgumentOnlyMismatchInEitherResponse": 0
+  },
+  "kind": "acephale-posthoc-public-candidate-alignment-inventory-v1",
+  "measurements": {
+    "bytes": 25908,
+    "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurements.json",
+    "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurements.json",
+    "sha256": "41d8f3de2b114220b3789ddee28a43069582acd2cc67982ac22aa8ff16a7b6ed",
+    "versionId": "3JDILUXzZGLvWsI7.bZqOwXcQrWp4Fsa"
+  },
+  "posthoc": true,
+  "priorStartupCohortsExcluded": [
+    {
+      "bytes": 14811,
+      "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/01-prepare/prepared/run/profile/artifacts/measurements.json",
+      "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/01-prepare/prepared/run/profile/artifacts/measurements.json",
+      "sha256": "f1d81e953b0d3b5cb115a086a2480ac8cb2060782656728f1ca012e6252f2788",
+      "versionId": "ahPMejdSBHY1VxMQecH8NuUUvpmzGZEh"
+    },
+    {
+      "bytes": 14771,
+      "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/04/prepared/run/profile/artifacts/measurements.json",
+      "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/04/prepared/run/profile/artifacts/measurements.json",
+      "sha256": "f6c5cc3e5617cca343b745af6e4264ed08ca0ab318a61bda80e45051cf4dc15a",
+      "versionId": ".FyB415FvCsAL41cb.DhhPBHSJlDWF3N"
+    }
+  ],
+  "profilePlan": {
+    "bytes": 22490,
+    "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/profile-plan.json",
+    "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/profile-plan.json",
+    "sha256": "48bfbc499fface20ceadd519f56124ee16e6d43c1fcc73b4191e10c765eaf109",
+    "versionId": "YgPIv3zT4PnMoiFDt58i7uFUBps80cQF"
+  },
+  "result": {
+    "bucket": "acephale-aws-20261121-971290362335",
+    "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/result.json",
+    "sha256": "63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c",
+    "versionId": "9.wUgEr_ma9.Wang3.d7nxOEx3h6MA.c"
+  },
+  "reusedReportLineageReceipt": {
+    "bytes": 34820,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/verified-row-lineage.json",
+    "sha256": "fce5cb115b87d8128651dfc2961e9fea16aca39e699e858e7108014ba45da71a"
+  },
+  "rows": [
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "578a8bc30b393f69383b14408a95d28e592a4dc1a6971460325ee8e83ad858ad",
+      "familyId": "airline-composition-12c63e86e436",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A1DD39E76C"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A1DD39E76C"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 0,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_6237cd3e0e92"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 38159,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0000.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0000.json",
+        "sha256": "2aff4296cee5f1195644b2ec09e2bbcafc1cc36d218836bfb5027325533d5a00",
+        "versionId": "TlKhEnZQFWaFsbsAs5Lpr7j.CyqfNod1"
+      },
+      "sourceLocalCopy": {
+        "bytes": 38159,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0000.json",
+        "sha256": "2aff4296cee5f1195644b2ec09e2bbcafc1cc36d218836bfb5027325533d5a00"
+      },
+      "split": "development"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "4095f2273d15180f97fd6c19bba48ed9c5592c327c669bdc69b90d031c6bec43",
+      "familyId": "airline-composition-3d9d8e3a0542",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_9ec672b1092c"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_9ec672b1092c"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 1,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_9ec672b1092c"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 35646,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0001.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0001.json",
+        "sha256": "2be5ee386bef3a5d4d8a0f7da0b474abcfb5d0f9032686305362c7ac2444a088",
+        "versionId": "Kwf0JfD4etYSx4MbJ61Ft2SoCwJsg5h1"
+      },
+      "sourceLocalCopy": {
+        "bytes": 35646,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0001.json",
+        "sha256": "2be5ee386bef3a5d4d8a0f7da0b474abcfb5d0f9032686305362c7ac2444a088"
+      },
+      "split": "development"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "45da3a0b389e8f1a09790f5024fb180f1c442477c87960d5b62fa8b97b5aabdd",
+      "familyId": "airline-composition-492b08e2bbd2",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_df2e9214abf2"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_df2e9214abf2"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 2,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_df2e9214abf2"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 34977,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0002.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0002.json",
+        "sha256": "dfdedab1cfb4d5f0c2a4a2537a114ed5ca53f326e9bbeaeaaec926132bde8062",
+        "versionId": "YflzqFDD22vH7y0QEBrF215k9V3hwuPe"
+      },
+      "sourceLocalCopy": {
+        "bytes": 34977,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0002.json",
+        "sha256": "dfdedab1cfb4d5f0c2a4a2537a114ed5ca53f326e9bbeaeaaec926132bde8062"
+      },
+      "split": "development"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "beb43e3f566a215b5dff8af936d61c5f0d0092638d6c1314726dabdf8b04b089",
+      "familyId": "retail-composition-11ece16f4c40",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "email": "22b49672997d@example.test"
+              },
+              "tool": "find_user_id_by_email"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "email": "22b49672997d@example.test"
+              },
+              "tool": "find_user_id_by_email"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 3,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "email": "22b49672997d@example.test"
+        },
+        "tool": "find_user_id_by_email"
+      },
+      "source": {
+        "bytes": 35160,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0003.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0003.json",
+        "sha256": "8df35b96a219706bbb388ba0b72536d4e8930c37dda80864cf1707a1ec58ce94",
+        "versionId": "SvnjCcn38A7xh.ln1.ED9V8ylw7sNbpo"
+      },
+      "sourceLocalCopy": {
+        "bytes": 35160,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0003.json",
+        "sha256": "8df35b96a219706bbb388ba0b72536d4e8930c37dda80864cf1707a1ec58ce94"
+      },
+      "split": "development"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "fa40a8b50a682880d050b5f616e0a07291e6283abffdbbdc11bcf4d5dde5f11d",
+      "familyId": "retail-composition-2697bc45e51c",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "email": "f6f7e37d2c6f@example.test"
+              },
+              "tool": "find_user_id_by_email"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "email": "f6f7e37d2c6f@example.test"
+              },
+              "tool": "find_user_id_by_email"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 4,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "email": "f6f7e37d2c6f@example.test"
+        },
+        "tool": "find_user_id_by_email"
+      },
+      "source": {
+        "bytes": 34423,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0004.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0004.json",
+        "sha256": "47f569cbfaef7f4a3bfdf032d29891fb0757e1b54a0347598ea8e75a985fb9a0",
+        "versionId": "Lg4gvlNVnf0r6lN9W5VuAcZp4cn.PUcv"
+      },
+      "sourceLocalCopy": {
+        "bytes": 34423,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0004.json",
+        "sha256": "47f569cbfaef7f4a3bfdf032d29891fb0757e1b54a0347598ea8e75a985fb9a0"
+      },
+      "split": "development"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "6dd97badda3bdf5dc9552b6a5026ce2d602174bd545495ed500b271049352c17",
+      "familyId": "retail-composition-680a5df34f49",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "email": "ee96badf5cca@example.test"
+              },
+              "tool": "find_user_id_by_email"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "email": "ee96badf5cca@example.test"
+              },
+              "tool": "find_user_id_by_email"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 5,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "email": "ee96badf5cca@example.test"
+        },
+        "tool": "find_user_id_by_email"
+      },
+      "source": {
+        "bytes": 33980,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0005.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0005.json",
+        "sha256": "3878a28f95cf2f735a26ff15e62673db6bb003776684efa38c9db98eff05f843",
+        "versionId": "ouUfkDI5N4ZJJeBv4olw0c4vOJTk8ywQ"
+      },
+      "sourceLocalCopy": {
+        "bytes": 33980,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0005.json",
+        "sha256": "3878a28f95cf2f735a26ff15e62673db6bb003776684efa38c9db98eff05f843"
+      },
+      "split": "development"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "c0a23057fadec8f1f399ae5a403c9008a1e7b2e7c432fb59d5559edd6a388471",
+      "familyId": "airline-composition-15c9135c1a19",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A349CF321E"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A349CF321E"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 6,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_58e61170611f"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 34392,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0006.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0006.json",
+        "sha256": "4352ac70612a63b8699475ac3fa091896f6ff8316e1cb5b362bd47f6760e495d",
+        "versionId": "AQB.qI0gvpaw63pJfHxMkeZCMYrDdDDk"
+      },
+      "sourceLocalCopy": {
+        "bytes": 34392,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0006.json",
+        "sha256": "4352ac70612a63b8699475ac3fa091896f6ff8316e1cb5b362bd47f6760e495d"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "c4f095e489ceeb3916331e39472a411f393d92eda2bc76a2b606117d515879fd",
+      "familyId": "airline-composition-2c6ba997495f",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A6D8717736"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A6D8717736"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 7,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "date": "2024-05-16",
+          "destination": "CLT",
+          "origin": "PHL"
+        },
+        "tool": "search_direct_flight"
+      },
+      "source": {
+        "bytes": 36285,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0007.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0007.json",
+        "sha256": "a535fe6840c2708b353346dfe8c15425fec04b71ad0ead2eab3d6d7653694a5a",
+        "versionId": "C0xnSGn862xRpiCUenc6lL_OU5s3TpQN"
+      },
+      "sourceLocalCopy": {
+        "bytes": 36285,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0007.json",
+        "sha256": "a535fe6840c2708b353346dfe8c15425fec04b71ad0ead2eab3d6d7653694a5a"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "87344e9431ac95ca6bc83e668ff6222db8e08b44b325eaa419f77102b3d59afc",
+      "familyId": "airline-composition-33d21829de4a",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "AE73907196"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "AE73907196"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 8,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_05ac0e18e62e"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 37437,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0008.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0008.json",
+        "sha256": "d9faf1f72fe7ca09170ab7e1387d25ca3e3b8752be97676d28c33d6d9dd049ad",
+        "versionId": "6Pphpnwv6Z.H3UeCY0xeWCtObNV5UmRQ"
+      },
+      "sourceLocalCopy": {
+        "bytes": 37437,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0008.json",
+        "sha256": "d9faf1f72fe7ca09170ab7e1387d25ca3e3b8752be97676d28c33d6d9dd049ad"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "834ff54ba76429fe4b0d37b2a1d88c0abf675be7515aedb75dae86946e4766d8",
+      "familyId": "airline-composition-35689ca74726",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A3F755282D"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A3F755282D"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 9,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_a0ac0759b551"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 38197,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0009.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0009.json",
+        "sha256": "f61d4ab5ad8f8bac101c141bffef3c9c864709b9f9caae9b7e4a6c5a905222c0",
+        "versionId": "tL2xJrCrAnSDXJBWtMA.MW4JtpE2kmyB"
+      },
+      "sourceLocalCopy": {
+        "bytes": 38197,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0009.json",
+        "sha256": "f61d4ab5ad8f8bac101c141bffef3c9c864709b9f9caae9b7e4a6c5a905222c0"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "5758e2a0dc8a4c4edcf94d155a4d8758a8aec4e6ec1837e34ccf9d3bba59e9ac",
+      "familyId": "airline-composition-41a762829eef",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A2A4F93723"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A2A4F93723"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 10,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_b24b710a305d"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 36240,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0010.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0010.json",
+        "sha256": "fdd2f8434217a87871944cd088b4f7281e885c3186f74cf5d8bbf514c1fd7e85",
+        "versionId": ".8zqcog9x7p.wnlX_6R3DMP9lJnQU9jg"
+      },
+      "sourceLocalCopy": {
+        "bytes": 36240,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0010.json",
+        "sha256": "fdd2f8434217a87871944cd088b4f7281e885c3186f74cf5d8bbf514c1fd7e85"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "911ae35cb84555b4b6db68870ded22fc8f9e925fa4e0d1ca4eba764d8a94f3fa",
+      "familyId": "airline-composition-4427424e7255",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "AE62EBA4EB"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "AE62EBA4EB"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 11,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_d2fe63362c09"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 37370,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0011.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0011.json",
+        "sha256": "fbc519467fd026a43afa5d7a5b03c986b36fcaf23b74145963d856a86aa58ffa",
+        "versionId": "XdKKIA8h9J3b.5iSvYHr1UAgxy2gSSqH"
+      },
+      "sourceLocalCopy": {
+        "bytes": 37370,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0011.json",
+        "sha256": "fbc519467fd026a43afa5d7a5b03c986b36fcaf23b74145963d856a86aa58ffa"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "5d409d541b07c87e7e79eadb22b943c4bda700615ce7acce8dd2cc5e0acdbb11",
+      "familyId": "airline-composition-4d8bf7caa96e",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A8CB29862F"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A8CB29862F"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 12,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_d7aaff4c5b10"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 38860,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0012.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0012.json",
+        "sha256": "40ea175a3f7a6e44400473d055c9d73b911664c20b7f95f22b5c2968c54a1540",
+        "versionId": "XC1njeZk8bArBGOC_LP9Lv4HestW0bGr"
+      },
+      "sourceLocalCopy": {
+        "bytes": 38860,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0012.json",
+        "sha256": "40ea175a3f7a6e44400473d055c9d73b911664c20b7f95f22b5c2968c54a1540"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "d58fa4e6a10e596796284ad83ca25eb9040971cfa818d1924dc880ce515b6c8e",
+      "familyId": "airline-composition-503037c9ae82",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_6f8758204159"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_6f8758204159"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 13,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_6f8758204159"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 37176,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0013.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0013.json",
+        "sha256": "5044fec37335ad2b78e1233c5c9798efbb0849d1a762d55a73b01d07dd2d94ec",
+        "versionId": "jADkLEV_OsAM06KSXH19mWED.Qpu7PKb"
+      },
+      "sourceLocalCopy": {
+        "bytes": 37176,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0013.json",
+        "sha256": "5044fec37335ad2b78e1233c5c9798efbb0849d1a762d55a73b01d07dd2d94ec"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "735496e6ea5f0acff72c8ba84ac96147e0f1c24ade50f73412afbdfd2f79cd9a",
+      "familyId": "airline-composition-673ee486455e",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A52321C256"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A52321C256"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 14,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_88657e3aa98a"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 38764,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0014.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0014.json",
+        "sha256": "17c135b4b0d39787e43647d6016db073d10334f188762dbd486e6dd1c87511b5",
+        "versionId": "gpewje5TeX57tWm0oGbNli_Dukhe8yKg"
+      },
+      "sourceLocalCopy": {
+        "bytes": 38764,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0014.json",
+        "sha256": "17c135b4b0d39787e43647d6016db073d10334f188762dbd486e6dd1c87511b5"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "a2d1ad9199d8a998b81a2683b319619112036f928dca9837e8d2e9e49e779a30",
+      "familyId": "airline-composition-8a460a8d9db1",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_8399799c9c26"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_8399799c9c26"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 15,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_8399799c9c26"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 37288,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0015.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0015.json",
+        "sha256": "d75e200e5206de2a00d2c595985e33d07fb8582bb74404e021e5b9216a02722a",
+        "versionId": "SIOs5XpWoAOkogvylkPbWGHcp_qqdafS"
+      },
+      "sourceLocalCopy": {
+        "bytes": 37288,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0015.json",
+        "sha256": "d75e200e5206de2a00d2c595985e33d07fb8582bb74404e021e5b9216a02722a"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "778271922f30dffdae49666bd311e8740e8356aca92a93d35967bcf61f8a0e49",
+      "familyId": "airline-composition-92f82d857334",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_e6572ad8889f"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_e6572ad8889f"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "same_tool_and_arguments"
+        }
+      },
+      "ordinal": 16,
+      "originalErrorType": null,
+      "originalStatus": "completed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_e6572ad8889f"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 35013,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0016.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0016.json",
+        "sha256": "62db06ab9483ceaba0f2fed75da9d8ef91b9b7ecb06d6953d0bd0ac6c800fdf1",
+        "versionId": "2aR6icMplYtDIElt4FHPWjiPNx.HoYVE"
+      },
+      "sourceLocalCopy": {
+        "bytes": 35013,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0016.json",
+        "sha256": "62db06ab9483ceaba0f2fed75da9d8ef91b9b7ecb06d6953d0bd0ac6c800fdf1"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "0a8153c01744ab474d12cb00573776c15d0283a4a579760dcfe4e430015356ac",
+      "familyId": "airline-composition-b08b59933c0d",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_5a1ee92a2505"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_5a1ee92a2505"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 17,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "date": "2024-05-17",
+          "destination": "MCO",
+          "origin": "PHX"
+        },
+        "tool": "search_direct_flight"
+      },
+      "source": {
+        "bytes": 44067,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0017.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0017.json",
+        "sha256": "e91d6e9c41bdb9df009b9b8bbcf5fb3dd3403d9f3e98dac170a4e402351f7c48",
+        "versionId": "sq.8P0laMq_D4h.AHyxz7PvarBpTEJJU"
+      },
+      "sourceLocalCopy": {
+        "bytes": 44067,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0017.json",
+        "sha256": "e91d6e9c41bdb9df009b9b8bbcf5fb3dd3403d9f3e98dac170a4e402351f7c48"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "d5e76542d25d9a3585fee757289f752f978e2faac413b1434273925ae19c8a55",
+      "familyId": "airline-composition-bcaa23f73d5c",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A548EB3B89"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "reservation_id": "A548EB3B89"
+              },
+              "tool": "get_reservation_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 18,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "user_id": "study_90a1ae245c98"
+        },
+        "tool": "get_user_details"
+      },
+      "source": {
+        "bytes": 38190,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0018.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0018.json",
+        "sha256": "6ca0466350e6ae87a12ec1edc30268b8099cc4e8c5700e0bd7dae83c02b3a82d",
+        "versionId": "fyD5AJS77sidcoxgomSz4Mv0YCLzLCiR"
+      },
+      "sourceLocalCopy": {
+        "bytes": 38190,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0018.json",
+        "sha256": "6ca0466350e6ae87a12ec1edc30268b8099cc4e8c5700e0bd7dae83c02b3a82d"
+      },
+      "split": "train"
+    },
+    {
+      "actorToolsExecuted": false,
+      "baselineConcurrentSemanticAgreement": true,
+      "checkpointId": "7932d27d19e406e31f3ef7d993ab109d193a17d07e7b2c484f060521d524e32e",
+      "familyId": "airline-composition-c5a138fe6974",
+      "observedActorResponses": {
+        "actor_baseline": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_87f8a72343d0"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        },
+        "actor_concurrent": {
+          "callCount": 1,
+          "calls": [
+            {
+              "arguments": {
+                "user_id": "study_87f8a72343d0"
+              },
+              "tool": "get_user_details"
+            }
+          ],
+          "relationToProfiledCandidate": "different_tool"
+        }
+      },
+      "ordinal": 19,
+      "originalErrorType": "actor_did_not_request_profiled_read",
+      "originalStatus": "failed",
+      "profiledCandidate": {
+        "arguments": {
+          "date": "2024-05-17",
+          "destination": "ORD",
+          "origin": "LAX"
+        },
+        "tool": "search_direct_flight"
+      },
+      "source": {
+        "bytes": 41545,
+        "key": "results/seed17-opportunity/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/artifacts/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0019.json",
+        "path": "/srv/acephale/attempts/unit-b8dae1aff90e4b838cb08b973c6e6ec6/operational-generations/06/prepared/run/profile/artifacts/measurement-0019.json",
+        "sha256": "50bf235dfe2fea54796d95e106f0345091b2d23ed9fc60344f744fcf0befa3d0",
+        "versionId": "5WOEvT310JQ8V55rouSsKb7eALEXUlnM"
+      },
+      "sourceLocalCopy": {
+        "bytes": 41545,
+        "path": "/srv/acephale/workspaces/report/manuscript-aws-03/new-evidence/measurement-0019.json",
+        "sha256": "50bf235dfe2fea54796d95e106f0345091b2d23ed9fc60344f744fcf0befa3d0"
+      },
+      "split": "train"
+    }
+  ],
+  "scope": "Descriptive inventory of retained public actor tool requests only. Original statuses/error labels unchanged. No model calls, replacement trials, metric computation, threshold change, task accuracy or speedup claim.",
+  "sourceSemantics": {
+    "aggregationExecutedByThisAudit": false,
+    "aggregator": {
+      "bytes": 21601,
+      "path": "/srv/acephale/workspaces/operator/science-source/research/acephale/src/acephale/infra_admission.py",
+      "sha256": "b6367cf0291286acecfd75a82ce9b0fef02e1b78b29bd7bf8a73d8d0a2f3f804"
+    },
+    "minimumCompletedRows": 10,
+    "minimumPredicateLines": [
+      172,
+      173
+    ],
+    "originalAggregateGateResult": "8 completed is below the unchanged minimum 10; no accepted opportunity estimate.",
+    "predicate": "Both responses must request the profiled tool with matching argument hash and satisfy the configured nonmutating filter; the frozen error label covers failure of that conjunction.",
+    "profileProducer": {
+      "bytes": 23039,
+      "path": "/srv/acephale/workspaces/operator/science-source/scripts/acephale-infra-native-profile.ts",
+      "sha256": "1b9c41de96261e4900136644b9a1c5ca90e6e82ad525e83b9bf3d19b96caf564"
+    },
+    "requestPredicateLines": [
+      194,
+      195,
+      196
+    ]
+  }
+}

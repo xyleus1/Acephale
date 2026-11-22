@@ -1,46 +1,38 @@
 {
-  "kind": "acephale-paper-accepted-results-fact-check-v1",
-  "statisticalReanalysisPerformed": false,
-  "syntheticResultsUsed": false,
-  "standaloneNeutral": {
-    "declared": 746,
-    "predictionCompleted": 745,
-    "failed": 1,
-    "scored": 600
+  "kind": "acephale-paper-fact-check-v3",
+  "newChecks": {
+    "allTwentyHaveActualSpans": true,
+    "allTwentyIndividualEvidenceHashes": true,
+    "allTwentyStatusErrorAndCheckpointParity": true,
+    "drainedOriginalProcessAndGuard": true,
+    "measurementAndPlanSourcesVersionAndSha256": true,
+    "profilePlanContentHashAndProfileEqual": true,
+    "sameTwentyUniqueRowIdsAndOrder": true,
+    "scientificLabelsChanged": false,
+    "statisticsRecomputed": false,
+    "workerVersionAndSha256": true
   },
-  "pairedGoalsFixed": {
-    "declaredPerCondition": 746,
-    "predictionCompletedPerCondition": 334,
-    "failedPerCondition": 412,
-    "scoredPairedCheckpoints": 230,
-    "families": 34,
-    "weighting": "equal_family_mean_of_paired_trial_differences",
-    "contrast": "neutral minus conditional",
-    "observedSubsetOnly": true
+  "newOutcome": {
+    "acceptedPerformanceEstimate": false,
+    "allChildrenDrained": true,
+    "benchmarkClaim": false,
+    "completedMeasurements": 8,
+    "declaredProfileRows": 20,
+    "failureType": "actor_did_not_request_profiled_read",
+    "minimumCompletedRequired": 10,
+    "readyForAggregation": false,
+    "retainedProfileFailures": 12,
+    "unitCompleted": false
   },
-  "reliability": {
-    "agreed": 6,
-    "graded": 141,
-    "recordedWilsonLower95": 0.019646160425252017,
-    "taskSuccessProbability": false
+  "originalAcceptedReportsUnchanged": true,
+  "originalMethodsByteIdentical": true,
+  "originalMinimumTenPredicateChecked": true,
+  "paper02Modified": false,
+  "parent": {
+    "bytes": 1308,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-02/fact-check.json",
+    "sha256": "b459b34a50d72fbf2a46921002b30d3976192d38d64aa9e24e04c6fbb5b558d8"
   },
-  "annotationAudit": {
-    "accepted": 19,
-    "audited": 20,
-    "humanReviews": 0,
-    "separateRequestSameModel": true
-  },
-  "frozenMethodsUnchanged": true,
-  "operationalFailureRecords": {
-    "tau2Import": 20,
-    "historicalBundlePath": 20,
-    "sameDeclaredCheckpoints": 20,
-    "nativeModelRequestsObservedInTheseRecords": 0
-  },
-  "figureVisualReview": {
-    "sha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88",
-    "legendTitleOverlapCorrected": true,
-    "labelsAndIntervalsLegible": true
-  },
-  "finalPdfVisualReviewOwner": "root"
+  "posthocKeptDistinct": true,
+  "previousPreModelRecordsKeptSeparate": true
 }

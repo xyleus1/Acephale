@@ -1,0 +1,358 @@
+{
+  "files": [
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 7678,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/render.py",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/render.py",
+      "sha256": "e93c309abf122993e8eedaf695d3ec17a8352d9c5e53cb6e6dbcf6a62500eaad",
+      "versionId": "unoJfT.Ww7CUCUrkiIREpz4Kep3Q7fIL"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 3285,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/assemble.py",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/assemble.py",
+      "sha256": "479ca4cc9d90be9c0e55058fb19578bdb5a6ba6bbf7619247bde379443ffceef",
+      "versionId": "pL6gZetOCE.YnY_FDlSvELI3_r5x1SqO"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1072,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/check_layout.py",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/check_layout.py",
+      "sha256": "df06c2b9563a9f657e2443907189f066b6d90b725752c7ae833db661cfc6f50d",
+      "versionId": "p.YlUs4FzOrBPYma3y5MzyI2VYJJclWR"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1751,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/make_previews.py",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/make_previews.py",
+      "sha256": "42237cd7db0142ca5dd8c1bc38173275b056a6333dd4459ae3e6db56c41a0bd4",
+      "versionId": "1xl11IbR1ZESo0kKhkq7lXohmmcle_wL"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 4702,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/render-provenance.json",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/render-provenance.json",
+      "sha256": "1015c934ccea9f54b2ca359805680d65dc43c1d9ec958139b4f386aaa2991be4",
+      "versionId": "STu7bbVdV110xN0guGv7oukXJcveKEYH"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2607,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/layout-check-final.json",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/layout-check-final.json",
+      "sha256": "abdc1b5f2171cb4aba6e3003cbecce90705fae06ef0a2e3ef285e046a6728a1f",
+      "versionId": "uW_TDtHrbZnBcbdaLpJW8ggHeLOF9L4_"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2426,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/page-features.json",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/page-features.json",
+      "sha256": "14f59b5713a868114b215b876462f7a00d9db6e58602d8e375f150bf7f81c40f",
+      "versionId": "D9YMCdUZUqP39.YhODQsCRSwieap6dW1"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1180,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/assemble.stdout.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/assemble.stdout.log",
+      "sha256": "1e7a9f1568769faa1b6c290d87bf090645bc38256946e38cc2cbe58502c0eb0b",
+      "versionId": "CJiKEKffc6jAHGjPTOVWNL2GSAYiDr0i"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 0,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/assemble.stderr.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/assemble.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versionId": "qgEtZ0rALpleZU1Nb8u7_egnyTrNH0_W"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 248,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/render.stdout.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/render.stdout.log",
+      "sha256": "acc3beaee83eb5a3e11509c268330f1a07a8a29f1acd23089a2d4f8fb9de7f14",
+      "versionId": "GDfZPAQk_vcQPAyO.Gc3bxokkVnlAIE."
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 0,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/render.stderr.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/render.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versionId": "3V6pWeHvLmZCBhhvGV0.t30Dr9JEcnfS"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 64,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/bounds.stdout.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/bounds.stdout.log",
+      "sha256": "85840038561b6be73c8587454f26edccbd34e908c2bca962af59d7af55586e96",
+      "versionId": "28I2uS..2AXzmtMteiRsu6PDwKQHD0E2"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 0,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/bounds.stderr.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/bounds.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versionId": "Qk22F3unlq.HVXxIuetSemwNEudJRypI"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 626,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/preview.stdout.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/preview.stdout.log",
+      "sha256": "a9129f6046595de37c549000928673d50c15fa0980a5ceba30cb4a5f1901e785",
+      "versionId": "iroTj5K30AKr.7K6MGGwdcmKw.ghLwwj"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 0,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/preview.stderr.log",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/preview.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versionId": "glfIQ.KqDbq50uYBus0vuBcpnyH6835d"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1382,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/assembled-source/assembly.json",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/assembled-source/assembly.json",
+      "sha256": "e0920cac15b7a37365c8b4d0cb4b72356c28241707fb87de2ceef83b5f30ab09",
+      "versionId": ".XtKnBMbeATrEykil2kvct5nOcQ5u3aP"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 772,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/assembled-source/references.md",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/assembled-source/references.md",
+      "sha256": "ecfaf20c94a5302419696f7b21df74aa0349a9f1688734a5958bde1bf6ed32dd",
+      "versionId": "EPnUEDJc_sHSa_3dlLaOqLy8KhEWhdI8"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 3799,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/build.json",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/build.json",
+      "sha256": "e040714308c378f42764cffb7aa018e9db52872281d43650d87dc2e272cd59b9",
+      "versionId": "6eUjPAUuUxMM0o.RIErhs6nMj4ijXWYu"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 301260,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/acephale-working-manuscript.pdf",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/acephale-working-manuscript.pdf",
+      "sha256": "70becf5c4f121b2538e7a3a6da58b92291e2a8be8099f0044d65b45a58347637",
+      "versionId": "ZSixfmlnIT4_5nRQdtSozCCOEH1J10KT"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 172251,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-01.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-01.png",
+      "sha256": "d9b8d5c59e58eaf773a759c6fb624de9f82e6e9807493ef8badcde724ec0443d",
+      "versionId": "xOKYS4RQf6wYXUrFTLMLI_KAfES6viUG"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 171843,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-02.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-02.png",
+      "sha256": "bf3a0ee4b8a989a67c717a43225adab289b1e3e3fcb17558191800328419bd25",
+      "versionId": "ptFdmMHD.5DAHAEwf7jceu87IuyI5.k3"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 167440,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-03.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-03.png",
+      "sha256": "19d01c1f7bb075e9275cbd33d85e5405fcc84ddf3b9d157a54125af9c56766b5",
+      "versionId": "Gw9veY1Ms1q42NJJpJxvFvOUZMz5aKE4"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 125735,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-04.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-04.png",
+      "sha256": "acf4db92170b0826e25c00da2c1e2c08badedd16e97b534e91c9b042ef4cef73",
+      "versionId": "dEamZCVp5zdW.FGiBKuj8DXHZHmGI3fC"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 160839,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-05.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-05.png",
+      "sha256": "788cfa855452abf20003ef2b202c1afc7430bf60a994a120ad1c849398d2eeef",
+      "versionId": "9BsLrXSGt3yaiu.Vabb8ydPy4qPWTgJD"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 162349,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-06.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-06.png",
+      "sha256": "17be22beb3fd3b7da791c4fc41183696a1c6ee7768c2ddcd776b78c30ad5bf01",
+      "versionId": "xXOtoFVpUpRsGNC1aTxBmoRZ0aygJyx4"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 171827,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-07.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-07.png",
+      "sha256": "6f172d540cdb7844c34f47bb167253d494a4ed343e4b08e221eb188d608fc466",
+      "versionId": "DgNwohTEXI4PQqv1syXv6En76LeGKV7Q"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 30931,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-08.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-08.png",
+      "sha256": "00ae9fa56c9470c453b131a5db5338d085c853f3ea6009349669f5d6471e0a84",
+      "versionId": "w.BMDm9.350WaMrA0WkXw3BmcMZtDOhG"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 155850,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-09.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-09.png",
+      "sha256": "69eb3a7f0653366c85d6c595e3bc7bb83f1dd7a5f7cad1b2459dca2a93e1a3de",
+      "versionId": "l9h2iaLw5TQOA_ueHTgO5jp6Zoe2_KaE"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 193545,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-10.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-10.png",
+      "sha256": "af5a71b478f04730ddd7fb7ae1996c46cdac03adb82a6d42fef73a13063d71d6",
+      "versionId": "hP31aFzTXyWBwkV5eBP_kuav8H_uV0RP"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 183542,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-11.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-11.png",
+      "sha256": "99e12700bc6104834abd7b2befee774de24f329f8be3dda8407f14a2631b1789",
+      "versionId": "J7AeGd3b2q3n8c7lxaoMy4DJsPuW_1QR"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 172175,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-12.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-12.png",
+      "sha256": "b3dc93ed8435ca39b604188325aacfcb1a2f0fa3bf5540e678145d8c20db71d5",
+      "versionId": "Cvd7UoEJhyQ6oVZb7tKpIbajGzGyqgqV"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 183689,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-13.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-13.png",
+      "sha256": "c538b37e3ffdb82b3113e0058d1868f8effff4d1aded244a8000960d41ac2adb",
+      "versionId": "8KE9uqgDPGgjRceije.DbXdM.ZLwh9KX"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 198488,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-14.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-14.png",
+      "sha256": "26809a73ca5752e155d5b761b3a7739e3e210ebdd599292b5b1fff4ef182fa47",
+      "versionId": "YI0K9qnbNcMNsxk.N63sNtZWy6YdP_8H"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 105457,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-15.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-15.png",
+      "sha256": "2f5424f1e9bf47f0a86b8b51695167aa0f68c310fb2ede5bb9e2094307f174b5",
+      "versionId": "pciCPDEZE33ZspDjvHsIkS83oHsoOasG"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 119372,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/output-01/page-16.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/page-16.png",
+      "sha256": "605dcb2132449d179dc0be9cefd19de43dbc1a8b1007884467fa4b74ad4a1559",
+      "versionId": "S7TElzeXqMD6BmZ188L6nZvyBj5_3qRg"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 715001,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/contact-sheets/contact-01.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/contact-sheets/contact-01.png",
+      "sha256": "a1221ad8a2b4073cc5f4dbe589943cfdace284bfd0743969c1b355ffa8b7765c",
+      "versionId": "NqjutN6JfCBwLgha5c1cywMHFcxtFxVo"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 814327,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/contact-sheets/contact-02.png",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/contact-sheets/contact-02.png",
+      "sha256": "f196accf9a515ec564affa4bce419da685d81ee526cfaa24613592eaf53fd62e",
+      "versionId": "cLWfy1GJX_Qgw8_67jMie0Sx.Xw22Tnm"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 8338,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/paper-render-03/source-binding.json",
+      "path": "/srv/acephale/workspaces/report/paper-render-03/source-binding.json",
+      "sha256": "8e8533cbb579e384c70a4dad07f690e1174d34927e9483d3f43d98185f29c1a5",
+      "versionId": "Tce1QBdWmtV_WNIlLEkfpnKmfnykV5D3"
+    }
+  ],
+  "kind": "acephale-paper03-render-publication-v1",
+  "originalSourcesAndPriorPdfsUnchanged": true,
+  "pageBoundsPassed": true,
+  "pageCount": 16,
+  "rootVisualReviewPending": true,
+  "sourceBinding": {
+    "bytes": 8338,
+    "path": "/srv/acephale/workspaces/report/paper-render-03/source-binding.json",
+    "sha256": "8e8533cbb579e384c70a4dad07f690e1174d34927e9483d3f43d98185f29c1a5"
+  },
+  "status": "working-paper-incomplete-study",
+  "workingDraftEveryPage": true
+}

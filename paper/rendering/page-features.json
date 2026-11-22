@@ -1,0 +1,127 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 2992
+    },
+    {
+      "page": 2,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 3096
+    },
+    {
+      "page": 3,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 2954
+    },
+    {
+      "page": 4,
+      "labels": [
+        "Figure 1."
+      ],
+      "workingDraftHeader": true,
+      "textCharacters": 1453
+    },
+    {
+      "page": 5,
+      "labels": [
+        "Figure 2."
+      ],
+      "workingDraftHeader": true,
+      "textCharacters": 2402
+    },
+    {
+      "page": 6,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 2782
+    },
+    {
+      "page": 7,
+      "labels": [
+        "References"
+      ],
+      "workingDraftHeader": true,
+      "textCharacters": 2970
+    },
+    {
+      "page": 8,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 378
+    },
+    {
+      "page": 9,
+      "labels": [
+        "Appendix A. Frozen methods"
+      ],
+      "workingDraftHeader": true,
+      "textCharacters": 2585
+    },
+    {
+      "page": 10,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 3556
+    },
+    {
+      "page": 11,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 3292
+    },
+    {
+      "page": 12,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 3016
+    },
+    {
+      "page": 13,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 3398
+    },
+    {
+      "page": 14,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 3532
+    },
+    {
+      "page": 15,
+      "labels": [],
+      "workingDraftHeader": true,
+      "textCharacters": 1917
+    },
+    {
+      "page": 16,
+      "labels": [
+        "Appendix B. Analysis plan"
+      ],
+      "workingDraftHeader": true,
+      "textCharacters": 2044
+    }
+  ],
+  "intactTableCell": [
+    {
+      "page": 4,
+      "text": "goal-conditioned",
+      "bbox": [
+        84.0,
+        164.921875,
+        151.6959991455078,
+        172.921875
+      ]
+    }
+  ],
+  "workingDraftEveryPage": true,
+  "contactSheets": [
+    "/srv/acephale/workspaces/report/paper-render-03/contact-sheets/contact-01.png",
+    "/srv/acephale/workspaces/report/paper-render-03/contact-sheets/contact-02.png"
+  ]
+}

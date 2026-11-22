@@ -1,9 +1,12 @@
-# Result boundaries
+# Results status: paper03
 
-Accepted retained components are export, seed17/replay and seed17/analysis. Exact references and successful original command receipts are recorded in evidence-register.json and retained-results-evidence-01.json.
+This is a working paper, not a declaration of full-study completion.
 
-The manuscript reports only the accepted seed17 replay/calibration outputs. The standalone neutral report and paired goals-fixed report have different observed cohorts. The paired estimates apply to 230 jointly scored checkpoints across 34 families; each goals-fixed condition retains 412 failed checkpoints out of 746 declared. No unobserved probability is imputed.
+- Three retained components remain accepted: export, seed17/replay and seed17/analysis.
+- The seed17/opportunity generation06 result is a retained whole-unit profile failure: twenty declared profile rows, eight completed and twelve actor_did_not_request_profiled_read failures. The original minimum is ten completed measurements; readyForAggregation is false. No opportunity aggregate or native performance result is accepted.
+- All twenty row identities, order and evidence hashes were checked against the versioned profile plan and result; the result and process receipts report drainage.
+- Forty earlier pre-model error records remain separate infrastructure history for the same twenty declared checkpoints. They are not forty independent scientific trials.
+- The independent seed29 chain may continue under existing gates. Dependent development2, selection and heldout work remains blocked by the failed prerequisite. Planned counts are not completed counts.
+- No profile failure is relabeled, discarded or replaced. No latency, speedup or native task score is estimated from the selected eight completed rows.
 
-Two operational executions of the same twenty seed17 opportunity checkpoints produced forty retained pre-model error records: twenty native-dependency import errors and twenty historical task-path errors. These are not forty independent trials. The later no-network prefix-construction check built all twenty prefixes but produced no model request or timing measurement. Deployment ownership is external; this manuscript workspace makes no claim about later live progress.
-
-Opportunity, native development, heldout selection and heldout outcomes require accepted closure evidence before insertion. No speedup, native success rate, full benchmark result or full-study completion is asserted. Empty future result tables contain no synthetic values.
+Paper02 and its published PDF remain immutable. Paper03 adds only the new verified negative outcome, count figure and provenance; original methods, accepted replay reports and their statistics are unchanged.

@@ -61,7 +61,11 @@ def render_markdown(text,styles):
                 elif q.type=='inline':row.append(Paragraph(inline(q),styles['Cell']))
                 elif q.type=='tr_close':rows.append(row)
                 j+=1
-            n=max(map(len,rows));tbl=LongTable(rows,colWidths=[468/n]*n,repeatRows=1,hAlign='LEFT')
+            n=max(map(len,rows))
+            widths=[468/n]*n
+            if n==6 and rows[0][0].getPlainText()=='Retained report / condition':
+                widths=[120]+[(468-120)/5]*5
+            tbl=LongTable(rows,colWidths=widths,repeatRows=1,hAlign='LEFT')
             tbl.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#edf1f4')),('VALIGN',(0,0),(-1,-1),'TOP'),('LINEBELOW',(0,0),(-1,0),.7,colors.HexColor('#76818a')),('LINEBELOW',(0,1),(-1,-1),.25,colors.HexColor('#d6dce0')),('LEFTPADDING',(0,0),(-1,-1),6),('RIGHTPADDING',(0,0),(-1,-1),6),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]));flow.extend([tbl,Spacer(1,10)]);i=j
         elif t.type=='hr':flow.append(Spacer(1,12))
         i+=1
@@ -85,10 +89,13 @@ def main():
     for n,size in ((2,13),(3,11),(4,10)):styles['H'+str(n)]=ParagraphStyle('H'+str(n),parent=styles['Body'],fontName='BodyBold',fontSize=size,leading=size+4,spaceBefore=13,spaceAfter=7,keepWithNext=True)
     styles['CodeBlock']=ParagraphStyle('CodeBlock',fontName='Code',fontSize=7,leading=9,spaceBefore=4,spaceAfter=8)
     styles['Cell']=ParagraphStyle('Cell',parent=styles['Body'],fontSize=8,leading=11,spaceAfter=0,splitLongWords=True)
-    names=['manuscript.md','related-work.md','methods.md','analysis-plan.md'];story=[];inputs=[]
+    names=['manuscript.md','related-work.md','references.md','methods.md','analysis-plan.md'];story=[];inputs=[]
     for n,name in enumerate(names):
         path=args.source/name;b=path.read_bytes();inputs.append({'path':str(path),'sha256':hashlib.sha256(b).hexdigest()})
-        if n:story.append(PageBreak())
+        if name in ('methods.md','analysis-plan.md'):
+            story.append(PageBreak())
+            label='Appendix A. Frozen methods' if name=='methods.md' else 'Appendix B. Analysis plan'
+            story.append(Paragraph(label,styles['H2']))
         story.extend(render_markdown(b.decode('utf-8'),styles))
     out=args.output/'acephale-working-manuscript.pdf'
     SimpleDocTemplate(str(out),pagesize=(612,792),rightMargin=72,leftMargin=72,topMargin=56,bottomMargin=54,title='Acephale: source-grounded goal conditioning (working draft)',author='').build(story,onFirstPage=page,onLaterPages=page)

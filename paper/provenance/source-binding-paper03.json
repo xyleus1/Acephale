@@ -1,0 +1,293 @@
+{
+  "checks": {
+    "acceptedReplayFigureByteIdentical": true,
+    "executionFilesChanged": false,
+    "kind": "acephale-paper03-publication-checks-v1",
+    "methodsByteIdentical": true,
+    "newContentSecretScan": {
+      "files": 20,
+      "findings": []
+    },
+    "newFigureCountsOnly": true,
+    "newModelCallsOrTrialReruns": false,
+    "newScientificStatisticsComputed": false,
+    "privateVerificationCopiesExcluded": true,
+    "unchangedParentChecksReused": 31,
+    "wholeStudyCompleted": false
+  },
+  "files": [
+    {
+      "bytes": 2088,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/README.md",
+      "sha256": "3060db9b3868f7586ccac3c1b24fd47c615d5acc15a999ea2e7fd43a78e7f267"
+    },
+    {
+      "bytes": 2052,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/analysis-plan.md",
+      "sha256": "63ee9ddc1e5c0394cf8ae9a69fcd52484733b354f892b7b1aeda0c5f2c2c2e5d"
+    },
+    {
+      "bytes": 774,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/evidence-register.json",
+      "sha256": "2e839389d445e4868da02a786746e8185379d389380d635ab5af41b052943a5a"
+    },
+    {
+      "bytes": 1322,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/fact-check.json",
+      "sha256": "e414e52aaa98401ac53dc0812b94595a1c81b249bf934c2668cb2bbfbf9cb616"
+    },
+    {
+      "bytes": 422,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figure-reproducibility.json",
+      "sha256": "bd0cff6b1710cabd4af588402f14d6b421cdd134d7f5ae3624e9b7289f7489d2"
+    },
+    {
+      "bytes": 2011,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/layouts.json",
+      "sha256": "8265c0a5b9d1d122ed24b72f83b338a7487d8960aa0175ecc268d48ce995959a"
+    },
+    {
+      "bytes": 1880,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/method-flow.svg",
+      "sha256": "84e10baa466be63ab76793fc71273fb2f207ab15d5751c85e3a78be3cac01e36"
+    },
+    {
+      "bytes": 1350,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.json",
+      "sha256": "973bdf39616899691892ae2dcb9a5ba8ad8fa10489ce60c5498a9ced1799c7eb"
+    },
+    {
+      "bytes": 25363,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.pdf",
+      "sha256": "906a72bf68c661ef47976405b6163c5af273bf939f35b9ad1c75fe4ec7a7f6dd"
+    },
+    {
+      "bytes": 59221,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.png",
+      "sha256": "d37580b9cf08164f9557ee6ed3b076e78d4361a2977f2f06826de0c83f1776ba"
+    },
+    {
+      "bytes": 49257,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.svg",
+      "sha256": "cd96393d352abbbff69ef466ef4192a73f10422e21b4ed2fd375f4945968e8a7"
+    },
+    {
+      "bytes": 2620,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.json",
+      "sha256": "61477b92a86b0e72b73a0fc65ecde8362c4f6fadf9d033055e3022199a0f30fe"
+    },
+    {
+      "bytes": 28186,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.pdf",
+      "sha256": "d4d1fb0200b1258a165926230d3c36d1f90e3296e6703cdd118adb3ba4caf4b6"
+    },
+    {
+      "bytes": 132777,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.png",
+      "sha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88"
+    },
+    {
+      "bytes": 18058,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.svg",
+      "sha256": "f393e0a721afede8783f1ea1c1a709d16302e6886c03882d604595b522cff7c7"
+    },
+    {
+      "bytes": 16316,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/manuscript.md",
+      "sha256": "1a13de21cb678eac4b4384f176c4deea118a37e1eee14cc3224bc0b4314c26f2"
+    },
+    {
+      "bytes": 21829,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/methods.md",
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "bytes": 23923,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome-evidence.json",
+      "sha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c"
+    },
+    {
+      "bytes": 2990,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome.md",
+      "sha256": "0f11878403c7121df87cc72e48465c5ff1e45407bf732f412919840f246f4f74"
+    },
+    {
+      "bytes": 535,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/opportunity-figure-reproducibility.json",
+      "sha256": "e7148c05b0a03a9e9cd86a2d2d3a2656ba11f76ef98cd3fba0f6485082c329d0"
+    },
+    {
+      "bytes": 2318,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/plot_profile_outcome.py",
+      "sha256": "6aaa8ce80f5a8c65e0875a78b65ff487d39951147229bc28c11f32a38dff4253"
+    },
+    {
+      "bytes": 4776,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/plot_retained.py",
+      "sha256": "b07ddcab927c487f0b82eb9da5f7a8121e1e72c41697ce36e033cc33d55b9945"
+    },
+    {
+      "bytes": 46844,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/posthoc/posthoc-inventory.json",
+      "sha256": "7ee1d4b8a7bdb2a0e296779f98ebde963f38e49573b182a6a33d8290944c1717"
+    },
+    {
+      "bytes": 3834,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/posthoc/posthoc-note.md",
+      "sha256": "15c22263b79c3d439120a5eafe21fa1f614001768537891d10603159d45da921"
+    },
+    {
+      "bytes": 2817,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/provenance/paper02-evidence-register.json",
+      "sha256": "5a1cb7f1568ea35f17ee85ff800ab9aaa4944b8693f955eac9ad2ac98e50d2a3"
+    },
+    {
+      "bytes": 1308,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/provenance/paper02-fact-check.json",
+      "sha256": "b459b34a50d72fbf2a46921002b30d3976192d38d64aa9e24e04c6fbb5b558d8"
+    },
+    {
+      "bytes": 23929,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/provenance/paper02-publication.json",
+      "sha256": "a77ccdf74911764ef6d93fe141479d80e448847e59296bce009f2ae2f5f47a10"
+    },
+    {
+      "bytes": 1010,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/references.bib",
+      "sha256": "d61d74e232591e80074f1d3db171eba26c135f00910b58806238cb254cd3aade"
+    },
+    {
+      "bytes": 2540,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/related-work.md",
+      "sha256": "b7a09a3ffbc1564f2b5d8c6879d69b18ba411cd1e2cc836cdca42fcfbcf33c44"
+    },
+    {
+      "bytes": 1422,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/results-status.md",
+      "sha256": "77bb80f748ce8a4ce821f916b1b20e8b79d1c29b9f84f8197b470559a2fe0171"
+    },
+    {
+      "bytes": 2884,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/retained-results-evidence-01.json",
+      "sha256": "ddbc886faf2c2d0a0f64d0737d050d71748880f876988530515fc55d09395b9d"
+    },
+    {
+      "bytes": 3009,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/retained-results.md",
+      "sha256": "31490907b27dd25dd10abb8b3c4e0b4b07636c74bcf74b97a979bd06d08624c1"
+    },
+    {
+      "bytes": 669,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/INFRA_NATIVE_PROFILE.md",
+      "sha256": "b26e463027ee01ee0984582437dce208b4f96d4fa58943b1926f95c1c4d25a50"
+    },
+    {
+      "bytes": 21829,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/METHODS.md",
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "bytes": 12506,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/continuation-dag.json",
+      "sha256": "be5ac0328d8a934186793ae546ff2f1669a651718d97121ac8bbd80e8d228be5"
+    },
+    {
+      "bytes": 1662,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/findings.json",
+      "sha256": "9595e812eaf4e901311dccd5e802ab3b9f036bcb6487987e324275f8a0415351"
+    },
+    {
+      "bytes": 4254,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goal-reliability.json",
+      "sha256": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e"
+    },
+    {
+      "bytes": 1487,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goals-fixed-score-command-result.json",
+      "sha256": "ee52de34a09028901c6765633a59f9565e4fcc34a35a009188c4fc88015be61b"
+    },
+    {
+      "bytes": 511,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goals-fixed-score-manifest.json",
+      "sha256": "3ce3d7dfe4c7ce2f118ef658664a1fbeb3cd61b972e437bf2a74a318814b32dc"
+    },
+    {
+      "bytes": 2842,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goals-fixed-score-report.json",
+      "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687"
+    },
+    {
+      "bytes": 1495,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-neutral-fixed-score-command-result.json",
+      "sha256": "8e8cce53618edf4ce90febc3e877c1957a95ca5bf5b53ab28be8f8d70bda20c5"
+    },
+    {
+      "bytes": 509,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-neutral-fixed-score-manifest.json",
+      "sha256": "8b7ef2a63d672e1c2bedc9578cb332dead746373c58c3834f2c1dac141f66a05"
+    },
+    {
+      "bytes": 1733,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-neutral-fixed-score-report.json",
+      "sha256": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6"
+    },
+    {
+      "bytes": 7128,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/staged-study-2026-11-13.md",
+      "sha256": "8f07b9847c22a79f8b457dd831630d4441ccd033c65c7b5b0808ee4150a26d33"
+    },
+    {
+      "bytes": 8238,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/vllm-lora-coverage-01-findings.json",
+      "sha256": "87eecb101df44a6ae2435e0af7665a7cb7322212221c150f2f0aa08c6cefe876"
+    },
+    {
+      "bytes": 66,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/costs.csv",
+      "sha256": "2194af38f6ed5256f4ff3b7bf59545f4ce2bf4503f461ce7517ebcef7d145979"
+    },
+    {
+      "bytes": 138,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/native.csv",
+      "sha256": "8b40656bd87a2943b95d58b584b2f530b040a248d1a38f853b11cdcd847a5a2f"
+    },
+    {
+      "bytes": 277,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/opportunity-outcomes.csv",
+      "sha256": "d122009a1fcb6333139fe48e45552947101489012c708d995e86f658adfadab9"
+    },
+    {
+      "bytes": 115,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/opportunity.csv",
+      "sha256": "cf8bbc0114154f837419514998212bf6c21f8556dc7c3a247642f84629fe44fe"
+    },
+    {
+      "bytes": 621,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/paired-replay.csv",
+      "sha256": "c96558e55ea3a59b097cbd359a1c68063bf084e1d603f5c9275e7d24bcf2e8a2"
+    },
+    {
+      "bytes": 561,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/replay.csv",
+      "sha256": "cad07c3208df73fa9782dd802214d7bd9a92cd6e792e9901babf354fa7231774"
+    },
+    {
+      "bytes": 463,
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/publication-checks.json",
+      "sha256": "f075bb3e20220531307519c96822b40a74abb482304d7e824984da225458ab1c"
+    }
+  ],
+  "kind": "acephale-paper03-source-binding-v1",
+  "newOutcomeEvidence": {
+    "bytes": 23923,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome-evidence.json",
+    "sha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c"
+  },
+  "newResultSha256": "63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c",
+  "parentPublication": {
+    "bytes": 23929,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-02/publication.json",
+    "sha256": "a77ccdf74911764ef6d93fe141479d80e448847e59296bce009f2ae2f5f47a10"
+  },
+  "status": "working-draft-retained-replay-and-failed-opportunity-profile"
+}

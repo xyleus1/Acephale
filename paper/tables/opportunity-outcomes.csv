@@ -1,0 +1,2 @@
+seed,operational_generation,declared_profile_rows,completed_measurements,retained_profile_failures,failure_type,minimum_completed_required,ready_for_aggregation,unit_completed,accepted_performance_estimate
+17,06,20,8,12,actor_did_not_request_profiled_read,10,false,false,false

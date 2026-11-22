@@ -1,0 +1,46 @@
+{
+  "copiedText": [
+    {
+      "bytes": 16316,
+      "name": "manuscript.md",
+      "sha256": "1a13de21cb678eac4b4384f176c4deea118a37e1eee14cc3224bc0b4314c26f2"
+    },
+    {
+      "bytes": 2540,
+      "name": "related-work.md",
+      "sha256": "b7a09a3ffbc1564f2b5d8c6879d69b18ba411cd1e2cc836cdca42fcfbcf33c44"
+    },
+    {
+      "bytes": 21829,
+      "name": "methods.md",
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "bytes": 2052,
+      "name": "analysis-plan.md",
+      "sha256": "63ee9ddc1e5c0394cf8ae9a69fcd52484733b354f892b7b1aeda0c5f2c2c2e5d"
+    },
+    {
+      "bytes": 1010,
+      "name": "references.bib",
+      "sha256": "d61d74e232591e80074f1d3db171eba26c135f00910b58806238cb254cd3aade"
+    }
+  ],
+  "generatedReferences": {
+    "bytes": 772,
+    "sha256": "ecfaf20c94a5302419696f7b21df74aa0349a9f1688734a5958bde1bf6ed32dd",
+    "sourceBibSha256": "d61d74e232591e80074f1d3db171eba26c135f00910b58806238cb254cd3aade"
+  },
+  "kind": "acephale-paper-final-layout-assembly-v1",
+  "order": [
+    "manuscript.md",
+    "related-work.md",
+    "references.md",
+    "Appendix A: methods.md",
+    "Appendix B: analysis-plan.md"
+  ],
+  "originalTextUnchanged": true,
+  "source": "/srv/acephale/workspaces/report/manuscript-aws-03",
+  "statisticalComputationPerformed": false,
+  "status": "working-draft-not-final-results"
+}

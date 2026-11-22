@@ -1,110 +1,117 @@
 {
   "pdf": {
-    "path": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/acephale-working-manuscript.pdf",
-    "sha256": "e61969cb91ccd51286238a01fc0c10a2391b04e54bf4cc7973529a0aa0a5b95d"
+    "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/acephale-working-manuscript.pdf",
+    "sha256": "70becf5c4f121b2538e7a3a6da58b92291e2a8be8099f0044d65b45a58347637"
   },
   "pages": [
     {
       "page": 1,
-      "textCharacters": 2902,
+      "textCharacters": 2992,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 2,
-      "textCharacters": 3064,
+      "textCharacters": 3096,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 3,
-      "textCharacters": 2801,
+      "textCharacters": 2954,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 4,
-      "textCharacters": 1379,
+      "textCharacters": 1453,
       "images": 1,
       "textOutsidePage": [],
       "containsFigureCaption": true
     },
     {
       "page": 5,
-      "textCharacters": 2750,
-      "images": 0,
+      "textCharacters": 2402,
+      "images": 1,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 6,
-      "textCharacters": 449,
+      "textCharacters": 2782,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 7,
-      "textCharacters": 2313,
+      "textCharacters": 2970,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 8,
-      "textCharacters": 2712,
+      "textCharacters": 378,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 9,
-      "textCharacters": 3460,
+      "textCharacters": 2585,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 10,
-      "textCharacters": 3310,
+      "textCharacters": 3556,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 11,
-      "textCharacters": 2939,
+      "textCharacters": 3292,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 12,
-      "textCharacters": 3398,
+      "textCharacters": 3016,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 13,
-      "textCharacters": 3532,
+      "textCharacters": 3398,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 14,
-      "textCharacters": 1917,
+      "textCharacters": 3532,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false
     },
     {
       "page": 15,
-      "textCharacters": 2018,
+      "textCharacters": 1917,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 16,
+      "textCharacters": 2044,
       "images": 0,
       "textOutsidePage": [],
       "containsFigureCaption": false

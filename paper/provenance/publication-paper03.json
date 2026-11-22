@@ -1,0 +1,556 @@
+{
+  "changedFilesUploaded": 22,
+  "files": [
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2088,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/README.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/README.md",
+      "reusedParentVersion": false,
+      "sha256": "3060db9b3868f7586ccac3c1b24fd47c615d5acc15a999ea2e7fd43a78e7f267",
+      "versionId": ".nrnv4oyiTLAxZJbYf.0qEMkG0zmYtQE"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2052,
+      "key": "audit/report/manuscript-aws-02/analysis-plan.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/analysis-plan.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/analysis-plan.md",
+      "reusedParentVersion": true,
+      "sha256": "63ee9ddc1e5c0394cf8ae9a69fcd52484733b354f892b7b1aeda0c5f2c2c2e5d",
+      "versionId": ".xG9kkkcLTSZWoD48k8efvZWI1UlEdx5"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 774,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/evidence-register.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/evidence-register.json",
+      "reusedParentVersion": false,
+      "sha256": "2e839389d445e4868da02a786746e8185379d389380d635ab5af41b052943a5a",
+      "versionId": "LBDvu93fE9l4PikwLCQFF52XRA8v.34g"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1322,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/fact-check.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/fact-check.json",
+      "reusedParentVersion": false,
+      "sha256": "e414e52aaa98401ac53dc0812b94595a1c81b249bf934c2668cb2bbfbf9cb616",
+      "versionId": "1VjaYvt8K_e.cxGyw7ficyLGUaGUIZf."
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 422,
+      "key": "audit/report/manuscript-aws-02/figure-reproducibility.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/figure-reproducibility.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figure-reproducibility.json",
+      "reusedParentVersion": true,
+      "sha256": "bd0cff6b1710cabd4af588402f14d6b421cdd134d7f5ae3624e9b7289f7489d2",
+      "versionId": "SifaXJztrNr6p9JoNyW9oPUSSfXda8ms"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2011,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/figures/layouts.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/layouts.json",
+      "reusedParentVersion": false,
+      "sha256": "8265c0a5b9d1d122ed24b72f83b338a7487d8960aa0175ecc268d48ce995959a",
+      "versionId": "1g9ay5draQoaBL_fTrCZncMSt7pSXbi0"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1880,
+      "key": "audit/report/manuscript-aws-02/figures/method-flow.svg",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/figures/method-flow.svg",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/method-flow.svg",
+      "reusedParentVersion": true,
+      "sha256": "84e10baa466be63ab76793fc71273fb2f207ab15d5751c85e3a78be3cac01e36",
+      "versionId": "L9mPbLA..jdVTGOmceB7R1H6HO4oJQYu"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1350,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/figures/seed17-opportunity-outcome.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.json",
+      "reusedParentVersion": false,
+      "sha256": "973bdf39616899691892ae2dcb9a5ba8ad8fa10489ce60c5498a9ced1799c7eb",
+      "versionId": "8LHbogmZtZS790.D8S1GIfrqwChDPd8R"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 25363,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/figures/seed17-opportunity-outcome.pdf",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.pdf",
+      "reusedParentVersion": false,
+      "sha256": "906a72bf68c661ef47976405b6163c5af273bf939f35b9ad1c75fe4ec7a7f6dd",
+      "versionId": "vrGS_xI3LFaP1eCHt0CvcRgrVnNJd1VL"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 59221,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/figures/seed17-opportunity-outcome.png",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.png",
+      "reusedParentVersion": false,
+      "sha256": "d37580b9cf08164f9557ee6ed3b076e78d4361a2977f2f06826de0c83f1776ba",
+      "versionId": "hRvCZVufohm5ZQOh4gAKzQtt1gWM.Yd9"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 49257,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/figures/seed17-opportunity-outcome.svg",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-opportunity-outcome.svg",
+      "reusedParentVersion": false,
+      "sha256": "cd96393d352abbbff69ef466ef4192a73f10422e21b4ed2fd375f4945968e8a7",
+      "versionId": "47YoPpoMXVYc6ZRoetJ5NhVp7BJ7pNoz"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2620,
+      "key": "audit/report/manuscript-aws-02/figures/seed17-retained-evidence.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/figures/seed17-retained-evidence.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.json",
+      "reusedParentVersion": true,
+      "sha256": "61477b92a86b0e72b73a0fc65ecde8362c4f6fadf9d033055e3022199a0f30fe",
+      "versionId": "o1xOnKYH0j40fkd.C6_cOi8AQZjT6Me5"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 28186,
+      "key": "audit/report/manuscript-aws-02/figures/seed17-retained-evidence.pdf",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/figures/seed17-retained-evidence.pdf",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.pdf",
+      "reusedParentVersion": true,
+      "sha256": "d4d1fb0200b1258a165926230d3c36d1f90e3296e6703cdd118adb3ba4caf4b6",
+      "versionId": "WBQv_eNY.nxZUXx5MY.vcblJZ_5gP1gf"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 132777,
+      "key": "audit/report/manuscript-aws-02/figures/seed17-retained-evidence.png",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/figures/seed17-retained-evidence.png",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.png",
+      "reusedParentVersion": true,
+      "sha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88",
+      "versionId": "oA9fiXETNDLq8rvf0UKj6F9VQxRIOCik"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 18058,
+      "key": "audit/report/manuscript-aws-02/figures/seed17-retained-evidence.svg",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/figures/seed17-retained-evidence.svg",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/figures/seed17-retained-evidence.svg",
+      "reusedParentVersion": true,
+      "sha256": "f393e0a721afede8783f1ea1c1a709d16302e6886c03882d604595b522cff7c7",
+      "versionId": "TX4LXLujdgIg_imszBm0dOrITCfGR.MB"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 16316,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/manuscript.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/manuscript.md",
+      "reusedParentVersion": false,
+      "sha256": "1a13de21cb678eac4b4384f176c4deea118a37e1eee14cc3224bc0b4314c26f2",
+      "versionId": "S0RosOLESXCYw7K_KFAIRlPazgR1aRxp"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 21829,
+      "key": "audit/report/manuscript-aws-02/methods.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/methods.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/methods.md",
+      "reusedParentVersion": true,
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58",
+      "versionId": "CNrrSYH0Slj_cLNfs3dpQL69fyMOn3DB"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 23923,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/negative-outcome-evidence.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome-evidence.json",
+      "reusedParentVersion": false,
+      "sha256": "99da158655d476fd89af049824e9f82ae1f9225bf533aa43ac1ca69c7713376c",
+      "versionId": "vTOWE0xc8e_t_V0J675mnQ3ulVxjGNFG"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2990,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/negative-outcome.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/negative-outcome.md",
+      "reusedParentVersion": false,
+      "sha256": "0f11878403c7121df87cc72e48465c5ff1e45407bf732f412919840f246f4f74",
+      "versionId": "zGKU5xqNUYhGH8XYnK7wb6Z3jwMxs1Vd"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 535,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/opportunity-figure-reproducibility.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/opportunity-figure-reproducibility.json",
+      "reusedParentVersion": false,
+      "sha256": "e7148c05b0a03a9e9cd86a2d2d3a2656ba11f76ef98cd3fba0f6485082c329d0",
+      "versionId": "954AW44loezBS_wmeziHs5fBIm2VEX8W"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2318,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/plot_profile_outcome.py",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/plot_profile_outcome.py",
+      "reusedParentVersion": false,
+      "sha256": "6aaa8ce80f5a8c65e0875a78b65ff487d39951147229bc28c11f32a38dff4253",
+      "versionId": "ijeIZMUoMlXMHrjK.yuD2pq3e2c_RlT1"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 4776,
+      "key": "audit/report/manuscript-aws-02/plot_retained.py",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/plot_retained.py",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/plot_retained.py",
+      "reusedParentVersion": true,
+      "sha256": "b07ddcab927c487f0b82eb9da5f7a8121e1e72c41697ce36e033cc33d55b9945",
+      "versionId": "V7wXVG2_rlmSb65DjBqWPfciOyt8NBe_"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 46844,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/posthoc/posthoc-inventory.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/posthoc/posthoc-inventory.json",
+      "reusedParentVersion": false,
+      "sha256": "7ee1d4b8a7bdb2a0e296779f98ebde963f38e49573b182a6a33d8290944c1717",
+      "versionId": "cbHdO3JAs0vU84G6KspA4Fgxlqn_w2Hc"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 3834,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/posthoc/posthoc-note.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/posthoc/posthoc-note.md",
+      "reusedParentVersion": false,
+      "sha256": "15c22263b79c3d439120a5eafe21fa1f614001768537891d10603159d45da921",
+      "versionId": "nXnEm_beYTurF2hgpWUwCuamm3b0b.8H"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2817,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/provenance/paper02-evidence-register.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/provenance/paper02-evidence-register.json",
+      "reusedParentVersion": false,
+      "sha256": "5a1cb7f1568ea35f17ee85ff800ab9aaa4944b8693f955eac9ad2ac98e50d2a3",
+      "versionId": "GXpE3KfzCbytax4cDGXTccz5gt5ruG_8"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1308,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/provenance/paper02-fact-check.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/provenance/paper02-fact-check.json",
+      "reusedParentVersion": false,
+      "sha256": "b459b34a50d72fbf2a46921002b30d3976192d38d64aa9e24e04c6fbb5b558d8",
+      "versionId": "ehtgntWizuxhC4oC2Q.Ea.le5sPAVO4d"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 23929,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/provenance/paper02-publication.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/provenance/paper02-publication.json",
+      "reusedParentVersion": false,
+      "sha256": "a77ccdf74911764ef6d93fe141479d80e448847e59296bce009f2ae2f5f47a10",
+      "versionId": "Fxc40ZxEewUROd3vSpNUatUrqFEhOUdp"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 463,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/publication-checks.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/publication-checks.json",
+      "reusedParentVersion": false,
+      "sha256": "f075bb3e20220531307519c96822b40a74abb482304d7e824984da225458ab1c",
+      "versionId": "rvLOBdoLQNuqtgUP2fZcwnjbGA_W6tEs"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1010,
+      "key": "audit/report/manuscript-aws-02/references.bib",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/references.bib",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/references.bib",
+      "reusedParentVersion": true,
+      "sha256": "d61d74e232591e80074f1d3db171eba26c135f00910b58806238cb254cd3aade",
+      "versionId": "2luIGGQXMRti.vGTWLh2o.ZHfSqG_zbz"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2540,
+      "key": "audit/report/manuscript-aws-02/related-work.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/related-work.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/related-work.md",
+      "reusedParentVersion": true,
+      "sha256": "b7a09a3ffbc1564f2b5d8c6879d69b18ba411cd1e2cc836cdca42fcfbcf33c44",
+      "versionId": "zAFqyaA1fU6TFqunAKO3b.XTfeh36vd8"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1422,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/results-status.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/results-status.md",
+      "reusedParentVersion": false,
+      "sha256": "77bb80f748ce8a4ce821f916b1b20e8b79d1c29b9f84f8197b470559a2fe0171",
+      "versionId": "VjifqYXU1BJL_m5yMrCdZOOgFDlkKGoC"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2884,
+      "key": "audit/report/manuscript-aws-02/retained-results-evidence-01.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/retained-results-evidence-01.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/retained-results-evidence-01.json",
+      "reusedParentVersion": true,
+      "sha256": "ddbc886faf2c2d0a0f64d0737d050d71748880f876988530515fc55d09395b9d",
+      "versionId": "7_34d5Eg5HHO2o2tiFEHKJ5xPHKlh.t7"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 3009,
+      "key": "audit/report/manuscript-aws-02/retained-results.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/retained-results.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/retained-results.md",
+      "reusedParentVersion": true,
+      "sha256": "31490907b27dd25dd10abb8b3c4e0b4b07636c74bcf74b97a979bd06d08624c1",
+      "versionId": "SLhHhNYqWmrzuAumK94lTxo6nj7kKW6l"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 12293,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/source-binding.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/source-binding.json",
+      "reusedParentVersion": false,
+      "sha256": "9ff16a97db3c4e91bb0de96dd1083b9d3b62c8f6ba56f270b17e0ea953bd2de1",
+      "versionId": "mdo9ErwJAjtN.BXieafP6f3JU3RNU970"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 669,
+      "key": "audit/report/manuscript-aws-02/sources/INFRA_NATIVE_PROFILE.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/INFRA_NATIVE_PROFILE.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/INFRA_NATIVE_PROFILE.md",
+      "reusedParentVersion": true,
+      "sha256": "b26e463027ee01ee0984582437dce208b4f96d4fa58943b1926f95c1c4d25a50",
+      "versionId": "uWEsmghCQn1IOrmBc4eD8pvQf_rd3xHq"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 21829,
+      "key": "audit/report/manuscript-aws-02/sources/METHODS.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/METHODS.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/METHODS.md",
+      "reusedParentVersion": true,
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58",
+      "versionId": "CAK_mXaSRDSL6b7etYewfryW4uO84XLf"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 12506,
+      "key": "audit/report/manuscript-aws-02/sources/continuation-dag.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/continuation-dag.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/continuation-dag.json",
+      "reusedParentVersion": true,
+      "sha256": "be5ac0328d8a934186793ae546ff2f1669a651718d97121ac8bbd80e8d228be5",
+      "versionId": "Tbnfa1NWiIs1HRG5NJuB3lhdNVV3Sa8r"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1662,
+      "key": "audit/report/manuscript-aws-02/sources/findings.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/findings.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/findings.json",
+      "reusedParentVersion": true,
+      "sha256": "9595e812eaf4e901311dccd5e802ab3b9f036bcb6487987e324275f8a0415351",
+      "versionId": "t3.DgPxr9UllifcyZMalCqNQoL061KO0"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 4254,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-goal-reliability.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-goal-reliability.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goal-reliability.json",
+      "reusedParentVersion": true,
+      "sha256": "872c1b28c5774d41dba14ef73716e9e470af1d1277566ffa60aae7bb712a9e5e",
+      "versionId": "ObbhuBAq0cVaK4fNxZ0j3bS5G1j6Wf3k"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1487,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-goals-fixed-score-command-result.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-goals-fixed-score-command-result.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goals-fixed-score-command-result.json",
+      "reusedParentVersion": true,
+      "sha256": "ee52de34a09028901c6765633a59f9565e4fcc34a35a009188c4fc88015be61b",
+      "versionId": "vZegY0E0x2RqvlDht.1rOYTDLQLhTKRG"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 511,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-goals-fixed-score-manifest.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-goals-fixed-score-manifest.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goals-fixed-score-manifest.json",
+      "reusedParentVersion": true,
+      "sha256": "3ce3d7dfe4c7ce2f118ef658664a1fbeb3cd61b972e437bf2a74a318814b32dc",
+      "versionId": "N4E.X5qKsW5ABNIBJZb9h.GAUQ5SVYcZ"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 2842,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-goals-fixed-score-report.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-goals-fixed-score-report.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-goals-fixed-score-report.json",
+      "reusedParentVersion": true,
+      "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687",
+      "versionId": "pSuoly_GBaeVI9Uxb7kcPW5crpERGmZx"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1495,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-neutral-fixed-score-command-result.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-neutral-fixed-score-command-result.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-neutral-fixed-score-command-result.json",
+      "reusedParentVersion": true,
+      "sha256": "8e8cce53618edf4ce90febc3e877c1957a95ca5bf5b53ab28be8f8d70bda20c5",
+      "versionId": "Uaj2uhwNGQITzELxJPjyZ56jSN1Tmg4K"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 509,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-neutral-fixed-score-manifest.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-neutral-fixed-score-manifest.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-neutral-fixed-score-manifest.json",
+      "reusedParentVersion": true,
+      "sha256": "8b7ef2a63d672e1c2bedc9578cb332dead746373c58c3834f2c1dac141f66a05",
+      "versionId": "ISWH14ViONg6pfg8fDYsbSrdan7xbOb7"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 1733,
+      "key": "audit/report/manuscript-aws-02/sources/seed17-neutral-fixed-score-report.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/seed17-neutral-fixed-score-report.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/seed17-neutral-fixed-score-report.json",
+      "reusedParentVersion": true,
+      "sha256": "d0eb584b34f682d47538780307c221ed9f376cec0a87323e7fc78447e3f35ab6",
+      "versionId": "x4m.BV31Xw7kyVZMXAXoYetWvXix43.S"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 7128,
+      "key": "audit/report/manuscript-aws-02/sources/staged-study-2026-11-13.md",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/staged-study-2026-11-13.md",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/staged-study-2026-11-13.md",
+      "reusedParentVersion": true,
+      "sha256": "8f07b9847c22a79f8b457dd831630d4441ccd033c65c7b5b0808ee4150a26d33",
+      "versionId": "YbQKdsB4lf4yy1Y8VO2hScowTXGA_WAR"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 8238,
+      "key": "audit/report/manuscript-aws-02/sources/vllm-lora-coverage-01-findings.json",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/sources/vllm-lora-coverage-01-findings.json",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/sources/vllm-lora-coverage-01-findings.json",
+      "reusedParentVersion": true,
+      "sha256": "87eecb101df44a6ae2435e0af7665a7cb7322212221c150f2f0aa08c6cefe876",
+      "versionId": "6d4OYLIzJghOFG9x2O0A0keSDlQ4SYIt"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 66,
+      "key": "audit/report/manuscript-aws-02/tables/costs.csv",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/tables/costs.csv",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/costs.csv",
+      "reusedParentVersion": true,
+      "sha256": "2194af38f6ed5256f4ff3b7bf59545f4ce2bf4503f461ce7517ebcef7d145979",
+      "versionId": "tb2tx1cA1PdNVfRhNxHfWp5lpSyRDa2r"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 138,
+      "key": "audit/report/manuscript-aws-02/tables/native.csv",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/tables/native.csv",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/native.csv",
+      "reusedParentVersion": true,
+      "sha256": "8b40656bd87a2943b95d58b584b2f530b040a248d1a38f853b11cdcd847a5a2f",
+      "versionId": "FeNqy.vfMi.3vynEYE832V9FD2vy4rmS"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 277,
+      "checksumType": "FULL_OBJECT",
+      "key": "audit/report/manuscript-aws-03/tables/opportunity-outcomes.csv",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/opportunity-outcomes.csv",
+      "reusedParentVersion": false,
+      "sha256": "d122009a1fcb6333139fe48e45552947101489012c708d995e86f658adfadab9",
+      "versionId": "qdlAjpB7yvcVcQixWTnXRrc8XXMZ1m8I"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 115,
+      "key": "audit/report/manuscript-aws-02/tables/opportunity.csv",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/tables/opportunity.csv",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/opportunity.csv",
+      "reusedParentVersion": true,
+      "sha256": "cf8bbc0114154f837419514998212bf6c21f8556dc7c3a247642f84629fe44fe",
+      "versionId": "bD53CoFh3tLTCD3QAUfzzWfyIZv5Bfl3"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 621,
+      "key": "audit/report/manuscript-aws-02/tables/paired-replay.csv",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/tables/paired-replay.csv",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/paired-replay.csv",
+      "reusedParentVersion": true,
+      "sha256": "c96558e55ea3a59b097cbd359a1c68063bf084e1d603f5c9275e7d24bcf2e8a2",
+      "versionId": "kCoaEvLtSX9QDyQ28iEJ33JQDkFAb4FR"
+    },
+    {
+      "bucket": "acephale-aws-20261121-971290362335",
+      "bytes": 561,
+      "key": "audit/report/manuscript-aws-02/tables/replay.csv",
+      "parentPath": "/srv/acephale/workspaces/report/manuscript-aws-02/tables/replay.csv",
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-03/tables/replay.csv",
+      "reusedParentVersion": true,
+      "sha256": "cad07c3208df73fa9782dd802214d7bd9a92cd6e792e9901babf354fa7231774",
+      "versionId": "2rlKrsF5NIAtbwIMWqO7yr14XqiUptH9"
+    }
+  ],
+  "kind": "acephale-paper-publication-v3",
+  "newCountSummary": {
+    "aggregationAccepted": false,
+    "completed": 8,
+    "declaredProfileRows": 20,
+    "minimumCompletedRequired": 10,
+    "retainedProfileFailures": 12
+  },
+  "parentPublication": {
+    "bytes": 23929,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-02/publication.json",
+    "sha256": "a77ccdf74911764ef6d93fe141479d80e448847e59296bce009f2ae2f5f47a10"
+  },
+  "pdf": "Not rebuilt; root owns final render/visual publication. Existing paper02 PDF remains immutable.",
+  "posthocInventoryLabeledSeparate": true,
+  "priorPreModelErrorsExcludedFromDenominator": 40,
+  "scientificLabelsChanged": false,
+  "scientificStatisticsRerun": false,
+  "status": "working-draft-retained-replay-and-failed-opportunity-profile",
+  "unchangedParentVersionsReused": 31,
+  "wholeStudyCompleted": false
+}

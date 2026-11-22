@@ -1,0 +1,16 @@
+{
+  "acceptedReplayFigureByteIdentical": true,
+  "executionFilesChanged": false,
+  "kind": "acephale-paper03-publication-checks-v1",
+  "methodsByteIdentical": true,
+  "newContentSecretScan": {
+    "files": 20,
+    "findings": []
+  },
+  "newFigureCountsOnly": true,
+  "newModelCallsOrTrialReruns": false,
+  "newScientificStatisticsComputed": false,
+  "privateVerificationCopiesExcluded": true,
+  "unchangedParentChecksReused": 31,
+  "wholeStudyCompleted": false
+}

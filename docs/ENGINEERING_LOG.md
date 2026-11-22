@@ -1,5 +1,12 @@
 # Acephale engineering log
 
+## 2026-11-22: Publish paper03 with the retained negative profile outcome
+
+Verified the exact generation06 failed result (SHA 63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c), its profile plan and receipt, and all 20 individual row hashes/identities. Added the complete 8/12 disposition, original minimum 10 gate, separately labeled post hoc inventory, count-only SVG/PNG/PDF and plotting source. Earlier40 pre-model errors remain separate.
+
+Rendered a new 16-page working PDF with formal references, labeled frozen-methods/analysis appendices and a wider results-table first column. Existing page-bounds checks passed and root reviewed all 16 pages. Original text, frozen methods, retained replay estimates and prior PDFs are unchanged. No model call, measurement rerun, statistical estimate, failure relabeling or operational deployment was performed by the paper work.
+
+
 ## 2026-11-22: Retained-result paper02 publication
 
 Prepared a paper-only publication from the immutable AWS paper02 manifest. Added updated text, accepted-result provenance, the plotting source, editable SVG/PNG and standalone figure PDF, plus the fifteen-page working manuscript PDF and render provenance.

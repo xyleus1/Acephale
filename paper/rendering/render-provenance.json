@@ -1,21 +1,119 @@
 {
-  "kind": "acephale-manuscript-render-provenance-v1",
-  "parentRenderer": {
-    "path": "/srv/acephale/workspaces/root/paper-render-01/render.py",
-    "sha256": "e694908e40cab017552e173bc3b4cabedbe00601abcb26b3fc72696e4cd68d6e"
+  "assemblyReceipt": {
+    "bytes": 1382,
+    "path": "/srv/acephale/workspaces/report/paper-render-03/assembled-source/assembly.json",
+    "sha256": "e0920cac15b7a37365c8b4d0cb4b72356c28241707fb87de2ceef83b5f30ab09"
   },
-  "renderer": {
-    "path": "/srv/acephale/workspaces/report/paper-render-02/render.py",
-    "sha256": "f3240bcf2e0f623734d7134435d8aca16fb9f7a2b211ee52be3132641d9c089d"
+  "assemblySource": {
+    "bytes": 3285,
+    "path": "/srv/acephale/workspaces/report/paper-final-assembly-03/assemble.py",
+    "sha256": "479ca4cc9d90be9c0e55058fb19578bdb5a6ba6bbf7619247bde379443ffceef"
+  },
+  "boundsCheck": {
+    "bytes": 2607,
+    "path": "/srv/acephale/workspaces/report/paper-render-03/layout-check-final.json",
+    "sha256": "abdc1b5f2171cb4aba6e3003cbecce90705fae06ef0a2e3ef285e046a6728a1f"
   },
   "changes": [
-    "Support source-root-bound scientific figure images with their captions",
-    "Write valid JSON build manifest"
+    "First column 120pt only for exact six-column retained-results table; total width remains468pt",
+    "Formal references and labeled appendices inherited from final-assembly03",
+    "Literal backslash-n formatting/JSON corrected to newline only where present"
   ],
-  "originalRendererRetained": true,
-  "sourceDirectory": "/srv/acephale/workspaces/report/manuscript-aws-02",
-  "outputDirectory": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview",
-  "figureVisualReviewPassed": true,
-  "fullPdfVisualReviewOwner": "root",
-  "frozenMethodsUnchanged": true
+  "commands": [
+    {
+      "argv": [
+        "/srv/acephale/workspaces/root/paper-render-01/venv/bin/python",
+        "/srv/acephale/workspaces/report/paper-render-03/assemble.py",
+        "--source",
+        "/srv/acephale/workspaces/report/manuscript-aws-03",
+        "--output",
+        "/srv/acephale/workspaces/report/paper-render-03/assembled-source"
+      ],
+      "exitCode": 0,
+      "name": "assemble",
+      "stderr": {
+        "bytes": 0,
+        "path": "/srv/acephale/workspaces/report/paper-render-03/assemble.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stdout": {
+        "bytes": 1180,
+        "path": "/srv/acephale/workspaces/report/paper-render-03/assemble.stdout.log",
+        "sha256": "1e7a9f1568769faa1b6c290d87bf090645bc38256946e38cc2cbe58502c0eb0b"
+      }
+    },
+    {
+      "argv": [
+        "/srv/acephale/workspaces/root/paper-render-01/venv/bin/python",
+        "/srv/acephale/workspaces/report/paper-render-03/render.py",
+        "--source",
+        "/srv/acephale/workspaces/report/paper-render-03/assembled-source",
+        "--output",
+        "/srv/acephale/workspaces/report/paper-render-03/output-01"
+      ],
+      "exitCode": 0,
+      "name": "render",
+      "stderr": {
+        "bytes": 0,
+        "path": "/srv/acephale/workspaces/report/paper-render-03/render.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stdout": {
+        "bytes": 248,
+        "path": "/srv/acephale/workspaces/report/paper-render-03/render.stdout.log",
+        "sha256": "acc3beaee83eb5a3e11509c268330f1a07a8a29f1acd23089a2d4f8fb9de7f14"
+      }
+    },
+    {
+      "argv": [
+        "/srv/acephale/workspaces/root/paper-render-01/venv/bin/python",
+        "/srv/acephale/workspaces/report/paper-render-03/check_layout.py"
+      ],
+      "exitCode": 0,
+      "name": "bounds",
+      "stderr": {
+        "bytes": 0,
+        "path": "/srv/acephale/workspaces/report/paper-render-03/bounds.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stdout": {
+        "bytes": 64,
+        "path": "/srv/acephale/workspaces/report/paper-render-03/bounds.stdout.log",
+        "sha256": "85840038561b6be73c8587454f26edccbd34e908c2bca962af59d7af55586e96"
+      }
+    }
+  ],
+  "kind": "acephale-paper03-render-provenance-v1",
+  "literalBackslashNReplacements": 0,
+  "originalBoundsChecker": {
+    "bytes": 1083,
+    "path": "/srv/acephale/workspaces/report/paper-render-02/check_layout_final.py",
+    "sha256": "71b21ae11db13026acfefd7959d59ff44c7073c1f86382d6d5be15dd74133597"
+  },
+  "originalManuscriptAndMethodsBytesUnchanged": true,
+  "pages": 16,
+  "paperSourceBinding": {
+    "bytes": 12293,
+    "path": "/srv/acephale/workspaces/report/manuscript-aws-03/source-binding.json",
+    "sha256": "9ff16a97db3c4e91bb0de96dd1083b9d3b62c8f6ba56f270b17e0ea953bd2de1"
+  },
+  "parentRenderer": {
+    "bytes": 7513,
+    "path": "/srv/acephale/workspaces/report/paper-final-assembly-03/render.py",
+    "sha256": "1ad32289a3c95381dd98a3d2c135ff7273fe31d60da1371a66f79457f257f1e2"
+  },
+  "pdf": {
+    "bytes": 301260,
+    "path": "/srv/acephale/workspaces/report/paper-render-03/output-01/acephale-working-manuscript.pdf",
+    "sha256": "70becf5c4f121b2538e7a3a6da58b92291e2a8be8099f0044d65b45a58347637"
+  },
+  "priorPdfsModified": false,
+  "renderer": {
+    "bytes": 7678,
+    "path": "/srv/acephale/workspaces/report/paper-render-03/render.py",
+    "sha256": "e93c309abf122993e8eedaf695d3ec17a8352d9c5e53cb6e6dbcf6a62500eaad"
+  },
+  "scientificOrStatisticalChanges": false,
+  "status": "working-draft-retained-replay-and-failed-opportunity-profile",
+  "visualReviewRequired": true
 }
