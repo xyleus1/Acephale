@@ -63,7 +63,7 @@ def render_markdown(text,styles):
                 j+=1
             n=max(map(len,rows))
             widths=[468/n]*n
-            if n==6 and rows[0][0].getPlainText()=='Retained report / condition':
+            if n==6 and rows[0][0].getPlainText() in ('Retained report / condition','Unvalidated seed29 report / condition','Calibration development subset'):
                 widths=[120]+[(468-120)/5]*5
             if n==3 and rows[0][0].getPlainText()=='Unit state':
                 widths=[80,45,343]
@@ -75,7 +75,7 @@ def render_markdown(text,styles):
 
 def page(canvas,doc):
     canvas.saveState();canvas.setFont('Body',8);canvas.setFillColor(colors.HexColor('#666666'))
-    canvas.drawString(72,758,'ACEPHALE  |  CURRENT RESULTS - STUDY INCOMPLETE');canvas.drawRightString(540,34,str(doc.page));canvas.restoreState()
+    canvas.drawString(72,758,'ACEPHALE  |  WORKING PAPER - STUDY INCOMPLETE');canvas.drawRightString(540,34,str(doc.page));canvas.restoreState()
 
 def main():
     global SOURCE_ROOT

@@ -1,0 +1,51 @@
+{
+  "changedPagesInspected": [
+    1,
+    11,
+    12,
+    13,
+    14
+  ],
+  "cleanSeedReplicationClaimed": false,
+  "clippingObserved": false,
+  "existingSeed17FilesAndScientificAppendicesUnchanged": {
+    "analysis-plan.md": true,
+    "figures/seed17-opportunity-outcome.pdf": true,
+    "figures/seed17-opportunity-outcome.png": true,
+    "figures/seed17-retained-evidence.pdf": true,
+    "figures/seed17-retained-evidence.png": true,
+    "methods.md": true,
+    "references.bib": true,
+    "related-work.md": true
+  },
+  "figureBootstrapMetadata": {
+    "copied": true,
+    "families": 36,
+    "jointlyScoredCheckpoints": 442,
+    "samples": 2000,
+    "seed": 42
+  },
+  "fullPageInspections": [
+    1,
+    11,
+    12,
+    13,
+    14
+  ],
+  "kind": "acephale-working-paper05-presentation-verification-v1",
+  "nativeTaskResultsAdded": false,
+  "newResultsTableContinuesAcrossPagesWithRepeatedHeader": true,
+  "overlapObserved": false,
+  "pages": 22,
+  "pdfEmbeddedAttachments": 0,
+  "pdfSha256": "eba014d1ba4ae9a25215f5dedcfd510106cbb89456a1b33a5eacd0683a5fffb1",
+  "priorEditionContactReviewReused": true,
+  "privateIdentifierFindings": [],
+  "statisticalReanalysisPerformed": false,
+  "status": "working-paper-incomplete",
+  "superiorityOrEquivalenceClaimed": false,
+  "teacherGradesAdded": true,
+  "textOutsidePage": false,
+  "unvalidatedLabelsVisible": true,
+  "visualInspectionCompleted": true
+}

@@ -1,0 +1,39 @@
+{
+  "acceptedScientificComponent": false,
+  "counts": {
+    "goals-fixed": {
+      "completed": 582,
+      "coverageComplete": true,
+      "expected": 746,
+      "failed": 164,
+      "missingCheckpointIds": [],
+      "notDispatched": 0,
+      "recorded": 746,
+      "responsesWithoutTerminalPrediction": []
+    },
+    "goals-selected": {
+      "completed": 583,
+      "coverageComplete": true,
+      "expected": 746,
+      "failed": 163,
+      "missingCheckpointIds": [],
+      "notDispatched": 0,
+      "recorded": 746,
+      "responsesWithoutTerminalPrediction": []
+    },
+    "neutral-fixed": {
+      "completed": 745,
+      "coverageComplete": true,
+      "expected": 746,
+      "failed": 1,
+      "missingCheckpointIds": [],
+      "notDispatched": 0,
+      "recorded": 746,
+      "responsesWithoutTerminalPrediction": []
+    }
+  },
+  "methodStatus": "distributed-replay-amendment",
+  "projection": "Copied terminal coverage counts only; private administrative locations omitted",
+  "sourceSha256": "8653580d096d8fd690504ed6f6931f305d85e58c6edf0590304ddfd03f81f847",
+  "status": "UNVALIDATED"
+}

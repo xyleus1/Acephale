@@ -1,0 +1,168 @@
+{
+  "acceptedSeed17EvidenceUnchanged": true,
+  "files": [
+    {
+      "bytes": 1215,
+      "gitBlobSha1": "191ed4823d3868bc6ac8716ccbf4503ab74f5873",
+      "path": "paper/PUBLICATION.md",
+      "sha256": "b5f75d203411ba2f11d70ba5e3563af56b40db130e194e659edd068596b7bc83"
+    },
+    {
+      "bytes": 2566,
+      "gitBlobSha1": "ec52644965dacbc0a0c417fb2cfc0c80bffcbd35",
+      "path": "paper/README.md",
+      "sha256": "e58de6a8390f2a39361ee8b3bc431556e743422770e4881c6534fc3d9ca3034d"
+    },
+    {
+      "bytes": 29079,
+      "gitBlobSha1": "425fd31bb6af4971640f18cf3380a14ef32fb783",
+      "path": "paper/figures/seed29-paired-differences.pdf",
+      "sha256": "ca8d10d1a6a02b824c3fb660fa50c7f337866ff6f73d77e472a4c90e155a30ee"
+    },
+    {
+      "bytes": 169145,
+      "gitBlobSha1": "008817f3827695f46f53a9bf2abcfef1a01937ac",
+      "path": "paper/figures/seed29-paired-differences.png",
+      "sha256": "f7f8e02611038ab281225ac5e04bd49c71e3648154abf850f4aa970d25895aae"
+    },
+    {
+      "bytes": 11953,
+      "gitBlobSha1": "600966d33bd809173cf5983df70de9359f1b7cb8",
+      "path": "paper/figures/seed29-paired-differences.svg",
+      "sha256": "b8db32c75c0edf7061650fde6e0e3e93f75e79ba8b518ba2afde36d6b09a2b4b"
+    },
+    {
+      "bytes": 26487,
+      "gitBlobSha1": "58ef98d55abebe48447c0c579e046faf1e2e5a67",
+      "path": "paper/figures/seed29-record-coverage.pdf",
+      "sha256": "1da4159220cc2e3c7eca2bebcae76a049e2fc709163cfea47b151efaffa350a5"
+    },
+    {
+      "bytes": 127704,
+      "gitBlobSha1": "409965ad2cb9496cf761ae13b8c10e786eb3eb69",
+      "path": "paper/figures/seed29-record-coverage.png",
+      "sha256": "92c63dbb61d399c53109dbc4403d858b6518913eff767ba1209d254acb58e33c"
+    },
+    {
+      "bytes": 9999,
+      "gitBlobSha1": "ca56cd387217d12f201449cb9fa13009c6535f45",
+      "path": "paper/figures/seed29-record-coverage.svg",
+      "sha256": "e92c836fbf1f8973456091030d61095694fd540503b83fc50b38b6f9556f16dc"
+    },
+    {
+      "bytes": 31254,
+      "gitBlobSha1": "23a09e194c058692424c2fa55a2449b40a5c737d",
+      "path": "paper/manuscript.md",
+      "sha256": "278131ecd1550c94f60de285dc53c9ca85ddb86ad157d848972fa50101e64295"
+    },
+    {
+      "bytes": 573467,
+      "gitBlobSha1": "cfa9847cb6c18ab276d271a0bbfb2c968c2ce421",
+      "path": "paper/output/acephale-working-manuscript.pdf",
+      "sha256": "eba014d1ba4ae9a25215f5dedcfd510106cbb89456a1b33a5eacd0683a5fffb1"
+    },
+    {
+      "bytes": 7844,
+      "gitBlobSha1": "a032e6790d4479f543701d43bc2ee3a142059fd5",
+      "path": "paper/rendering/render.py",
+      "sha256": "a304b3084962b3c4d46f5927a2bb80d47450b66e086f171349fc0f5cf13415c5"
+    },
+    {
+      "bytes": 1401,
+      "gitBlobSha1": "e0be2b9ac89f044b741b281d3cf68af24622ca31",
+      "path": "paper/rendering/verification-paper05.json",
+      "sha256": "a333da08b11bbdb46da3a8317cd1b0191381dc7b9ec846b525dcc4c1b17d8d60"
+    },
+    {
+      "bytes": 1526,
+      "gitBlobSha1": "32add5c8816d52705029dd328f7bcfd1e1d9b36e",
+      "path": "paper/results-status.md",
+      "sha256": "3bb827010503ab72f01d37e64530f7434d0555f6695e1ec7a0bd493caad02288"
+    },
+    {
+      "bytes": 3841,
+      "gitBlobSha1": "5d87e0bbadc92ba92de75c4d6cb9a1030afe23b0",
+      "path": "paper/seed29-unvalidated/README.md",
+      "sha256": "a0ee38d9842430c695a4f6f7daef8ee69cd2fcd5dee506cdf3a304fdf556bad7"
+    },
+    {
+      "bytes": 2120,
+      "gitBlobSha1": "6e0a4267d3431da713804908400304d160001160",
+      "path": "paper/seed29-unvalidated/figure-data.json",
+      "sha256": "75304348ce143b1bc98efaa74c524959d435cdab9589a8f9fbf122ef4665660d"
+    },
+    {
+      "bytes": 7446,
+      "gitBlobSha1": "923c0b75f38037059a96d2d02c5265a56d71a008",
+      "path": "paper/seed29-unvalidated/plot_seed29.py",
+      "sha256": "5c13ba12ddd6c51099a28ae7c276d9cf03d1950a67f77cb8b4141572d5a9a991"
+    },
+    {
+      "bytes": 2356,
+      "gitBlobSha1": "42bec22f8d9935c9d70c2f3a86da03bce8f78bbf",
+      "path": "paper/seed29-unvalidated/provenance.json",
+      "sha256": "007fbeeba8cd92f3b561113f428dde508e5c90591526640aeac4c4c86b087689"
+    },
+    {
+      "bytes": 44756,
+      "gitBlobSha1": "b6d51349dfb7152f72b080a873251bb29d5af0bd",
+      "path": "paper/seed29-unvalidated/sources/calibration-report.json",
+      "sha256": "d5ad3f70f35531a57b316240c7057fbbb8b7b50a73425a7875fdfb57f03d42f4"
+    },
+    {
+      "bytes": 13042,
+      "gitBlobSha1": "707e055d5bc472addece90faebbfd2ef8082986d",
+      "path": "paper/seed29-unvalidated/sources/calibration.json",
+      "sha256": "ffc6958173ece415298b58c5557a0f2032fbe31485d01c3ed65134e38ecbf556"
+    },
+    {
+      "bytes": 610,
+      "gitBlobSha1": "3dc9cfe8d203e223c1d50979005be77bd2fc07ef",
+      "path": "paper/seed29-unvalidated/sources/goal-reliability-manifest.json",
+      "sha256": "e8fa770484a1844a94d78b9d3e922a84aed32047b490c5e395f5a640a4c1eb3d"
+    },
+    {
+      "bytes": 26671,
+      "gitBlobSha1": "d064218623c9804cb5ecb236d10daea983d93d00",
+      "path": "paper/seed29-unvalidated/sources/goal-reliability-report.json",
+      "sha256": "bdb839b0b71fbb9729c4b39ffb5b168de7b893f9f3795ffee14d895d1b002f99"
+    },
+    {
+      "bytes": 4254,
+      "gitBlobSha1": "ce9242d49f558514eaeff28083747a8ca04c0438",
+      "path": "paper/seed29-unvalidated/sources/goal-reliability.json",
+      "sha256": "347203b9ac9c1fd65e2c2f4ee5ab2c5fe6737d1512ca550eea29b353d01a56d5"
+    },
+    {
+      "bytes": 2845,
+      "gitBlobSha1": "979dc7ca7a3c8bf806e8933ef1a9eebf999d236b",
+      "path": "paper/seed29-unvalidated/sources/goals-fixed-report.json",
+      "sha256": "9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5"
+    },
+    {
+      "bytes": 1733,
+      "gitBlobSha1": "900330ca5fc7f5278e83dc6314bae91fe4b9bff7",
+      "path": "paper/seed29-unvalidated/sources/neutral-fixed-report.json",
+      "sha256": "b361bba09c411dffdf930c51740d61b3741c0b4839a74c36692cece8ab71c515"
+    },
+    {
+      "bytes": 1099,
+      "gitBlobSha1": "6fe6209eb4a4c5624a903c96ba9e393516860fd3",
+      "path": "paper/seed29-unvalidated/sources/record-coverage.json",
+      "sha256": "f94c6762d155d4e8fd46cfa9b62047d86bbd460ded3ce384c5aedc9d74e01bc5"
+    },
+    {
+      "bytes": 2252,
+      "gitBlobSha1": "890393122d45bb097bbac376829f5213a0f83e47",
+      "path": "paper/seed29-unvalidated/sources/teacher-disposition.json",
+      "sha256": "193584b7eb97b0bba079096daa86d0a547c26eba3e1f59283da457373f9487bc"
+    }
+  ],
+  "kind": "acephale-public-working-paper05-source-binding-v1",
+  "parentCommit": "d5a3b01a1bc29ea5cb8edc5560b3f40eedafc215",
+  "parentTree": "8476ceaf1abb2fa9610a068b16f16db9d85d2999",
+  "privateOperationalLocationsExcluded": true,
+  "sourceVersionsRemainInPrivateEvidence": true,
+  "statisticalReanalysisPerformed": false,
+  "status": "working-paper-incomplete-unvalidated-amendment"
+}

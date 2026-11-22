@@ -1,25 +1,21 @@
-# Current results paper: incomplete frozen study
+# Working paper: incomplete study, with an UNVALIDATED distributed replay amendment
 
-This paper reports the dated disposition observed on 22 November 2026 at 06:26 UTC: three accepted components, one failed opportunity component, four derived blocked descendants and four pending independent components. It is not a completed benchmark or an official tau task-success evaluation. Read manuscript.md and results-status.md.
+This current results paper preserves the original accepted seed17 evidence, failed opportunity profile and frozen-DAG disposition. It adds copied original CPU scores/calibration and complete terminal-record coverage for a separate distributed seed29 research continuation. The new results are UNVALIDATED and do not change accepted component status.
 
-The accepted seed17 estimates and confidence intervals, source reports, frozen scientific rules and both figures are preserved. The opportunity profile has eight completed and twelve retained profile failures among twenty rows, below the original minimum of ten completed measurements. Forty earlier pre-model error records remain separate. Numerical validation diagnostics are reported separately; none supplies a benchmark gain or scientific acceptance.
+The distributed run is not a clean seed replication: hardware, serving-runtime corrections and scheduling changed. Both new paired loss intervals include zero. Native outcomes remain pending. Original seed29 teacher grading and reliability are now included: 141 retained records, 93 returned responses, 40 prediction misses, 8 context rejections, 15 agreements, and recorded Wilson lower bound 0.06553601106011342. These are not Top-1 or task-success results. No superiority, equivalence, task-success, latency gain or full-study completion is claimed.
 
 ## Reproduce this presentation
 
-From the repository root, the PDF commands use the versions in paper/rendering/requirements.lock. The optional plotting commands also require Matplotlib (the retained figure records version 3.11.2); plotting dependencies are not included in the PDF-only lock. The copy-only disposition exporter uses the Python standard library:
+Use the PDF dependencies in paper/rendering/requirements.lock. The optional figure renderer additionally requires Matplotlib 3.11.2; plotting dependencies are separate from the PDF-only lock.
 
-    python paper/disposition/export_snapshot.py --output build/paper04-recorded-values
-    python paper/plot_retained.py
-    python paper/plot_profile_outcome.py
-    python paper/rendering/assemble.py --source paper --output build/paper04-assembled
-    python paper/rendering/render.py --source build/paper04-assembled --output build/paper04-rendered
+    python paper/seed29-unvalidated/plot_seed29.py
+    python paper/rendering/assemble.py --source paper --output build/paper05-assembled
+    python paper/rendering/render.py --source build/paper05-assembled --output build/paper05-rendered
 
-Output directories must be fresh for assembly and the recorded-value export. Plotting reads the already accepted reports; it does not rerun a bootstrap or score pending data. Existing figure bytes are included and were reused in this publication, without plotting again.
+Use fresh output directories. Existing figure images are already included, so plotting is optional. These commands render copied reports; they do not rerun statistics or scientific trials. Original seed17 figures and scientific appendices are unchanged. The assembly places formal references before clearly labeled frozen-methods and analysis-plan appendices.
 
-The offline snapshot exporter requires exact reviewed source hashes. It copies accepted report values and the dated incomplete disposition; it is not an acceptance engine and cannot declare study completion. See INCORPORATE.md for adding future independently accepted results.
+## Provenance and privacy
 
-## Public provenance
+seed29-unvalidated/provenance.json binds the exact original source hashes. Public coverage metadata removes private administrative locations while retaining the original collector hash and counts. No credentials, account IDs, private object-store locations or private filesystem paths are needed to reproduce this presentation. The private original records remain immutable.
 
-The public disposition uses logical source IDs and original SHA-256 hashes instead of private storage paths, account/resource identifiers or raw administrative records. The original private report and evidence remain immutable. The analysis-plan appendix replaces one absolute report-package location with a descriptive name; all scientific rules are unchanged. The public PDF was rendered from these public copies. It is not byte-identical to the private PDF because of that location redaction and PDF rendering metadata.
-
-No editable ZIP is newly offered. The repository contains the editable sources. Historical paper03 provenance already in the parent commit is preserved; this update does not newly bundle those private-location records. The current paper04 provenance manifest identifies the exact new public payload. Earlier PDFs remain available in Git history.
+The repository is the editable source packet. paper/output/acephale-working-manuscript.pdf is the current working edition; prior PDFs remain in Git history. INCORPORATE.md describes later accepted-result incorporation and does not authorize dispatch or acceptance. The unchanged disposition exporter remains pinned to its earlier dated snapshot.

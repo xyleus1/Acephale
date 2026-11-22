@@ -1,0 +1,21 @@
+{
+  "claimsUnchanged": true,
+  "kind": "acephale-public-working-paper05-v1",
+  "nativeResultsPending": true,
+  "newResultsScope": "UNVALIDATED distributed seed29 replay; changed hardware/runtime/scheduling",
+  "originalTeacherResultsIncluded": true,
+  "parentCommit": "d5a3b01a1bc29ea5cb8edc5560b3f40eedafc215",
+  "pdf": {
+    "bytes": 573467,
+    "gitBlobSha1": "cfa9847cb6c18ab276d271a0bbfb2c968c2ce421",
+    "path": "paper/output/acephale-working-manuscript.pdf",
+    "sha256": "eba014d1ba4ae9a25215f5dedcfd510106cbb89456a1b33a5eacd0683a5fffb1"
+  },
+  "sourceBinding": {
+    "bytes": 6758,
+    "gitBlobSha1": "274a96dcc7894146a14d2e8fab2474a1e2d416f2",
+    "path": "paper/provenance/source-binding-paper05.json",
+    "sha256": "95c612a34d18779334e4f253265373621d926b18f7f07a20ac4388448084091a"
+  },
+  "status": "working-paper-incomplete"
+}
