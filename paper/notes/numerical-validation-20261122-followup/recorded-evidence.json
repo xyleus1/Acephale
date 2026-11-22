@@ -1,0 +1,518 @@
+{
+  "cacheStateObserved": null,
+  "digestConventions": {
+    "requestHashAndResponseHash": "SHA256 of RFC 8785 canonical JSON",
+    "sourceDigests": "SHA256 of original file bytes"
+  },
+  "frozenInputDigests": {
+    "adapter/adapter_config.json": "011e0a31d80cc881a375a1201e71c76d460960fedd6ad66068b5e96ad14db5bf",
+    "adapter/adapter_model.safetensors": "ff5bafd8f5ee7b126fba3fa12620b6d9d0b3455d3e1a283de604e77ac96671ba",
+    "predictor.json": "04070b905bb127460c0c28b177b825f76878bb96d656cc5811bef1cf8a00081a",
+    "serving-probe.json": "318990f3ef5155925ae90c69f1c267de0c65b908ee0a3ddea4f6ffea29f64373"
+  },
+  "interpretationLimits": [
+    "Sessions are separate diagnostics of one frozen probe, not new benchmark cohorts",
+    "Equal conditional probability is not identical raw logprobs or controls",
+    "Startup selection, installed source and compiled caches are not per-request kernel traces",
+    "Ohio FlashInfer prefill bypasses retained Triton KKT source",
+    "No full causal diagnosis or mathematical ineffectiveness conclusion",
+    "Requested cold/warm/cold is not observed cache state",
+    "No task accuracy, latency or throughput benefit estimate",
+    "Original baseline and HF reference were not rerun"
+  ],
+  "kind": "public-two-session-numerical-followup-v1",
+  "newModelCalls": 0,
+  "preservedParentCommit": "a9e9f355a9b9afe6c378826f07da08515c36689f",
+  "probabilitiesRecomputed": false,
+  "sessions": [
+    {
+      "baselineRepeated": false,
+      "handback": {
+        "actorUnchanged": true,
+        "diagnosticOwnerReleased": true,
+        "diagnosticProcessesDrained": true,
+        "observedUtc": "2026-11-22T04:56:27.752012+00:00",
+        "originalPredictorRestored": true,
+        "qualificationPass": false,
+        "scientificDispatchAuthorized": false,
+        "sourceSha256": "802898225ed14601a7b5da9149589bca3c7efd063d1dba0e10d98fcc7e07e568"
+      },
+      "image": {
+        "baseDigest": "sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+        "candidateDigest": "sha256:100c0c08a5b0ceaa13c93874fe0ea1bb168f0f4952cef22e0d0c56e53396251c",
+        "nativeExtensionSha256": "ae9c8a293020e422e0b6b61d1024263dc476a772337f5d39d46d18baa7ce0ad9",
+        "nativeExtensionUnchanged": true,
+        "sourceChanges": [
+          {
+            "candidateSha256": "f03089c0805edf80822f88525514d9361c30014c5351433c0784a38c8cca3f01",
+            "filename": "fused_gdn_prefill_post_conv.py",
+            "originalSha256": "590717b2107abc90d72548de06b5d315229eb2775c94614f3f545df11cc2b5df"
+          },
+          {
+            "candidateSha256": "691ab98586417ce60a66dea51ebbcc21943aa54bfb739186cbe5efd21c1cd26b",
+            "filename": "fused_sigmoid_gating.py",
+            "originalSha256": "000ab8996af9788fdb8843a6a3b91833e7a14c8acc0e1ea073a536330f64cb6f"
+          },
+          {
+            "candidateSha256": "71c402ef6335e9ced5e71f25f43c978f470ff507b93afcff9c668dea6abe2f99",
+            "filename": "fused_recurrent.py",
+            "originalSha256": "fe6f1311014809040497aa0a623e7fa97f4b3457cdc7ee1f1f8aed21f326f755"
+          },
+          {
+            "candidateSha256": "05ea9ad35ffa9024d5cc5fa65b83d7c796e57f1f262278c3136c6f7600a6633a",
+            "filename": "chunk_scaled_dot_kkt.py",
+            "originalSha256": "ae443be743a95b2b2fb8859d2ee8f9921887a50b1b33b5ede4058a8bb5438856"
+          }
+        ]
+      },
+      "label": "Virginia session03",
+      "originalGate": {
+        "maximumConditionalProbabilityDifference": 0.01,
+        "requireTopTokenMatch": true,
+        "version": 1
+      },
+      "pipelineCompletedUtc": "2026-11-22T04:53:33.901902+00:00",
+      "qualificationReceipt": false,
+      "recordedServingSettings": {
+        "logprobsMode": "raw_logprobs",
+        "loraDtype": "bfloat16",
+        "maxModelLength": "8192",
+        "maximumLoraRank": "16",
+        "maximumSequences": "1",
+        "modelDtype": "bfloat16"
+      },
+      "referenceProbability": 0.23370635691404026,
+      "referenceRepeated": false,
+      "route": {
+        "limitation": "Startup selects Triton/FLA; it is not a per-request trace of every modified kernel.",
+        "perRequestKernelTraceEstablished": false,
+        "selectedStartupMessage": "Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).",
+        "sourceCoverageStatement": "Python prefill/ordinary decode beta and KKT source; native speculative binary unchanged",
+        "tokenSpeculativeConfig": null,
+        "tritonKktPerRequestInvocationProven": false
+      },
+      "rows": [
+        {
+          "absoluteProbabilityDifference": 0.021637552556934947,
+          "adapterState": "adapter",
+          "cacheIntent": "cold_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.21206880435710532,
+          "index": 0,
+          "logitDifference": -1.3125,
+          "one": -25.218812942504883,
+          "passedOriginalGate": false,
+          "requestHash": "82f7886d98ba36a1beb374d22456bac9bb3769ca270435fc15e8de60e82fe686",
+          "responseHash": "4663a26ddc02f5f82236192c3c9fe0f55bf38d1638dc7c6b4288b7ed837c3d56",
+          "topTokenId": 4754,
+          "zero": -23.906312942504883
+        },
+        {
+          "absoluteProbabilityDifference": 0.021637552556934947,
+          "adapterState": "adapter",
+          "cacheIntent": "warm_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.21206880435710532,
+          "index": 1,
+          "logitDifference": -1.3125,
+          "one": -25.218812942504883,
+          "passedOriginalGate": false,
+          "requestHash": "82f7886d98ba36a1beb374d22456bac9bb3769ca270435fc15e8de60e82fe686",
+          "responseHash": "8e6f4ebd5c969107c1e8a8b1995e457284665940e9169581abbbe70ef3890b63",
+          "topTokenId": 4754,
+          "zero": -23.906312942504883
+        },
+        {
+          "absoluteProbabilityDifference": 0.021637552556934947,
+          "adapterState": "adapter",
+          "cacheIntent": "cold_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.21206880435710532,
+          "index": 2,
+          "logitDifference": -1.3125,
+          "one": -25.218812942504883,
+          "passedOriginalGate": false,
+          "requestHash": "d6294b801a63002ea52f7c31bf098389a81c278cf92d35fad7c941934c356328",
+          "responseHash": "efb2fcdd87c2dcd43ac3659c4ab43aee98fa5b290a7348046a5e50e2e51899be",
+          "topTokenId": 4754,
+          "zero": -23.906312942504883
+        },
+        {
+          "absoluteProbabilityDifference": 0.724205924782507,
+          "adapterState": "base",
+          "cacheIntent": "cold_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.9579122816965473,
+          "index": 3,
+          "logitDifference": 3.125000238418579,
+          "one": -2.665398359298706,
+          "passedOriginalGate": false,
+          "requestHash": "eaa31adac32d856f69415cbc2ba74c2381fe956b8a4b63b2a95ae34f4f3e671e",
+          "responseHash": "0eca798fce748b7013a378d7d0afe4cc89164b1d629740ec14348b9d29064181",
+          "topTokenId": 4754,
+          "zero": -5.790398597717285
+        }
+      ],
+      "scientificTaskAccuracyMeasured": false
+    },
+    {
+      "baselineRepeated": false,
+      "handback": {
+        "actorUnchanged": true,
+        "diagnosticOwnerReleased": true,
+        "diagnosticProcessesDrained": true,
+        "observedUtc": "2026-11-22T04:57:26.513971+00:00",
+        "originalPredictorRestored": true,
+        "qualificationPass": false,
+        "scientificDispatchAuthorized": false,
+        "sourceSha256": "64080decedab3004be725d1a29ecb89aee2615e2884604ceb2359be2457d7f22"
+      },
+      "image": {
+        "baseDigest": "sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34",
+        "candidateDigest": "sha256:84c6d0de5b61b7fb9e0c8948de3be2489042d25c52db967bf8736a813963055b",
+        "nativeExtensionSha256": "ae9c8a293020e422e0b6b61d1024263dc476a772337f5d39d46d18baa7ce0ad9",
+        "nativeExtensionUnchanged": true,
+        "sourceChanges": [
+          {
+            "candidateSha256": "f03089c0805edf80822f88525514d9361c30014c5351433c0784a38c8cca3f01",
+            "filename": "fused_gdn_prefill_post_conv.py",
+            "originalSha256": "590717b2107abc90d72548de06b5d315229eb2775c94614f3f545df11cc2b5df"
+          },
+          {
+            "candidateSha256": "691ab98586417ce60a66dea51ebbcc21943aa54bfb739186cbe5efd21c1cd26b",
+            "filename": "fused_sigmoid_gating.py",
+            "originalSha256": "000ab8996af9788fdb8843a6a3b91833e7a14c8acc0e1ea073a536330f64cb6f"
+          },
+          {
+            "candidateSha256": "71c402ef6335e9ced5e71f25f43c978f470ff507b93afcff9c668dea6abe2f99",
+            "filename": "fused_recurrent.py",
+            "originalSha256": "fe6f1311014809040497aa0a623e7fa97f4b3457cdc7ee1f1f8aed21f326f755"
+          },
+          {
+            "candidateSha256": "05ea9ad35ffa9024d5cc5fa65b83d7c796e57f1f262278c3136c6f7600a6633a",
+            "filename": "chunk_scaled_dot_kkt.py",
+            "originalSha256": "ae443be743a95b2b2fb8859d2ee8f9921887a50b1b33b5ede4058a8bb5438856"
+          },
+          {
+            "candidateSha256": "ce9b586e3e7a06ea77e2273d842c79a25b46404fe595683b3dfa33e294e009d5",
+            "filename": "causal_conv1d.py",
+            "originalSha256": "cb16cc9250c4195c09d6d83b43bba607c2d749b621d8d135a920443d1577265f"
+          }
+        ]
+      },
+      "label": "Ohio session04",
+      "originalGate": {
+        "maximumConditionalProbabilityDifference": 0.01,
+        "requireTopTokenMatch": true,
+        "version": 1
+      },
+      "pipelineCompletedUtc": "2026-11-22T04:56:32.692035+00:00",
+      "qualificationReceipt": false,
+      "recordedServingSettings": {
+        "logprobsMode": "raw_logprobs",
+        "loraDtype": "bfloat16",
+        "maxModelLength": "8192",
+        "maximumLoraRank": "16",
+        "maximumSequences": "1",
+        "modelDtype": "bfloat16"
+      },
+      "referenceProbability": 0.23370635691404026,
+      "referenceRepeated": false,
+      "route": {
+        "compiledConvolutionEvidence": {
+          "limitation": "Compiled-cache presence proves compilation, not per-request kernel execution. No cache flags were changed.",
+          "scope": "read-only stopped-container causal_conv JSON/PTX capture; no kernel execution",
+          "sourceSha256": "1908f58382dee0bf931d4c42fda53489db5c2adfbae4c74c54c5ad7a012fe6c2",
+          "status": "complete"
+        },
+        "perRequestKernelTraceEstablished": false,
+        "selectedStartupMessage": "Using FlashInfer GDN prefill kernel (requested=auto, head_k_dim=128).",
+        "sourceCoverageStatement": "Source includes beta and active causal-convolution prefill/update. Retained Triton KKT source is bypassed when selected GDN prefill is FlashInfer. Compiled cache evidence is separate from per-request invocation; native speculative binary unchanged",
+        "tokenSpeculativeConfig": null,
+        "tritonKktOnSelectedFlashinferPrefill": false
+      },
+      "rows": [
+        {
+          "absoluteProbabilityDifference": 0.021637552556934947,
+          "adapterState": "adapter",
+          "cacheIntent": "cold_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.21206880435710532,
+          "index": 0,
+          "logitDifference": -1.3125,
+          "one": -25.062562942504883,
+          "passedOriginalGate": false,
+          "requestHash": "509a0b69d48e28dac620389ad431415486c10e023adcf13b192427c419c29478",
+          "responseHash": "3dfb0fcd2385e2d1a5883efe888203c7342d6003e2224890e10bb68696f2853d",
+          "topTokenId": 4754,
+          "zero": -23.750062942504883
+        },
+        {
+          "absoluteProbabilityDifference": 0.021637552556934947,
+          "adapterState": "adapter",
+          "cacheIntent": "warm_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.21206880435710532,
+          "index": 1,
+          "logitDifference": -1.3125,
+          "one": -25.062562942504883,
+          "passedOriginalGate": false,
+          "requestHash": "509a0b69d48e28dac620389ad431415486c10e023adcf13b192427c419c29478",
+          "responseHash": "cbd09db3dd623a8aa78ecc7ac081df7fe881004353050e19b498c4e1e7305e92",
+          "topTokenId": 4754,
+          "zero": -23.750062942504883
+        },
+        {
+          "absoluteProbabilityDifference": 0.021637552556934947,
+          "adapterState": "adapter",
+          "cacheIntent": "cold_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.21206880435710532,
+          "index": 2,
+          "logitDifference": -1.3125,
+          "one": -25.062562942504883,
+          "passedOriginalGate": false,
+          "requestHash": "bc481ae4fc2e38de93edd855a81bd98d6b33f6b8b6d82bb734ba55243137cb3d",
+          "responseHash": "3577316b7f2bdaf659d9645ca608273d2d415edcafae06c56706dbb9af4b8441",
+          "topTokenId": 4754,
+          "zero": -23.750062942504883
+        },
+        {
+          "absoluteProbabilityDifference": 0.7289667471745936,
+          "adapterState": "base",
+          "cacheIntent": "cold_requested",
+          "cachedTokens": null,
+          "conditionalOneProbability": 0.9626731040886339,
+          "index": 3,
+          "logitDifference": 3.249999761581421,
+          "one": -2.6494829654693604,
+          "passedOriginalGate": false,
+          "requestHash": "a10bf83ebf4e3cf053ff1e5d45fc57a271538b39f3eac5db3c5aaafb7b28c308",
+          "responseHash": "53644081f0eb078c9c8a9eb9fceab6e68a7809efa8149bf10426d504f1b98d04",
+          "topTokenId": 4754,
+          "zero": -5.899482727050781
+        }
+      ],
+      "scientificTaskAccuracyMeasured": false
+    }
+  ],
+  "sourceDigests": [
+    {
+      "bytes": 3502,
+      "label": "virginia-comparison.json",
+      "sha256": "30fa675b657bbd43fcd1e00911e67bdba7dfb7ce9e05c7f71064f497e388475a"
+    },
+    {
+      "bytes": 8581,
+      "label": "virginia-handback.json",
+      "sha256": "802898225ed14601a7b5da9149589bca3c7efd063d1dba0e10d98fcc7e07e568"
+    },
+    {
+      "bytes": 3510,
+      "label": "ohio-comparison.json",
+      "sha256": "f42e080f634d4a4d7dc4f1809f23bb412e25029b4e9a46e028dbfe489c3d72d5"
+    },
+    {
+      "bytes": 7641,
+      "label": "ohio-handback.json",
+      "sha256": "64080decedab3004be725d1a29ecb89aee2615e2884604ceb2359be2457d7f22"
+    },
+    {
+      "bytes": 5598,
+      "label": "ohio-route.json",
+      "sha256": "f75e7d61893eea059b62ba5ce2eb4cfd453e44f78b0d3519f40e757ecaa1aa59"
+    },
+    {
+      "bytes": 2287,
+      "label": "ohio-image-manifest.json",
+      "sha256": "34c56532ffc42012cb11a39a2881eaf5a549cb93ff343d242c5c03fd45d75861"
+    },
+    {
+      "bytes": 7132,
+      "label": "ohio-image-receipt.json",
+      "sha256": "126aeb5d6cc1b34d96074e7472d379e68ec00fbeb04143788b827efa766c782f"
+    },
+    {
+      "bytes": 516,
+      "label": "ohio-input-binding.json",
+      "sha256": "d2b784e8ca902f0564c05c75cb2af941d00f174b51427ecfdd402787c975fd5b"
+    },
+    {
+      "bytes": 3045,
+      "label": "ohio-derivation.json",
+      "sha256": "871864f049d52b0e5ee10398d70fdeb0c1a85e12041ae29e58b7152ada2b58be"
+    },
+    {
+      "bytes": 1048,
+      "label": "ohio-pipeline.json",
+      "sha256": "bb5bccecea9a46a6a84d201566406047200737e36a95afd99200683204f1f959"
+    },
+    {
+      "bytes": 437,
+      "label": "ohio-plan.json",
+      "sha256": "0f00d709d47113a8bbad22a6678c037955ff781c78fdd1ab35e9c171a363a1bf"
+    },
+    {
+      "bytes": 25300,
+      "label": "ohio-request-0.json",
+      "sha256": "13a0561b402b418b319312a7bfdd253050d274da06208fe4e2a07bbcc1033368"
+    },
+    {
+      "bytes": 25300,
+      "label": "ohio-request-1.json",
+      "sha256": "13a0561b402b418b319312a7bfdd253050d274da06208fe4e2a07bbcc1033368"
+    },
+    {
+      "bytes": 25300,
+      "label": "ohio-request-2.json",
+      "sha256": "226b9e34a31967b22a107fe97330bdbb945ae7dde283bf830a6c4377d357df08"
+    },
+    {
+      "bytes": 25286,
+      "label": "ohio-request-3.json",
+      "sha256": "1cda951f51930be8d3930f04b13b29bbd1b9e49e19a445cb498ca1c7df49c887"
+    },
+    {
+      "bytes": 36547,
+      "label": "ohio-response-0.json",
+      "sha256": "e04ea64b56ba2beb69ebbf06991ebe1e84531bb7b091dc7b904d21058e0229dd"
+    },
+    {
+      "bytes": 36547,
+      "label": "ohio-response-1.json",
+      "sha256": "820edbd22f0976737a7696fcffb9f642214acdedb49130cb79cfebbdb04171e2"
+    },
+    {
+      "bytes": 36547,
+      "label": "ohio-response-2.json",
+      "sha256": "4ae956b9a95043d3802f69f5758a5375201abdb71708fc9b4ff9f3b030066e64"
+    },
+    {
+      "bytes": 36526,
+      "label": "ohio-response-3.json",
+      "sha256": "eb65b15968a5f0c96f2c98283f5ccbda79643c818c1668d4324737de57ef5eb1"
+    },
+    {
+      "bytes": 641,
+      "label": "ohio-result-0.json",
+      "sha256": "9f151690cd9630cbb11c68cd2fd6c2ffb6947e12556e67025b999712c1991839"
+    },
+    {
+      "bytes": 643,
+      "label": "ohio-result-1.json",
+      "sha256": "b392b231cadc29abaa14911e14471bfbaa6c013846066f3f6f307d8c3b373cf3"
+    },
+    {
+      "bytes": 641,
+      "label": "ohio-result-2.json",
+      "sha256": "bc837bb2eaa50b69566cf05140db77f9e6780f090f6d502eb11cf43c18cf2aad"
+    },
+    {
+      "bytes": 644,
+      "label": "ohio-result-3.json",
+      "sha256": "03de6c8ad6d4d539a5c924635eba585616767774946151770d859bfc2928f9a0"
+    },
+    {
+      "bytes": 24321,
+      "label": "ohio-conv-cache-manifest.json",
+      "sha256": "1908f58382dee0bf931d4c42fda53489db5c2adfbae4c74c54c5ad7a012fe6c2"
+    },
+    {
+      "bytes": 5438,
+      "label": "virginia-route.json",
+      "sha256": "a78664d1ed2720afb51bc090ccf24bcb7263d10aedbe9fe37815935bbcb2b4b0"
+    },
+    {
+      "bytes": 1981,
+      "label": "virginia-image-manifest.json",
+      "sha256": "46ea9dba85b4f372a0b5f7ae11739066df227e7e81a6f16cad26d74e5d33d9d9"
+    },
+    {
+      "bytes": 6260,
+      "label": "virginia-image-receipt.json",
+      "sha256": "8fdf415c0ad8a80c63109555a64e7ec03c9a9d4df499c7c9b40a0b0d11dbf21d"
+    },
+    {
+      "bytes": 618,
+      "label": "virginia-input-binding.json",
+      "sha256": "4bd354913135fe9e44660d47e99bcf474e1a49e88f8c27421263e62ab202b79d"
+    },
+    {
+      "bytes": 2857,
+      "label": "virginia-derivation.json",
+      "sha256": "4f2368ed603ec7ea78039ee9fc7a6b27c158c0116667261782bee80e8e6db088"
+    },
+    {
+      "bytes": 711,
+      "label": "virginia-pipeline.json",
+      "sha256": "db62d027f557765cf49fcd634e95f4e0e0ce563751d36806c46b519931df2f6e"
+    },
+    {
+      "bytes": 437,
+      "label": "virginia-plan.json",
+      "sha256": "0f00d709d47113a8bbad22a6678c037955ff781c78fdd1ab35e9c171a363a1bf"
+    },
+    {
+      "bytes": 25300,
+      "label": "virginia-request-0.json",
+      "sha256": "85118c8a501b644171e4ce43b89fe994f9f8c3963ea8d1ee49aea63d6bbd2fb7"
+    },
+    {
+      "bytes": 25300,
+      "label": "virginia-request-1.json",
+      "sha256": "85118c8a501b644171e4ce43b89fe994f9f8c3963ea8d1ee49aea63d6bbd2fb7"
+    },
+    {
+      "bytes": 25300,
+      "label": "virginia-request-2.json",
+      "sha256": "19196140703e62c2663c01afed536685815610c142debc6a8dca62ca98ac2cc6"
+    },
+    {
+      "bytes": 25286,
+      "label": "virginia-request-3.json",
+      "sha256": "9ca8fdfd0cecca86160fc1effbfe1fef0847d22316996b056351b3f65e574a00"
+    },
+    {
+      "bytes": 36547,
+      "label": "virginia-response-0.json",
+      "sha256": "f68fcf345babcaa320932292127218efb307e79ab1fefed383179ef9954eb808"
+    },
+    {
+      "bytes": 36547,
+      "label": "virginia-response-1.json",
+      "sha256": "b2f5bcbf03f5c3cc446b265a5c93a38ff82387ec52e813829639bc15710ce572"
+    },
+    {
+      "bytes": 36547,
+      "label": "virginia-response-2.json",
+      "sha256": "d32aec976ba5fd5c2ad4a72c13759fd8c57f6332abc8f3ddfe9216cb9f82588c"
+    },
+    {
+      "bytes": 36523,
+      "label": "virginia-response-3.json",
+      "sha256": "aa5920d88eb8d984f5ad9af8248429dfdbbad203d3806eceb59f27b5f8519bef"
+    },
+    {
+      "bytes": 640,
+      "label": "virginia-result-0.json",
+      "sha256": "3757faa681ea711b75c21f72cce76f31590b44e55e7455928f2b064b0569cc36"
+    },
+    {
+      "bytes": 640,
+      "label": "virginia-result-1.json",
+      "sha256": "8e6a74de1f2cd6d0ed60ecf8f0a7bd28525ebf136b7b00b76f913b1c8aba48c4"
+    },
+    {
+      "bytes": 639,
+      "label": "virginia-result-2.json",
+      "sha256": "6b109732e7f76b4605704f576e09dbcc63bc95f26e586398649e83da5e60fbef"
+    },
+    {
+      "bytes": 642,
+      "label": "virginia-result-3.json",
+      "sha256": "47362cce51c975d8c61206fc9a16818ae3865ee549ae9d3b4fdf7eed1a40b505"
+    }
+  ],
+  "statisticsRecomputed": false,
+  "status": "both candidates failed the original numerical gate; no official qualification or scientific acceptance"
+}
