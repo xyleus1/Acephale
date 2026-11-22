@@ -1,0 +1,1 @@
+Final fidelity reader verifies exact unique selected membership and unchanged within-cohort order, then aligns derived public rows to selection order. Original execution-order provenance retained. No estimator, scientific record, model or ledger change; prior failed CPU retained.

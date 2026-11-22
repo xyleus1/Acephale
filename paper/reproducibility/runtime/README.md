@@ -1,0 +1,3 @@
+# Executed reporting and presentation source archive
+
+UNVALIDATED research. These are source-bound copies of the actually used reporting readers, original-report formatter, paper assembly and publication helpers. No model, estimator or scientific record was changed by the reader/schema repairs. Failed prior CPU attempts remain in private provenance. Deployment paths, account and resource identifiers are replaced with explicit REQUIRED_BINDINGS placeholders; live configurations and credentials are excluded. The manifest records both the original executed source SHA256 and the public-copy SHA256. These operational modules require their original external bindings; portable numerical reproduction is provided separately in the two nine-file native reproduction packages.

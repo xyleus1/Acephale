@@ -1,0 +1,1 @@
+Normalize the exercised worker systemctl stdout string only in the two terminal-state readers; retain existing dict compatibility, PID/state predicates, raw state bytes and versioned index provenance. No scientific or worker changes. Seven focused cases use an actual immutable completed-worker fixture.

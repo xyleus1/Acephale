@@ -1,0 +1,1 @@
+Bind approved direct-report metadata successor30822 and change only REPORT_SOURCE_SHA in its dependent paper assembler. Numerical report789055 and original estimators are unchanged; all prior CPU failure evidence remains. No model, ledger or scientific changes.

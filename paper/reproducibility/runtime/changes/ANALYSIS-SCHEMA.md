@@ -1,0 +1,1 @@
+The derived reporting plan lacked original schema version:1. Add only that structural field. Preserve all96 rows/order, schedule hash, scope hashes and original estimator bytes. New analysis-inputs-schema02 directory preserves old plan/input and failed CPU attempt. No scientific/study-completion assertion is introduced.
