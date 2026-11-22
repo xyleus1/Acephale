@@ -1,0 +1,258 @@
+{
+  "completedDevelopment": {
+    "all12ConfigsOmitEpisodicEmbeddingsPath": true,
+    "all12ShadowPredictionDisabled": true,
+    "allLocalRequestIdsEndWith": ":actor",
+    "auxiliaryPredictorDispatches": 0,
+    "byArm": {
+      "acephale": {
+        "infra_opportunity_rejected": 123,
+        "model_completed:actor": 123,
+        "model_dispatch:actor": 123
+      },
+      "base": {
+        "model_completed:actor": 123,
+        "model_dispatch:actor": 123
+      },
+      "neutral_memory_prefetch": {
+        "infra_opportunity_rejected": 124,
+        "model_completed:actor": 124,
+        "model_dispatch:actor": 124
+      }
+    },
+    "localModelCompletions": 370,
+    "localModelDispatches": 370,
+    "observedPredictorRankingGoalEvents": {
+      "infra_goals_ready": 0,
+      "infra_predictor_compiled": 0,
+      "infra_predictor_input": 0,
+      "infra_ranking": 0
+    },
+    "opportunityRejectedCheckpoints": 247,
+    "pairedBlocks": 12,
+    "prefetchArmCheckpoints": 247,
+    "runs": 36
+  },
+  "evidenceScope": {
+    "development": "All36 retained original outcomes across12 closed paired-block cohorts",
+    "heldout": "Partial ongoing event-log snapshots, not final cohort results",
+    "modelCallsForThisInspection": 0,
+    "statisticsRecomputed": false
+  },
+  "exactRecordedOpportunityEstimates": [
+    {
+      "estimate": {
+        "actorLeadMs": 890.3100450000002,
+        "contentionMs": 1219.8852330000009,
+        "predictionMs": 1673.4862939999994,
+        "schedulingMs": 3.9155009999999493,
+        "toolMs": 11.965048000000024,
+        "validationMs": 7.870182999999997
+      },
+      "eventCount": 118
+    },
+    {
+      "estimate": {
+        "actorLeadMs": 479.77543900000046,
+        "contentionMs": 813.435841,
+        "predictionMs": 541.0528319999999,
+        "schedulingMs": 3.185523000000103,
+        "toolMs": 9.076121000000057,
+        "validationMs": 5.812296999999944
+      },
+      "eventCount": 129
+    }
+  ],
+  "gate": {
+    "event": "infra_opportunity_rejected",
+    "explanation": "Both recorded estimate groups have predictionMs greater than actorLeadMs, yielding zero perfect-predictor overlap with positive overheads.",
+    "formula": "overlap = min(toolMs, max(0, actorLeadMs - predictionMs - schedulingMs)); saving = probability * overlap - validationMs - schedulingMs - contentionMs",
+    "lines": "16-22,115-130",
+    "ordering": "Return before retrieval, goal inference, candidate ranking and speculative admission.",
+    "predicate": "expectedInfraSaving(1, opportunity) <= 0",
+    "reasonFieldPresent": false,
+    "source": "src/lib/acephale/infra-session.ts"
+  },
+  "heldoutPartialSnapshots": [
+    {
+      "auxiliaryPredictorDispatches": 0,
+      "configurationSha256": "446e4e5fae01f0022a7b5e7fd3064fe974c04c047194e138a3a74cd11aa80196",
+      "embeddingsConfigured": false,
+      "eventBytes": 2198235,
+      "eventSnapshotSha256": "d3bba1a487b50d1b578553c21a86346d078b9e8757f81da0e315d63a18805244",
+      "localRequestIdsBySuffix": {
+        "model_completed:actor": 301,
+        "model_dispatch:actor": 301
+      },
+      "observedAt": "2026-11-22T17:51:50.760291+00:00",
+      "opportunityRejectedCheckpoints": 207,
+      "prefetchArmCheckpoints": 207,
+      "segment": 1
+    },
+    {
+      "auxiliaryPredictorDispatches": 0,
+      "configurationSha256": "f14520c5151fce3b24065c7986002359ab8fe546d27ac688940d8b5d7aa8cb77",
+      "embeddingsConfigured": false,
+      "eventBytes": 1896556,
+      "eventSnapshotSha256": "1474b7f5b0a6f70db976d2edd348dfd9aed07abbc33d99c0637e6d52b6965e59",
+      "localRequestIdsBySuffix": {
+        "model_completed:actor": 260,
+        "model_dispatch:actor": 261
+      },
+      "observedAt": "2026-11-22T17:51:50.808656+00:00",
+      "opportunityRejectedCheckpoints": 170,
+      "prefetchArmCheckpoints": 170,
+      "segment": 2
+    }
+  ],
+  "interpretation": [
+    "Native arm names are nominal configurations; these retained runs did not invoke auxiliary goal inference or candidate ranking.",
+    "The observed task outcomes evaluate actor/user/judge execution under a system that abstained from speculation, not full GoalSpec predictor efficacy.",
+    "Zero speculation does not prove absence of potentially useful speculative work or poor candidate prediction.",
+    "Configured opportunity estimates are retained exploratory inputs; no qualification or failed profile gate is converted to acceptance.",
+    "Timing validity and all original failure/censoring labels remain unchanged."
+  ],
+  "rawDevelopmentEventSources": [
+    {
+      "cohortOrdinal": 0,
+      "sha256": "970b7f7ef46b99e8f2d2b904df48d01c192b73bb0b867f5682b0e2b3990ac2a3"
+    },
+    {
+      "cohortOrdinal": 1,
+      "sha256": "4f34521312fed93952d43de0fd4e472ec3c9ed50587269ef63de86c611be4068"
+    },
+    {
+      "cohortOrdinal": 2,
+      "sha256": "cca3e3f67818c501be6c75d7e62a73722a7fe585a638aa48de18a03d31c8f15c"
+    },
+    {
+      "cohortOrdinal": 3,
+      "sha256": "656df39db83dc2ef43b7f71840b1f33da5f8765fbb97d3579659f8862ab33d3b"
+    },
+    {
+      "cohortOrdinal": 4,
+      "sha256": "2b14fea3cc9a41f0d4b44dcb73aa8b9e4cd9d51020cc648074a2f3bef99f3e3e"
+    },
+    {
+      "cohortOrdinal": 5,
+      "sha256": "eb54822e2185f9cdad4657fff67a5c5c93f8af7da534727840dbb8fc33853d36"
+    },
+    {
+      "cohortOrdinal": 6,
+      "sha256": "e319949a4091d5f7471267bee42733303bf0419bc9235a7aacb4dc1478902949"
+    },
+    {
+      "cohortOrdinal": 7,
+      "sha256": "fa9e07098906708edd757636a4bcbc11ffb533b1e4077eecdfdd92e6da7c507e"
+    },
+    {
+      "cohortOrdinal": 8,
+      "sha256": "30a5d724bb091273aa30ba5560d80d80a7a26a4ced5c3c3ee4e69191edacf8e1"
+    },
+    {
+      "cohortOrdinal": 9,
+      "sha256": "ce7e7aef538a3c7b7ad6c3a6afcb07e6669a211297d1949e3dd7c6732b3f2703"
+    },
+    {
+      "cohortOrdinal": 10,
+      "sha256": "76a8080ab4e2f15955ba83b684b25dab83e9cc5412484980fad00d65ce4bc406"
+    },
+    {
+      "cohortOrdinal": 11,
+      "sha256": "a03e4d64bc7131f848abbfbcae3868eafde815324f1415559b770304c0a13a31"
+    }
+  ],
+  "retrieval": {
+    "configuredNativeFallback": "Frozen lexical token-set cosine; max4 episodes, max16000 characters, strict-policy/verified/family filtering.",
+    "implementedCapability": "Optional embeddings/database retrieval is supported by a separate configured port.",
+    "nativeLexicalRetrievalExercised": false,
+    "nativeVectorOrRrfExercised": false,
+    "replayResultsSeparate": true,
+    "why": "Every observed prefetch checkpoint returned at the earlier opportunity gate."
+  },
+  "schemaVersion": 1,
+  "scientificAcceptanceAsserted": false,
+  "serviceConfigurationSha256s": [
+    "5c744e0009bde9cafd1c9dbc671f33f105e1a1f6e3ac5bd9d3c378127efe2187",
+    "9364de6f6c2e6ddb4b731ab898f0535502c6466f6f9915093d3cbc4b44242723",
+    "05af2b6369d64efbc5535de0245b8caecf124a340886f7ea673d4dd65909844b",
+    "4006d4a327e865d03f98f399b7eaa0492c768f04799f28506aa0ae2344e3d009",
+    "22462c81108cefca77dfbeed8c525b75fe9f3ac106d5206561f47e3a9900dd69",
+    "c950a5b30ce2f5cbd867d33fe845679ace09e6095c15e74c2eaed45a798f83e3",
+    "33c47347d851524db6a0aba19d758b65e9ba21d0d1bfed2c90bb71e1a1447410",
+    "2301c66c77150d3a7a6c02e30a4823fcfece4444ab910e1c084f83fb39f6528b",
+    "801d974bdfec9edd69f9ba0562a59275d4e989fb70b6424492fc22cd92fc5876",
+    "ceefcf0c7c486a2f8290d6a8b5363c0750c60f48860ff42b9786e770a56f0875",
+    "87d0f354af88ce1ef56fe23eff037d67c64cfd607d253a5ba8e5221c1b84be00",
+    "7c1750c0add9d21682cedcc2878f43c9e0cb409ba76069847c5b40bb7e635ff4"
+  ],
+  "sourceFiles": [
+    {
+      "bytes": 14558,
+      "lineRanges": [
+        [
+          16,
+          22
+        ],
+        [
+          115,
+          130
+        ],
+        [
+          178,
+          204
+        ]
+      ],
+      "repositoryRelativePath": "src/lib/acephale/infra-session.ts",
+      "sha256": "df3c8273572a130f4d35654247e6e25ac030ed3c6ab4f4e9263613f21f44ebbe"
+    },
+    {
+      "bytes": 22164,
+      "lineRanges": [
+        [
+          104,
+          120
+        ],
+        [
+          155,
+          169
+        ],
+        [
+          195,
+          220
+        ]
+      ],
+      "repositoryRelativePath": "services/acephale-runtime/infra-predictors.ts",
+      "sha256": "53a682386ce8eee4316117203c439c124ff7dafe78f66fd45f944096d6d04830"
+    },
+    {
+      "bytes": 32801,
+      "lineRanges": [
+        [
+          195,
+          206
+        ],
+        [
+          214,
+          265
+        ]
+      ],
+      "repositoryRelativePath": "scripts/acephale-infra-native.ts",
+      "sha256": "b177f74239c36432d90aa515efe4172c6bdd236bc304b302e80c2c96d06e5454"
+    },
+    {
+      "bytes": 30393,
+      "lineRanges": [
+        [
+          64,
+          70
+        ]
+      ],
+      "repositoryRelativePath": "src/lib/acephale/experience-memory.ts",
+      "sha256": "12a69409342f991d977b2a135ee041e24e423444d0c0c596c89de00f6c512659"
+    }
+  ],
+  "studyComplete": false,
+  "title": "Evaluated native execution path: early opportunity abstention",
+  "validationStatus": "unvalidated"
+}

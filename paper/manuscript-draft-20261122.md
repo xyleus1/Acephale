@@ -1,10 +1,10 @@
-# Goal-conditioned speculative tool execution: an exploratory study
+# Acephale: goal-conditioned speculative tool execution
 
 **Draft: native evaluation is still running.** This manuscript reports the retained prediction experiments and separates the original protocol from the subsequent exploratory cloud runs. Development results are complete; the held-out table awaits the selected cohort.
 
 ## Abstract
 
-We investigate whether a representation of a user's requested outcome improves prediction of an agent's next read-only tool invocation. Acephale combines frozen workflow and episodic memory, source-bound argument construction, an auxiliary language-model predictor, and speculative execution during actor generation. The actor's weights, available tools and authoritative execution rules remain fixed. In the retained seed-17 fixed-panel replay, goal-conditioned scores improve equal-family binary log loss by 0.126 nats on 230 jointly scored checkpoints, with a 95% family-bootstrap interval of [0.021, 0.265]. However, 412 of 746 declared checkpoints failed in each condition. A separate distributed seed-29 replay finds a difference of -0.0129 nats on 442 jointly scored checkpoints, with an interval of [-0.0846, 0.0932]. The two opportunity profiles fail their predeclared minimum coverage requirement. In 36 exploratory development runs, all three arms receive database reward in 12/12 runs; constraint-clean success is 8/12, 9/12 and 9/12 for base, neutral-prefetch and goal-prefetch respectively. No speculative read executes, and all comparative-timing flags are invalid. Held-out evaluation remains pending. The evidence does not establish that adding inferred goals improves task success or end-to-end latency.
+We investigate whether a representation of a user's requested outcome improves prediction of an agent's next read-only tool invocation. The Acephale implementation provides frozen workflow and episodic memory, source-bound argument construction, an auxiliary language-model predictor, and speculative execution during actor generation; these capabilities must be distinguished from the paths actually exercised. The actor's weights, available tools and authoritative execution rules remain fixed. In the retained seed-17 fixed-panel replay, goal-conditioned scores improve equal-family binary log loss by 0.126 nats on 230 jointly scored checkpoints, with a 95% family-bootstrap interval of [0.021, 0.265]. However, 412 of 746 declared checkpoints failed in each condition. A separate distributed seed-29 replay finds a difference of -0.0129 nats on 442 jointly scored checkpoints, with an interval of [-0.0846, 0.0932]. Exact-call Top-1 hit rates are unchanged by goal conditioning within each seed. The two opportunity profiles fail their predeclared minimum coverage requirement. In 36 exploratory development runs, all three arms receive database reward in 12/12 runs; constraint-clean success is 8/12, 9/12 and 9/12 for base, neutral-prefetch and goal-prefetch respectively. The original opportunity bound rejects all 247 development prefetch checkpoints before retrieval, goal inference or ranking; all 370 local model calls are actor calls. The nominal native arms therefore collapse to demand-only execution here and do not measure live auxiliary-predictor efficacy. All comparative-timing flags are invalid. Held-out evaluation remains pending. The evidence does not establish that adding inferred goals improves task success or end-to-end latency.
 
 ## 1. Question and scope
 
@@ -24,15 +24,19 @@ Only the predictor is fine-tuned. The existing recipe uses rank-16 LoRA, alpha 3
 
 Ranking outputs an action class and one binary hit token per candidate. Serving normalizes the logits of the 0/1 token pair, then applies the retained calibration map. Because decoding is autoregressive, later scores condition on earlier generated tokens. They are not independent marginal probabilities. A discriminative ranking head was proposed but is not an evaluated component of this frozen experiment.
 
+The actual fitting manifest contains 1,074 supervised examples from 358 complete checkpoints across 24 families; 79 checkpoints contain a positive read. Each checkpoint contributes goal inference, neutral ranking and goal-conditioned ranking supervision. Both seed receipts record 204 completed optimizer steps. Three epochs was the configured recipe; completed epochs, training duration and final loss are not independently supplied by the recovered receipts. Each unmerged adapter has 10,822,656 trainable parameters in 372 tensors across 186 modules, stored in FP32 and served with BF16 LoRA. The base recipe retains 18 A_log tensors in FP32.
+
 ### 2.2 Public context, memory and candidates
 
 The input compiler includes the visible conversation, policy, tool contracts and current argument evidence. Future actions, hidden native state and evaluator outcomes are excluded. Families are split before annotation or memory mining. Requested-goal labels see the public checkpoint only.
 
 Workflow patterns encode observed ordering, argument dependencies and verified endpoints. At a new checkpoint, symbolic binding resolves arguments from currently visible fields and indices. A historical entity value cannot authorize a current argument.
 
-Frozen episodic retrieval filters for compatible model, tool, environment, policy, authorization and family scope. Lexical and exact-cosine hits are combined with reciprocal-rank fusion; the prompt admits at most four examples, including at most one negative. Retrieval failure and fallback remain recorded.
+The implementation supports filtered episodic retrieval for compatible model, tool, environment, policy, authorization and family scope. The optional embedding/exact-cosine and reciprocal-rank-fusion route is a capability, not an evaluated native path in these runs. All retained development and ongoing held-out native configurations omit episodicEmbeddingsPath. Without a retrieval port, the configured fallback uses lexical token-set cosine with at most four episodes, a 16,000-character limit and strict-policy, verified and family filters.
 
-Proposals deduplicate exact invocations and construct a common, goal-neutral candidate window before conditional ranking. The proposal pool is bounded at 128, and at most three candidates are selected. A positive label means the exact invocation occurs anywhere in the immediately following authoritative batch. Multiple candidates may be positive.
+Even this lexical fallback was not reached at the observed native prefetch checkpoints: the earlier perfect-predictor opportunity bound returned before retrieval, inferGoals or rank. The completed development audit is reported in Section 5.1. Fixed-panel predictor replay remains a separate experiment and must not be conflated with the native execution path.
+
+When admitted past the opportunity bound, the proposal implementation deduplicates exact invocations and constructs a common, goal-neutral candidate window before conditional ranking. The proposal pool is bounded at 128, and at most three candidates are selected. A positive label means the exact invocation occurs anywhere in the immediately following authoritative batch. Multiple candidates may be positive.
 
 ### 2.3 Speculative execution
 
@@ -80,6 +84,14 @@ The original seed-17 opportunity profile completed 8 of 20 measurements; the oth
 
 Goal-teacher agreement is also distinct from native reward. The retained seed-17 reliability artifact reports 6 agreements among 141 graded cases and a Wilson lower bound of 0.01965. The seed-29 continuation reports 15 agreements among 141 cases and a lower bound of 0.06554. The annotation audit used zero human reviews and a separate prompt to the same teacher model; reviewer-model independence is not claimed.
 
+![Retained seed17 replay evidence](figures/autonomous-20261122/seed17-retained-evidence.png)
+
+Figure 1. Retained seed-17 prediction evidence. Positive neutral-minus-goal differences favor goal conditioning on the jointly observed subset; missing predictions remain reported.
+
+![Unvalidated paired seed29 differences](figures/autonomous-20261122/seed29-paired-differences.png)
+
+Figure 2. Exploratory seed-29 paired replay differences. Both intervals include zero, and this distributed continuation is not a clean seed replication.
+
 ## 5. Native evaluation
 
 ### 5.1 Completed development cohort
@@ -99,11 +111,19 @@ All 36 declared development arm-runs completed: six families, two task variants 
 
 Database reward and policy compliance differ because the database evaluator can find the expected final state while a separate assertion flags missing explicit confirmation before a mutation. The recorded policy verdict is retained; database reward alone is not unconditional task correctness.
 
-The equal-family paired difference in constraint-clean success is +0.0833 for either prefetch arm relative to the base actor, with the original 95% family-bootstrap interval [0, 0.25]. Goal-conditioned minus neutral prefetch is 0 with interval [-0.25, 0.25]. Goal-conditioned minus base logical tool calls is -0.0833 per run, with interval [-0.3333, 0.1667]. These estimates use six families and 12 paired trials, with 2,000 resamples and seed 42. They do not establish a general advantage.
+The equal-family paired difference in constraint-clean success is +0.0833 for either prefetch arm relative to the base actor, with the original 95% family-bootstrap interval [0, 0.25]. Goal-conditioned minus neutral prefetch is 0 with interval [-0.25, 0.25]. Goal-conditioned minus base logical tool calls is -0.0833 per run, with interval [-0.3333, 0.1667]. These estimates use six families and 12 paired trials, with 2,000 resamples and seed 42. They compare nominal configurations whose auxiliary prediction paths were never entered, so their differences cannot be attributed to inferred goals, retrieval or trained-predictor efficacy.
 
 All arms have empirical database-reward estimates and bootstrap intervals of 1.0 [1.0, 1.0]; all paired reward differences are 0 [0, 0]. These degenerate empirical intervals reflect the uniformly successful observed sample. They do not establish population-perfect performance, equivalence or a ceiling on future failures.
 
-No speculative read was executed. There is therefore no evidence here for an effect of consumed prefetched results. Every comparative-timing validity flag is false, and the original report has null latency estimates and intervals. Operational elapsed time is excluded from speedup comparisons. Hosted usage is recorded user-simulator/judge usage, separate from GPU charges and any reconciled invoice.
+The completed raw event logs record 370 local model dispatches and 370 completions, all Qwen3.5-9B actor requests; no auxiliary goal-inference or candidate-ranking request occurs. Every one of the 247 prefetch-arm checkpoints is rejected by the unchanged perfect-predictor opportunity bound before retrieval, inferGoals or rank. The two retained opportunity estimates have predictionMs greater than actorLeadMs (541.052832 versus 479.775439, and 1673.486294 versus 890.310045). The original overlap formula is therefore zero even at probability one, while validation, scheduling and contention overheads make the bound nonpositive.
+
+The nominal native arms collapsed to demand-only execution under these exploratory opportunity inputs. Neither configured lexical fallback nor optional vector/RRF retrieval was exercised at these checkpoints. This is fail-closed abstention, not a measured predictor-accuracy failure, and it does not prove that the tasks lacked useful speculative reads. No speculative read was executed or consumed. Every comparative-timing validity flag is false, and the original report has null latency estimates and intervals. Operational elapsed time is excluded from speedup comparisons. Hosted usage is recorded user-simulator/judge usage, separate from GPU charges and any reconciled invoice.
+
+A separate ongoing held-out log snapshot at 17:51:50 UTC showed the same early-abstention path: segments 1 and 2 had 207/207 and 170/170 rejected prefetch checkpoints, respectively, and 301 and 261 actor dispatches with no auxiliary-predictor dispatch. These are dated partial log counts, not final held-out cohort statistics. The source-bound audit is retained in [native evaluated-path evidence](sources/native-evaluated-path-20261122.json).
+
+![Development reward and constraint audit](figures/autonomous-20261122/development-reward-constraint-counts.png)
+
+Figure 3. Development database reward and constraint-clean outcomes for nominal arms, copied from the original native analysis. Each arm has 12 runs across six families. The opportunity bound prevents auxiliary prediction and speculation; these are not live goal-predictor efficacy estimates. All comparative timings are invalid.
 
 ### 5.2 Deployment and reporting amendments
 
@@ -137,8 +157,3 @@ The release retains model and source identities, family splits, prompt and candi
 
 The final artifact bundle will contain this editable manuscript, the rendered PDF, figures and source data, original analysis scripts, and a manifest mapping reported values to result files. Infrastructure/provider charges and hosted-model usage are reported separately. Recorded usage is not presented as a reconciled invoice.
 
-## References
-
-1. Sui et al. *Parallelizing Tool Execution and LLM Generation for Low-Latency Agent Serving*. arXiv:2603.18897v3, 2026. https://arxiv.org/abs/2603.18897v3
-2. Li et al. *Speculate with Memory: Lossless Acceleration for LLM Agents*. arXiv:2607.12236v1, 2026. https://arxiv.org/abs/2607.12236v1
-3. Sierra Research. *tau2-bench*, commit 2174a603f6d014ef94473ffa95957f6ce27100db. https://github.com/sierra-research/tau2-bench/tree/2174a603f6d014ef94473ffa95957f6ce27100db

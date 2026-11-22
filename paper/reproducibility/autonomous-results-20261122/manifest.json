@@ -1,0 +1,112 @@
+{
+  "kind": "public-source-and-native-fidelity-archive-v1",
+  "files": [
+    {
+      "relativePath": "source/paper_assembly_04.py",
+      "sourceName": "paper_assembly_04.py",
+      "originalSha256": "370efff1c8855aa3d484ed1ea63cc472cc5e1399b3aef609e1491f7a54e38a3b",
+      "publicSha256": "278aacdd307a432b19f89658b86ed74d0f4c5217e10fdb500a4da2a667e23086",
+      "bytes": 17948,
+      "privatePathRedactions": 3
+    },
+    {
+      "relativePath": "source/native_section.py",
+      "sourceName": "native_section.py",
+      "originalSha256": "efae1bd776fe86080b3ac391921dbe6dea6101ee6450ee4f0406ae52c24b77cc",
+      "publicSha256": "efae1bd776fe86080b3ac391921dbe6dea6101ee6450ee4f0406ae52c24b77cc",
+      "bytes": 8615,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "paper/manuscript.md",
+      "sourceName": "manuscript.md",
+      "originalSha256": "db070e293521e6464a9b73af2ed02f73f487358f5e9e5e8c46313d75da0f4dfb",
+      "publicSha256": "db070e293521e6464a9b73af2ed02f73f487358f5e9e5e8c46313d75da0f4dfb",
+      "bytes": 22363,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "paper/sources/native-evaluated-path-public.json",
+      "sourceName": "native-evaluated-path-public.json",
+      "originalSha256": "55e60d25cea8089dfbe4cd92635b8c2b2ccd93771668556c0557e2d685a315b7",
+      "publicSha256": "55e60d25cea8089dfbe4cd92635b8c2b2ccd93771668556c0557e2d685a315b7",
+      "bytes": 8938,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "paper/figures/seed17-retained-evidence.png",
+      "sourceName": "seed17-retained-evidence.png",
+      "originalSha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88",
+      "publicSha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88",
+      "bytes": 132777,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "paper/figures/seed29-paired-differences.png",
+      "sourceName": "seed29-paired-differences.png",
+      "originalSha256": "f7f8e02611038ab281225ac5e04bd49c71e3648154abf850f4aa970d25895aae",
+      "publicSha256": "f7f8e02611038ab281225ac5e04bd49c71e3648154abf850f4aa970d25895aae",
+      "bytes": 169145,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "paper/figures/development-reward-constraint-counts.png",
+      "sourceName": "development-reward-constraint-counts.png",
+      "originalSha256": "5e56f9e3a78e55d03baa45f0a3059b74a9b38ee7dd46c3ea06a2cf87ef395669",
+      "publicSha256": "5e56f9e3a78e55d03baa45f0a3059b74a9b38ee7dd46c3ea06a2cf87ef395669",
+      "bytes": 172726,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "source/postprocess/collect_heldout.py",
+      "sourceName": "collect_heldout.py",
+      "originalSha256": "1a17fbe0ec7ae8b64c6e6a3dea5b5eff0dde191c2823ed4c5ed476b417dba6e9",
+      "publicSha256": "1a17fbe0ec7ae8b64c6e6a3dea5b5eff0dde191c2823ed4c5ed476b417dba6e9",
+      "bytes": 5787,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "source/postprocess/heldout_callbacks_02.py",
+      "sourceName": "heldout_callbacks_02.py",
+      "originalSha256": "db66ab2870511877a988b0146ca305061465c4aec792434313f45f6968b25e1b",
+      "publicSha256": "619773d8e2addf7e7c630a4ade688c763b32c77b38bed15573625bc131f6fe25",
+      "bytes": 6050,
+      "privatePathRedactions": 2
+    },
+    {
+      "relativePath": "source/postprocess/prepare_analysis.py",
+      "sourceName": "prepare_analysis.py",
+      "originalSha256": "00d6f7b1fbf8cebcfd376096a4ab96cb53475becea9f9a78706825ec2f6c4086",
+      "publicSha256": "00d6f7b1fbf8cebcfd376096a4ab96cb53475becea9f9a78706825ec2f6c4086",
+      "bytes": 2761,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "source/postprocess/prepare_reports.py",
+      "sourceName": "prepare_reports.py",
+      "originalSha256": "0dd5e43bdf01f64d4f89ce1fd43c127fbf1dd1467c198743ce5fa8d06549c78c",
+      "publicSha256": "0dd5e43bdf01f64d4f89ce1fd43c127fbf1dd1467c198743ce5fa8d06549c78c",
+      "bytes": 4488,
+      "privatePathRedactions": 0
+    },
+    {
+      "relativePath": "source/postprocess/publish_reports.py",
+      "sourceName": "publish_reports.py",
+      "originalSha256": "a83dcb907ea839995a983da29f610e98343c282e7f6cba28b03481e413503124",
+      "publicSha256": "a83dcb907ea839995a983da29f610e98343c282e7f6cba28b03481e413503124",
+      "bytes": 1958,
+      "privatePathRedactions": 0
+    }
+  ],
+  "sanitization": {
+    "privatePathsReplaced": 5,
+    "scanFindings": [],
+    "pythonSyntaxChecked": 7
+  },
+  "noLiveConfigurations": true,
+  "noCredentials": true,
+  "scientificSettingsChanged": false,
+  "statisticsComputed": false,
+  "modelsCalled": false,
+  "githubPublished": false
+}
