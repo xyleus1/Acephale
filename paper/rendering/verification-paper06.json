@@ -1,0 +1,44 @@
+{
+  "status": "working-paper-incomplete",
+  "pdfSha256": "ee32f73850af6f6f9ca2f5c0709801701eb6d4113e70c0d108d12c83f76c34b7",
+  "pageCount": 24,
+  "textOutsidePage": [],
+  "privacyFindings": [],
+  "embeddedAttachments": 0,
+  "newStatisticalEstimates": false,
+  "modelCallsPerformed": false,
+  "canonicalAcceptanceChanged": false,
+  "visualInspection": {
+    "passed": true,
+    "reviewer": "report_resume",
+    "prior24PageContactSheetsInspected": true,
+    "fullSizePagesInspected": [
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "finalChangedPages": [
+      15,
+      16
+    ],
+    "clippingOrOverlapObserved": false,
+    "tablesReadable": true,
+    "formalReferencesAndLabeledAppendicesPresent": true
+  },
+  "independentMaterialReview": {
+    "reviewer": "recovery_publication_review",
+    "scope": "changed result paragraphs and public native projections",
+    "necessaryCorrections": [],
+    "laterClarification": "operational/cache amendment limitation only; no statistical change"
+  },
+  "independentPrivacyReview": {
+    "reviewer": "recovery_publication_review",
+    "scope": "native projections plus PDF text, metadata and links",
+    "concreteLeaks": [],
+    "laterClarificationContainsNoAdministrativeIdentifiers": true
+  },
+  "pageBoundsChecked": 24,
+  "unchangedFiguresReused": true
+}

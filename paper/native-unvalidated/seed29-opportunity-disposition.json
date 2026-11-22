@@ -1,0 +1,142 @@
+{
+  "actualCompletedRows": 7,
+  "actualErrorTypes": {
+    "actor_did_not_request_profiled_read": 12
+  },
+  "actualMeasuredFailedRows": 12,
+  "canonicalAcceptanceChanged": false,
+  "censoredActualRequestCount": "unknown; not zero-inferred from missing records",
+  "censoredOriginalRows": [
+    2
+  ],
+  "interpretation": "Profile invocation matching, not task reward or customer-task failure; censored row is not a zero-request observation.",
+  "minimumCompletedRequired": 10,
+  "noResamplingOrRerunToMeetMinimum": true,
+  "rawArtifactIndexSha256": "74c87565fe7cc73bc8247b88ac10f2d1fb2d37c7cfc9a7e32399fb0cebb61d25",
+  "rows": [
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 0,
+      "sha256": "57ed005471795ef3d91a3be192d4e1c928d55548c33eac353aa286114ac7e590",
+      "status": "failed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 1,
+      "sha256": "5df7416a084eb1707ce8ca3b3c66daf5c4118025b2c734e58a561ae39cb78489",
+      "status": "completed"
+    },
+    {
+      "errorType": "external_capacity_stop_ambiguous_request",
+      "ordinal": 2,
+      "sha256": "73675640cba3e2beb8898e26e1de7fdf2d928859b3605c92693707138a97f426",
+      "status": "failed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 3,
+      "sha256": "46c46176632a0ab535cb49883c85954d4509c80af26ac05e8888a5cc69624680",
+      "status": "completed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 4,
+      "sha256": "f62e1e111590e0290aef22723ecd5af467ae1e81ba47d98a31f6b443fcd97c88",
+      "status": "completed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 5,
+      "sha256": "14e09ca60733476e9f9fd9bd19b64e15be27a4e14d05a7f671946d209d68187f",
+      "status": "completed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 6,
+      "sha256": "0096facdd6af961abbfa52bef2c51d1739a8397ca654e0f951b1baf61aa253a9",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 7,
+      "sha256": "f92fb9c67e15767fe24f14301a2a6f96b4cf5f076fdd40e4ddfe3c6dbf4c996b",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 8,
+      "sha256": "569ff108d01f98f3418b4d504dfb55d99292f83707fa8c110522436d138b59f5",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 9,
+      "sha256": "292085085eb9bfd9d63eadc83745fdcf9c1b5463317ba7c03ac9d3480d6d2266",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 10,
+      "sha256": "7f843c1b85a78f173ad98ccbf495798ab0271278ac186260ba415aee5fdf774d",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 11,
+      "sha256": "7416fbc51593db056c8c441784817ff2123f0af0ef1492346ba8c1b34fc97f83",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 12,
+      "sha256": "a63777aba73acc0ec0cbb8cfd58badf6857c60984cc6b828709d5a8acd7d2e0a",
+      "status": "failed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 13,
+      "sha256": "41d3bb89f5e322c658a8da8b5162a8690f4287171039129e4ea6dced65ddfc47",
+      "status": "completed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 14,
+      "sha256": "47000c020c65f280e94ac9fcbbdf635ad3eafa313c6d9b460ebd6bc45eeddc0b",
+      "status": "failed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 15,
+      "sha256": "d178e77dd5874f049ae9f87ba67a2de3347d2726c6fd1d1855fd39e7d5b68206",
+      "status": "completed"
+    },
+    {
+      "errorType": null,
+      "ordinal": 16,
+      "sha256": "e80cf9f8983b8dacd23a8e044134ab093b0c03e948c0e7c3df6245d699b662ae",
+      "status": "completed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 17,
+      "sha256": "ba4b0d31b20449269e8b7d41bd2f7f235b1a5889d524cf97ea4de4eb14b061ae",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 18,
+      "sha256": "a20a67b7bb00f6ec0830891e73c8c5722cca52527314bf06e123eb9c0de7c5bc",
+      "status": "failed"
+    },
+    {
+      "errorType": "actor_did_not_request_profiled_read",
+      "ordinal": 19,
+      "sha256": "beb338d3c7ebd4422201d5c367c9e3a2ccce81a84ac1c32bdfda3dcbbef1cb75",
+      "status": "failed"
+    }
+  ],
+  "sourceTerminalNoteSha256": "8a3ba44c99e2a1c1c13238949b8b2a512abe5fc6b9ca8155b9405ad773acfae7",
+  "statisticsComputed": false,
+  "status": "UNVALIDATED; original minimum gate failed",
+  "studyComplete": false
+}

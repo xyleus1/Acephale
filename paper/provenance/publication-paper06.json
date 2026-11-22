@@ -1,0 +1,25 @@
+{
+  "kind": "acephale-working-paper-publication-v1",
+  "edition": "paper06",
+  "status": "working-paper-incomplete-unvalidated-continuation",
+  "expectedParentCommit": "2ccbd87c6df04426fa19960787c55d0d02f84bdd",
+  "pageCount": 24,
+  "pdfSha256": "ee32f73850af6f6f9ca2f5c0709801701eb6d4113e70c0d108d12c83f76c34b7",
+  "sourceStatisticsRecomputed": false,
+  "newModelCalls": false,
+  "canonicalAcceptanceChanged": false,
+  "nativePairedCases": 1,
+  "nativeArms": 3,
+  "nativeTimingValid": false,
+  "opportunityDisposition": {
+    "completed": 7,
+    "measuredReadMiss": 12,
+    "censored": 1,
+    "originalMinimumComplete": 10,
+    "gatePassed": false
+  },
+  "priorInfrastructureFailuresRetained": 3,
+  "fundingApprovalAsserted": false,
+  "relativeSourceDirectory": "paper/native-unvalidated",
+  "figures": "inherited unchanged from parent"
+}

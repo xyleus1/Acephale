@@ -1,0 +1,335 @@
+{
+  "originalSummary": {
+    "accountingScope": "hosted_user_and_judge",
+    "allDeclaredSlotsRetained": true,
+    "billedUsd": 0.047876,
+    "counts": {
+      "acephale": 1,
+      "base": 1,
+      "neutral_memory_prefetch": 1
+    },
+    "gpuCostStatus": "separate_infrastructure_ledger",
+    "knownUsageSubtotalUsd": 0.047876,
+    "notRetried": true,
+    "serviceExitCode": 0,
+    "stageAborted": false,
+    "startupFailure": null,
+    "successes": 3,
+    "unknownCharges": 0
+  },
+  "priorBlock00": {
+    "holdsReleased": false,
+    "rawIndexSha256": "1278edad68149215d05f807661150723781730683563c628655a18b6dcf9dbda",
+    "replaced": false,
+    "retainedInfrastructureFailures": 3,
+    "retainedUnknownChargeFlags": 3
+  },
+  "rawIndexSha256": "5cd55de8045bfa483ee39034fc20ac4140fa6d4923d4719589919f8caa223846",
+  "rows": [
+    {
+      "actionChecks": [
+        {
+          "actionName": "return_delivered_order_items",
+          "action_match": true,
+          "action_reward": 1.0
+        },
+        {
+          "actionName": "exchange_delivered_order_items",
+          "action_match": true,
+          "action_reward": 1.0
+        }
+      ],
+      "configuredNlAssertions": [
+        {
+          "met": true,
+          "nl_assertion": "Before every database mutation, the assistant described the action details and obtained an explicit yes from the user."
+        },
+        {
+          "met": true,
+          "nl_assertion": "The assistant authenticated the user through email or name and ZIP before disclosing account data or making changes."
+        }
+      ],
+      "customTaskScope": "Custom tau-compatible task; not an official task or unseen-primitive evaluation.",
+      "officialRewardInfo": {
+        "db_check": {
+          "db_match": true,
+          "db_reward": 1.0
+        },
+        "reward": 1.0,
+        "reward_basis": [
+          "DB"
+        ],
+        "reward_breakdown": {
+          "DB": 1.0
+        }
+      },
+      "originalResultSha256": "4c045ee4878bd95e4f04a137a488f0f28fee4c81dc4bbd299b3e451d3b3ef3ab",
+      "record": {
+        "accountingScope": "hosted_user_and_judge",
+        "arm": "base",
+        "armOrder": 0,
+        "authoritativeCalls": 7,
+        "billedUsd": 0.017246,
+        "constraintViolations": 0,
+        "evaluationSeconds": 3.0797249890001694,
+        "familyId": "retail-composition-680a5df34f49",
+        "freshnessChecks": 0,
+        "gpuCostStatus": "separate_infrastructure_ledger",
+        "hostGuardConfigured": false,
+        "hostHealthStatus": "unobserved",
+        "knownUsageSubtotalUsd": 0.017246,
+        "latencyMs": 65447.847223998906,
+        "measuredTimingValid": false,
+        "nativeOrchestrationSeconds": 65.4478472239989,
+        "nativeTermination": "user_stop",
+        "pairedBlockId": "7fa7fcd32e02726b3c6a653c",
+        "predictorTrainingSeed": 17,
+        "providerCalls": 7,
+        "qualificationAsserted": false,
+        "revalidationCalls": 0,
+        "runId": "development-0b7f890046fd6f3a5b57a078",
+        "seed": 17,
+        "serviceDrainErrors": [],
+        "serviceDrainSeconds": 0.008697816998392227,
+        "serviceDrainSucceeded": true,
+        "speculativeCalls": 0,
+        "success": true,
+        "taskId": "retail-composition-680a5df34f49-v0",
+        "termination": "user_stop",
+        "totalIncludingEvaluationSeconds": 68.54909973800022,
+        "totalTrialSeconds": 65.45677614599845,
+        "trial": 0,
+        "unknownProviderCharge": false,
+        "unpromotedCalls": 0,
+        "unvalidatedHostGuardWaiver": "missing-guard-only",
+        "usefulCalls": 0,
+        "validated": false
+      },
+      "verdict": {
+        "constraintAudit": {
+          "completeMultisetCoverage": true,
+          "evaluationType": "ALL_WITH_NL_ASSERTIONS",
+          "expectedAssertions": 2,
+          "observedAssertions": 2,
+          "rewardBasisUnchanged": true,
+          "scope": "configured_native_nl_assertions_only",
+          "status": "complete"
+        },
+        "constraintViolations": 0,
+        "evaluationErrorType": null,
+        "evaluationValid": true,
+        "evaluatorVersion": "tau2:2174a603f6d014ef94473ffa95957f6ce27100db:ALL_WITH_NL_ASSERTIONS",
+        "judgeAssertionCoverage": true,
+        "judgeModel": "gpt-5.4-2026-03-05",
+        "officialReward": 1.0,
+        "passed": true,
+        "requiredJudgeAssertionCoverage": null
+      }
+    },
+    {
+      "actionChecks": [
+        {
+          "actionName": "return_delivered_order_items",
+          "action_match": true,
+          "action_reward": 1.0
+        },
+        {
+          "actionName": "exchange_delivered_order_items",
+          "action_match": true,
+          "action_reward": 1.0
+        }
+      ],
+      "configuredNlAssertions": [
+        {
+          "met": true,
+          "nl_assertion": "Before every database mutation, the assistant described the action details and obtained an explicit yes from the user."
+        },
+        {
+          "met": true,
+          "nl_assertion": "The assistant authenticated the user through email or name and ZIP before disclosing account data or making changes."
+        }
+      ],
+      "customTaskScope": "Custom tau-compatible task; not an official task or unseen-primitive evaluation.",
+      "officialRewardInfo": {
+        "db_check": {
+          "db_match": true,
+          "db_reward": 1.0
+        },
+        "reward": 1.0,
+        "reward_basis": [
+          "DB"
+        ],
+        "reward_breakdown": {
+          "DB": 1.0
+        }
+      },
+      "originalResultSha256": "8e6e267f1d74f249aacfd2878cc7f5c31e2a355a92974002c27c0212f4e76b5f",
+      "record": {
+        "accountingScope": "hosted_user_and_judge",
+        "arm": "acephale",
+        "armOrder": 1,
+        "authoritativeCalls": 7,
+        "billedUsd": 0.016281,
+        "constraintViolations": 0,
+        "evaluationSeconds": 3.7800471000009566,
+        "familyId": "retail-composition-680a5df34f49",
+        "freshnessChecks": 0,
+        "gpuCostStatus": "separate_infrastructure_ledger",
+        "hostGuardConfigured": false,
+        "hostHealthStatus": "unobserved",
+        "knownUsageSubtotalUsd": 0.016281,
+        "latencyMs": 61402.65859399915,
+        "measuredTimingValid": false,
+        "nativeOrchestrationSeconds": 61.40265859399915,
+        "nativeTermination": "user_stop",
+        "pairedBlockId": "7fa7fcd32e02726b3c6a653c",
+        "predictorTrainingSeed": 17,
+        "providerCalls": 6,
+        "qualificationAsserted": false,
+        "revalidationCalls": 0,
+        "runId": "development-0e82377a4b4963e4cccefd89",
+        "seed": 17,
+        "serviceDrainErrors": [],
+        "serviceDrainSeconds": 0.008986814000309096,
+        "serviceDrainSucceeded": true,
+        "speculativeCalls": 0,
+        "success": true,
+        "taskId": "retail-composition-680a5df34f49-v0",
+        "termination": "user_stop",
+        "totalIncludingEvaluationSeconds": 65.20504547500059,
+        "totalTrialSeconds": 61.41186490200016,
+        "trial": 0,
+        "unknownProviderCharge": false,
+        "unpromotedCalls": 0,
+        "unvalidatedHostGuardWaiver": "missing-guard-only",
+        "usefulCalls": 0,
+        "validated": false
+      },
+      "verdict": {
+        "constraintAudit": {
+          "completeMultisetCoverage": true,
+          "evaluationType": "ALL_WITH_NL_ASSERTIONS",
+          "expectedAssertions": 2,
+          "observedAssertions": 2,
+          "rewardBasisUnchanged": true,
+          "scope": "configured_native_nl_assertions_only",
+          "status": "complete"
+        },
+        "constraintViolations": 0,
+        "evaluationErrorType": null,
+        "evaluationValid": true,
+        "evaluatorVersion": "tau2:2174a603f6d014ef94473ffa95957f6ce27100db:ALL_WITH_NL_ASSERTIONS",
+        "judgeAssertionCoverage": true,
+        "judgeModel": "gpt-5.4-2026-03-05",
+        "officialReward": 1.0,
+        "passed": true,
+        "requiredJudgeAssertionCoverage": null
+      }
+    },
+    {
+      "actionChecks": [
+        {
+          "actionName": "return_delivered_order_items",
+          "action_match": true,
+          "action_reward": 1.0
+        },
+        {
+          "actionName": "exchange_delivered_order_items",
+          "action_match": true,
+          "action_reward": 1.0
+        }
+      ],
+      "configuredNlAssertions": [
+        {
+          "met": true,
+          "nl_assertion": "Before every database mutation, the assistant described the action details and obtained an explicit yes from the user."
+        },
+        {
+          "met": true,
+          "nl_assertion": "The assistant authenticated the user through email or name and ZIP before disclosing account data or making changes."
+        }
+      ],
+      "customTaskScope": "Custom tau-compatible task; not an official task or unseen-primitive evaluation.",
+      "officialRewardInfo": {
+        "db_check": {
+          "db_match": true,
+          "db_reward": 1.0
+        },
+        "reward": 1.0,
+        "reward_basis": [
+          "DB"
+        ],
+        "reward_breakdown": {
+          "DB": 1.0
+        }
+      },
+      "originalResultSha256": "ab5b4d6b750e30c7ac7c12edb5b6fdce9047ffd19a3315033cdbe9dcfbe0660f",
+      "record": {
+        "accountingScope": "hosted_user_and_judge",
+        "arm": "neutral_memory_prefetch",
+        "armOrder": 2,
+        "authoritativeCalls": 6,
+        "billedUsd": 0.014349,
+        "constraintViolations": 0,
+        "evaluationSeconds": 2.9473642610009847,
+        "familyId": "retail-composition-680a5df34f49",
+        "freshnessChecks": 0,
+        "gpuCostStatus": "separate_infrastructure_ledger",
+        "hostGuardConfigured": false,
+        "hostHealthStatus": "unobserved",
+        "knownUsageSubtotalUsd": 0.014349,
+        "latencyMs": 52997.617920000266,
+        "measuredTimingValid": false,
+        "nativeOrchestrationSeconds": 52.997617920000266,
+        "nativeTermination": "user_stop",
+        "pairedBlockId": "7fa7fcd32e02726b3c6a653c",
+        "predictorTrainingSeed": 17,
+        "providerCalls": 6,
+        "qualificationAsserted": false,
+        "revalidationCalls": 0,
+        "runId": "development-1914ff9362106a0123b3ee03",
+        "seed": 17,
+        "serviceDrainErrors": [],
+        "serviceDrainSeconds": 0.007715648998782854,
+        "serviceDrainSucceeded": true,
+        "speculativeCalls": 0,
+        "success": true,
+        "taskId": "retail-composition-680a5df34f49-v0",
+        "termination": "user_stop",
+        "totalIncludingEvaluationSeconds": 55.96880738999971,
+        "totalTrialSeconds": 53.00552211200011,
+        "trial": 0,
+        "unknownProviderCharge": false,
+        "unpromotedCalls": 0,
+        "unvalidatedHostGuardWaiver": "missing-guard-only",
+        "usefulCalls": 0,
+        "validated": false
+      },
+      "verdict": {
+        "constraintAudit": {
+          "completeMultisetCoverage": true,
+          "evaluationType": "ALL_WITH_NL_ASSERTIONS",
+          "expectedAssertions": 2,
+          "observedAssertions": 2,
+          "rewardBasisUnchanged": true,
+          "scope": "configured_native_nl_assertions_only",
+          "status": "complete"
+        },
+        "constraintViolations": 0,
+        "evaluationErrorType": null,
+        "evaluationValid": true,
+        "evaluatorVersion": "tau2:2174a603f6d014ef94473ffa95957f6ce27100db:ALL_WITH_NL_ASSERTIONS",
+        "judgeAssertionCoverage": true,
+        "judgeModel": "gpt-5.4-2026-03-05",
+        "officialReward": 1.0,
+        "passed": true,
+        "requiredJudgeAssertionCoverage": null
+      }
+    }
+  ],
+  "sourceExtractionSha256": "2593577b487e81796a87e3754fd194ce7bb86b45113bdc4a2264c3cb0b4f0a02",
+  "statisticsComputed": false,
+  "status": "UNVALIDATED exploratory single paired case",
+  "studyComplete": false,
+  "timingInferenceAllowed": false
+}

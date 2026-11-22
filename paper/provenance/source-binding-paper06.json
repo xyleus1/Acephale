@@ -1,0 +1,63 @@
+{
+  "kind": "acephale-public-paper-source-binding-v1",
+  "expectedParentCommit": "2ccbd87c6df04426fa19960787c55d0d02f84bdd",
+  "unchangedAssetsInheritedFromParent": true,
+  "newSourceHashes": {
+    "nativeOriginalExtraction": "2593577b487e81796a87e3754fd194ce7bb86b45113bdc4a2264c3cb0b4f0a02",
+    "opportunityOriginalTerminalNote": "8a3ba44c99e2a1c1c13238949b8b2a512abe5fc6b9ca8155b9405ad773acfae7",
+    "originalNativeRawIndex": "5cd55de8045bfa483ee39034fc20ac4140fa6d4923d4719589919f8caa223846"
+  },
+  "projection": "copied original values with private administrative locations omitted; no statistical estimates added",
+  "files": [
+    {
+      "path": "paper/PUBLICATION.md",
+      "sha256": "07aaf12e0ade7346d4e7d5781084235349b202f84afba1decf412eb6e4b05017",
+      "bytes": 1734
+    },
+    {
+      "path": "paper/README.md",
+      "sha256": "68b058e6efac042050eb4ea15ca287b554ded562bc6758ad63c01eacf75fb8fa",
+      "bytes": 2965
+    },
+    {
+      "path": "paper/manuscript.md",
+      "sha256": "6f403346a7f0b68fafb8c3dc450446b301819789a31d523b24e0a517d429aebb",
+      "bytes": 36573
+    },
+    {
+      "path": "paper/native-unvalidated/README.md",
+      "sha256": "ba4ecdce84efebd2122ca454a8ad3f2e13141be4af6e720a18c961724091cc29",
+      "bytes": 556
+    },
+    {
+      "path": "paper/native-unvalidated/native-block01.json",
+      "sha256": "f100ea04c4cfe55e8a88d8dbd6d035060ccf37e124180154018fed21bf4b0acb",
+      "bytes": 11736
+    },
+    {
+      "path": "paper/native-unvalidated/seed29-opportunity-disposition.json",
+      "sha256": "5159aa8fac39fef2d4a12fd311faba4d1374013bbb2ec5ed6dd638b4a04cb335",
+      "bytes": 4650
+    },
+    {
+      "path": "paper/output/acephale-working-manuscript.pdf",
+      "sha256": "ee32f73850af6f6f9ca2f5c0709801701eb6d4113e70c0d108d12c83f76c34b7",
+      "bytes": 579291
+    },
+    {
+      "path": "paper/provenance/publication-paper06.json",
+      "sha256": "a706a2d72d71fc13afaea4ef1a02057553a19650595255ec707646d043c9e27d",
+      "bytes": 840
+    },
+    {
+      "path": "paper/rendering/verification-paper06.json",
+      "sha256": "d31436ecf27b348328259100ac9bdf572091287a7b6185a44be785ca88759e28",
+      "bytes": 1313
+    },
+    {
+      "path": "paper/results-status.md",
+      "sha256": "d8cb4bab52d939effefd2125bec38ae5b4abb56c99090daa96336b9a605187ce",
+      "bytes": 2222
+    }
+  ]
+}
