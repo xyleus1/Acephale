@@ -12,7 +12,7 @@ catalog and task limits stay fixed across the primary comparison arms. Goal
 conditioning affects the predictor and scheduler. It does not train the actor
 or guarantee improvements in task accuracy, logical tool-call count or latency.
 
-- [Current results: trained checkpoints verified; paired benchmarks pending](docs/STATE.md)
+- [Current results: retained native cohort, replay, and qualification failures](docs/RESULTS-20261122.md)
 - [Earlier pilot: base benchmark and failed predictor export](docs/experiments/predictor-lora-pilot-2026-11-10.md)
 - [Methods and experimental controls](docs/METHODS.md)
 - [Collection, memory, calibration and evaluation commands](docs/RUNBOOK.md)
@@ -56,8 +56,9 @@ continues to require its independently pinned runtime, including Python 3.12.16.
 | Pinned GPU serving, research database and observability | `infra/acephale-infra-v1` |
 
 The primary comparison is base actor, neutral-memory prefetch and goal-conditioned
-memory prefetch on paired tasks/seeds. No new live accuracy or latency gain has
-been established for this standalone checkout. Earlier reports remain unchanged
+memory prefetch on paired tasks/seeds. The retained November 22 cohort does not establish a goal-conditioning or latency
+gain: every speculative opportunity was rejected before prediction, and native
+timing samples were invalid. See the result summary for denominators and failures. Earlier reports remain unchanged
 in the original checkout and Git history; they are neither current results nor
 automatically eligible training data. The implementation is paper-based research,
 not a verified reproduction of every PASTE or Salesforce serving component.

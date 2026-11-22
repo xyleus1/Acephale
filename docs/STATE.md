@@ -1,5 +1,13 @@
 # Current state
 
+Updated November 22, 2026 (UTC). The retained native cohort has 96 scheduled slots:
+84 successes, 11 execution errors, and one step-limit outcome. Training and replay
+outputs are retained. Scientific qualification remains unsuccessful; no validated
+latency or goal-conditioning improvement is claimed. Read the [current result
+summary](RESULTS-20261122.md) before interpreting the historical notes below.
+
+## Historical state recorded November 16, 2026
+
 Updated November 16, 2026 (UTC). Both predictor seeds completed their 204 optimizer
 updates. E17 independently completed strict GPU export and teacher-forced
 evaluation with unchanged weights and tolerances. Each seed reproduced all
