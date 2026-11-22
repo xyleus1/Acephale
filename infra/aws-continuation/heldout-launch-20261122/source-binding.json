@@ -1,0 +1,87 @@
+{
+  "deploymentBundle": false,
+  "fullStudyComplete": false,
+  "kind": "sanitized-heldout-launch-source-archive-v1",
+  "originalFailedAttemptsRetained": true,
+  "originalFinancialWriterChanged": false,
+  "redactionPolicy": [
+    "Replace deployment filesystem prefix and user-home path with examples",
+    "Replace AWS account/bucket identity and EC2/resource identifiers",
+    "Do not include configurations, credentials, ledgers, customer data or worker outputs"
+  ],
+  "scientificAcceptanceAsserted": false,
+  "selectedRunIdsChanged": false,
+  "sourceFiles": [
+    {
+      "bytes": 27641,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "196d3c4505f0e5827a7d170319a2ead80da3192b5857b358cd133070d825313a",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/heldout_packages.py",
+      "sanitizedSha256": "15ecae4cadc9f2e440e9855deec870f993c958ce2d6569ef76ddf9c9e3a12387"
+    },
+    {
+      "bytes": 17777,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "366689a3602778c138f809f2206fea52e9b421139edccc7a64f39814701b4352",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/paired_selected_scope02.py",
+      "sanitizedSha256": "c492349739a9d5f417559e8bb6c6297f256f37e64c228fc2ef9102dbab92caf5"
+    },
+    {
+      "bytes": 35446,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "c0f3feeea59d5103430838307aba6d0543417ae0d206df6940ce08723ffbc72c",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/unvalidated-native-seed17-scope02.mts",
+      "sanitizedSha256": "722198c2c24540cfc9ed1c5821edec8651f42137fada49b12087e372c06c2e9b"
+    },
+    {
+      "bytes": 35494,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "6dea2c12711c77854c676b571b69e59e12878ed215da9147f30a019363836b56",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/unvalidated-native-seed29-scope02.mts",
+      "sanitizedSha256": "6f7045355e8e67ef60d6f3919227e60aabe4bb0033f83356a1fd200f4606120b"
+    },
+    {
+      "bytes": 10624,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "db8338693b6736ddfc29165ca2effe56710d0217aaf4573fa4b6882121e43234",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/issue_ec2_segment_bash05.py",
+      "sanitizedSha256": "5c5d4f30b9d96c3a05523c1b3436adee861d64ce936be1d36a82ea44e069b744"
+    },
+    {
+      "bytes": 833,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "dbd2d0571d08b3e542a23bd0ed26f357544efb8f1c3370b48dea86f08b1290a5",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/seed17/run_native.py",
+      "sanitizedSha256": "5275aba2bd378b1b932dc879641633ad1666e92fb06544b5bda8a4de08db0f19"
+    },
+    {
+      "bytes": 29526,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "3b176b2aebd14a42d7c7fd660dfb11b0a92cdd4d5789127410decb541799cc02",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/seed17/infra_native_runner.py",
+      "sanitizedSha256": "c250f734b5975f530411121ee59559e0a35e898bdbe4c51f563bca0c82fb46e0"
+    },
+    {
+      "bytes": 785,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "c905ca16a8104054fdd20290031cd9e63127732e75b46ea4607a7c1d7dc48333",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/seed29/run_native.py",
+      "sanitizedSha256": "a4c9838c894b37e7a7ee5d592cae6214aea8fefc928e4f959b76973f733c44eb"
+    },
+    {
+      "bytes": 29528,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "7f86eb624ab7e201c453138edaf29a9665e7ab65da8dcb6c2b345af2be782af0",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/seed29/infra_native_runner.py",
+      "sanitizedSha256": "e5b66f49904237e5b5db2020e80de509cbdeb5442d16810c4fa3693c0fa3967a"
+    },
+    {
+      "bytes": 3425,
+      "changes": "Deployment filesystem root, account/bucket identity and EC2/resource identifiers replaced with explicit example tokens. Source logic retained.",
+      "originalSha256": "5273fd73aa9d098be982333383c5264306034ea103e22a042652f1498cdc13fc",
+      "path": "infra/aws-continuation/heldout-launch-20261122/sources/checkpoint_projection_executed.sh",
+      "sanitizedSha256": "ae75adcef9dc3b65addfac0ac8ad3c6e567d806b9e0a7fb1596772457fe35c6a"
+    }
+  ],
+  "validationStatus": "unvalidated"
+}

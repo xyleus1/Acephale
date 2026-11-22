@@ -1,10 +1,10 @@
 # Goal-conditioned speculative tool execution: an exploratory study
 
-**Draft: native evaluation is still running.** This manuscript reports the retained prediction experiments and separates the original protocol from the subsequent exploratory cloud runs. Native comparative tables will be populated from the original analysis outputs after the selected cohorts finish.
+**Draft: native evaluation is still running.** This manuscript reports the retained prediction experiments and separates the original protocol from the subsequent exploratory cloud runs. Development results are complete; the held-out table awaits the selected cohort.
 
 ## Abstract
 
-We investigate whether a representation of a user's requested outcome improves prediction of an agent's next read-only tool invocation. Acephale combines frozen workflow and episodic memory, source-bound argument construction, an auxiliary language-model predictor, and speculative execution during actor generation. The actor's weights, available tools and authoritative execution rules remain fixed. In the retained seed-17 fixed-panel replay, goal-conditioned scores improve equal-family binary log loss by 0.126 nats on 230 jointly scored checkpoints, with a 95% family-bootstrap interval of [0.021, 0.265]. However, 412 of 746 declared checkpoints failed in each condition. A separate distributed seed-29 replay finds a difference of −0.0129 nats on 442 jointly scored checkpoints, with an interval of [−0.0846, 0.0932]. The two opportunity profiles fail their predeclared minimum coverage requirement. Native task evaluation continues as an explicitly exploratory extension; operational wall times with invalid measurement flags are excluded from speedup claims. The evidence does not establish that adding inferred goals improves task success or end-to-end latency.
+We investigate whether a representation of a user's requested outcome improves prediction of an agent's next read-only tool invocation. Acephale combines frozen workflow and episodic memory, source-bound argument construction, an auxiliary language-model predictor, and speculative execution during actor generation. The actor's weights, available tools and authoritative execution rules remain fixed. In the retained seed-17 fixed-panel replay, goal-conditioned scores improve equal-family binary log loss by 0.126 nats on 230 jointly scored checkpoints, with a 95% family-bootstrap interval of [0.021, 0.265]. However, 412 of 746 declared checkpoints failed in each condition. A separate distributed seed-29 replay finds a difference of -0.0129 nats on 442 jointly scored checkpoints, with an interval of [-0.0846, 0.0932]. The two opportunity profiles fail their predeclared minimum coverage requirement. In 36 exploratory development runs, all three arms receive database reward in 12/12 runs; constraint-clean success is 8/12, 9/12 and 9/12 for base, neutral-prefetch and goal-prefetch respectively. No speculative read executes, and all comparative-timing flags are invalid. Held-out evaluation remains pending. The evidence does not establish that adding inferred goals improves task success or end-to-end latency.
 
 ## 1. Question and scope
 
@@ -59,11 +59,22 @@ Native reporting preserves every declared run, failures and censoring. It separa
 | Replay comparison | Jointly scored checkpoints / families | Neutral-minus-goal log loss, nats (95% CI) | Brier difference (95% CI) |
 |---|---:|---:|---:|
 | Retained seed 17 | 230 / 34 | 0.125995 [0.021043, 0.265059] | 0.017339 [0.004602, 0.034146] |
-| Distributed seed 29, exploratory | 442 / 36 | −0.012936 [−0.084643, 0.093218] | 0.005168 [−0.005044, 0.022080] |
+| Distributed seed 29, exploratory | 442 / 36 | -0.012936 [-0.084643, 0.093218] | 0.005168 [-0.005044, 0.022080] |
 
 Positive values favor goal conditioning on the observed comparison panel. Seed 17 retained 334 completed predictions and 412 failures per fixed-panel condition. Seed 29 retained 582 completed predictions and 164 failures per fixed-panel condition. The standalone neutral reports use a different scored cohort and are not substitutes for the paired neutral rows.
 
 Seed 17 shows an observed-subset improvement, but its high failure rate limits interpretation. Seed 29's intervals include zero. Neither result establishes a general goal-conditioning benefit, equivalence, or a native latency improvement. The distributed continuation also changed hardware and runtime execution placement, so it is not a clean seed replication.
+
+The fixed-panel exact-invocation hit rates do not improve with goal conditioning. Both reports declare 266 checkpoints whose next authoritative batch contains an eligible read, out of 746 total checkpoints; the other 480 are no-read checkpoints.
+
+| Replay / condition | Exact-call Top-1 hit rate | Exact-call Top-3 hit rate | Candidate-panel any-hit coverage |
+|---|---:|---:|---:|
+| Seed 17, neutral | 20.68% | 20.68% | 45.86% |
+| Seed 17, goal-conditioned | 20.68% | 20.68% | 45.86% |
+| Seed 29, neutral | 39.47% | 40.23% | 45.86% |
+| Seed 29, goal-conditioned | 39.47% | 40.23% | 45.86% |
+
+Each rate uses the declared 266 eligible-read checkpoints, including missing predictions rather than conditioning on successfully decoded outputs. A hit requires the tool and full arguments to match an invocation in the next authoritative batch. At most three preselected candidates are ranked. These are exact-invocation hit rates, not tool-name-only accuracy. The equal rates show that seed 17's probability-loss improvement did not change these top-ranked-hit outcomes. Different missing-prediction rates prevent treating the two seed rows as a clean causal seed comparison.
 
 The original seed-17 opportunity profile completed 8 of 20 measurements; the other 12 requested a different read from the profiled candidate. Seed 29 completed 7 of 20, with 12 measured read misses and one interruption-censored row. Both fail the unchanged minimum of ten completed measurements. Read misses are prediction failures at those prefixes, not evidence that the actor failed the customer's task.
 
@@ -71,15 +82,48 @@ Goal-teacher agreement is also distinct from native reward. The retained seed-17
 
 ## 5. Native evaluation
 
-**Results pending completion of the selected cohorts.** The final tables will use the original native analysis, with separate development and held-out denominators, per-arm reward and policy compliance, paired family intervals, calls and cost. The source-bound interim observations are retained alongside this draft.
+### 5.1 Completed development cohort
 
-The cloud continuation bypassed the original opportunity prerequisite and some deployment qualification steps at the user's explicit operational direction. It is therefore reported as exploratory, not retrospectively accepted under the frozen protocol. Existing accepted components and failed qualification evidence remain unchanged.
+All 36 declared development arm-runs completed: six families, two task variants and three arms. The original native estimators were applied to the saved evaluator outputs. The following results are exploratory; none is a held-out result.
 
-Every currently inspected new run has invalid comparative-timing flags and no speculative execution. If that remains true in the final cohort, these runs cannot establish a prefetch speedup or isolate an effect of consumed speculative evidence. Operational elapsed time may describe how long the study took to run, but it will not be substituted for a validated arm-level latency result.
+| Metric | Base actor | Neutral-memory prefetch | Goal-conditioned prefetch |
+|---|---:|---:|---:|
+| Completed / declared arm-runs | 12 / 12 | 12 / 12 | 12 / 12 |
+| Database reward 1.0 | 12 / 12 | 12 / 12 | 12 / 12 |
+| Reward 1.0 with no recorded policy violation | 8 / 12 | 9 / 12 | 9 / 12 |
+| Runs with a recorded policy violation | 4 | 3 | 3 |
+| Logical / physical tool calls, total | 77 / 77 | 77 / 77 | 76 / 76 |
+| Speculative reads / revalidation calls | 0 / 0 | 0 / 0 | 0 / 0 |
+| Valid comparative latency samples | 0 | 0 | 0 |
+| Recorded hosted user/judge usage, USD | 0.153230 | 0.146678 | 0.152834 |
 
-The observed native evaluator can award database reward 1.0 while reporting a policy violation. In the current runs, affected assertions require explicit user confirmation before each database mutation. Final reporting will include that disagreement rather than treating database reward as unconditional task correctness.
+Database reward and policy compliance differ because the database evaluator can find the expected final state while a separate assertion flags missing explicit confirmation before a mutation. The recorded policy verdict is retained; database reward alone is not unconditional task correctness.
+
+The equal-family paired difference in constraint-clean success is +0.0833 for either prefetch arm relative to the base actor, with the original 95% family-bootstrap interval [0, 0.25]. Goal-conditioned minus neutral prefetch is 0 with interval [-0.25, 0.25]. Goal-conditioned minus base logical tool calls is -0.0833 per run, with interval [-0.3333, 0.1667]. These estimates use six families and 12 paired trials, with 2,000 resamples and seed 42. They do not establish a general advantage.
+
+All arms have empirical database-reward estimates and bootstrap intervals of 1.0 [1.0, 1.0]; all paired reward differences are 0 [0, 0]. These degenerate empirical intervals reflect the uniformly successful observed sample. They do not establish population-perfect performance, equivalence or a ceiling on future failures.
+
+No speculative read was executed. There is therefore no evidence here for an effect of consumed prefetched results. Every comparative-timing validity flag is false, and the original report has null latency estimates and intervals. Operational elapsed time is excluded from speedup comparisons. Hosted usage is recorded user-simulator/judge usage, separate from GPU charges and any reconciled invoice.
+
+### 5.2 Deployment and reporting amendments
+
+The exploratory cloud continuation proceeded despite failed opportunity and deployment-qualification prerequisites. It remains UNVALIDATED under the original protocol. Existing accepted components and failed qualification evidence are preserved.
+
+Development ran as 12 intact three-arm blocks. Eleven blocks used L40S hardware and one used RTX PRO 6000 Blackwell; notebook and EC2 runtime images also differed. Each paired block retained one execution environment across its arms. All 12 original scope records remain available. The reporting adapter compares scope within blocks, retains domain-specific tool schemas and hardware strata, and verifies unchanged model configuration, data, protocol, source commit and task bundle. The statistical estimators are unchanged.
+
+A collection record omitted the tools field for 18 seed-17 rows. Reporting restored that metadata from the exact executed configurations, after verifying all frozen run IDs, task/family identities, arms, trial and predictor seeds, ordering and step limits. No tool schema or scientific output was modified.
+
+The development actor seed is 17 in both predictor-training-seed groups. Task variant and predictor training seed are confounded. There is no repeated same-task trial pair, so two-trial consistency is undefined for development.
+
+### 5.3 Held-out evaluation
+
+The original selector selected all eight held-out families: 96 arm-runs, comprising two variants, two trials and three arms per family. The whole cohort was reserved before execution. Held-out execution and its final analysis are pending in this draft.
 
 ## 6. Limitations and interpretation
+
+The retained seed-29 serving probe also failed its numerical acceptance criterion. PyTorch's reference conditional probability for token 1 relative to tokens 0 and 1 is 0.23370636; the configured serving engine returned 0.21206880, an absolute difference of 0.02163755 against the unchanged maximum of 0.01. All three retained requests on each of L40S and RTX PRO 6000 Blackwell produced the same conditional probability. This does not establish a hardware-specific cause.
+
+The retained source audit found routes for all 372 FP32 adapter tensors (186 A/B pairs, 114 packed runtime groups), but did not attest every live tensor value or establish why the two engines disagree. The adapter remains stored in FP32 and served under the declared BF16 configuration. No tolerance was widened, and numerical equivalence remains unestablished. The release includes the exact fixture identity, checkpoint/tokenizer hashes, reference and observed values, and unchanged gate.
 
 The central weakness is not solved by more GPU capacity. Candidate coverage, goal reliability and the opportunity gate limit whether speculation becomes useful. Token-level training accuracy is not a substitute for exact-call ranking quality. Missing prediction outcomes can bias an observed-subset comparison.
 
