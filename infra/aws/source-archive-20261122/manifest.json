@@ -1,0 +1,91 @@
+{
+  "credentialsIncluded": false,
+  "deployedSourcesUnchanged": true,
+  "files": [
+    {
+      "bytes": 41398,
+      "deploymentIdentifiersChanged": true,
+      "originalSha256": "c8074ed0860d91201cfa6a103e6957933e0056e8d05539bfc6abb65ae3172d04",
+      "originalSource": "direct-owner-producer-06/controller_with_scheduler.py",
+      "path": "controller/controller_with_scheduler.py",
+      "sanitizedSha256": "c55f294528d91a2e1cac4cf8446c5d5ab8be7d22733a459c0918141066886321"
+    },
+    {
+      "bytes": 1418,
+      "deploymentIdentifiersChanged": false,
+      "originalSha256": "82f49d686fe71c4f719e568b45706ad7103cab97fb7967287c41b7bc5d01471d",
+      "originalSource": "direct-owner-producer-06/owner_handler.py",
+      "path": "controller/owner_handler.py",
+      "sanitizedSha256": "82f49d686fe71c4f719e568b45706ad7103cab97fb7967287c41b7bc5d01471d"
+    },
+    {
+      "bytes": 14641,
+      "deploymentIdentifiersChanged": false,
+      "originalSha256": "616272c956c4dd12b19595d5cba8e2d91e2c2ec4705e4a7f6ca7ac9712a151e1",
+      "originalSource": "direct-owner-producer-06/generation_bridge.py",
+      "path": "controller/generation_bridge.py",
+      "sanitizedSha256": "616272c956c4dd12b19595d5cba8e2d91e2c2ec4705e4a7f6ca7ac9712a151e1"
+    },
+    {
+      "bytes": 12747,
+      "deploymentIdentifiersChanged": false,
+      "originalSha256": "fa1d0585209d7c393a86fc2ab0c9af3083eee22f989da80ee14e1b6553fce8b1",
+      "originalSource": "direct-cpu-callbacks-01/cpu_callbacks_05.py",
+      "path": "callbacks/cpu_callbacks_05.py",
+      "sanitizedSha256": "fa1d0585209d7c393a86fc2ab0c9af3083eee22f989da80ee14e1b6553fce8b1"
+    },
+    {
+      "bytes": 5724,
+      "deploymentIdentifiersChanged": false,
+      "originalSha256": "9bd75600229234d96be758ecb4badfb6f16efdadf5bbd0f6bf41147805485178",
+      "originalSource": "direct-cpu-callbacks-01/owner_collection.py",
+      "path": "callbacks/owner_collection.py",
+      "sanitizedSha256": "9bd75600229234d96be758ecb4badfb6f16efdadf5bbd0f6bf41147805485178"
+    },
+    {
+      "bytes": 3311,
+      "deploymentIdentifiersChanged": false,
+      "originalSha256": "8bd9ec4e694c2f64adba6c24fe0268f7bf710831a36717d1ecbddc4faf1413ba",
+      "originalSource": "direct-cpu-callbacks-01/output_resolver_02.py",
+      "path": "callbacks/output_resolver_02.py",
+      "sanitizedSha256": "8bd9ec4e694c2f64adba6c24fe0268f7bf710831a36717d1ecbddc4faf1413ba"
+    },
+    {
+      "bytes": 7970,
+      "deploymentIdentifiersChanged": true,
+      "originalSha256": "22900b03c80700bd231740cad9e06367ef34a07ca3fdfccd2edfb9ec208a425d",
+      "originalSource": "funded-serial00-01/worker-02.py",
+      "path": "transport/serial_worker_02.py",
+      "sanitizedSha256": "0cf571402d2a26cd3c5c11c416e31f277224dca1a26f0abd0e07c807225d002f"
+    },
+    {
+      "bytes": 20456,
+      "deploymentIdentifiersChanged": false,
+      "originalSha256": "5630ccd45011a122e912e02b34075dbabcff4336bd9200a4992d1e6533dfbc15",
+      "originalSource": "development-closed-01/future_dag_receipt_ref_02.py",
+      "path": "callbacks/future_dag_receipt_ref_02.py",
+      "sanitizedSha256": "5630ccd45011a122e912e02b34075dbabcff4336bd9200a4992d1e6533dfbc15"
+    }
+  ],
+  "kind": "sanitized-root-controller-source-archive-v1",
+  "liveConfigurationIncluded": false,
+  "runnableDeploymentBundle": false,
+  "sanitization": [
+    "AWS account replaced with 000000000000",
+    "S3 bucket replaced with example-study-artifacts",
+    "EC2 instance IDs replaced with distinct example IDs",
+    "embedded immutable S3 version IDs replaced with EXAMPLE_IMMUTABLE_VERSION",
+    "local user path replaced with example_user"
+  ],
+  "scientificAcceptanceAsserted": false,
+  "secretScan": {
+    "allCountsZero": true,
+    "patterns": [
+      "awsAccessKey",
+      "privateKey",
+      "openAiKey",
+      "credentialLiteral"
+    ]
+  },
+  "sourceOnly": true
+}

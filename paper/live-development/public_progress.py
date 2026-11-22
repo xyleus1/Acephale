@@ -8,7 +8,7 @@ def project(observation):
             outcome = record['outcome']
             fields = ('runId', 'arm', 'armOrder', 'domain', 'familyId', 'taskId', 'pairedBlockId',
                       'predictorTrainingSeed', 'seed', 'trial', 'authoritativeCalls', 'speculativeCalls',
-                      'revalidationCalls', 'constraintViolations', 'evaluationValid',
+                      'revalidationCalls', 'providerCalls', 'constraintViolations', 'evaluationValid',
                       'measuredTimingValid', 'qualificationAsserted', 'validated', 'knownUsageSubtotalUsd')
             row = {key: outcome[key] for key in fields if key in outcome}
             row['officialReward'] = record['officialReward']
@@ -20,6 +20,7 @@ def project(observation):
         'scope': observation['scope'],
         'validationStatus': 'unvalidated',
         'studyComplete': False,
+        'scientificAcceptanceAsserted': False,
         'rows': rows,
         'counts': {
             'uniqueRuns': len({row['runId'] for row in rows}),
@@ -29,10 +30,10 @@ def project(observation):
             'speculativeCalls': sum(row['speculativeCalls'] for row in rows),
         },
         'notes': [
-            'This snapshot covers nine new development blocks, not the full study.',
-            'Earlier completed cases and failed startup attempts are retained separately.',
+            'This snapshot covers all 36 original development run IDs, not the full study or any heldout outcome.',
+            'Prior infrastructure startup failures and operational continuation records are retained separately in immutable owner evidence.',
             'Database reward and policy compliance are separate outcomes.',
-            'Invalid comparative latency values are intentionally omitted.',
+            'Every measuredTimingValid flag is false; comparative latency values are intentionally omitted. Whole-block distributed execution remains an unvalidated amendment.',
             'Usage is recorded API usage, not an invoice or account-credit balance.',
         ],
     }
