@@ -4,7 +4,7 @@
 
 ## Abstract
 
-We study whether source-grounded representations of a user's requested outcome help a small auxiliary predictor select useful read-only tool invocations while an unchanged language-model actor is generating. Acephale combines workflow and episodic memory with explicit argument binding, calibrated invocation scores and deployment-specific admission measurements. Speculative results remain isolated until the actor requests the exact invocation and validation succeeds. We separate prediction quality on common replay panels, measured local overlap for conservative admission, and paired native latency and task outcomes. The design fixes actor weights, prompts, tools, trial seeds and limits across paired arms and retains failures and censored slots. The study is a machine-audited exploratory, custom tau-compatible pilot. This draft makes no live speedup, task-success improvement or complete-benchmark claim; those require the pending accepted analyses.
+We study whether source-grounded representations of a user's requested outcome help an auxiliary predictor select useful read-only tool invocations while an unchanged language-model actor is generating. Acephale combines workflow and episodic memory with explicit argument binding, calibrated invocation scores and deployment-specific admission measurements. Speculative results remain isolated until the actor requests the exact invocation and validation succeeds. The frozen study separates common-panel replay, prefix-level opportunity profiling and paired native outcomes. In retained seed17 replay, 230 jointly scored checkpoints across 34 families yield an equal-family neutral-minus-goal-conditioned log-loss difference of 0.126 nats (95% bootstrap interval 0.021 to 0.265) and Brier difference of 0.0173 (0.0046 to 0.0341). However, each condition retained 412 failures among 746 declared checkpoints; these observed-subset estimates do not establish an all-checkpoint or heldout benefit. The study is an exploratory, machine-audited custom tau-compatible pilot, with zero human annotation reviews. Native task outcomes remain pending, so this draft makes no task-success or speedup claim.
 
 ## 1. Introduction
 
@@ -48,15 +48,19 @@ AWS infrastructure expenditure and hosted model API expenditure are separate acc
 
 ### 5.1 Retained seed17 replay and calibration
 
-The accepted seed17 analysis contains two distinct fixed-panel reports. The standalone neutral report declared 746 checkpoints, completed 745 and retained one failure; it scored 600 checkpoints. The goals-fixed report declared the same 746 checkpoints for each condition but completed 334 and retained 412 failures per condition. Its paired analysis uses 230 jointly scored checkpoints across 34 families. These coverage differences prevent treating the standalone neutral estimate and the goals-fixed estimates as one common-cohort comparison.
+The accepted seed17 analysis contains two distinct fixed-panel reports. The standalone neutral report declared 746 checkpoints: 745 completed prediction and one failed. Scores were available for 600 checkpoints. The goals-fixed report declared the same 746 checkpoints for each condition but recorded 334 completed predictions and 412 failures per condition. Its paired analysis uses 230 jointly scored checkpoints across 34 families. These coverage differences prevent treating the standalone neutral estimate and the goals-fixed estimates as one common-cohort comparison.
 
-Within the goals-fixed report's jointly observed cohort, the original equal-family paired analysis estimates neutral minus goal-conditioned binary log loss as 0.125995 nats (95% family bootstrap interval 0.021043 to 0.265059). The corresponding Brier difference is 0.017339 (0.004602 to 0.034146). Positive values favor the goal-conditioned scores on this observed subset. Both intervals come directly from the original report's 2,000 bootstrap samples with seed 42. They do not account for the missing outcomes by inventing probabilities, and they do not establish an improvement across all declared checkpoints, fresh heldout tasks or native task execution.
+Within the goals-fixed report's jointly observed cohort, the original equal-family paired analysis estimates neutral minus goal-conditioned binary log loss as 0.125995 nats (95% family bootstrap interval 0.021043 to 0.265059). The corresponding Brier difference is 0.017339 (0.004602 to 0.034146). Positive values favor the goal-conditioned scores on this observed subset. Both intervals come directly from the original report's 2,000 bootstrap samples with seed 42. They do not account for potentially selective missing outcomes, and they do not establish an improvement across all declared checkpoints, fresh heldout tasks or native task execution.
 
-| Retained report / condition | Declared checkpoints | Completed / failed | Scored checkpoints | Binary log loss (nats) | Brier |
+| Retained report / condition | Declared checkpoints | Prediction completed / failed | Scored checkpoints | Binary log loss (nats) | Brier |
 |---|---:|---:|---:|---:|---:|
 | Standalone neutral | 746 | 745 / 1 | 600 | 1.087892 | 0.111409 |
 | Goals-fixed / neutral | 746 | 334 / 412 | 230 | 1.199627 | 0.107620 |
 | Goals-fixed / goal-conditioned | 746 | 334 / 412 | 230 | 0.969563 | 0.077217 |
+
+![Retained seed17 replay evidence](figures/seed17-retained-evidence.png)
+
+**Figure 1. Retained replay quality and coverage.** The upper panel separates scored checkpoints, checkpoints that completed prediction without a score, and retained failures; the goals-fixed bar applies to both conditions. Lower panels reproduce the original equal-family paired estimates and 95% bootstrap intervals on 230 jointly scored checkpoints in 34 families. Positive differences favor goal-conditioned scores on this observed subset. The standalone neutral report is shown for coverage only and is not the baseline for the paired estimates. Intervals do not incorporate unobserved outcomes. All plotted values come from the accepted report artifacts; no bootstrap was rerun.
 
 The two goals-fixed rows share the paired cohort. Their displayed checkpoint means differ from the equal-family paired estimand above. The original reports explicitly disclaim a heldout claim and are not restricted to the test partition. All conditions retain 266 eligible read checkpoints and candidate-panel any-hit coverage 0.458647; this panel-coverage denominator differs from the scored-checkpoint denominator.
 
@@ -66,7 +70,9 @@ Sources: accepted seed17 analysis component SHA 647f23466bed49876e0901dda865c121
 
 ### 5.2 Opportunity profiling
 
-The Ohio seed17 profile reached the original profile stage. That operational execution recorded twenty dependency-import failures before native prefix reconstruction or model requests. All twenty records are retained. Subsequent operational continuations preserve those failures and repair interpreter dependencies and metadata paths in separate output directories. Its scientific results remain unreported until closure.
+The Ohio seed17 profile reached its original profiling code in two operational generations. Each recorded twenty failures before timing spans or model requests: first from missing native dependencies, then from an unresolved historical task-bundle path. These forty retained error records correspond to repeated operational executions of the same twenty declared checkpoints, not forty independent scientific trials. Later continuations preserve the records and completed preparation under the same permanent assignment. No opportunity estimate is reported until an accepted closure is available.
+
+The recovered prefix-construction check successfully built all twenty declared prefixes with network access denied and no actor or predictor request. This is an operational readiness check, not a timing measurement or native outcome.
 
 ### 5.3 Paired native evaluation
 

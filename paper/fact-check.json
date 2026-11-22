@@ -1,0 +1,46 @@
+{
+  "kind": "acephale-paper-accepted-results-fact-check-v1",
+  "statisticalReanalysisPerformed": false,
+  "syntheticResultsUsed": false,
+  "standaloneNeutral": {
+    "declared": 746,
+    "predictionCompleted": 745,
+    "failed": 1,
+    "scored": 600
+  },
+  "pairedGoalsFixed": {
+    "declaredPerCondition": 746,
+    "predictionCompletedPerCondition": 334,
+    "failedPerCondition": 412,
+    "scoredPairedCheckpoints": 230,
+    "families": 34,
+    "weighting": "equal_family_mean_of_paired_trial_differences",
+    "contrast": "neutral minus conditional",
+    "observedSubsetOnly": true
+  },
+  "reliability": {
+    "agreed": 6,
+    "graded": 141,
+    "recordedWilsonLower95": 0.019646160425252017,
+    "taskSuccessProbability": false
+  },
+  "annotationAudit": {
+    "accepted": 19,
+    "audited": 20,
+    "humanReviews": 0,
+    "separateRequestSameModel": true
+  },
+  "frozenMethodsUnchanged": true,
+  "operationalFailureRecords": {
+    "tau2Import": 20,
+    "historicalBundlePath": 20,
+    "sameDeclaredCheckpoints": 20,
+    "nativeModelRequestsObservedInTheseRecords": 0
+  },
+  "figureVisualReview": {
+    "sha256": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88",
+    "legendTitleOverlapCorrected": true,
+    "labelsAndIntervalsLegible": true
+  },
+  "finalPdfVisualReviewOwner": "root"
+}

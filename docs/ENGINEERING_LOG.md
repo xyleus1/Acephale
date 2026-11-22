@@ -1,5 +1,14 @@
 # Acephale engineering log
 
+## 2026-11-22: Retained-result paper02 publication
+
+Prepared a paper-only publication from the immutable AWS paper02 manifest. Added updated text, accepted-result provenance, the plotting source, editable SVG/PNG and standalone figure PDF, plus the fifteen-page working manuscript PDF and render provenance.
+
+The plot copies the original accepted estimates and confidence intervals without rerunning the bootstrap or fitting statistics. Two figure renders produce identical PNG/SVG/PDF bytes; the figure was visually checked and the preview has no out-of-page text. Root retains final PDF visual review and GitHub publication.
+
+Publication preserves exact UTF-8 bytes and CRLF where present, separates binary base64 uploads, reuses the parent checks for unchanged files and scans new content for credential patterns. The frozen methods, scientific source, models, execution roots and accepted result bytes are unchanged. This update is not study completion or a new native performance result.
+
+
 ## 2026-11-21: Preserve the AWS continuation sources
 
 Recorded the deployed controller, regional qualification metadata adapters,

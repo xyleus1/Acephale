@@ -1,14 +1,14 @@
-# Acephale manuscript workspace
+# Acephale working manuscript and accepted-result figures
 
-Editable writing and analysis preparation on the AWS controller. These files are not execution authority or an accepted final report.
+This is an editable manuscript with accepted retained seed17 replay/calibration findings. Native and seed29 outcome sections remain explicitly incomplete. It is not a complete-study report.
 
-- manuscript.md: connected draft with explicit result boundaries.
-- methods.md: current frozen methods, copied byte for byte.
-- related-work.md and references.bib: positioning and versioned primary references.
-- analysis-plan.md: mapping to the unchanged original analyses.
-- figures/layouts.json: panel, denominator and caption contracts.
-- figures/method-flow.svg: editable vector methods diagram.
-- tables/: editable schemas. Blank numeric cells mean unreported, never zero.
-- evidence-register.json: source hashes and retained accepted components.
+## Reproduce on AWS
 
-Populate results from the original validated reports and accepted components. Historical seed17 evidence keeps its original hardware/serving identity. Qualification, import errors and software checks are not native outcomes. Do not replace failures or silently pool different serving configurations.
+1. Run /srv/acephale/workspaces/report/locked-environments-02/analysis5a/bin/python -B /srv/acephale/workspaces/report/manuscript-aws-02/plot_retained.py
+2. Render with /srv/acephale/workspaces/root/paper-render-01/venv/bin/python -B /srv/acephale/workspaces/report/paper-render-02/render.py --source /srv/acephale/workspaces/report/manuscript-aws-02 --output <new-output-directory>
+
+The plot copies accepted estimates and confidence intervals; it does not fit models or rerun the bootstrap. Its only display arithmetic is completed minus scored for the mutually exclusive coverage categories. PNG, editable SVG and standalone PDF are produced together. Figure provenance lists exact input hashes and values. tables/paired-replay.csv retains the original paired estimands at full precision.
+
+The original frozen methods are preserved byte for byte. Statistical results come from successful original report commands and their accepted component, manifest and report lineage. The PDF renderer is an operational derivative of root's existing renderer, adding figure support. The original renderer and earlier previews remain unchanged.
+
+Final PDF review and publication belong to root. Operational execution belongs to the external execution owner; no deployment files or scientific assignments are changed by this writing workspace.

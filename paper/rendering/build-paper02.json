@@ -1,0 +1,109 @@
+{
+  "status": "working-draft-incomplete-results",
+  "inputs": [
+    {
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-02/manuscript.md",
+      "sha256": "c71c0485e757ba4137a16332d0ed49a14c9a6dd4b1ddec2f7868f09204174edc"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-02/related-work.md",
+      "sha256": "b7a09a3ffbc1564f2b5d8c6879d69b18ba411cd1e2cc836cdca42fcfbcf33c44"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-02/methods.md",
+      "sha256": "1c83ab185bfc1a405c5be2f37237d248c283d54a45d355f241ffb16d6521de58"
+    },
+    {
+      "path": "/srv/acephale/workspaces/report/manuscript-aws-02/analysis-plan.md",
+      "sha256": "63ee9ddc1e5c0394cf8ae9a69fcd52484733b354f892b7b1aeda0c5f2c2c2e5d"
+    }
+  ],
+  "pdf": {
+    "path": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/acephale-working-manuscript.pdf",
+    "sha256": "e61969cb91ccd51286238a01fc0c10a2391b04e54bf4cc7973529a0aa0a5b95d"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "textCharacters": 2902,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-01.png"
+    },
+    {
+      "page": 2,
+      "textCharacters": 3064,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-02.png"
+    },
+    {
+      "page": 3,
+      "textCharacters": 2801,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-03.png"
+    },
+    {
+      "page": 4,
+      "textCharacters": 1379,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-04.png"
+    },
+    {
+      "page": 5,
+      "textCharacters": 2750,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-05.png"
+    },
+    {
+      "page": 6,
+      "textCharacters": 449,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-06.png"
+    },
+    {
+      "page": 7,
+      "textCharacters": 2313,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-07.png"
+    },
+    {
+      "page": 8,
+      "textCharacters": 2712,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-08.png"
+    },
+    {
+      "page": 9,
+      "textCharacters": 3460,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-09.png"
+    },
+    {
+      "page": 10,
+      "textCharacters": 3310,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-10.png"
+    },
+    {
+      "page": 11,
+      "textCharacters": 2939,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-11.png"
+    },
+    {
+      "page": 12,
+      "textCharacters": 3398,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-12.png"
+    },
+    {
+      "page": 13,
+      "textCharacters": 3532,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-13.png"
+    },
+    {
+      "page": 14,
+      "textCharacters": 1917,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-14.png"
+    },
+    {
+      "page": 15,
+      "textCharacters": 2018,
+      "render": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/page-15.png"
+    }
+  ],
+  "createdAt": "2026-11-21T23:57:59.624197+00:00",
+  "packages": {
+    "reportlab": "4.4.5",
+    "pypdf": "6.1.3",
+    "markdown-it-py": "4.0.0",
+    "PyMuPDF": "1.26.6"
+  }
+}

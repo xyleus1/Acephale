@@ -1,0 +1,10 @@
+{
+  "statisticalReanalysisPerformed": false,
+  "twoRendersIdentical": true,
+  "sha256": {
+    "png": "0ebffe2b9ad623b8edd101098d696fcc121afd6d326810d9b8b7b0c5f1bf0f88",
+    "pdf": "d4d1fb0200b1258a165926230d3c36d1f90e3296e6703cdd118adb3ba4caf4b6",
+    "svg": "f393e0a721afede8783f1ea1c1a709d16302e6886c03882d604595b522cff7c7"
+  },
+  "plotScriptSha256": "b07ddcab927c487f0b82eb9da5f7a8121e1e72c41697ce36e033cc33d55b9945"
+}

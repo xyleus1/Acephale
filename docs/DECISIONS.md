@@ -1,5 +1,14 @@
 # Acephale decisions
 
+## 2026-11-22: Retained-result paper02 publication
+
+Report the retained observed subset with its actual denominators and original estimator. Do not treat prediction-completed status as a scored checkpoint, subtract means from unmatched cohorts, or interpret binary next-batch invocation membership as full-action entropy or native task success.
+
+Preserve the equal-family paired contrast and the reported bootstrap interval; do not recompute either for presentation. State potentially selective missing outcomes alongside the estimates. Keep graded agreement, machine annotation audit and native outcomes separate.
+
+Publish an editable, reproducible working paper and exact artifact provenance while remaining results are pending. Root owns final PDF review/publication, and external execution ownership is independent. Historical methods stay byte-identical; clarifications of prior-work attribution belong in editable related-work prose.
+
+
 ## 2026-11-21: Keep cloud operations separate from frozen science
 
 Infrastructure corrections may resume a stopped preparation step in the same

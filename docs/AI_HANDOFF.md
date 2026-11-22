@@ -1,5 +1,14 @@
 # Working on Acephale
 
+## 2026-11-22: Retained-result paper02 publication
+
+The editable paper and reproducible figure sources are at [paper](../paper/PUBLICATION.md). This is a draft reporting the three retained accepted components, export, seed17/replay and seed17/analysis. New opportunity/native outcomes and the remaining DAG are pending accepted closure evidence.
+
+Execution ownership has transferred externally. Do not infer live assignment status from this manuscript or start a competing controller. The paper keeps forty pre-model error records distinct from the twenty declared opportunity checkpoints; these are not successful timing measurements or forty independent trials.
+
+For reporting, retain 600 scored checkpoints versus 745 completing prediction in the standalone neutral report. The goals-fixed paired analysis uses 230 jointly scored checkpoints across 34 families, with the original equal-family weighting and all 412 failures per condition disclosed. Keep six-of-141 graded agreement separate from nineteen-of-twenty machine-audit acceptance and zero human reviews.
+
+
 ## AWS continuation, 2026-11-21
 
 The existing study now uses the persistent AWS controller and cloud-owned state.

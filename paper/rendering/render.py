@@ -2,7 +2,7 @@ from pathlib import Path
 import argparse,hashlib,json,html,re,datetime,importlib.metadata
 from markdown_it import MarkdownIt
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,PageBreak,Preformatted,LongTable,TableStyle,KeepTogether
+from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,PageBreak,Preformatted,LongTable,TableStyle,KeepTogether,Image
 from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
 from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
@@ -35,7 +35,18 @@ def render_markdown(text,styles):
         elif t.type=='heading_open':
             level=int(t.tag[1:]);flow.append(Paragraph(inline(ts[i+1]),styles['Title' if level==1 else 'H'+str(min(level,4))]));i+=2
         elif t.type=='paragraph_open':
-            flow.append(Paragraph(('&#8226; 'if listdepth else '')+inline(ts[i+1]),styles['BulletBody' if listdepth else 'Body']));i+=2
+            children=ts[i+1].children or []
+            if len(children)==1 and children[0].type=='image':
+                from reportlab.lib.utils import ImageReader
+                path=(SOURCE_ROOT/children[0].attrGet('src')).resolve()
+                if not path.is_relative_to(SOURCE_ROOT.resolve())or not path.is_file():raise ValueError('Exact manuscript figure path')
+                width,height=ImageReader(str(path)).getSize()
+                items=[Image(str(path),width=468,height=468*height/width),Spacer(1,5)]
+                if i+5<len(ts)and ts[i+3].type=='paragraph_open'and ts[i+4].type=='inline':
+                    items.append(Paragraph(inline(ts[i+4]),styles['Body']));i+=3
+                flow.append(KeepTogether(items));i+=2
+            else:
+                flow.append(Paragraph(('&#8226; 'if listdepth else '')+inline(ts[i+1]),styles['BulletBody' if listdepth else 'Body']));i+=2
         elif t.type in ('fence','code_block'):
             lines=[]
             for line in t.content.splitlines():
@@ -61,7 +72,9 @@ def page(canvas,doc):
     canvas.drawString(72,758,'ACEPHALE  |  WORKING DRAFT - RESULTS INCOMPLETE');canvas.drawRightString(540,34,str(doc.page));canvas.restoreState()
 
 def main():
+    global SOURCE_ROOT
     parser=argparse.ArgumentParser();parser.add_argument('--source',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
+    SOURCE_ROOT=args.source
     font=Path('/usr/share/fonts/truetype/dejavu')
     for name,file in [('Body','DejaVuSerif.ttf'),('BodyBold','DejaVuSerif-Bold.ttf'),('BodyItalic','DejaVuSerif-Italic.ttf'),('BodyBoldItalic','DejaVuSerif-BoldItalic.ttf'),('Code','DejaVuSansMono.ttf')]:pdfmetrics.registerFont(TTFont(name,str(font/file)))
     pdfmetrics.registerFontFamily('Body',normal='Body',bold='BodyBold',italic='BodyItalic',boldItalic='BodyBoldItalic')

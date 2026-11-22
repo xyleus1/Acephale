@@ -1,0 +1,21 @@
+{
+  "kind": "acephale-manuscript-render-provenance-v1",
+  "parentRenderer": {
+    "path": "/srv/acephale/workspaces/root/paper-render-01/render.py",
+    "sha256": "e694908e40cab017552e173bc3b4cabedbe00601abcb26b3fc72696e4cd68d6e"
+  },
+  "renderer": {
+    "path": "/srv/acephale/workspaces/report/paper-render-02/render.py",
+    "sha256": "f3240bcf2e0f623734d7134435d8aca16fb9f7a2b211ee52be3132641d9c089d"
+  },
+  "changes": [
+    "Support source-root-bound scientific figure images with their captions",
+    "Write valid JSON build manifest"
+  ],
+  "originalRendererRetained": true,
+  "sourceDirectory": "/srv/acephale/workspaces/report/manuscript-aws-02",
+  "outputDirectory": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview",
+  "figureVisualReviewPassed": true,
+  "fullPdfVisualReviewOwner": "root",
+  "frozenMethodsUnchanged": true
+}

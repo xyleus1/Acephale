@@ -3,13 +3,13 @@
   "syntheticDataUsed": false,
   "figures": [
     {
-      "id": "figure1",
+      "id": "method-flow-unumbered",
       "title": "Prediction, admission and authoritative consumption",
       "file": "method-flow.svg",
-      "status": "methods diagram"
+      "status": "editable methods schematic, not numbered in manuscript"
     },
     {
-      "id": "figure2",
+      "id": "figure1",
       "title": "Replay quality",
       "panels": [
         "log loss paired differences",
@@ -17,7 +17,9 @@
         "coverage and failures"
       ],
       "source": "tables/replay.csv",
-      "status": "awaiting accepted report values"
+      "status": "accepted seed17 report values only",
+      "file": "seed17-retained-evidence.svg",
+      "provenance": "seed17-retained-evidence.json"
     },
     {
       "id": "figure3",

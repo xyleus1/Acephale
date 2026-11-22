@@ -1,0 +1,115 @@
+{
+  "pdf": {
+    "path": "/srv/acephale/workspaces/report/paper-render-02/output-final-preview/acephale-working-manuscript.pdf",
+    "sha256": "e61969cb91ccd51286238a01fc0c10a2391b04e54bf4cc7973529a0aa0a5b95d"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "textCharacters": 2902,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 2,
+      "textCharacters": 3064,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 3,
+      "textCharacters": 2801,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 4,
+      "textCharacters": 1379,
+      "images": 1,
+      "textOutsidePage": [],
+      "containsFigureCaption": true
+    },
+    {
+      "page": 5,
+      "textCharacters": 2750,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 6,
+      "textCharacters": 449,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 7,
+      "textCharacters": 2313,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 8,
+      "textCharacters": 2712,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 9,
+      "textCharacters": 3460,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 10,
+      "textCharacters": 3310,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 11,
+      "textCharacters": 2939,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 12,
+      "textCharacters": 3398,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 13,
+      "textCharacters": 3532,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 14,
+      "textCharacters": 1917,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    },
+    {
+      "page": 15,
+      "textCharacters": 2018,
+      "images": 0,
+      "textOutsidePage": [],
+      "containsFigureCaption": false
+    }
+  ],
+  "pageBoundsPassed": true,
+  "visualReviewRequired": true
+}
