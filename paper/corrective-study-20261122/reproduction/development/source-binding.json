@@ -1,0 +1,55 @@
+{
+  "allOriginalIdsAndFailuresRetained": true,
+  "files": [
+    {
+      "bytes": 18506,
+      "path": "original_numeric.py",
+      "sha256": "146bfabc2af624c7edc767630cdd95e6ce9c65e04a002b72c128cf8cbfb32c47"
+    },
+    {
+      "bytes": 4312,
+      "path": "original_safe_rows.py",
+      "sha256": "5ed8162b1e3ad39a9d878af137792a2251df84139cfa2f573479cac150b09314"
+    },
+    {
+      "bytes": 6666,
+      "path": "original-source-binding.json",
+      "sha256": "fca793d7ff90e2714acbcfb0cc71e96e5cf86734f51f8e2c62553217f8abb6c0"
+    },
+    {
+      "bytes": 1088,
+      "path": "reproduce_native.py",
+      "sha256": "0eae2e13770ccc44886985aef7883d6beede37ec89270447f9649f49f1a9cbb1"
+    },
+    {
+      "bytes": 1491,
+      "path": "README.md",
+      "sha256": "0701b070cc898d6a66f89281419d144d9e7d91cbb00eacfcb518b90846feb588"
+    },
+    {
+      "bytes": 141,
+      "path": "requirements.lock",
+      "sha256": "cd2d286b167c7a3f273a49450ec1b7496e5309590ecc3e785fc57b40a17a03ca"
+    },
+    {
+      "bytes": 80545,
+      "path": "native-statistical-inputs.json",
+      "sha256": "d234edac08599ea30888552abb766a3523d175d0dc379d0d7f8c86d33e173dc0"
+    },
+    {
+      "bytes": 31089,
+      "path": "original-numerical-sections.json",
+      "sha256": "7056550e9affebc130e0f4039a434c07bd594dab6fd619893f4ca5860fc2d800"
+    }
+  ],
+  "originalComputedReportSha256": "72f65aa6786fe1f58ea221dd79478de176eb6556adf8059515138e9d2cad9f76",
+  "originalPreprocessingSourceSha256": "eb5575ebf94ba75ef9ead44b09170a631e59ae140d70d3e52e6fa09aa8a86c2e",
+  "originalProducerSha256": "9b985a76b36d19ea101f7cf27eb5b7455763d1a594e6195d39c1ab6eea97ebef",
+  "originalSchedulerSourceSha256": "5f761066d3f5d46b8248d0f2067444f98d6cc2599b26c41b6221c0612db07358",
+  "originalSelectedCount": 36,
+  "schemaVersion": 1,
+  "scientificAcceptanceAsserted": false,
+  "statisticsExecutedByExporter": false,
+  "studyComplete": false,
+  "validationStatus": "unvalidated"
+}

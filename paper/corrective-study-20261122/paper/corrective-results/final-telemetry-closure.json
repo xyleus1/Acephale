@@ -1,0 +1,182 @@
+{
+  "hosts": {
+    "17": {
+      "actualNativeTraceEvidenceCount": 16,
+      "archive": {
+        "bytes": 1951441,
+        "sha256": "e7b7454244709779e9fcc9a5309ecec52813d8aee48b7ecf8360ea4ba1100f28"
+      },
+      "archiveReceipt": {
+        "bytes": 632,
+        "sha256": "ecb742b3d731a34c23108c66347fb6d65fabc7fa60ddeadab1ec9a77b447ea4f"
+      },
+      "hostBinding": {
+        "bytes": 3892,
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/root/corrective-telemetry-closure-02/seed17/BINDING-PUBLISHED.json",
+        "sha256": "5551515b3e7e34695fd7f9ef763165062fcedf654bc9e8a5074453c4331c8bfc"
+      },
+      "managedObservation": {
+        "bytes": 4924,
+        "sha256": "2e6d129ab557999c3ac7c65ef17465d6e1fa00cc1435d72adfafe7c3d45b84ce"
+      },
+      "observedAt": 1795410558.3555007,
+      "originalClosedResults": [
+        {
+          "bytes": 22884,
+          "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/collections/development-2/3750baf884e44f62e416de82d8fef1b45d2261ee488eff7a00d8778ae4dfa33e/CLOSED-RESULT.json",
+          "sha256": "edf3193a79c9ec4ad98606868f5b0f85bc2545e4c1729b2024730b2f6974bd91"
+        },
+        {
+          "bytes": 37995,
+          "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/collections/heldout-1/bc7e436fc07a2463986842165b435177069b1d5cd198857580aeb69c28b92140/CLOSED-RESULT.json",
+          "sha256": "868559c46ad390d44d77a6ea5ff9fd01c883bcbf00c7428a40246dc2d3ad48f3"
+        }
+      ],
+      "originalVerification": {
+        "actualNativeTraceEvidenceCount": 16,
+        "archiveSha256": "e7b7454244709779e9fcc9a5309ecec52813d8aee48b7ecf8360ea4ba1100f28",
+        "currentContainerIdentitiesStillMatch": true,
+        "filesVerified": 31,
+        "instanceId": "PRIVATE_INSTANCE",
+        "kind": "acephale-current-native-telemetry-local-export-v1",
+        "leaseId": "PRIVATE_RESOURCE",
+        "localExportVerified": true,
+        "nativeBenchmarkScore": false,
+        "occurrenceId": "seed17-01",
+        "omissions": [
+          {
+            "item": "actor.log",
+            "reason": "log_byte_limit"
+          },
+          {
+            "item": "predictor.log",
+            "reason": "log_byte_limit"
+          }
+        ],
+        "otlpAcceptanceOnlyClaim": false,
+        "selectedTraceCount": 16,
+        "sourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+        "verificationScope": "whole_archive_and_each_retained_file"
+      },
+      "queryConfiguration": {
+        "bytes": 2636,
+        "sha256": "a15751533b65ac2423f9118c6cc8eb441c91312d6186cfc15df5cf4a0d37c953"
+      },
+      "ready": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/operations-v08/telemetry-seed17-receipt02/prepared/READY.json",
+        "sha256": "fd7466c67c4bb0e694e02ff192295464eb17e64f0f2679e345648524c4773453"
+      },
+      "requirementsSatisfied": true,
+      "scientificAcceptanceAsserted": false,
+      "selectedTraceCount": 16,
+      "state": "completed",
+      "terminal": {
+        "bytes": 3220,
+        "sha256": "819e6759ed2e2cbf42b94cec23f285476aca203f6a2e99c48530118ffb34ae4b"
+      },
+      "verified": {
+        "bytes": 2679,
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/operations-v08/telemetry-seed17-receipt02/prepared/VERIFIED.json",
+        "sha256": "af684cfb7cec519389ec0d50a5542063820807d8512aef7695829f7dd8ededf5"
+      }
+    },
+    "29": {
+      "actualNativeTraceEvidenceCount": 16,
+      "archive": {
+        "bytes": 1973903,
+        "sha256": "66bb056a069919d0f3ad64cdb8d424f823ecb0347ee2834f982f9b976c021d61"
+      },
+      "archiveReceipt": {
+        "bytes": 632,
+        "sha256": "74d119a3a64b22f204e5768b159e6bb751a93b1246e4ec839f0694828e68c7bf"
+      },
+      "hostBinding": {
+        "bytes": 3893,
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/root/corrective-telemetry-closure-02/seed29/BINDING-PUBLISHED.json",
+        "sha256": "d240314b05d9b707480ec7738c099af07da2c620806c1d91e0f86364ebd07dd5"
+      },
+      "managedObservation": {
+        "bytes": 4925,
+        "sha256": "89396a615e767da3a12b98381de13d808347f3105f174415d1a78158f4a6e7b0"
+      },
+      "observedAt": 1795410662.297309,
+      "originalClosedResults": [
+        {
+          "bytes": 24676,
+          "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/collections/development-1/9a17693fb6c4a4780e3bdace17fe6b4ae1fa41fe4be52880e226f6a3df4b3cd3/CLOSED-RESULT.json",
+          "sha256": "11d1300bd485f4f3b62d1836f974d02a6e1af4889bc3120ab6bad9bed0f4ed1e"
+        },
+        {
+          "bytes": 40649,
+          "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/collections/heldout-2/979607f4f48f1915f25cb4b99b130cdc3b397608b89d9680392789b4ca1067cd/CLOSED-RESULT.json",
+          "sha256": "701f9b6dd95591fa1aea7383031e310461145da873fa40a0c47be5dbbe1ed633"
+        }
+      ],
+      "originalVerification": {
+        "actualNativeTraceEvidenceCount": 16,
+        "archiveSha256": "66bb056a069919d0f3ad64cdb8d424f823ecb0347ee2834f982f9b976c021d61",
+        "currentContainerIdentitiesStillMatch": true,
+        "filesVerified": 31,
+        "instanceId": "PRIVATE_INSTANCE",
+        "kind": "acephale-current-native-telemetry-local-export-v1",
+        "leaseId": "PRIVATE_RESOURCE",
+        "localExportVerified": true,
+        "nativeBenchmarkScore": false,
+        "occurrenceId": "seed29-01",
+        "omissions": [
+          {
+            "item": "actor.log",
+            "reason": "log_byte_limit"
+          },
+          {
+            "item": "predictor.log",
+            "reason": "log_byte_limit"
+          }
+        ],
+        "otlpAcceptanceOnlyClaim": false,
+        "selectedTraceCount": 16,
+        "sourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+        "verificationScope": "whole_archive_and_each_retained_file"
+      },
+      "queryConfiguration": {
+        "bytes": 2635,
+        "sha256": "d11d3cd4a02f22202509c5e9111d0ca5e1301c96d176f8f41e3943a5fbb05b8d"
+      },
+      "ready": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/operations-v08/telemetry-seed29-receipt02/prepared/READY.json",
+        "sha256": "8ce9b6dbed2c4931d316fa164835e27c55f72c329a1a6cddf8560aa6734fd400"
+      },
+      "requirementsSatisfied": true,
+      "scientificAcceptanceAsserted": false,
+      "selectedTraceCount": 16,
+      "state": "completed",
+      "terminal": {
+        "bytes": 3220,
+        "sha256": "eeb5d5ab45cdde89a1fec968ae43d4a167d5262c895efe7ab8de62c7092a8843"
+      },
+      "verified": {
+        "bytes": 2679,
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-native-controller-01/operations-v08/telemetry-seed29-receipt02/prepared/VERIFIED.json",
+        "sha256": "23d651e322c1bd1a6aab7509254a75dfebddde9e42e9f237afff9520b6254f70"
+      }
+    }
+  },
+  "kind": "acephale-final-private-paper-telemetry-evidence-v1",
+  "nativeTimingFlagsChanged": false,
+  "originalReports": {
+    "development": {
+      "bytes": 32591,
+      "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-report-continuation-02/outputs/analysis/development/0a62f2065a44c59eb97cc4d94314fb5c6f495f73f21e9361e704408bc6b74240/result/native-report.json",
+      "sha256": "72f65aa6786fe1f58ea221dd79478de176eb6556adf8059515138e9d2cad9f76"
+    },
+    "heldout": {
+      "bytes": 32033,
+      "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-report-continuation-02/outputs/analysis/heldout/d88519d913084db2b000aeabe85124c49b6aeb58fc2304fdbb800d1ee2d8a743/result/native-report.json",
+      "sha256": "0b24292a07dd3493a54e6075866af92f5dca813c7dfc2a90b8b975d642ad53a3"
+    }
+  },
+  "paragraph": "Predictor-seed 17 host telemetry archive passed the original archive/member verification and selected-trace coverage checks (16 selected traces; 16 recorded native trace evidence items). Predictor-seed 29 host telemetry archive passed the original archive/member verification and selected-trace coverage checks (16 selected traces; 16 recorded native trace evidence items). These late read-only observations follow both original cohorts on each host. They do not change recorded measuredTimingValid flags, native outcomes, latency inclusion, or the original statistical results. Recorded hosted usage remains distinct from invoice reconciliation. Telemetry verification alone does not establish benchmark validity or speculative efficacy.",
+  "statisticsRecomputed": false,
+  "studyComplete": false,
+  "telemetryRequirementsSatisfied": true
+}

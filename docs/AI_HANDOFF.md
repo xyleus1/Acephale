@@ -1,5 +1,21 @@
 # Working on Acephale
 
+## Current corrective study
+
+Both original predictor fits and the required replay work are retained. The
+corrected native execution completed the original 36 development and 96 heldout
+slots. Do not retrain, replace failed historical trials, or start another
+controller to reproduce a status recorded in the older notes below.
+
+Read [current results](RESULTS-20261122-CORRECTIVE.md), the
+[paper and reproduction package](../paper/corrective-study-20261122/README.md), and
+[the operational source archive](../infra/aws-continuation/corrective-study-20261122/README.md).
+Preserve exact source/model/data identities, immutable evidence and the original
+budget journal. Current resource ownership and cleanup are recorded in the
+private AWS handoff and lifecycle receipts, not in this public historical log.
+
+The dated notes below describe earlier states and remain preserved for provenance.
+
 ## 2026-11-22: Retain the failed opportunity profile
 
 Paper03 now reports the actual seed17 opportunity generation06 disposition: 20 declared profile rows, 8 completed and 12 actor_did_not_request_profiled_read failures. The unchanged minimum is 10 completed measurements, so aggregation is rejected and the whole unit failed. The eight completed rows support descriptive records only, not an accepted latency, speedup or native score.

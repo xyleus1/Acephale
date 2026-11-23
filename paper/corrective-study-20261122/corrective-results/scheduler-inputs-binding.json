@@ -1,0 +1,68 @@
+{
+  "actualProfileBindings": {
+    "17": {
+      "completed": 33,
+      "declared": 80,
+      "failed": 47,
+      "opportunity": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-continuation-03/collections/seed17/0a12dbf96b8cf3838eaed820b943a0612ac15af46d0cd28d3836d3fb4e31c3ce/restoredPRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-profile-controller-01/prepared/seed17-path08/prepared/run/aggregate/artifacts/opportunity.json",
+        "sha256": "ab5580f6edba2eb1f82745e1da3fa5c12ae643402cd1aa976eb69c5d6c7da7b3"
+      },
+      "profileReady": {
+        "bytes": 3923,
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-continuation-03/collections/seed17/0a12dbf96b8cf3838eaed820b943a0612ac15af46d0cd28d3836d3fb4e31c3ce/PROFILE-READY.json",
+        "sha256": "1677d24cc608a5693a4ea623e7b9f7880719e05e1aa9f66c97b6da580c20e002"
+      },
+      "receipt": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-continuation-03/collections/seed17/0a12dbf96b8cf3838eaed820b943a0612ac15af46d0cd28d3836d3fb4e31c3ce/restoredPRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-profile-controller-01/prepared/seed17-path08/prepared/run/profile/artifacts/receipt.json",
+        "sha256": "e1b5f0c1a6abba7a9436a38428ac7357534d375f80bdb4959a972eb923196693"
+      },
+      "sampleCount": 33
+    },
+    "29": {
+      "completed": 33,
+      "declared": 80,
+      "failed": 47,
+      "opportunity": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-continuation-03/collections/seed29/911d3a8594950eab929390d1aa3ae38bb1f8c4183983aaaf2b63b645da0399fb/restoredPRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-profile-controller-01/prepared/seed29-path08/prepared/run/aggregate/artifacts/opportunity.json",
+        "sha256": "61e8a3649651e1f4f356d9f52756049aa676149dc2d0efb689e0de7e21152f26"
+      },
+      "profileReady": {
+        "bytes": 3841,
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-continuation-03/collections/seed29/911d3a8594950eab929390d1aa3ae38bb1f8c4183983aaaf2b63b645da0399fb/PROFILE-READY.json",
+        "sha256": "60428acf4f09fc6603fa6f6fbcf3073bffbc321ef4e621213691231c01bf97cd"
+      },
+      "receipt": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-continuation-03/collections/seed29/911d3a8594950eab929390d1aa3ae38bb1f8c4183983aaaf2b63b645da0399fb/restoredPRIVATE_RUNTIME_ROOT/workspaces/operator/corrective-profile-controller-01/prepared/seed29-path08/prepared/run/profile/artifacts/receipt.json",
+        "sha256": "e1b5f0c1a6abba7a9436a38428ac7357534d375f80bdb4959a972eb923196693"
+      },
+      "sampleCount": 33
+    }
+  },
+  "actualQualificationBindings": {
+    "17": {
+      "path": "PRIVATE_RUNTIME_ROOT/state/corrective-qualification/PRIVATE_RESOURCE/d82ee76826cbca81b0bfb05d3779f57c585e0ed2457416e4d9be56ef47378eed/TERMINAL.json",
+      "sha256": "3377e3587c19bd8ea415f929ca262b26ddcd6242ec45c73a6a42b470a46a9b8a"
+    },
+    "29": {
+      "path": "PRIVATE_RUNTIME_ROOT/workspaces/review/corrective-qualification29-01/postproof-seal07/TERMINAL.json",
+      "sha256": "3262c5e60503b471d0806ff32a452e52cf6581c4a68500fa04530e3185b4acc7"
+    }
+  },
+  "schedulerFindings": {
+    "bytes": 5449,
+    "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-scheduler-inputs-01/FINDINGS.json",
+    "sha256": "09cc4d5df7aa7d6e3076e6ee7a2e066b88d3f5f8acac35b6b67c930c9fced3c1"
+  },
+  "schedulerObservation": {
+    "bytes": 20925,
+    "path": "PRIVATE_RUNTIME_ROOT/workspaces/review/corrective-native-exposure-01/OBSERVATION-005326.json",
+    "sha256": "446c968a6197f72295914aba086842c886be5f69fae6278021395769c4455be8"
+  },
+  "schedulerParagraph": {
+    "bytes": 962,
+    "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-scheduler-inputs-01/PARAGRAPH.md",
+    "sha256": "1283dae6165792464ec0f191a7cd8ac351601c24416a767adaec170db06387ea"
+  },
+  "statisticsRecomputed": false
+}

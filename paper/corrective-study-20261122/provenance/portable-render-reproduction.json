@@ -1,0 +1,13 @@
+{
+  "allPagePixelsIdenticalAt90Dpi": true,
+  "allPageTextsIdentical": true,
+  "assemblyExitCode": 0,
+  "kind": "portable-render-reproduction-v1",
+  "originalPdfSha256": "f050574d88e593334b03b404928e0f1963de8266c88a6547e54668ea7da2b157",
+  "pages": 32,
+  "pdfMetadataMayDiffer": true,
+  "privateProofSha256": "4a1e377dcbccf7d15ae9b14dd03cc7daa24718e3ed684aefc6fcbfa4d58b6f49",
+  "rebuiltPdfSha256": "0de8612f636d39c1fc88ec0a51a4a4571e4bcb760e49750a048068d6bb78d292",
+  "renderExitCode": 0,
+  "statisticalOrModelComputation": false
+}

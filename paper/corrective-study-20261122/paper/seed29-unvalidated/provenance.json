@@ -1,0 +1,57 @@
+{
+  "acceptedComponentCountChanged": false,
+  "calibrationRecoveryReceiptSha256": "7d9e706c372f71c980160f3e30b43ce453a48c1d03e367653146387f5d0fcd40",
+  "cleanSeedReplication": false,
+  "collectorProvenanceSha256": "44f9ebf79492953340dec7394573e041899d0cb179e59911a528490c332193ad",
+  "hardwareRuntimeAndSchedulingChanged": true,
+  "kind": "acephale-unvalidated-seed29-public-provenance-v1",
+  "modelCallsForAnalysis": false,
+  "nativeTaskOutcomesIncluded": false,
+  "originalCpuExecutionReceiptSha256": "204f779df894a8700bbbc724b31fccf3814ca1c4a8eed38488a4edf84990b133",
+  "pairedReportSourceSha256": "9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5",
+  "parentPublicCommit": "d5a3b01a1bc29ea5cb8edc5560b3f40eedafc215",
+  "qualificationDeferred": true,
+  "scientificSourceChangedForAnalysis": false,
+  "sourceFiles": [
+    {
+      "bytes": 2845,
+      "originalBytesUnchanged": true,
+      "path": "sources/goals-fixed-report.json",
+      "sha256": "9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5"
+    },
+    {
+      "bytes": 1733,
+      "originalBytesUnchanged": true,
+      "path": "sources/neutral-fixed-report.json",
+      "sha256": "b361bba09c411dffdf930c51740d61b3741c0b4839a74c36692cece8ab71c515"
+    },
+    {
+      "bytes": 13042,
+      "originalBytesUnchanged": true,
+      "path": "sources/calibration.json",
+      "sha256": "ffc6958173ece415298b58c5557a0f2032fbe31485d01c3ed65134e38ecbf556"
+    },
+    {
+      "bytes": 44756,
+      "originalBytesUnchanged": true,
+      "path": "sources/calibration-report.json",
+      "sha256": "d5ad3f70f35531a57b316240c7057fbbb8b7b50a73425a7875fdfb57f03d42f4"
+    },
+    {
+      "bytes": 1099,
+      "originalSourceSha256": "8653580d096d8fd690504ed6f6931f305d85e58c6edf0590304ddfd03f81f847",
+      "path": "sources/record-coverage.json",
+      "privacyProjection": true,
+      "sha256": "f94c6762d155d4e8fd46cfa9b62047d86bbd460ded3ce384c5aedc9d74e01bc5"
+    }
+  ],
+  "statisticsRecomputedForPaper": false,
+  "status": "UNVALIDATED",
+  "teacherEvidence": {
+    "finalAnalysisReceiptSha256": "843f84b7cd59fdeea5861fdcc7899fcfda586a2c2b97ab2376acd53b4bdc6ac9",
+    "reliabilitySha256": "347203b9ac9c1fd65e2c2f4ee5ab2c5fe6737d1512ca550eea29b353d01a56d5",
+    "source": "sources/teacher-disposition.json",
+    "statisticsRecomputed": false
+  },
+  "teacherGradesIncluded": true
+}

@@ -1,0 +1,74 @@
+{
+  "bootstrapRecomputed": false,
+  "completionCounts": {
+    "goals-fixed": {
+      "completed": 582,
+      "coverageComplete": true,
+      "expected": 746,
+      "failed": 164,
+      "missingCheckpointIds": [],
+      "notDispatched": 0,
+      "recorded": 746,
+      "responsesWithoutTerminalPrediction": []
+    },
+    "goals-selected": {
+      "completed": 583,
+      "coverageComplete": true,
+      "expected": 746,
+      "failed": 163,
+      "missingCheckpointIds": [],
+      "notDispatched": 0,
+      "recorded": 746,
+      "responsesWithoutTerminalPrediction": []
+    },
+    "neutral-fixed": {
+      "completed": 745,
+      "coverageComplete": true,
+      "expected": 746,
+      "failed": 1,
+      "missingCheckpointIds": [],
+      "notDispatched": 0,
+      "recorded": 746,
+      "responsesWithoutTerminalPrediction": []
+    }
+  },
+  "kind": "acephale-public-copied-figure-data-v1",
+  "matplotlibVersion": "3.11.2",
+  "pairedComparison": {
+    "baseline": "conditional",
+    "metrics": {
+      "binary_log_loss_nats_difference": {
+        "bootstrap_samples": 2000,
+        "bootstrap_seed": 42,
+        "ci95": [
+          -0.08464273517954458,
+          0.09321751366903658
+        ],
+        "estimate": -0.012935838243441876,
+        "families": 36,
+        "paired_trials": 442,
+        "weighting": "equal_family_mean_of_paired_trial_differences"
+      },
+      "brier_difference": {
+        "bootstrap_samples": 2000,
+        "bootstrap_seed": 42,
+        "ci95": [
+          -0.005043655312490144,
+          0.0220801474162657
+        ],
+        "estimate": 0.0051684620124447115,
+        "families": 36,
+        "paired_trials": 442,
+        "weighting": "equal_family_mean_of_paired_trial_differences"
+      }
+    },
+    "treatment": "neutral"
+  },
+  "sourceHashes": {
+    "originalCollector": "8653580d096d8fd690504ed6f6931f305d85e58c6edf0590304ddfd03f81f847",
+    "originalPairedReport": "9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5"
+  },
+  "sourceProvenance": "provenance.json",
+  "statisticalReanalysisPerformed": false,
+  "status": "UNVALIDATED distributed replay amendment"
+}

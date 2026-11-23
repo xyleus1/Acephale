@@ -1,0 +1,127 @@
+{
+  "conclusion": "Both neutral and conditional paired rows are equal within each seed. The0.20676691729323307 and0.39473684210526316 values are Top1 values in different predictor-seed paired reports. Seed29 Top3 is0.40225563909774437; standalone-neutral results are separate.",
+  "kind": "original-replay-metric-label-audit-v1",
+  "pairedRows": [
+    {
+      "condition": "conditional",
+      "fields": {
+        "candidate_panel_any_hit_coverage": {
+          "pointer": "/conditions/conditional/candidate_panel_any_hit_coverage",
+          "value": 0.45864661654135336
+        },
+        "declared_checkpoints": {
+          "pointer": "/conditions/conditional/declared_checkpoints",
+          "value": 746
+        },
+        "eligible_read_checkpoints": {
+          "pointer": "/conditions/conditional/eligible_read_checkpoints",
+          "value": 266
+        },
+        "exact_top1_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/conditional/exact_top1_any_hit_over_declared_eligible",
+          "value": 0.20676691729323307
+        },
+        "exact_top3_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/conditional/exact_top3_any_hit_over_declared_eligible",
+          "value": 0.20676691729323307
+        }
+      },
+      "seed": "17",
+      "source": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-report-continuation-02/outputs/jobs/development/e5cd79a44fcc7cc30ce4ef2bd4e0cf161b2d41933d368f2f70439de077886e6a/work/paper/source/sources/seed17-goals-fixed-score-report.json",
+        "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687"
+      }
+    },
+    {
+      "condition": "neutral",
+      "fields": {
+        "candidate_panel_any_hit_coverage": {
+          "pointer": "/conditions/neutral/candidate_panel_any_hit_coverage",
+          "value": 0.45864661654135336
+        },
+        "declared_checkpoints": {
+          "pointer": "/conditions/neutral/declared_checkpoints",
+          "value": 746
+        },
+        "eligible_read_checkpoints": {
+          "pointer": "/conditions/neutral/eligible_read_checkpoints",
+          "value": 266
+        },
+        "exact_top1_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/neutral/exact_top1_any_hit_over_declared_eligible",
+          "value": 0.20676691729323307
+        },
+        "exact_top3_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/neutral/exact_top3_any_hit_over_declared_eligible",
+          "value": 0.20676691729323307
+        }
+      },
+      "seed": "17",
+      "source": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-report-continuation-02/outputs/jobs/development/e5cd79a44fcc7cc30ce4ef2bd4e0cf161b2d41933d368f2f70439de077886e6a/work/paper/source/sources/seed17-goals-fixed-score-report.json",
+        "sha256": "8909cf9306588359116befe9f810f3fdc8a2596b766691f65fde27800cc14687"
+      }
+    },
+    {
+      "condition": "conditional",
+      "fields": {
+        "candidate_panel_any_hit_coverage": {
+          "pointer": "/conditions/conditional/candidate_panel_any_hit_coverage",
+          "value": 0.45864661654135336
+        },
+        "declared_checkpoints": {
+          "pointer": "/conditions/conditional/declared_checkpoints",
+          "value": 746
+        },
+        "eligible_read_checkpoints": {
+          "pointer": "/conditions/conditional/eligible_read_checkpoints",
+          "value": 266
+        },
+        "exact_top1_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/conditional/exact_top1_any_hit_over_declared_eligible",
+          "value": 0.39473684210526316
+        },
+        "exact_top3_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/conditional/exact_top3_any_hit_over_declared_eligible",
+          "value": 0.40225563909774437
+        }
+      },
+      "seed": "29",
+      "source": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-report-continuation-02/outputs/jobs/development/e5cd79a44fcc7cc30ce4ef2bd4e0cf161b2d41933d368f2f70439de077886e6a/work/paper/source/seed29-unvalidated/sources/goals-fixed-report.json",
+        "sha256": "9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5"
+      }
+    },
+    {
+      "condition": "neutral",
+      "fields": {
+        "candidate_panel_any_hit_coverage": {
+          "pointer": "/conditions/neutral/candidate_panel_any_hit_coverage",
+          "value": 0.45864661654135336
+        },
+        "declared_checkpoints": {
+          "pointer": "/conditions/neutral/declared_checkpoints",
+          "value": 746
+        },
+        "eligible_read_checkpoints": {
+          "pointer": "/conditions/neutral/eligible_read_checkpoints",
+          "value": 266
+        },
+        "exact_top1_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/neutral/exact_top1_any_hit_over_declared_eligible",
+          "value": 0.39473684210526316
+        },
+        "exact_top3_any_hit_over_declared_eligible": {
+          "pointer": "/conditions/neutral/exact_top3_any_hit_over_declared_eligible",
+          "value": 0.40225563909774437
+        }
+      },
+      "seed": "29",
+      "source": {
+        "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-report-continuation-02/outputs/jobs/development/e5cd79a44fcc7cc30ce4ef2bd4e0cf161b2d41933d368f2f70439de077886e6a/work/paper/source/seed29-unvalidated/sources/goals-fixed-report.json",
+        "sha256": "9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5"
+      }
+    }
+  ],
+  "statisticsInvoked": false
+}

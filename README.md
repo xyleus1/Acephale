@@ -12,9 +12,9 @@ catalog and task limits stay fixed across the primary comparison arms. Goal
 conditioning affects the predictor and scheduler. It does not train the actor
 or guarantee improvements in task accuracy, logical tool-call count or latency.
 
-- [Paper PDF](paper/final-study-20261122/acephale-study.pdf)
-- [Editable paper, figures, result files and reproduction instructions](paper/final-study-20261122/README.md)
-- [Current results: retained native cohort, replay, and qualification failures](docs/RESULTS-20261122.md)
+- [Paper PDF](paper/corrective-study-20261122/acephale-study.pdf)
+- [Editable paper, figures, result files and reproduction instructions](paper/corrective-study-20261122/README.md)
+- [Current results and limitations](docs/RESULTS-20261122-CORRECTIVE.md)
 - [Earlier pilot: base benchmark and failed predictor export](docs/experiments/predictor-lora-pilot-2026-11-10.md)
 - [Methods and experimental controls](docs/METHODS.md)
 - [Collection, memory, calibration and evaluation commands](docs/RUNBOOK.md)
@@ -58,9 +58,14 @@ continues to require its independently pinned runtime, including Python 3.12.16.
 | Pinned GPU serving, research database and observability | `infra/acephale-infra-v1` |
 
 The primary comparison is base actor, neutral-memory prefetch and goal-conditioned
-memory prefetch on paired tasks/seeds. The retained November 22 cohort does not establish a goal-conditioning or latency
-gain: every speculative opportunity was rejected before prediction, and native
-timing samples were invalid. See the result summary for denominators and failures. Earlier reports remain unchanged
-in the original checkout and Git history; they are neither current results nor
-automatically eligible training data. The implementation is paper-based research,
-not a verified reproduction of every PASTE or Salesforce serving component.
+memory prefetch on paired tasks. The corrected November 22 run completed all
+36 development and 96 heldout trials on the qualified deployments. The current
+report separates database reward, configured policy constraints, measured latency
+and actual speculative exposure. This is a custom tau-compatible pilot, not an
+official full-benchmark score or evidence of superiority over other actor models.
+Earlier attempts and their failures remain unchanged in the historical packages.
+
+The [published operational sources](infra/aws-continuation/corrective-study-20261122/README.md)
+record the runtime corrections and AWS continuation used for this study. The
+implementation is paper-based research, not a verified reproduction of every
+PASTE or Salesforce serving component.

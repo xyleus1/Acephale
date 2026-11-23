@@ -1,0 +1,23 @@
+{
+  "boundsViolations": [],
+  "dataSha256": "b9a8ca5c1712e562cc34294d73a06ada7e4a78bdf8bf0fd792e1eb3edcd1a687",
+  "files": [
+    {
+      "bytes": 102016,
+      "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-final-private-paper-07/outputs/a29805faa7d389b6f7ab6ac162385ab00c31f6d72714266c3853594114dd3955/work/paper/source/figures/corrective-heldout/rates.png",
+      "sha256": "3fa5dc3e992c6d757b872d3f025bd00e2348467669aff22ec426aed21ed9e74a"
+    },
+    {
+      "bytes": 10576,
+      "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-final-private-paper-07/outputs/a29805faa7d389b6f7ab6ac162385ab00c31f6d72714266c3853594114dd3955/work/paper/source/figures/corrective-heldout/rates.svg",
+      "sha256": "3e2739117af1aafa990f9bd83f0480033e3b8890e1b5043fde84e6f87bdae847"
+    },
+    {
+      "bytes": 23263,
+      "path": "PRIVATE_RUNTIME_ROOT/workspaces/report/corrective-final-private-paper-07/outputs/a29805faa7d389b6f7ab6ac162385ab00c31f6d72714266c3853594114dd3955/work/paper/source/figures/corrective-heldout/rates.pdf",
+      "sha256": "0c46bd3588c45e107a7b47581583f1fa6b2e498712a92adc39fb3bbe570f1c9b"
+    }
+  ],
+  "matplotlibVersion": "3.11.2",
+  "statisticsComputed": false
+}

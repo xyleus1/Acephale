@@ -1,0 +1,1067 @@
+{
+  "additionalArmMetrics": {
+    "acephale": {
+      "byPredictorTrainingSeed": {
+        "17": {
+          "actorSeeds": [
+            17
+          ],
+          "declaredTrials": 6,
+          "knownConstraintCleanSuccesses": 4,
+          "nativeSuccesses": 6
+        },
+        "29": {
+          "actorSeeds": [
+            17
+          ],
+          "declaredTrials": 6,
+          "knownConstraintCleanSuccesses": 4,
+          "nativeSuccesses": 6
+        }
+      },
+      "constraintAuditCompleteTrials": 12,
+      "hostedUsage": {
+        "billedUsd": 0.140916,
+        "gpuCostsIncluded": false,
+        "invoiceVerified": false,
+        "knownUsageSubtotalUsd": 0.140916,
+        "missingKnownSubtotalTrials": 0,
+        "scope": "hosted_user_and_judge_only",
+        "unknownCharges": 0
+      },
+      "knownConstraintCleanJointSeedConsistency": null,
+      "knownConstraintCleanPass1": 0.6666666666666666,
+      "nativePass1FamilyBootstrap": {
+        "bootstrap_samples": 2000,
+        "bootstrap_seed": 42,
+        "ci95": [
+          1.0,
+          1.0
+        ],
+        "estimate": 1.0,
+        "families": 6,
+        "trials": 12,
+        "weighting": "equal_family_mean_of_native_completion_indicators"
+      },
+      "nativeUnpromotedPhysicalCalls": {
+        "knownTotal": 0,
+        "missingTrials": 0
+      },
+      "schedulerEvents": {
+        "cancel_requested": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "cancellation_confirmed": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "rejected": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "revalidation_completed": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "started": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "useful": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "wasted": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        }
+      }
+    },
+    "base": {
+      "byPredictorTrainingSeed": {
+        "17": {
+          "actorSeeds": [
+            17
+          ],
+          "declaredTrials": 6,
+          "knownConstraintCleanSuccesses": 5,
+          "nativeSuccesses": 6
+        },
+        "29": {
+          "actorSeeds": [
+            17
+          ],
+          "declaredTrials": 6,
+          "knownConstraintCleanSuccesses": 4,
+          "nativeSuccesses": 6
+        }
+      },
+      "constraintAuditCompleteTrials": 12,
+      "hostedUsage": {
+        "billedUsd": 0.150927,
+        "gpuCostsIncluded": false,
+        "invoiceVerified": false,
+        "knownUsageSubtotalUsd": 0.150927,
+        "missingKnownSubtotalTrials": 0,
+        "scope": "hosted_user_and_judge_only",
+        "unknownCharges": 0
+      },
+      "knownConstraintCleanJointSeedConsistency": null,
+      "knownConstraintCleanPass1": 0.75,
+      "nativePass1FamilyBootstrap": {
+        "bootstrap_samples": 2000,
+        "bootstrap_seed": 42,
+        "ci95": [
+          1.0,
+          1.0
+        ],
+        "estimate": 1.0,
+        "families": 6,
+        "trials": 12,
+        "weighting": "equal_family_mean_of_native_completion_indicators"
+      },
+      "nativeUnpromotedPhysicalCalls": {
+        "knownTotal": 0,
+        "missingTrials": 0
+      },
+      "schedulerEvents": {
+        "cancel_requested": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "cancellation_confirmed": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "rejected": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "revalidation_completed": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "started": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "useful": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "wasted": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        }
+      }
+    },
+    "neutral_memory_prefetch": {
+      "byPredictorTrainingSeed": {
+        "17": {
+          "actorSeeds": [
+            17
+          ],
+          "declaredTrials": 6,
+          "knownConstraintCleanSuccesses": 4,
+          "nativeSuccesses": 6
+        },
+        "29": {
+          "actorSeeds": [
+            17
+          ],
+          "declaredTrials": 6,
+          "knownConstraintCleanSuccesses": 4,
+          "nativeSuccesses": 6
+        }
+      },
+      "constraintAuditCompleteTrials": 12,
+      "hostedUsage": {
+        "billedUsd": 0.14353,
+        "gpuCostsIncluded": false,
+        "invoiceVerified": false,
+        "knownUsageSubtotalUsd": 0.14353,
+        "missingKnownSubtotalTrials": 0,
+        "scope": "hosted_user_and_judge_only",
+        "unknownCharges": 0
+      },
+      "knownConstraintCleanJointSeedConsistency": null,
+      "knownConstraintCleanPass1": 0.6666666666666666,
+      "nativePass1FamilyBootstrap": {
+        "bootstrap_samples": 2000,
+        "bootstrap_seed": 42,
+        "ci95": [
+          1.0,
+          1.0
+        ],
+        "estimate": 1.0,
+        "families": 6,
+        "trials": 12,
+        "weighting": "equal_family_mean_of_native_completion_indicators"
+      },
+      "nativeUnpromotedPhysicalCalls": {
+        "knownTotal": 0,
+        "missingTrials": 0
+      },
+      "schedulerEvents": {
+        "cancel_requested": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "cancellation_confirmed": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "rejected": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "revalidation_completed": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "started": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "useful": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        },
+        "wasted": {
+          "knownTotal": 0,
+          "missingTrials": 0
+        }
+      }
+    }
+  },
+  "causalComparisonScope": "Paired arm differences within the original frozen blocks; no causal contrast between predictor seeds",
+  "constraintScope": "Configured complete NL assertion audit, not a complete policy compliance proof",
+  "declaredSlots": 36,
+  "evaluatorInclusiveLatency": {
+    "annotationReview": {
+      "humanReviewCount": 0,
+      "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+      "machineReviewCount": 20,
+      "reviewIndependence": "separate_request_and_prompt_same_model",
+      "reviewProtocol": "machine_audited_exploratory",
+      "reviewerModel": "gpt-5.4-2026-03-05"
+    },
+    "arms": {
+      "acephale": {
+        "constraint_violations": {
+          "known_total": 4,
+          "missing_trials": 0
+        },
+        "joint_actor_and_predictor_seed_consistency": null,
+        "known_usage_usd": 0.14091599999999999,
+        "latency_samples": 12,
+        "logical_calls": {
+          "known_total": 73,
+          "missing_trials": 0
+        },
+        "mean_latency_ms": 117341.69158108292,
+        "median_latency_ms": 106689.27419299961,
+        "observed_p95_latency_ms": 163964.57615564964,
+        "p95_method": "linear_sample_quantile",
+        "pass1": 1.0,
+        "physical_call_amplification": 1.0,
+        "physical_calls": {
+          "known_total": 73,
+          "missing_trials": 0
+        },
+        "physical_calls_per_success": 6.083333333333333,
+        "revalidation_calls": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "scheduled_trials": 12,
+        "speculative_starts": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "status_counts": {
+          "completed": 12
+        },
+        "successes": 12,
+        "two_trial_tasks": 0,
+        "unknown_cost_trials": 0,
+        "useful_speculations": {
+          "known_total": 0,
+          "missing_trials": 0
+        }
+      },
+      "base": {
+        "constraint_violations": {
+          "known_total": 3,
+          "missing_trials": 0
+        },
+        "joint_actor_and_predictor_seed_consistency": null,
+        "known_usage_usd": 0.150927,
+        "latency_samples": 12,
+        "logical_calls": {
+          "known_total": 77,
+          "missing_trials": 0
+        },
+        "mean_latency_ms": 119859.22255066683,
+        "median_latency_ms": 116696.12583050002,
+        "observed_p95_latency_ms": 153224.6699108006,
+        "p95_method": "linear_sample_quantile",
+        "pass1": 1.0,
+        "physical_call_amplification": 1.0,
+        "physical_calls": {
+          "known_total": 77,
+          "missing_trials": 0
+        },
+        "physical_calls_per_success": 6.416666666666667,
+        "revalidation_calls": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "scheduled_trials": 12,
+        "speculative_starts": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "status_counts": {
+          "completed": 12
+        },
+        "successes": 12,
+        "two_trial_tasks": 0,
+        "unknown_cost_trials": 0,
+        "useful_speculations": {
+          "known_total": 0,
+          "missing_trials": 0
+        }
+      },
+      "neutral_memory_prefetch": {
+        "constraint_violations": {
+          "known_total": 4,
+          "missing_trials": 0
+        },
+        "joint_actor_and_predictor_seed_consistency": null,
+        "known_usage_usd": 0.14353,
+        "latency_samples": 12,
+        "logical_calls": {
+          "known_total": 76,
+          "missing_trials": 0
+        },
+        "mean_latency_ms": 113572.56879083342,
+        "median_latency_ms": 114875.6146980004,
+        "observed_p95_latency_ms": 143857.5787380002,
+        "p95_method": "linear_sample_quantile",
+        "pass1": 1.0,
+        "physical_call_amplification": 1.0,
+        "physical_calls": {
+          "known_total": 76,
+          "missing_trials": 0
+        },
+        "physical_calls_per_success": 6.333333333333333,
+        "revalidation_calls": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "scheduled_trials": 12,
+        "speculative_starts": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "status_counts": {
+          "completed": 12
+        },
+        "successes": 12,
+        "two_trial_tasks": 0,
+        "unknown_cost_trials": 0,
+        "useful_speculations": {
+          "known_total": 0,
+          "missing_trials": 0
+        }
+      }
+    },
+    "design_hash": "ad859820cab97b9786452443a37790a9a78343ec34073bd28f84d99a3ae62847",
+    "label": "Custom tau-compatible paired development",
+    "limitations": [
+      "Usage-derived costs are not invoice-reconciled",
+      "Missing telemetry is never imputed as zero",
+      "Execution replay timing is not live latency",
+      "Task success and exact-read prediction use different denominators",
+      "Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests"
+    ],
+    "measurement_kind": "live",
+    "paired_comparisons": [
+      {
+        "baseline": "base",
+        "metrics": {
+          "latency_ms_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -9894.757565583406,
+              -2775.7106659999736
+            ],
+            "estimate": -6286.653759833373,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "logical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.4166666666666667,
+              0.4166666666666667
+            ],
+            "estimate": -0.08333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "physical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.4166666666666667,
+              0.4166666666666667
+            ],
+            "estimate": -0.08333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "success_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "estimate": 0.0,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          }
+        },
+        "treatment": "neutral_memory_prefetch"
+      },
+      {
+        "baseline": "base",
+        "metrics": {
+          "latency_ms_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -9937.173700750465,
+              4563.390437855504
+            ],
+            "estimate": -2517.5309695838864,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "logical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.8333333333333334,
+              0.0
+            ],
+            "estimate": -0.3333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "physical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.8333333333333334,
+              0.0
+            ],
+            "estimate": -0.3333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "success_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "estimate": 0.0,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          }
+        },
+        "treatment": "acephale"
+      },
+      {
+        "baseline": "neutral_memory_prefetch",
+        "metrics": {
+          "latency_ms_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -1463.2539898254286,
+              7911.61189999896
+            ],
+            "estimate": 3769.1227902494866,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "logical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.75,
+              0.16666666666666666
+            ],
+            "estimate": -0.25,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "physical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.75,
+              0.16666666666666666
+            ],
+            "estimate": -0.25,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "success_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "estimate": 0.0,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          }
+        },
+        "treatment": "acephale"
+      }
+    ],
+    "results_hash": "1d06a00766b7b73b92e94900e099918bddb87f078f8051bb9f12225d4347e7a7",
+    "schema_version": "acephale-infra-evaluation-v1",
+    "twoTrialInterpretation": "Joint actor/predictor-seed consistency; not same-fixed-checkpoint pass^2"
+  },
+  "knownConstraintCleanPairedDifferences": [
+    {
+      "baseline": "base",
+      "metrics": {
+        "latency_ms_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -9865.182261083646,
+            -3059.2217873346876
+          ],
+          "estimate": -6119.473020250855,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "logical_calls_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.4166666666666667,
+            0.4166666666666667
+          ],
+          "estimate": -0.08333333333333333,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "physical_calls_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.4166666666666667,
+            0.4166666666666667
+          ],
+          "estimate": -0.08333333333333333,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "success_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.25,
+            0.0
+          ],
+          "estimate": -0.08333333333333333,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        }
+      },
+      "treatment": "neutral_memory_prefetch"
+    },
+    {
+      "baseline": "base",
+      "metrics": {
+        "latency_ms_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -13386.03567602761,
+            4994.637669567105
+          ],
+          "estimate": -3832.226395751301,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "logical_calls_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.8333333333333334,
+            0.0
+          ],
+          "estimate": -0.3333333333333333,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "physical_calls_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.8333333333333334,
+            0.0
+          ],
+          "estimate": -0.3333333333333333,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "success_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.3333333333333333,
+            0.16666666666666666
+          ],
+          "estimate": -0.08333333333333333,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        }
+      },
+      "treatment": "acephale"
+    },
+    {
+      "baseline": "neutral_memory_prefetch",
+      "metrics": {
+        "latency_ms_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -4989.392651833138,
+            8604.405833373808
+          ],
+          "estimate": 2287.2466244995544,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "logical_calls_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.75,
+            0.16666666666666666
+          ],
+          "estimate": -0.25,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "physical_calls_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.75,
+            0.16666666666666666
+          ],
+          "estimate": -0.25,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        },
+        "success_difference": {
+          "bootstrap_samples": 2000,
+          "bootstrap_seed": 42,
+          "ci95": [
+            -0.3333333333333333,
+            0.4166666666666667
+          ],
+          "estimate": 0.0,
+          "families": 6,
+          "paired_trials": 12,
+          "weighting": "equal_family_mean_of_paired_trial_differences"
+        }
+      },
+      "treatment": "acephale"
+    }
+  ],
+  "latencyScope": "Live totalTrialSeconds includes actor/user drain; evaluator-inclusive elapsed time reported separately",
+  "nativeCompletionAndLiveLatency": {
+    "annotationReview": {
+      "humanReviewCount": 0,
+      "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+      "machineReviewCount": 20,
+      "reviewIndependence": "separate_request_and_prompt_same_model",
+      "reviewProtocol": "machine_audited_exploratory",
+      "reviewerModel": "gpt-5.4-2026-03-05"
+    },
+    "arms": {
+      "acephale": {
+        "constraint_violations": {
+          "known_total": 4,
+          "missing_trials": 0
+        },
+        "joint_actor_and_predictor_seed_consistency": null,
+        "known_usage_usd": 0.14091599999999999,
+        "latency_samples": 12,
+        "logical_calls": {
+          "known_total": 73,
+          "missing_trials": 0
+        },
+        "mean_latency_ms": 95599.94110141603,
+        "median_latency_ms": 87313.75683899932,
+        "observed_p95_latency_ms": 137853.95521220032,
+        "p95_method": "linear_sample_quantile",
+        "pass1": 1.0,
+        "physical_call_amplification": 1.0,
+        "physical_calls": {
+          "known_total": 73,
+          "missing_trials": 0
+        },
+        "physical_calls_per_success": 6.083333333333333,
+        "revalidation_calls": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "scheduled_trials": 12,
+        "speculative_starts": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "status_counts": {
+          "completed": 12
+        },
+        "successes": 12,
+        "two_trial_tasks": 0,
+        "unknown_cost_trials": 0,
+        "useful_speculations": {
+          "known_total": 0,
+          "missing_trials": 0
+        }
+      },
+      "base": {
+        "constraint_violations": {
+          "known_total": 3,
+          "missing_trials": 0
+        },
+        "joint_actor_and_predictor_seed_consistency": null,
+        "known_usage_usd": 0.150927,
+        "latency_samples": 12,
+        "logical_calls": {
+          "known_total": 77,
+          "missing_trials": 0
+        },
+        "mean_latency_ms": 99432.16749716735,
+        "median_latency_ms": 99181.0395604998,
+        "observed_p95_latency_ms": 130331.14272730051,
+        "p95_method": "linear_sample_quantile",
+        "pass1": 1.0,
+        "physical_call_amplification": 1.0,
+        "physical_calls": {
+          "known_total": 77,
+          "missing_trials": 0
+        },
+        "physical_calls_per_success": 6.416666666666667,
+        "revalidation_calls": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "scheduled_trials": 12,
+        "speculative_starts": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "status_counts": {
+          "completed": 12
+        },
+        "successes": 12,
+        "two_trial_tasks": 0,
+        "unknown_cost_trials": 0,
+        "useful_speculations": {
+          "known_total": 0,
+          "missing_trials": 0
+        }
+      },
+      "neutral_memory_prefetch": {
+        "constraint_violations": {
+          "known_total": 4,
+          "missing_trials": 0
+        },
+        "joint_actor_and_predictor_seed_consistency": null,
+        "known_usage_usd": 0.14353,
+        "latency_samples": 12,
+        "logical_calls": {
+          "known_total": 76,
+          "missing_trials": 0
+        },
+        "mean_latency_ms": 93312.6944769165,
+        "median_latency_ms": 97590.09877400058,
+        "observed_p95_latency_ms": 124475.63534574873,
+        "p95_method": "linear_sample_quantile",
+        "pass1": 1.0,
+        "physical_call_amplification": 1.0,
+        "physical_calls": {
+          "known_total": 76,
+          "missing_trials": 0
+        },
+        "physical_calls_per_success": 6.333333333333333,
+        "revalidation_calls": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "scheduled_trials": 12,
+        "speculative_starts": {
+          "known_total": 0,
+          "missing_trials": 0
+        },
+        "status_counts": {
+          "completed": 12
+        },
+        "successes": 12,
+        "two_trial_tasks": 0,
+        "unknown_cost_trials": 0,
+        "useful_speculations": {
+          "known_total": 0,
+          "missing_trials": 0
+        }
+      }
+    },
+    "design_hash": "ad859820cab97b9786452443a37790a9a78343ec34073bd28f84d99a3ae62847",
+    "label": "Custom tau-compatible paired development",
+    "limitations": [
+      "Usage-derived costs are not invoice-reconciled",
+      "Missing telemetry is never imputed as zero",
+      "Execution replay timing is not live latency",
+      "Task success and exact-read prediction use different denominators",
+      "Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests"
+    ],
+    "measurement_kind": "live",
+    "paired_comparisons": [
+      {
+        "baseline": "base",
+        "metrics": {
+          "latency_ms_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -9865.182261083646,
+              -3059.2217873346876
+            ],
+            "estimate": -6119.473020250855,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "logical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.4166666666666667,
+              0.4166666666666667
+            ],
+            "estimate": -0.08333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "physical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.4166666666666667,
+              0.4166666666666667
+            ],
+            "estimate": -0.08333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "success_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "estimate": 0.0,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          }
+        },
+        "treatment": "neutral_memory_prefetch"
+      },
+      {
+        "baseline": "base",
+        "metrics": {
+          "latency_ms_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -13386.03567602761,
+              4994.637669567105
+            ],
+            "estimate": -3832.226395751301,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "logical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.8333333333333334,
+              0.0
+            ],
+            "estimate": -0.3333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "physical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.8333333333333334,
+              0.0
+            ],
+            "estimate": -0.3333333333333333,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "success_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "estimate": 0.0,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          }
+        },
+        "treatment": "acephale"
+      },
+      {
+        "baseline": "neutral_memory_prefetch",
+        "metrics": {
+          "latency_ms_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -4989.392651833138,
+              8604.405833373808
+            ],
+            "estimate": 2287.2466244995544,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "logical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.75,
+              0.16666666666666666
+            ],
+            "estimate": -0.25,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "physical_calls_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              -0.75,
+              0.16666666666666666
+            ],
+            "estimate": -0.25,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          },
+          "success_difference": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "estimate": 0.0,
+            "families": 6,
+            "paired_trials": 12,
+            "weighting": "equal_family_mean_of_paired_trial_differences"
+          }
+        },
+        "treatment": "acephale"
+      }
+    ],
+    "results_hash": "090c0102b3b1a86a5311e657f3b832f689f632bf475f9c944a990850da8e8027",
+    "schema_version": "acephale-infra-evaluation-v1",
+    "twoTrialInterpretation": "Joint actor/predictor-seed consistency; not same-fixed-checkpoint pass^2"
+  },
+  "officialFullBenchmarkScore": false,
+  "physicalCalls": "Authoritative + speculative + freshness validation + revalidation; unknown counts stay unknown",
+  "planHash": "7954568c663bd19a305abe726eee7bc63f7a20a7cb82fe828122d2d54586644b",
+  "predictorSeedTrialCounts": {
+    "17": 18,
+    "29": 18
+  },
+  "schedulerCountSource": "Verified runtime events; rejected/cancelled cost-log defaults are ignored",
+  "seedDesignLimitation": "Development variantv0 uses predictor17 and variantv1 predictor29, actor17 in both; between-weight comparison is confounded by task variant.",
+  "sources": [
+    {
+      "cohortReceiptSha256": "beef1badb4cb67d626ddbbd4f6b50d653df3cff2b155b34581d9d337062d7ddd",
+      "declaredSlots": 18,
+      "runtimeEventsSha256": "2c250d3d26ba973eba4bd8e0c32ec33cf98d1078bd654f812fd01e69642268fd",
+      "schedulerCountsComplete": true
+    },
+    {
+      "cohortReceiptSha256": "b6e818df831a293f3255290ba4f53a6c8c7cd73a27792c04dce3fc29701e9688",
+      "declaredSlots": 18,
+      "runtimeEventsSha256": "999b5c9b50cfe74bc6aa55be46b358ba1eb19c7173fd609f1ac913c15787e8dc",
+      "schedulerCountsComplete": true
+    }
+  ],
+  "stage": "development",
+  "status": "closed"
+}

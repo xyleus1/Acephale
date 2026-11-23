@@ -1,0 +1,204 @@
+{
+  "estimatorsUnchanged": true,
+  "extractions": [
+    {
+      "firstLine": 12,
+      "fragmentSha256": "ce5d7cd5182558372b82bf080a931821fe70fd2433027c57d2950f38ba7b1bc5",
+      "lastLine": 13,
+      "sourceFile": "schemas.py",
+      "symbol": "Record"
+    },
+    {
+      "firstLine": 13,
+      "fragmentSha256": "c23d103cf2f27034fc09b9c395e95255e1d5f1ce78e97213d9862a0e473d78cf",
+      "lastLine": 13,
+      "sourceFile": "annotation_review.py",
+      "symbol": "MACHINE_PROTOCOL"
+    },
+    {
+      "firstLine": 14,
+      "fragmentSha256": "7a539eaee5002675437bd185d12880bc6c48bb674a4d46aa393ed22341923715",
+      "lastLine": 14,
+      "sourceFile": "annotation_review.py",
+      "symbol": "HUMAN_PROTOCOL"
+    },
+    {
+      "firstLine": 15,
+      "fragmentSha256": "2bac4e019a139c9637d24b931f31f1715eb0e5b1729163acebfb029ce9efbbce",
+      "lastLine": 15,
+      "sourceFile": "annotation_review.py",
+      "symbol": "REVIEWER"
+    },
+    {
+      "firstLine": 16,
+      "fragmentSha256": "d9aaf6dce008c02d60ba9518dc6fca96e64870c9befc9652918792104db64868",
+      "lastLine": 16,
+      "sourceFile": "annotation_review.py",
+      "symbol": "INDEPENDENCE"
+    },
+    {
+      "firstLine": 17,
+      "fragmentSha256": "cf68a61b345d1d1a66446b17acb2806cf2355af27f1d6439275b1c16e24d84ed",
+      "lastLine": 17,
+      "sourceFile": "annotation_review.py",
+      "symbol": "METADATA_KEYS"
+    },
+    {
+      "firstLine": 20,
+      "fragmentSha256": "216d7394fbf3fdbca4e71da2f1b24e42cd73cdb48e837e38ebf90ddd52e3f23e",
+      "lastLine": 22,
+      "sourceFile": "annotation_review.py",
+      "symbol": "require"
+    },
+    {
+      "firstLine": 31,
+      "fragmentSha256": "be5a025666dc84b0e56db30d121ab2b9dbcdedf83bbb4c246d8087d5edf62fa0",
+      "lastLine": 46,
+      "sourceFile": "annotation_review.py",
+      "symbol": "review_metadata"
+    },
+    {
+      "firstLine": 28,
+      "fragmentSha256": "137f79950a3e7446eb70ef88900ea7419f4ad652e4efd512ab0ec7c7130d7fe1",
+      "lastLine": 28,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "ARMS"
+    },
+    {
+      "firstLine": 29,
+      "fragmentSha256": "9f79bd15a4f2cf456372c2fbe1e606de56efc48af212884b28c6c1bb08ed733c",
+      "lastLine": 29,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "Arm"
+    },
+    {
+      "firstLine": 32,
+      "fragmentSha256": "5dbac983df8c4855861a8d0ae56f2c7fc5fdbd3c9624b8bdc0bf9f404276a33c",
+      "lastLine": 43,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "TrialSlot"
+    },
+    {
+      "firstLine": 46,
+      "fragmentSha256": "fdcbde43bbd0899e704807cc842b73bfe2062c558fa1ba6868b94d871f4a7626",
+      "lastLine": 72,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "TrialDesign"
+    },
+    {
+      "firstLine": 75,
+      "fragmentSha256": "95db3d740db69746bd78a7b4bb44923d166d31d32c13caf482e1a2e195579db5",
+      "lastLine": 102,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "TrialResult"
+    },
+    {
+      "firstLine": 105,
+      "fragmentSha256": "c4fb24094b961d95c8791d21baf63cad1410439fb1cf82a78feb1d4fea741abf",
+      "lastLine": 116,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "_paired_interval"
+    },
+    {
+      "firstLine": 119,
+      "fragmentSha256": "fe70b129336e6893931093da92a224f43378529f325f9a39aab32c6800eb9f4d",
+      "lastLine": 190,
+      "sourceFile": "infra_evaluation.py",
+      "symbol": "report_trials"
+    },
+    {
+      "firstLine": 61,
+      "fragmentSha256": "50a9c5b88616505aebc46a749aae1ac61d955360f4818e8eac1a52b4f31ff123",
+      "lastLine": 72,
+      "sourceFile": "native_common.py",
+      "symbol": "summarize_costs"
+    },
+    {
+      "firstLine": 17,
+      "fragmentSha256": "db291b05a4879353dd8f158c9d958c6fe571771cca85cb10c217e938156405ae",
+      "lastLine": 17,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "RUNTIME"
+    },
+    {
+      "firstLine": 31,
+      "fragmentSha256": "4fb59ff2afb8ad4583239d8a71c8714ab40cb44862bd983173c4fc0e7eef48d8",
+      "lastLine": 31,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "COUNTS"
+    },
+    {
+      "firstLine": 178,
+      "fragmentSha256": "0edd1bf5ff0d72fb662c4a14c01f9185a849c66ea80f98100950e0e6c3f90683",
+      "lastLine": 226,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "statementASTUnchanged": true,
+      "symbol": "native_report numerical statements"
+    },
+    {
+      "firstLine": 30,
+      "fragmentSha256": "c8be1bd11d5cfa4bd255ba8a6883c36a2f35ec480a6761ea7d76f9eb0886fa45",
+      "lastLine": 30,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "CALLS"
+    },
+    {
+      "firstLine": 35,
+      "fragmentSha256": "fba5518dbbe127c5d736b6a2ef99ebbb28b24be84759bc3ce649d93a6815e637",
+      "lastLine": 37,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "require"
+    },
+    {
+      "firstLine": 69,
+      "fragmentSha256": "156312fef574c1c5ab61066860705cd82cc3a82a7c2c8373d7e04f9c901b7fa0",
+      "lastLine": 70,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "numeric"
+    },
+    {
+      "firstLine": 73,
+      "fragmentSha256": "24b06b83f05a575269fea5b2be81ab60310f7accfd2b1fb260cd129427214d3d",
+      "lastLine": 74,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "counter"
+    },
+    {
+      "firstLine": 85,
+      "fragmentSha256": "60b203b30712dc98c8523ccebfe2a1d878194711e3e8ccb327156afdb1754d08",
+      "lastLine": 124,
+      "sourceFile": "assemble_study_report_20261115.py",
+      "symbol": "safe_native_row"
+    }
+  ],
+  "nativeNumericalStatementASTUnchanged": true,
+  "purpose": "Public reproduction from source-bound safe native statistical rows; no private prompts or runtime dependencies",
+  "schemaVersion": 1,
+  "sourceFiles": {
+    "annotation_review.py": {
+      "bytes": 12704,
+      "sha256": "c9009eb61bbcf990396579e054778c064937e34f477011ed8f3920ca07f7bba6"
+    },
+    "assemble_study_report_20261115.py": {
+      "bytes": 45479,
+      "sha256": "eb5575ebf94ba75ef9ead44b09170a631e59ae140d70d3e52e6fa09aa8a86c2e"
+    },
+    "contracts_v1.py": {
+      "bytes": 686,
+      "sha256": "97278a1e78f7fe1eda41983116f69082de7b5622587808d621c348bedd61da5e"
+    },
+    "infra_evaluation.py": {
+      "bytes": 29732,
+      "sha256": "68cbe1e854c925f14c0b70cacdf91d261c6dc3c921914291ab964e289c4910f2"
+    },
+    "native_common.py": {
+      "bytes": 17624,
+      "sha256": "f987a03bf4bb352c17ff4e677aaafc0e4216efa18344cc12a1c1c3bd1dea1cd8"
+    },
+    "schemas.py": {
+      "bytes": 7553,
+      "sha256": "9613845bf8cc3d259fa6200479a892d703b290ece33b613d2e4434b7174f25b6"
+    }
+  },
+  "statisticsExecutedDuringPackaging": false
+}

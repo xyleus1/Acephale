@@ -1,5 +1,23 @@
 # Acephale decisions
 
+## 2026-11-23: Keep corrective results and historical failures distinct
+
+Report the original 36/96 native design executed on the currently qualified
+deployments as a separate corrective cohort. Preserve the older cohort and
+numerical failures rather than relabeling or deleting them. Current qualification
+does not retroactively validate the earlier distributed replay configuration.
+
+The prospective fixed 80-row opportunity profiles retain all 33 valid pairs and
+47 measured read misses per predictor seed. They meet the original minimum of
+10 valid measurements without adaptive extension or pooling the failed earlier
+20-row profiles. Their scheduler estimates are conditional on the 33 valid pairs.
+
+Keep native database reward, configured constraint audits, measured latency,
+speculative exposure and replay prediction quality separate. Do not describe
+nominal arm differences without actual speculative execution as evidence of a
+prefetching benefit. Preserve the original estimators, their failure denominators
+and confidence-interval limitations in the final report.
+
 ## 2026-11-22: Report the opportunity gate failure without selected-success claims
 
 Retain all 20 declared profile outcomes and the unchanged minimum 10 completion rule. Eight completed rows and 12 profile failures do not yield an accepted opportunity aggregate; do not estimate a latency gain or native score from the selected eight or replace failed rows.

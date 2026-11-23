@@ -1,5 +1,25 @@
 # Current state
 
+Updated November 23, 2026 (UTC), November 22 in Pacific time.
+
+The corrected native run completed all 132 original scheduled trials: 36
+development and 96 heldout. Both current deployments passed the unchanged
+serving qualification. Models, trained weights, task IDs, trial limits and
+within-cohort ordering were preserved. Earlier failed attempts remain retained.
+
+Use the [current results](RESULTS-20261122-CORRECTIVE.md) and
+[current paper package](../paper/corrective-study-20261122/README.md) for the
+reported metrics, denominators, confidence intervals and limitations. These
+results do not constitute an official full-benchmark score or a claim of
+superiority. The [operational source archive](../infra/aws-continuation/corrective-study-20261122/README.md)
+records the code used for the AWS continuation.
+
+Cloud lifecycle and cost reconciliation have separate private receipts.
+Do not infer current resource ownership or permission to repeat a trial from
+historical status entries below.
+
+## Historical state before the corrective run
+
 Updated November 22, 2026 (UTC). The retained native cohort has 96 scheduled slots:
 84 successes, 11 execution errors, and one step-limit outcome. Training and replay
 outputs are retained. Scientific qualification remains unsuccessful; no validated

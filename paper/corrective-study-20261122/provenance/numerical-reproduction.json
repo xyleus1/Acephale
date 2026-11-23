@@ -1,0 +1,19 @@
+{
+  "exportReadySha256": "b04c4c9b0d1b88757d75b2caee694dac6e55ee4154f849fec7b2f3e6959a3ff5",
+  "kind": "original-public-numerical-parity-evidence-v1",
+  "originalReportsUnmodified": true,
+  "stages": {
+    "development": {
+      "analysisReadySha256": "c2645f75bd4842487b8e1764befaf3631f220398ce692a1e4d5f0c27c541546c",
+      "originalParityChecksExecuted": 1,
+      "passed": true,
+      "reproducedOutputSha256": "7056550e9affebc130e0f4039a434c07bd594dab6fd619893f4ca5860fc2d800"
+    },
+    "heldout": {
+      "analysisReadySha256": "8fe244d8f917e8fb4c619227def24eb4f8bb390e9a78e8273e913d89c7181853",
+      "originalParityChecksExecuted": 1,
+      "passed": true,
+      "reproducedOutputSha256": "7ba9c5e061eb6c39e2ef81c887141ac985938cd61694c8e079c01351c7ff91bc"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "agreedCount": 15,
+  "analysisSourceCommit": "c8a662c97c5daae33d4868d7e50494d8355fbc2c",
+  "batchReturnedResponses": [
+    47,
+    46
+  ],
+  "executedGraderSourceSha256": "272529245430b88062f5dd1c263f3ac6fac23a5cbdccb8adb8b72cae494e9e6e",
+  "failuresCountAsDisagreement": true,
+  "gradeCompilerSourceSha256": "9394438a196fde839a737aa7b4ff05f5b289ce58eae32c1ed20e52736ee158e0",
+  "gradeStatuses": {
+    "completed": 93,
+    "context_rejected": 8,
+    "prediction_miss": 40
+  },
+  "gradedCountField": 141,
+  "historicalAnnotationAudit": {
+    "acceptedCount": 19,
+    "auditedCount": 20,
+    "humanReviewCount": 0,
+    "newAuditPerformed": false
+  },
+  "historicalAuditComplete": false,
+  "hostedRequestsRepeated": 0,
+  "hypothesisSelectionDefinition": "Maximum-probability inferred hypothesis versus maximum-confidence annotated reference, each including unknown; semantic agreement is not converted into a new Top-1 metric",
+  "kind": "acephale-public-copied-seed29-teacher-disposition-v1",
+  "method": "reserved_calibration_full_cohort_wilson_lower_95",
+  "nativeTaskSuccessComputed": false,
+  "originalReliabilitySourceSha256": "0cbf557562edae3b542deb67f703b1c9d2a05bc6133b06807d65548ebcaaf8fc",
+  "reliability": 0.06553601106011342,
+  "retainedRecords": 141,
+  "returnedTeacherResponses": 93,
+  "sourceHashes": {
+    "batch1-summary.json": "8959639e564fe32528e8a91505dd076028c765b7538cd191339cca909ca99b72",
+    "batch2-summary.json": "3c0f4259f2100f672dc2d922444e1a31c6f12fc703977c19f2980c7c27a6d500",
+    "final-analysis-result.json": "843f84b7cd59fdeea5861fdcc7899fcfda586a2c2b97ab2376acd53b4bdc6ac9",
+    "goal-reliability.json": "347203b9ac9c1fd65e2c2f4ee5ab2c5fe6737d1512ca550eea29b353d01a56d5",
+    "grade-union-receipt.json": "404bc9d8ac52eef9afec6e1d92ea7cb70a792e6a4bffd85c149da6b1990528b7",
+    "reliability-command-result.json": "4223abdd89ddccfd7d1678e211192f9511fb184f7b37b0bd3b3062ddf5475dce"
+  },
+  "statisticalReanalysisPerformed": false,
+  "status": "UNVALIDATED",
+  "strictAgreementRule": "Source-bound structured teacher agreed=true, with no missing constraints or contradictions; prediction/context misses remain false without a grading request",
+  "top1AccuracyComputed": false,
+  "unresolvedHostedRequestsAccounting": 0
+}

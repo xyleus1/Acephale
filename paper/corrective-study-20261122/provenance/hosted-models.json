@@ -1,0 +1,47 @@
+{
+  "actualManifestsAndSummariesCheckedBySourceReviewer": 4,
+  "annotationReview": {
+    "humanReviews": 0,
+    "reviewerModel": "gpt-5.4-2026-03-05",
+    "sameModelAsEvaluator": true,
+    "scope": "Machine review; not independent-model or human review.",
+    "separatePrompt": true
+  },
+  "configuredAuxiliaryPredictor": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "scope": "Configured predictor identity does not assert native invocation; actual treatment exposure is reported separately.",
+    "trainingSeeds": [
+      17,
+      29
+    ]
+  },
+  "hostedNlAssertionEvaluator": {
+    "modelId": "gpt-5.4-2026-03-05",
+    "provider": "OpenAI"
+  },
+  "hostedUserSimulator": {
+    "modelId": "gpt-4.1-mini-2025-04-14",
+    "provider": "OpenAI"
+  },
+  "kind": "acephale-evaluated-model-role-provenance-v1",
+  "nativeActor": {
+    "modelId": "Qwen/Qwen3.5-9B",
+    "route": "local qualified vLLM serving"
+  },
+  "sourceCommit": "5a36a8b3835820fe65b3615ead31fb6fb7bc9672",
+  "sourceEvidence": [
+    {
+      "line": 68,
+      "repositoryPath": "services/acephale-runtime/infra-hosted-workers.ts",
+      "sha256": "2db7d9272ef52c109ac6c6850da413e06c4a848661beaab5bda08ec679581936"
+    },
+    {
+      "lines": [
+        7,
+        8
+      ],
+      "repositoryPath": "src/lib/acephale/model.ts",
+      "sha256": "a74a213166b0f9e25768a0113d817becf6fe316fc8d8a4e94229a3f4f4373f32"
+    }
+  ]
+}

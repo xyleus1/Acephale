@@ -1,5 +1,23 @@
 # Acephale engineering log
 
+## 2026-11-23: Corrective native run and final research release
+
+Executed all 36 development and 96 heldout slots on two equivalent, freshly
+qualified L40S deployments. Both original trained adapters, frozen task IDs,
+per-trial limits and within-cohort order were retained. Earlier failed runs and
+the three originally accepted components remain unchanged.
+
+The AWS continuation uses one controller and atomic accounting, with separate
+worker ownership. End-of-run collection and export verification use bounded
+16-way concurrency while retaining every declared member, object version,
+length and hash check. The retirement verifier's 17 focused fixtures passed;
+this operational change does not alter native model calls or measured timings.
+
+The current paper, analysis reproduction files and operational source archive
+have dedicated additive publication paths. Their manifests distinguish original
+bytes from portable public projections. Current results link to the corrected
+cohort; previous working papers remain historical evidence.
+
 ## 2026-11-22: Publish paper03 with the retained negative profile outcome
 
 Verified the exact generation06 failed result (SHA 63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c), its profile plan and receipt, and all 20 individual row hashes/identities. Added the complete 8/12 disposition, original minimum 10 gate, separately labeled post hoc inventory, count-only SVG/PNG/PDF and plotting source. Earlier40 pre-model errors remain separate.
