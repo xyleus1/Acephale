@@ -1,0 +1,3918 @@
+{
+  "calibrationCoverage": {
+    "allReadCoverage": {
+      "eligibleObservedCheckpoints": 86,
+      "fullPoolHits": 0,
+      "fullPoolRate": 0,
+      "observedFrozenWindows": 86,
+      "unavailableWindows": 0,
+      "windowHits": 0,
+      "windowRate": 0
+    },
+    "conditioning": [
+      "neutral"
+    ],
+    "declaredActorRequests": 98,
+    "declaredRunsInProvidedStages": 12,
+    "finalNoReadCheckpoints": 11,
+    "frozenPlanRuns": 36,
+    "headExamples": 97,
+    "observedLabelCheckpoints": 97,
+    "partitionCounts": {
+      "calibration": 97,
+      "weight_fit": 0
+    },
+    "rankedCoverage": {
+      "observed": 0,
+      "reason": "no_ranking_generation_or_head_scoring_performed",
+      "top1": null,
+      "top3": null
+    },
+    "runStatusCounts": {
+      "completed": 11,
+      "error": 1
+    },
+    "runsWithoutActorRequests": 0,
+    "setupFailedCheckpoints": 0,
+    "successfulTaskFilteringPerformed": false,
+    "unavailableLabelCheckpoints": 1,
+    "unprovidedRunIds": [
+      "researchy-v2-p05-fitting-186620-s17-base",
+      "researchy-v2-p05-fitting-573284-s17-base",
+      "researchy-v2-p05-fitting-942143-s17-base",
+      "researchy-v2-p05-fitting-207825-s17-base",
+      "researchy-v2-p05-fitting-893417-s17-base",
+      "researchy-v2-p05-fitting-558784-s17-base",
+      "researchy-v2-p05-fitting-422836-s17-base",
+      "researchy-v2-p05-fitting-356556-s17-base",
+      "researchy-v2-p05-fitting-112278-s17-base",
+      "researchy-v2-p05-fitting-339568-s17-base",
+      "researchy-v2-p05-fitting-574163-s17-base",
+      "researchy-v2-p05-fitting-357716-s17-base",
+      "researchy-v2-p05-fitting-600150-s17-base",
+      "researchy-v2-p05-fitting-493054-s17-base",
+      "researchy-v2-p05-fitting-322950-s17-base",
+      "researchy-v2-p05-fitting-702124-s17-base",
+      "researchy-v2-p05-fitting-823244-s17-base",
+      "researchy-v2-p05-fitting-175924-s17-base",
+      "researchy-v2-p05-fitting-971565-s17-base",
+      "researchy-v2-p05-fitting-147623-s17-base",
+      "researchy-v2-p05-fitting-495239-s17-base",
+      "researchy-v2-p05-fitting-393113-s17-base",
+      "researchy-v2-p05-fitting-596014-s17-base",
+      "researchy-v2-p05-fitting-246782-s17-base"
+    ],
+    "unprovidedStages": [
+      "fitting"
+    ],
+    "visitCoverage": {
+      "eligibleObservedCheckpoints": 46,
+      "fullPoolHits": 0,
+      "fullPoolRate": 0,
+      "observedFrozenWindows": 46,
+      "unavailableWindows": 0,
+      "windowHits": 0,
+      "windowRate": 0
+    }
+  },
+  "calibrationUrlAudit": {
+    "counts": {
+      "checkpoints": 98,
+      "emptyVisitWindows": 0,
+      "exactFullPoolMatches": 0,
+      "notInPriorPublicSearchResults": 2,
+      "otherPathOrQueryChanges": 4,
+      "searchCallsOutsideVisitPool": 49,
+      "utmSourceOpenaiRemovedOnly": 45,
+      "visibleSourceOutsidePool128": 1,
+      "visitCalls": 52,
+      "visitCheckpoints": 46
+    },
+    "limitations": [
+      "Counts describe attempted exact visit invocations, not successful HTTP reads or task accuracy.",
+      "The 45 tag-only cases occur at 39 checkpoints; call and checkpoint denominators differ.",
+      "Four other calls also change trailing slash; two additionally remove non-tracking d/do/id query fields.",
+      "The pool-cap case additionally removes the UTM tag.",
+      "Provider response observations retain hashes and source counts, not original action.sources or url_citation response bodies. All three inspected retained public responses contain tagged URLs only. This cannot establish whether an unretained provider body also contained a clean URL.",
+      "No URL normalization, label change, candidate reconstruction, or scientific rerun occurred during sealing."
+    ]
+  },
+  "checkpointRuntimeSensitivity": {
+    "closed": true,
+    "comparisonScope": "checkpoint/runtime sensitivity; primary17 stock runtime, checkpoint29 historically qualified seven-file correction",
+    "declaredCheckpoints": 98,
+    "originalClosedSha256": "88970ef8e86c7cea27aa286f80f4a13ce587aa035cf0a4b105ed3ef4d289a45a",
+    "originalPrimaryCalibrationUnchanged": true,
+    "semanticGoalAccuracyMeasured": false
+  },
+  "developmentErrorAudit": {
+    "byArm": [
+      {
+        "arm": "acephale",
+        "cleanupErrorType": null,
+        "count": 1,
+        "drained": true,
+        "errorType": "RemoteProtocolError"
+      },
+      {
+        "arm": "acephale",
+        "cleanupErrorType": "ConnectError",
+        "count": 2,
+        "drained": false,
+        "errorType": "RuntimeError"
+      },
+      {
+        "arm": "acephale",
+        "cleanupErrorType": null,
+        "count": 2,
+        "drained": true,
+        "errorType": "RuntimeError"
+      },
+      {
+        "arm": "acephale",
+        "cleanupErrorType": "ConnectError",
+        "count": 1,
+        "drained": false,
+        "errorType": "TimeoutError"
+      },
+      {
+        "arm": "acephale",
+        "cleanupErrorType": "ConnectError",
+        "count": 10,
+        "drained": false,
+        "errorType": null
+      },
+      {
+        "arm": "base",
+        "cleanupErrorType": null,
+        "count": 4,
+        "drained": true,
+        "errorType": "RuntimeError"
+      },
+      {
+        "arm": "neutral_memory_prefetch",
+        "cleanupErrorType": "ConnectError",
+        "count": 2,
+        "drained": false,
+        "errorType": "RuntimeError"
+      },
+      {
+        "arm": "neutral_memory_prefetch",
+        "cleanupErrorType": null,
+        "count": 2,
+        "drained": true,
+        "errorType": "RuntimeError"
+      },
+      {
+        "arm": "neutral_memory_prefetch",
+        "cleanupErrorType": "ConnectError",
+        "count": 1,
+        "drained": false,
+        "errorType": "TimeoutError"
+      },
+      {
+        "arm": "neutral_memory_prefetch",
+        "cleanupErrorType": "ConnectError",
+        "count": 11,
+        "drained": false,
+        "errorType": null
+      },
+      {
+        "arm": "symbolic_prefetch",
+        "cleanupErrorType": "ConnectError",
+        "count": 1,
+        "drained": false,
+        "errorType": "RuntimeError"
+      },
+      {
+        "arm": "symbolic_prefetch",
+        "cleanupErrorType": "ConnectError",
+        "count": 1,
+        "drained": false,
+        "errorType": "TimeoutError"
+      },
+      {
+        "arm": "symbolic_prefetch",
+        "cleanupErrorType": "ConnectError",
+        "count": 11,
+        "drained": false,
+        "errorType": null
+      }
+    ],
+    "declaredSlots": 160,
+    "errorRows": 49,
+    "groups": [
+      {
+        "cleanupErrorType": null,
+        "count": 1,
+        "drained": true,
+        "errorType": "RemoteProtocolError"
+      },
+      {
+        "cleanupErrorType": "ConnectError",
+        "count": 5,
+        "drained": false,
+        "errorType": "RuntimeError"
+      },
+      {
+        "cleanupErrorType": null,
+        "count": 8,
+        "drained": true,
+        "errorType": "RuntimeError"
+      },
+      {
+        "cleanupErrorType": "ConnectError",
+        "count": 3,
+        "drained": false,
+        "errorType": "TimeoutError"
+      },
+      {
+        "cleanupErrorType": "ConnectError",
+        "count": 32,
+        "drained": false,
+        "errorType": null
+      }
+    ],
+    "interpretation": "Literal original fields only. Null errorType is retained, not inferred. No scientific result or status was modified."
+  },
+  "heldout": null,
+  "kind": "acephale-public-saved-results-v1",
+  "nativeComparison": {
+    "baselineStatuses": {
+      "completed": 44,
+      "empty_window": 24,
+      "unavailable": 68
+    },
+    "baselineUnavailable": 68,
+    "comparisonScope": "whole_recipe_development_selected_not_heldout",
+    "declaredCheckpoints": 136,
+    "generative": {
+      "availableCheckpoints": 68,
+      "candidateCount": 71,
+      "candidatePositiveLabels": 16,
+      "coveredReadCheckpoints": 16,
+      "declaredCheckpoints": 136,
+      "eligibleReadCheckpoints": 31,
+      "families": 6,
+      "metrics": {
+        "allPrefixHitAt1": {
+          "checkpointMean": 0.20588235294117646,
+          "checkpoints": 68,
+          "families": 6,
+          "familyMacro": 0.21568627450980393
+        },
+        "allPrefixHitAt3": {
+          "checkpointMean": 0.22058823529411764,
+          "checkpoints": 68,
+          "families": 6,
+          "familyMacro": 0.23651960784313725
+        },
+        "binaryLogLoss": {
+          "checkpointMean": 5.6186899962081585,
+          "checkpoints": 44,
+          "families": 6,
+          "familyMacro": 5.561901008079375
+        },
+        "brier": {
+          "checkpointMean": 0.5063307317668976,
+          "checkpoints": 44,
+          "families": 6,
+          "familyMacro": 0.4791488056624074
+        },
+        "coveredExactRecallAt3": {
+          "checkpointMean": 0.9375,
+          "checkpoints": 16,
+          "families": 5,
+          "familyMacro": 0.95
+        },
+        "coveredTop1": {
+          "checkpointMean": 0.875,
+          "checkpoints": 16,
+          "families": 5,
+          "familyMacro": 0.9
+        },
+        "eligibleReadHitAt1": {
+          "checkpointMean": 0.45161290322580644,
+          "checkpoints": 31,
+          "families": 6,
+          "familyMacro": 0.4484126984126984
+        },
+        "eligibleReadHitAt3": {
+          "checkpointMean": 0.4838709677419355,
+          "checkpoints": 31,
+          "families": 6,
+          "familyMacro": 0.49007936507936506
+        }
+      }
+    },
+    "kind": "acephale-native-head-comparison-v2",
+    "method": {
+      "actionMetric": "head evaluator record; action logits not retained",
+      "bootstrapSamples": 2000,
+      "bootstrapSeed": 42,
+      "differenceDirection": "head minus comparator",
+      "generativeProbabilities": "original binary decoder, conditional on previous generated bits",
+      "headProbabilities": "uncalibrated independent candidate sigmoid",
+      "headRanking": "raw logits with original-order stable ties",
+      "higherIsBetterExcept": [
+        "brier",
+        "binaryLogLoss"
+      ],
+      "intervalsExploratory": true,
+      "latencyClaim": false,
+      "limitations": [
+        "6 development families, already used for epoch selection",
+        "generative unavailable subset is not missing at random",
+        "different fitting prefix counts, prior adapters and input encodings; whole-recipe comparison",
+        "covered recall conditions on candidate coverage; all-prefix yield is not task accuracy"
+      ],
+      "probabilityEpsilon": 1e-12,
+      "selection": "within-variant original epoch selection; no cross-variant selection",
+      "symbolicProbabilities": null,
+      "taskAccuracyClaim": false,
+      "weighting": "equal family mean of checkpoint metrics; missing predictions stay unavailable"
+    },
+    "symbolic": {
+      "availableCheckpoints": 136,
+      "candidateCount": 473,
+      "candidatePositiveLabels": 28,
+      "coveredReadCheckpoints": 28,
+      "declaredCheckpoints": 136,
+      "eligibleReadCheckpoints": 52,
+      "families": 6,
+      "metrics": {
+        "allPrefixHitAt1": {
+          "checkpointMean": 0.17647058823529413,
+          "checkpoints": 136,
+          "families": 6,
+          "familyMacro": 0.16662035215423962
+        },
+        "allPrefixHitAt3": {
+          "checkpointMean": 0.19852941176470587,
+          "checkpoints": 136,
+          "families": 6,
+          "familyMacro": 0.1813262345071808
+        },
+        "binaryLogLoss": {
+          "checkpointMean": null,
+          "checkpoints": 0,
+          "families": 0,
+          "familyMacro": null
+        },
+        "brier": {
+          "checkpointMean": null,
+          "checkpoints": 0,
+          "families": 0,
+          "familyMacro": null
+        },
+        "coveredExactRecallAt3": {
+          "checkpointMean": 0.9642857142857143,
+          "checkpoints": 28,
+          "families": 6,
+          "familyMacro": 0.9861111111111112
+        },
+        "coveredTop1": {
+          "checkpointMean": 0.8571428571428571,
+          "checkpoints": 28,
+          "families": 6,
+          "familyMacro": 0.9444444444444444
+        },
+        "eligibleReadHitAt1": {
+          "checkpointMean": 0.46153846153846156,
+          "checkpoints": 52,
+          "families": 6,
+          "familyMacro": 0.4361111111111111
+        },
+        "eligibleReadHitAt3": {
+          "checkpointMean": 0.5192307692307693,
+          "checkpoints": 52,
+          "families": 6,
+          "familyMacro": 0.46944444444444444
+        }
+      }
+    },
+    "symbolicOnGenerativeAvailable": {
+      "availableCheckpoints": 68,
+      "candidateCount": 71,
+      "candidatePositiveLabels": 16,
+      "coveredReadCheckpoints": 16,
+      "declaredCheckpoints": 136,
+      "eligibleReadCheckpoints": 31,
+      "families": 6,
+      "metrics": {
+        "allPrefixHitAt1": {
+          "checkpointMean": 0.23529411764705882,
+          "checkpoints": 68,
+          "families": 6,
+          "familyMacro": 0.25735294117647056
+        },
+        "allPrefixHitAt3": {
+          "checkpointMean": 0.23529411764705882,
+          "checkpoints": 68,
+          "families": 6,
+          "familyMacro": 0.25735294117647056
+        },
+        "binaryLogLoss": {
+          "checkpointMean": null,
+          "checkpoints": 0,
+          "families": 0,
+          "familyMacro": null
+        },
+        "brier": {
+          "checkpointMean": null,
+          "checkpoints": 0,
+          "families": 0,
+          "familyMacro": null
+        },
+        "coveredExactRecallAt3": {
+          "checkpointMean": 1.0,
+          "checkpoints": 16,
+          "families": 5,
+          "familyMacro": 1.0
+        },
+        "coveredTop1": {
+          "checkpointMean": 1.0,
+          "checkpoints": 16,
+          "families": 5,
+          "familyMacro": 1.0
+        },
+        "eligibleReadHitAt1": {
+          "checkpointMean": 0.5161290322580645,
+          "checkpoints": 31,
+          "families": 6,
+          "familyMacro": 0.5317460317460317
+        },
+        "eligibleReadHitAt3": {
+          "checkpointMean": 0.5161290322580645,
+          "checkpoints": 31,
+          "families": 6,
+          "familyMacro": 0.5317460317460317
+        }
+      }
+    },
+    "variants": {
+      "frozen_head": {
+        "calibrated": false,
+        "metrics": {
+          "allDevelopment": {
+            "availableCheckpoints": 136,
+            "candidateCount": 473,
+            "candidatePositiveLabels": 28,
+            "coveredReadCheckpoints": 28,
+            "declaredCheckpoints": 136,
+            "eligibleReadCheckpoints": 52,
+            "families": 6,
+            "metrics": {
+              "allPrefixHitAt1": {
+                "checkpointMean": 0.16176470588235295,
+                "checkpoints": 136,
+                "families": 6,
+                "familyMacro": 0.15338505803659255
+              },
+              "allPrefixHitAt3": {
+                "checkpointMean": 0.20588235294117646,
+                "checkpoints": 136,
+                "families": 6,
+                "familyMacro": 0.18622819529149454
+              },
+              "binaryLogLoss": {
+                "checkpointMean": 0.5088242282448558,
+                "checkpoints": 112,
+                "families": 6,
+                "familyMacro": 0.45559066498607365
+              },
+              "brier": {
+                "checkpointMean": 0.08991465994523444,
+                "checkpoints": 112,
+                "families": 6,
+                "familyMacro": 0.08060574782751953
+              },
+              "coveredExactRecallAt3": {
+                "checkpointMean": 1.0,
+                "checkpoints": 28,
+                "families": 6,
+                "familyMacro": 1.0
+              },
+              "coveredTop1": {
+                "checkpointMean": 0.7857142857142857,
+                "checkpoints": 28,
+                "families": 6,
+                "familyMacro": 0.9027777777777778
+              },
+              "eligibleReadHitAt1": {
+                "checkpointMean": 0.4230769230769231,
+                "checkpoints": 52,
+                "families": 6,
+                "familyMacro": 0.4041666666666667
+              },
+              "eligibleReadHitAt3": {
+                "checkpointMean": 0.5384615384615384,
+                "checkpoints": 52,
+                "families": 6,
+                "familyMacro": 0.48055555555555557
+              },
+              "recordedActionCorrect": {
+                "checkpointMean": 0.6985294117647058,
+                "checkpoints": 136,
+                "families": 6,
+                "familyMacro": 0.7106384025181979
+              }
+            }
+          },
+          "baselineAvailableSubset": {
+            "availableCheckpoints": 68,
+            "candidateCount": 71,
+            "candidatePositiveLabels": 16,
+            "coveredReadCheckpoints": 16,
+            "declaredCheckpoints": 136,
+            "eligibleReadCheckpoints": 31,
+            "families": 6,
+            "metrics": {
+              "allPrefixHitAt1": {
+                "checkpointMean": 0.22058823529411764,
+                "checkpoints": 68,
+                "families": 6,
+                "familyMacro": 0.23651960784313725
+              },
+              "allPrefixHitAt3": {
+                "checkpointMean": 0.23529411764705882,
+                "checkpoints": 68,
+                "families": 6,
+                "familyMacro": 0.25735294117647056
+              },
+              "binaryLogLoss": {
+                "checkpointMean": 0.8302060124500023,
+                "checkpoints": 44,
+                "families": 6,
+                "familyMacro": 1.178917518768361
+              },
+              "brier": {
+                "checkpointMean": 0.15730206787068962,
+                "checkpoints": 44,
+                "families": 6,
+                "familyMacro": 0.2387850738522808
+              },
+              "coveredExactRecallAt3": {
+                "checkpointMean": 1.0,
+                "checkpoints": 16,
+                "families": 5,
+                "familyMacro": 1.0
+              },
+              "coveredTop1": {
+                "checkpointMean": 0.9375,
+                "checkpoints": 16,
+                "families": 5,
+                "familyMacro": 0.95
+              },
+              "eligibleReadHitAt1": {
+                "checkpointMean": 0.4838709677419355,
+                "checkpoints": 31,
+                "families": 6,
+                "familyMacro": 0.49007936507936506
+              },
+              "eligibleReadHitAt3": {
+                "checkpointMean": 0.5161290322580645,
+                "checkpoints": 31,
+                "families": 6,
+                "familyMacro": 0.5317460317460317
+              },
+              "recordedActionCorrect": {
+                "checkpointMean": 0.7058823529411765,
+                "checkpoints": 68,
+                "families": 6,
+                "familyMacro": 0.6854575163398693
+              }
+            }
+          },
+          "headMinusGenerative": {
+            "allPrefixHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.0625,
+                0.125
+              ],
+              "estimate": 0.020833333333333332,
+              "families": 6,
+              "paired_trials": 68,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "allPrefixHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.0625
+              ],
+              "estimate": 0.020833333333333332,
+              "families": 6,
+              "paired_trials": 68,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "binaryLogLoss": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -5.675905776133149,
+                -2.595730773485108
+              ],
+              "estimate": -4.382983489311013,
+              "families": 6,
+              "paired_trials": 44,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "brier": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.4304860975953336,
+                -0.08125209513559181
+              ],
+              "estimate": -0.2403637318101266,
+              "families": 6,
+              "paired_trials": 44,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredExactRecallAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.15
+              ],
+              "estimate": 0.05,
+              "families": 5,
+              "paired_trials": 16,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredTop1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.15,
+                0.3
+              ],
+              "estimate": 0.05,
+              "families": 5,
+              "paired_trials": 16,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.125,
+                0.25
+              ],
+              "estimate": 0.041666666666666664,
+              "families": 6,
+              "paired_trials": 31,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.125
+              ],
+              "estimate": 0.041666666666666664,
+              "families": 6,
+              "paired_trials": 31,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "headMinusSymbolic": {
+            "allPrefixHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.02990196078431373,
+                0.0
+              ],
+              "estimate": -0.013235294117647059,
+              "families": 6,
+              "paired_trials": 136,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "allPrefixHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.014705882352941175
+              ],
+              "estimate": 0.004901960784313725,
+              "families": 6,
+              "paired_trials": 136,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredExactRecallAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.041666666666666664
+              ],
+              "estimate": 0.013888888888888888,
+              "families": 6,
+              "paired_trials": 28,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredTop1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.09722222222222221,
+                0.0
+              ],
+              "estimate": -0.041666666666666664,
+              "families": 6,
+              "paired_trials": 28,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.07361111111111111,
+                0.0
+              ],
+              "estimate": -0.03194444444444444,
+              "families": 6,
+              "paired_trials": 52,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.03333333333333333
+              ],
+              "estimate": 0.011111111111111112,
+              "families": 6,
+              "paired_trials": 52,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          }
+        },
+        "optimizerUpdates": 90,
+        "selectedEpoch": 1
+      },
+      "rank8": {
+        "calibrated": false,
+        "metrics": {
+          "allDevelopment": {
+            "availableCheckpoints": 136,
+            "candidateCount": 473,
+            "candidatePositiveLabels": 28,
+            "coveredReadCheckpoints": 28,
+            "declaredCheckpoints": 136,
+            "eligibleReadCheckpoints": 52,
+            "families": 6,
+            "metrics": {
+              "allPrefixHitAt1": {
+                "checkpointMean": 0.13970588235294118,
+                "checkpoints": 136,
+                "families": 6,
+                "familyMacro": 0.1386791756836514
+              },
+              "allPrefixHitAt3": {
+                "checkpointMean": 0.20588235294117646,
+                "checkpoints": 136,
+                "families": 6,
+                "familyMacro": 0.18622819529149454
+              },
+              "binaryLogLoss": {
+                "checkpointMean": 0.25510201766320684,
+                "checkpoints": 112,
+                "families": 6,
+                "familyMacro": 0.23234071409339926
+              },
+              "brier": {
+                "checkpointMean": 0.07764514001637883,
+                "checkpoints": 112,
+                "families": 6,
+                "familyMacro": 0.07000951601339346
+              },
+              "coveredExactRecallAt3": {
+                "checkpointMean": 1.0,
+                "checkpoints": 28,
+                "families": 6,
+                "familyMacro": 1.0
+              },
+              "coveredTop1": {
+                "checkpointMean": 0.6785714285714286,
+                "checkpoints": 28,
+                "families": 6,
+                "familyMacro": 0.8611111111111112
+              },
+              "eligibleReadHitAt1": {
+                "checkpointMean": 0.36538461538461536,
+                "checkpoints": 52,
+                "families": 6,
+                "familyMacro": 0.37083333333333335
+              },
+              "eligibleReadHitAt3": {
+                "checkpointMean": 0.5384615384615384,
+                "checkpoints": 52,
+                "families": 6,
+                "familyMacro": 0.48055555555555557
+              },
+              "recordedActionCorrect": {
+                "checkpointMean": 0.75,
+                "checkpoints": 136,
+                "families": 6,
+                "familyMacro": 0.7743864351760771
+              }
+            }
+          },
+          "baselineAvailableSubset": {
+            "availableCheckpoints": 68,
+            "candidateCount": 71,
+            "candidatePositiveLabels": 16,
+            "coveredReadCheckpoints": 16,
+            "declaredCheckpoints": 136,
+            "eligibleReadCheckpoints": 31,
+            "families": 6,
+            "metrics": {
+              "allPrefixHitAt1": {
+                "checkpointMean": 0.19117647058823528,
+                "checkpoints": 68,
+                "families": 6,
+                "familyMacro": 0.1948529411764706
+              },
+              "allPrefixHitAt3": {
+                "checkpointMean": 0.23529411764705882,
+                "checkpoints": 68,
+                "families": 6,
+                "familyMacro": 0.25735294117647056
+              },
+              "binaryLogLoss": {
+                "checkpointMean": 0.45403093824921625,
+                "checkpoints": 44,
+                "families": 6,
+                "familyMacro": 0.6386026368563632
+              },
+              "brier": {
+                "checkpointMean": 0.14099805509995514,
+                "checkpoints": 44,
+                "families": 6,
+                "familyMacro": 0.20634550555543335
+              },
+              "coveredExactRecallAt3": {
+                "checkpointMean": 1.0,
+                "checkpoints": 16,
+                "families": 5,
+                "familyMacro": 1.0
+              },
+              "coveredTop1": {
+                "checkpointMean": 0.8125,
+                "checkpoints": 16,
+                "families": 5,
+                "familyMacro": 0.85
+              },
+              "eligibleReadHitAt1": {
+                "checkpointMean": 0.41935483870967744,
+                "checkpoints": 31,
+                "families": 6,
+                "familyMacro": 0.40674603174603174
+              },
+              "eligibleReadHitAt3": {
+                "checkpointMean": 0.5161290322580645,
+                "checkpoints": 31,
+                "families": 6,
+                "familyMacro": 0.5317460317460317
+              },
+              "recordedActionCorrect": {
+                "checkpointMean": 0.8235294117647058,
+                "checkpoints": 68,
+                "families": 6,
+                "familyMacro": 0.7720588235294118
+              }
+            }
+          },
+          "headMinusGenerative": {
+            "allPrefixHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.125,
+                0.0625
+              ],
+              "estimate": -0.020833333333333332,
+              "families": 6,
+              "paired_trials": 68,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "allPrefixHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.0625
+              ],
+              "estimate": 0.020833333333333332,
+              "families": 6,
+              "paired_trials": 68,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "binaryLogLoss": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -6.569831222030975,
+                -2.8351423826997717
+              ],
+              "estimate": -4.923298371223011,
+              "families": 6,
+              "paired_trials": 44,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "brier": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.43447966357372153,
+                -0.15069913131274515
+              ],
+              "estimate": -0.27280330010697407,
+              "families": 6,
+              "paired_trials": 44,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredExactRecallAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.15
+              ],
+              "estimate": 0.05,
+              "families": 5,
+              "paired_trials": 16,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredTop1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.3,
+                0.15
+              ],
+              "estimate": -0.05,
+              "families": 5,
+              "paired_trials": 16,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.25,
+                0.125
+              ],
+              "estimate": -0.041666666666666664,
+              "families": 6,
+              "paired_trials": 31,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.125
+              ],
+              "estimate": 0.041666666666666664,
+              "families": 6,
+              "paired_trials": 31,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "headMinusSymbolic": {
+            "allPrefixHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.06715686274509804,
+                0.0
+              ],
+              "estimate": -0.027941176470588237,
+              "families": 6,
+              "paired_trials": 136,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "allPrefixHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.014705882352941175
+              ],
+              "estimate": 0.004901960784313725,
+              "families": 6,
+              "paired_trials": 136,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredExactRecallAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.041666666666666664
+              ],
+              "estimate": 0.013888888888888888,
+              "families": 6,
+              "paired_trials": 28,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "coveredTop1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.19444444444444442,
+                0.0
+              ],
+              "estimate": -0.08333333333333333,
+              "families": 6,
+              "paired_trials": 28,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt1": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.15416666666666667,
+                0.0
+              ],
+              "estimate": -0.06527777777777778,
+              "families": 6,
+              "paired_trials": 52,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "eligibleReadHitAt3": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                0.0,
+                0.03333333333333333
+              ],
+              "estimate": 0.011111111111111112,
+              "families": 6,
+              "paired_trials": 52,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          }
+        },
+        "optimizerUpdates": 90,
+        "selectedEpoch": 3
+      }
+    }
+  },
+  "newEstimates": false,
+  "originalNegativeControl": {
+    "development": {
+      "additionalArmMetrics": {
+        "acephale": {
+          "byPredictorTrainingSeed": {
+            "17": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 6,
+              "knownConstraintCleanSuccesses": 4,
+              "nativeSuccesses": 6
+            },
+            "29": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 6,
+              "knownConstraintCleanSuccesses": 4,
+              "nativeSuccesses": 6
+            }
+          },
+          "constraintAuditCompleteTrials": 12,
+          "hostedUsage": {
+            "billedUsd": 0.140916,
+            "gpuCostsIncluded": false,
+            "invoiceVerified": false,
+            "knownUsageSubtotalUsd": 0.140916,
+            "missingKnownSubtotalTrials": 0,
+            "scope": "hosted_user_and_judge_only",
+            "unknownCharges": 0
+          },
+          "knownConstraintCleanJointSeedConsistency": null,
+          "knownConstraintCleanPass1": 0.6666666666666666,
+          "nativePass1FamilyBootstrap": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "families": 6,
+            "trials": 12,
+            "weighting": "equal_family_mean_of_native_completion_indicators"
+          },
+          "nativeUnpromotedPhysicalCalls": {
+            "knownTotal": 0,
+            "missingTrials": 0
+          },
+          "schedulerEvents": {
+            "cancel_requested": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "cancellation_confirmed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "rejected": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "revalidation_completed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "started": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "useful": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "wasted": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            }
+          }
+        },
+        "base": {
+          "byPredictorTrainingSeed": {
+            "17": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 6,
+              "knownConstraintCleanSuccesses": 5,
+              "nativeSuccesses": 6
+            },
+            "29": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 6,
+              "knownConstraintCleanSuccesses": 4,
+              "nativeSuccesses": 6
+            }
+          },
+          "constraintAuditCompleteTrials": 12,
+          "hostedUsage": {
+            "billedUsd": 0.150927,
+            "gpuCostsIncluded": false,
+            "invoiceVerified": false,
+            "knownUsageSubtotalUsd": 0.150927,
+            "missingKnownSubtotalTrials": 0,
+            "scope": "hosted_user_and_judge_only",
+            "unknownCharges": 0
+          },
+          "knownConstraintCleanJointSeedConsistency": null,
+          "knownConstraintCleanPass1": 0.75,
+          "nativePass1FamilyBootstrap": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "families": 6,
+            "trials": 12,
+            "weighting": "equal_family_mean_of_native_completion_indicators"
+          },
+          "nativeUnpromotedPhysicalCalls": {
+            "knownTotal": 0,
+            "missingTrials": 0
+          },
+          "schedulerEvents": {
+            "cancel_requested": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "cancellation_confirmed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "rejected": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "revalidation_completed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "started": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "useful": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "wasted": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            }
+          }
+        },
+        "neutral_memory_prefetch": {
+          "byPredictorTrainingSeed": {
+            "17": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 6,
+              "knownConstraintCleanSuccesses": 4,
+              "nativeSuccesses": 6
+            },
+            "29": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 6,
+              "knownConstraintCleanSuccesses": 4,
+              "nativeSuccesses": 6
+            }
+          },
+          "constraintAuditCompleteTrials": 12,
+          "hostedUsage": {
+            "billedUsd": 0.14353,
+            "gpuCostsIncluded": false,
+            "invoiceVerified": false,
+            "knownUsageSubtotalUsd": 0.14353,
+            "missingKnownSubtotalTrials": 0,
+            "scope": "hosted_user_and_judge_only",
+            "unknownCharges": 0
+          },
+          "knownConstraintCleanJointSeedConsistency": null,
+          "knownConstraintCleanPass1": 0.6666666666666666,
+          "nativePass1FamilyBootstrap": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "families": 6,
+            "trials": 12,
+            "weighting": "equal_family_mean_of_native_completion_indicators"
+          },
+          "nativeUnpromotedPhysicalCalls": {
+            "knownTotal": 0,
+            "missingTrials": 0
+          },
+          "schedulerEvents": {
+            "cancel_requested": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "cancellation_confirmed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "rejected": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "revalidation_completed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "started": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "useful": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "wasted": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            }
+          }
+        }
+      },
+      "causalComparisonScope": "Paired arm differences within the original frozen blocks; no causal contrast between predictor seeds",
+      "constraintScope": "Configured complete NL assertion audit, not a complete policy compliance proof",
+      "declaredSlots": 36,
+      "evaluatorInclusiveLatency": {
+        "annotationReview": {
+          "humanReviewCount": 0,
+          "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+          "machineReviewCount": 20,
+          "reviewIndependence": "separate_request_and_prompt_same_model",
+          "reviewProtocol": "machine_audited_exploratory",
+          "reviewerModel": "gpt-5.4-2026-03-05"
+        },
+        "arms": {
+          "acephale": {
+            "constraint_violations": {
+              "known_total": 4,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": null,
+            "known_usage_usd": 0.14091599999999999,
+            "latency_samples": 12,
+            "logical_calls": {
+              "known_total": 73,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 117341.69158108292,
+            "median_latency_ms": 106689.27419299961,
+            "observed_p95_latency_ms": 163964.57615564964,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 73,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 6.083333333333333,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 12,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 12
+            },
+            "successes": 12,
+            "two_trial_tasks": 0,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "base": {
+            "constraint_violations": {
+              "known_total": 3,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": null,
+            "known_usage_usd": 0.150927,
+            "latency_samples": 12,
+            "logical_calls": {
+              "known_total": 77,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 119859.22255066683,
+            "median_latency_ms": 116696.12583050002,
+            "observed_p95_latency_ms": 153224.6699108006,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 77,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 6.416666666666667,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 12,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 12
+            },
+            "successes": 12,
+            "two_trial_tasks": 0,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "neutral_memory_prefetch": {
+            "constraint_violations": {
+              "known_total": 4,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": null,
+            "known_usage_usd": 0.14353,
+            "latency_samples": 12,
+            "logical_calls": {
+              "known_total": 76,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 113572.56879083342,
+            "median_latency_ms": 114875.6146980004,
+            "observed_p95_latency_ms": 143857.5787380002,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 76,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 6.333333333333333,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 12,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 12
+            },
+            "successes": 12,
+            "two_trial_tasks": 0,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          }
+        },
+        "design_hash": "ad859820cab97b9786452443a37790a9a78343ec34073bd28f84d99a3ae62847",
+        "label": "Custom tau-compatible paired development",
+        "limitations": [
+          "Usage-derived costs are not invoice-reconciled",
+          "Missing telemetry is never imputed as zero",
+          "Execution replay timing is not live latency",
+          "Task success and exact-read prediction use different denominators",
+          "Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests"
+        ],
+        "measurement_kind": "live",
+        "paired_comparisons": [
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -9894.757565583406,
+                  -2775.7106659999736
+                ],
+                "estimate": -6286.653759833373,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.4166666666666667,
+                  0.4166666666666667
+                ],
+                "estimate": -0.08333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.4166666666666667,
+                  0.4166666666666667
+                ],
+                "estimate": -0.08333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "neutral_memory_prefetch"
+          },
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -9937.173700750465,
+                  4563.390437855504
+                ],
+                "estimate": -2517.5309695838864,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.8333333333333334,
+                  0.0
+                ],
+                "estimate": -0.3333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.8333333333333334,
+                  0.0
+                ],
+                "estimate": -0.3333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          },
+          {
+            "baseline": "neutral_memory_prefetch",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -1463.2539898254286,
+                  7911.61189999896
+                ],
+                "estimate": 3769.1227902494866,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.75,
+                  0.16666666666666666
+                ],
+                "estimate": -0.25,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.75,
+                  0.16666666666666666
+                ],
+                "estimate": -0.25,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          }
+        ],
+        "results_hash": "1d06a00766b7b73b92e94900e099918bddb87f078f8051bb9f12225d4347e7a7",
+        "schema_version": "acephale-infra-evaluation-v1",
+        "twoTrialInterpretation": "Joint actor/predictor-seed consistency; not same-fixed-checkpoint pass^2"
+      },
+      "knownConstraintCleanPairedDifferences": [
+        {
+          "baseline": "base",
+          "metrics": {
+            "latency_ms_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -9865.182261083646,
+                -3059.2217873346876
+              ],
+              "estimate": -6119.473020250855,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "logical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.4166666666666667,
+                0.4166666666666667
+              ],
+              "estimate": -0.08333333333333333,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "physical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.4166666666666667,
+                0.4166666666666667
+              ],
+              "estimate": -0.08333333333333333,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "success_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.25,
+                0.0
+              ],
+              "estimate": -0.08333333333333333,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "neutral_memory_prefetch"
+        },
+        {
+          "baseline": "base",
+          "metrics": {
+            "latency_ms_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -13386.03567602761,
+                4994.637669567105
+              ],
+              "estimate": -3832.226395751301,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "logical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.8333333333333334,
+                0.0
+              ],
+              "estimate": -0.3333333333333333,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "physical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.8333333333333334,
+                0.0
+              ],
+              "estimate": -0.3333333333333333,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "success_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.3333333333333333,
+                0.16666666666666666
+              ],
+              "estimate": -0.08333333333333333,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "acephale"
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "metrics": {
+            "latency_ms_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -4989.392651833138,
+                8604.405833373808
+              ],
+              "estimate": 2287.2466244995544,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "logical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.75,
+                0.16666666666666666
+              ],
+              "estimate": -0.25,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "physical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.75,
+                0.16666666666666666
+              ],
+              "estimate": -0.25,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "success_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.3333333333333333,
+                0.4166666666666667
+              ],
+              "estimate": 0.0,
+              "families": 6,
+              "paired_trials": 12,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "acephale"
+        }
+      ],
+      "latencyScope": "Live totalTrialSeconds includes actor/user drain; evaluator-inclusive elapsed time reported separately",
+      "nativeCompletionAndLiveLatency": {
+        "annotationReview": {
+          "humanReviewCount": 0,
+          "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+          "machineReviewCount": 20,
+          "reviewIndependence": "separate_request_and_prompt_same_model",
+          "reviewProtocol": "machine_audited_exploratory",
+          "reviewerModel": "gpt-5.4-2026-03-05"
+        },
+        "arms": {
+          "acephale": {
+            "constraint_violations": {
+              "known_total": 4,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": null,
+            "known_usage_usd": 0.14091599999999999,
+            "latency_samples": 12,
+            "logical_calls": {
+              "known_total": 73,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 95599.94110141603,
+            "median_latency_ms": 87313.75683899932,
+            "observed_p95_latency_ms": 137853.95521220032,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 73,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 6.083333333333333,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 12,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 12
+            },
+            "successes": 12,
+            "two_trial_tasks": 0,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "base": {
+            "constraint_violations": {
+              "known_total": 3,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": null,
+            "known_usage_usd": 0.150927,
+            "latency_samples": 12,
+            "logical_calls": {
+              "known_total": 77,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 99432.16749716735,
+            "median_latency_ms": 99181.0395604998,
+            "observed_p95_latency_ms": 130331.14272730051,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 77,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 6.416666666666667,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 12,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 12
+            },
+            "successes": 12,
+            "two_trial_tasks": 0,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "neutral_memory_prefetch": {
+            "constraint_violations": {
+              "known_total": 4,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": null,
+            "known_usage_usd": 0.14353,
+            "latency_samples": 12,
+            "logical_calls": {
+              "known_total": 76,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 93312.6944769165,
+            "median_latency_ms": 97590.09877400058,
+            "observed_p95_latency_ms": 124475.63534574873,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 76,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 6.333333333333333,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 12,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 12
+            },
+            "successes": 12,
+            "two_trial_tasks": 0,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          }
+        },
+        "design_hash": "ad859820cab97b9786452443a37790a9a78343ec34073bd28f84d99a3ae62847",
+        "label": "Custom tau-compatible paired development",
+        "limitations": [
+          "Usage-derived costs are not invoice-reconciled",
+          "Missing telemetry is never imputed as zero",
+          "Execution replay timing is not live latency",
+          "Task success and exact-read prediction use different denominators",
+          "Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests"
+        ],
+        "measurement_kind": "live",
+        "paired_comparisons": [
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -9865.182261083646,
+                  -3059.2217873346876
+                ],
+                "estimate": -6119.473020250855,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.4166666666666667,
+                  0.4166666666666667
+                ],
+                "estimate": -0.08333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.4166666666666667,
+                  0.4166666666666667
+                ],
+                "estimate": -0.08333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "neutral_memory_prefetch"
+          },
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -13386.03567602761,
+                  4994.637669567105
+                ],
+                "estimate": -3832.226395751301,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.8333333333333334,
+                  0.0
+                ],
+                "estimate": -0.3333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.8333333333333334,
+                  0.0
+                ],
+                "estimate": -0.3333333333333333,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          },
+          {
+            "baseline": "neutral_memory_prefetch",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -4989.392651833138,
+                  8604.405833373808
+                ],
+                "estimate": 2287.2466244995544,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.75,
+                  0.16666666666666666
+                ],
+                "estimate": -0.25,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.75,
+                  0.16666666666666666
+                ],
+                "estimate": -0.25,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 6,
+                "paired_trials": 12,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          }
+        ],
+        "results_hash": "090c0102b3b1a86a5311e657f3b832f689f632bf475f9c944a990850da8e8027",
+        "schema_version": "acephale-infra-evaluation-v1",
+        "twoTrialInterpretation": "Joint actor/predictor-seed consistency; not same-fixed-checkpoint pass^2"
+      },
+      "officialFullBenchmarkScore": false,
+      "physicalCalls": "Authoritative + speculative + freshness validation + revalidation; unknown counts stay unknown",
+      "planHash": "7954568c663bd19a305abe726eee7bc63f7a20a7cb82fe828122d2d54586644b",
+      "predictorSeedTrialCounts": {
+        "17": 18,
+        "29": 18
+      },
+      "schedulerCountSource": "Verified runtime events; rejected/cancelled cost-log defaults are ignored",
+      "seedDesignLimitation": "Development variantv0 uses predictor17 and variantv1 predictor29, actor17 in both; between-weight comparison is confounded by task variant.",
+      "sources": [
+        {
+          "cohortReceiptSha256": "beef1badb4cb67d626ddbbd4f6b50d653df3cff2b155b34581d9d337062d7ddd",
+          "declaredSlots": 18,
+          "runtimeEventsSha256": "2c250d3d26ba973eba4bd8e0c32ec33cf98d1078bd654f812fd01e69642268fd",
+          "schedulerCountsComplete": true
+        },
+        {
+          "cohortReceiptSha256": "b6e818df831a293f3255290ba4f53a6c8c7cd73a27792c04dce3fc29701e9688",
+          "declaredSlots": 18,
+          "runtimeEventsSha256": "999b5c9b50cfe74bc6aa55be46b358ba1eb19c7173fd609f1ac913c15787e8dc",
+          "schedulerCountsComplete": true
+        }
+      ],
+      "stage": "development",
+      "status": "closed"
+    },
+    "heldout": {
+      "additionalArmMetrics": {
+        "acephale": {
+          "byPredictorTrainingSeed": {
+            "17": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 16,
+              "knownConstraintCleanSuccesses": 13,
+              "nativeSuccesses": 16
+            },
+            "29": {
+              "actorSeeds": [
+                29
+              ],
+              "declaredTrials": 16,
+              "knownConstraintCleanSuccesses": 10,
+              "nativeSuccesses": 16
+            }
+          },
+          "constraintAuditCompleteTrials": 32,
+          "hostedUsage": {
+            "billedUsd": 0.576918,
+            "gpuCostsIncluded": false,
+            "invoiceVerified": false,
+            "knownUsageSubtotalUsd": 0.576918,
+            "missingKnownSubtotalTrials": 0,
+            "scope": "hosted_user_and_judge_only",
+            "unknownCharges": 0
+          },
+          "knownConstraintCleanJointSeedConsistency": 0.5625,
+          "knownConstraintCleanPass1": 0.71875,
+          "nativePass1FamilyBootstrap": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "families": 8,
+            "trials": 32,
+            "weighting": "equal_family_mean_of_native_completion_indicators"
+          },
+          "nativeUnpromotedPhysicalCalls": {
+            "knownTotal": 0,
+            "missingTrials": 0
+          },
+          "schedulerEvents": {
+            "cancel_requested": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "cancellation_confirmed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "rejected": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "revalidation_completed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "started": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "useful": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "wasted": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            }
+          }
+        },
+        "base": {
+          "byPredictorTrainingSeed": {
+            "17": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 16,
+              "knownConstraintCleanSuccesses": 13,
+              "nativeSuccesses": 16
+            },
+            "29": {
+              "actorSeeds": [
+                29
+              ],
+              "declaredTrials": 16,
+              "knownConstraintCleanSuccesses": 12,
+              "nativeSuccesses": 16
+            }
+          },
+          "constraintAuditCompleteTrials": 32,
+          "hostedUsage": {
+            "billedUsd": 0.598737,
+            "gpuCostsIncluded": false,
+            "invoiceVerified": false,
+            "knownUsageSubtotalUsd": 0.598737,
+            "missingKnownSubtotalTrials": 0,
+            "scope": "hosted_user_and_judge_only",
+            "unknownCharges": 0
+          },
+          "knownConstraintCleanJointSeedConsistency": 0.6875,
+          "knownConstraintCleanPass1": 0.78125,
+          "nativePass1FamilyBootstrap": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "families": 8,
+            "trials": 32,
+            "weighting": "equal_family_mean_of_native_completion_indicators"
+          },
+          "nativeUnpromotedPhysicalCalls": {
+            "knownTotal": 0,
+            "missingTrials": 0
+          },
+          "schedulerEvents": {
+            "cancel_requested": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "cancellation_confirmed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "rejected": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "revalidation_completed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "started": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "useful": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "wasted": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            }
+          }
+        },
+        "neutral_memory_prefetch": {
+          "byPredictorTrainingSeed": {
+            "17": {
+              "actorSeeds": [
+                17
+              ],
+              "declaredTrials": 16,
+              "knownConstraintCleanSuccesses": 13,
+              "nativeSuccesses": 16
+            },
+            "29": {
+              "actorSeeds": [
+                29
+              ],
+              "declaredTrials": 16,
+              "knownConstraintCleanSuccesses": 14,
+              "nativeSuccesses": 16
+            }
+          },
+          "constraintAuditCompleteTrials": 32,
+          "hostedUsage": {
+            "billedUsd": 0.567207,
+            "gpuCostsIncluded": false,
+            "invoiceVerified": false,
+            "knownUsageSubtotalUsd": 0.567207,
+            "missingKnownSubtotalTrials": 0,
+            "scope": "hosted_user_and_judge_only",
+            "unknownCharges": 0
+          },
+          "knownConstraintCleanJointSeedConsistency": 0.75,
+          "knownConstraintCleanPass1": 0.84375,
+          "nativePass1FamilyBootstrap": {
+            "bootstrap_samples": 2000,
+            "bootstrap_seed": 42,
+            "ci95": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "families": 8,
+            "trials": 32,
+            "weighting": "equal_family_mean_of_native_completion_indicators"
+          },
+          "nativeUnpromotedPhysicalCalls": {
+            "knownTotal": 0,
+            "missingTrials": 0
+          },
+          "schedulerEvents": {
+            "cancel_requested": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "cancellation_confirmed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "rejected": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "revalidation_completed": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "started": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "useful": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            },
+            "wasted": {
+              "knownTotal": 0,
+              "missingTrials": 0
+            }
+          }
+        }
+      },
+      "causalComparisonScope": "Paired arm differences within the original frozen blocks; no causal contrast between predictor seeds",
+      "constraintScope": "Configured complete NL assertion audit, not a complete policy compliance proof",
+      "declaredSlots": 96,
+      "evaluatorInclusiveLatency": {
+        "annotationReview": {
+          "humanReviewCount": 0,
+          "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+          "machineReviewCount": 20,
+          "reviewIndependence": "separate_request_and_prompt_same_model",
+          "reviewProtocol": "machine_audited_exploratory",
+          "reviewerModel": "gpt-5.4-2026-03-05"
+        },
+        "arms": {
+          "acephale": {
+            "constraint_violations": {
+              "known_total": 9,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": 1.0,
+            "known_usage_usd": 0.576918,
+            "latency_samples": 32,
+            "logical_calls": {
+              "known_total": 295,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 225459.1698199065,
+            "median_latency_ms": 218530.35899349925,
+            "observed_p95_latency_ms": 314693.5494921501,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 295,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 9.21875,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 32,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 32
+            },
+            "successes": 32,
+            "two_trial_tasks": 16,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "base": {
+            "constraint_violations": {
+              "known_total": 7,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": 1.0,
+            "known_usage_usd": 0.598737,
+            "latency_samples": 32,
+            "logical_calls": {
+              "known_total": 302,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 241789.98436221853,
+            "median_latency_ms": 227633.27925700106,
+            "observed_p95_latency_ms": 381225.57987399993,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 302,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 9.4375,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 32,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 32
+            },
+            "successes": 32,
+            "two_trial_tasks": 16,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "neutral_memory_prefetch": {
+            "constraint_violations": {
+              "known_total": 5,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": 1.0,
+            "known_usage_usd": 0.567207,
+            "latency_samples": 32,
+            "logical_calls": {
+              "known_total": 297,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 230660.01364271902,
+            "median_latency_ms": 210767.32267100125,
+            "observed_p95_latency_ms": 345606.08062675,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 297,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 9.28125,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 32,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 32
+            },
+            "successes": 32,
+            "two_trial_tasks": 16,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          }
+        },
+        "design_hash": "0982ab8601cf39305d8b8cbb01a8f23236d17da786cd0fbddf3bdf8704694918",
+        "label": "Custom tau-compatible paired heldout",
+        "limitations": [
+          "Usage-derived costs are not invoice-reconciled",
+          "Missing telemetry is never imputed as zero",
+          "Execution replay timing is not live latency",
+          "Task success and exact-read prediction use different denominators",
+          "Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests"
+        ],
+        "measurement_kind": "live",
+        "paired_comparisons": [
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -21259.717371342143,
+                  277.8412472150876
+                ],
+                "estimate": -11129.97071949951,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.3125,
+                  0.0
+                ],
+                "estimate": -0.15625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.3125,
+                  0.0
+                ],
+                "estimate": -0.15625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "neutral_memory_prefetch"
+          },
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -34697.247161600884,
+                  619.400445500788
+                ],
+                "estimate": -16330.814542312051,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.5625,
+                  0.03125
+                ],
+                "estimate": -0.21875,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.5625,
+                  0.03125
+                ],
+                "estimate": -0.21875,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          },
+          {
+            "baseline": "neutral_memory_prefetch",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -23096.129871677487,
+                  9291.406417987188
+                ],
+                "estimate": -5200.8438228125415,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.34375,
+                  0.15625
+                ],
+                "estimate": -0.0625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.34375,
+                  0.15625
+                ],
+                "estimate": -0.0625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          }
+        ],
+        "results_hash": "c47a37c3eb9473f89fbaeeeeda8ac0342fed544b276eba24a4f77c91fc8448f8",
+        "schema_version": "acephale-infra-evaluation-v1",
+        "twoTrialInterpretation": "Joint actor/predictor-seed consistency; not same-fixed-checkpoint pass^2"
+      },
+      "knownConstraintCleanPairedDifferences": [
+        {
+          "baseline": "base",
+          "metrics": {
+            "latency_ms_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -20493.409921002858,
+                1362.1038167922902
+              ],
+              "estimate": -10521.978164094206,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "logical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.3125,
+                0.0
+              ],
+              "estimate": -0.15625,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "physical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.3125,
+                0.0
+              ],
+              "estimate": -0.15625,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "success_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.0625,
+                0.1875
+              ],
+              "estimate": 0.0625,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "neutral_memory_prefetch"
+        },
+        {
+          "baseline": "base",
+          "metrics": {
+            "latency_ms_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -31760.38912689211,
+                -164.2757638371223
+              ],
+              "estimate": -15250.948702280879,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "logical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.5625,
+                0.03125
+              ],
+              "estimate": -0.21875,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "physical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.5625,
+                0.03125
+              ],
+              "estimate": -0.21875,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "success_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.375,
+                0.21875
+              ],
+              "estimate": -0.0625,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "acephale"
+        },
+        {
+          "baseline": "neutral_memory_prefetch",
+          "metrics": {
+            "latency_ms_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -21987.690233789905,
+                10052.54558806348
+              ],
+              "estimate": -4728.9705381866725,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "logical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.34375,
+                0.15625
+              ],
+              "estimate": -0.0625,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "physical_calls_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.34375,
+                0.15625
+              ],
+              "estimate": -0.0625,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            },
+            "success_difference": {
+              "bootstrap_samples": 2000,
+              "bootstrap_seed": 42,
+              "ci95": [
+                -0.375,
+                0.09375
+              ],
+              "estimate": -0.125,
+              "families": 8,
+              "paired_trials": 32,
+              "weighting": "equal_family_mean_of_paired_trial_differences"
+            }
+          },
+          "treatment": "acephale"
+        }
+      ],
+      "latencyScope": "Live totalTrialSeconds includes actor/user drain; evaluator-inclusive elapsed time reported separately",
+      "nativeCompletionAndLiveLatency": {
+        "annotationReview": {
+          "humanReviewCount": 0,
+          "machineAuditHash": "7cbfd1bc83c361d17224cd5d00d1524cc7b7738b864bbbc842cdaad7f598f07d",
+          "machineReviewCount": 20,
+          "reviewIndependence": "separate_request_and_prompt_same_model",
+          "reviewProtocol": "machine_audited_exploratory",
+          "reviewerModel": "gpt-5.4-2026-03-05"
+        },
+        "arms": {
+          "acephale": {
+            "constraint_violations": {
+              "known_total": 9,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": 1.0,
+            "known_usage_usd": 0.576918,
+            "latency_samples": 32,
+            "logical_calls": {
+              "known_total": 295,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 192509.65601153177,
+            "median_latency_ms": 182249.29952149978,
+            "observed_p95_latency_ms": 271091.1486018014,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 295,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 9.21875,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 32,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 32
+            },
+            "successes": 32,
+            "two_trial_tasks": 16,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "base": {
+            "constraint_violations": {
+              "known_total": 7,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": 1.0,
+            "known_usage_usd": 0.598737,
+            "latency_samples": 32,
+            "logical_calls": {
+              "known_total": 302,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 207760.60471381265,
+            "median_latency_ms": 196712.9577984997,
+            "observed_p95_latency_ms": 322635.54863405076,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 302,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 9.4375,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 32,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 32
+            },
+            "successes": 32,
+            "two_trial_tasks": 16,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          },
+          "neutral_memory_prefetch": {
+            "constraint_violations": {
+              "known_total": 5,
+              "missing_trials": 0
+            },
+            "joint_actor_and_predictor_seed_consistency": 1.0,
+            "known_usage_usd": 0.567207,
+            "latency_samples": 32,
+            "logical_calls": {
+              "known_total": 297,
+              "missing_trials": 0
+            },
+            "mean_latency_ms": 197238.62654971844,
+            "median_latency_ms": 182825.1456959988,
+            "observed_p95_latency_ms": 300246.9400582984,
+            "p95_method": "linear_sample_quantile",
+            "pass1": 1.0,
+            "physical_call_amplification": 1.0,
+            "physical_calls": {
+              "known_total": 297,
+              "missing_trials": 0
+            },
+            "physical_calls_per_success": 9.28125,
+            "revalidation_calls": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "scheduled_trials": 32,
+            "speculative_starts": {
+              "known_total": 0,
+              "missing_trials": 0
+            },
+            "status_counts": {
+              "completed": 32
+            },
+            "successes": 32,
+            "two_trial_tasks": 16,
+            "unknown_cost_trials": 0,
+            "useful_speculations": {
+              "known_total": 0,
+              "missing_trials": 0
+            }
+          }
+        },
+        "design_hash": "0982ab8601cf39305d8b8cbb01a8f23236d17da786cd0fbddf3bdf8704694918",
+        "label": "Custom tau-compatible paired heldout",
+        "limitations": [
+          "Usage-derived costs are not invoice-reconciled",
+          "Missing telemetry is never imputed as zero",
+          "Execution replay timing is not live latency",
+          "Task success and exact-read prediction use different denominators",
+          "Exploratory machine-audited study; zero human reviews; reviewer and teacher use the same model in separate requests"
+        ],
+        "measurement_kind": "live",
+        "paired_comparisons": [
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -20493.409921002858,
+                  1362.1038167922902
+                ],
+                "estimate": -10521.978164094206,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.3125,
+                  0.0
+                ],
+                "estimate": -0.15625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.3125,
+                  0.0
+                ],
+                "estimate": -0.15625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "neutral_memory_prefetch"
+          },
+          {
+            "baseline": "base",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -31760.38912689211,
+                  -164.2757638371223
+                ],
+                "estimate": -15250.948702280879,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.5625,
+                  0.03125
+                ],
+                "estimate": -0.21875,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.5625,
+                  0.03125
+                ],
+                "estimate": -0.21875,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          },
+          {
+            "baseline": "neutral_memory_prefetch",
+            "metrics": {
+              "latency_ms_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -21987.690233789905,
+                  10052.54558806348
+                ],
+                "estimate": -4728.9705381866725,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "logical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.34375,
+                  0.15625
+                ],
+                "estimate": -0.0625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "physical_calls_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  -0.34375,
+                  0.15625
+                ],
+                "estimate": -0.0625,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              },
+              "success_difference": {
+                "bootstrap_samples": 2000,
+                "bootstrap_seed": 42,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "estimate": 0.0,
+                "families": 8,
+                "paired_trials": 32,
+                "weighting": "equal_family_mean_of_paired_trial_differences"
+              }
+            },
+            "treatment": "acephale"
+          }
+        ],
+        "results_hash": "7be3dc1f235984a7e1bb6c6d6905fd63886a706c154442d02dd606f0eabee5f1",
+        "schema_version": "acephale-infra-evaluation-v1",
+        "twoTrialInterpretation": "Joint actor/predictor-seed consistency; not same-fixed-checkpoint pass^2"
+      },
+      "officialFullBenchmarkScore": false,
+      "physicalCalls": "Authoritative + speculative + freshness validation + revalidation; unknown counts stay unknown",
+      "planHash": "ede55e778d0635205b4fb7b9ccb016f7d649f70af7a4a384c02d3945d0238692",
+      "predictorSeedTrialCounts": {
+        "17": 48,
+        "29": 48
+      },
+      "schedulerCountSource": "Verified runtime events; rejected/cancelled cost-log defaults are ignored",
+      "seedDesignLimitation": "Heldout trial0 uses actor17/predictor17 and trial1 actor29/predictor29; consistency changes both seeds.",
+      "sources": [
+        {
+          "cohortReceiptSha256": "55a8cd3e05332929efbd931c42283ffd9bdff77f3315db26999b22c77141e488",
+          "declaredSlots": 48,
+          "runtimeEventsSha256": "aa12edc20f8c8f60c2689b88f539bff85a16a4cb0e73f01c774e6b5b7e29bdb8",
+          "schedulerCountsComplete": true
+        },
+        {
+          "cohortReceiptSha256": "49103b6143876fb5a8fdaf5e9cc3e48e628f39331e8e6873a79bce4c1e2319b4",
+          "declaredSlots": 48,
+          "runtimeEventsSha256": "8472ef523148915522dad833d0b9111c9849d814e2d43917e9a86ab66a99abac",
+          "schedulerCountsComplete": true
+        }
+      ],
+      "stage": "heldout",
+      "status": "closed"
+    }
+  },
+  "primary": {
+    "claimAvailable": false,
+    "jointCriterionMet": null,
+    "reason": "development_gate_failed"
+  },
+  "quality": null,
+  "scientificScope": "negative study; native whole-recipe comparisons are development-selected",
+  "tables": {
+    "coverage": [
+      {
+        "eligible": "46",
+        "fullPoolHits": "0",
+        "population": "visitCoverage",
+        "unavailable": "0",
+        "windowHits": "0"
+      },
+      {
+        "eligible": "86",
+        "fullPoolHits": "0",
+        "population": "allReadCoverage",
+        "unavailable": "0",
+        "windowHits": "0"
+      }
+    ],
+    "exposure": [
+      {
+        "admissionEvents": "0",
+        "arm": "acephale",
+        "consumedReads": "0",
+        "measuredPairs": "22",
+        "tasksWithConsumption": "0"
+      },
+      {
+        "admissionEvents": "0",
+        "arm": "neutral_memory_prefetch",
+        "consumedReads": "0",
+        "measuredPairs": "21",
+        "tasksWithConsumption": "0"
+      },
+      {
+        "admissionEvents": "24",
+        "arm": "symbolic_prefetch",
+        "consumedReads": "0",
+        "measuredPairs": "23",
+        "tasksWithConsumption": "0"
+      }
+    ],
+    "frozen_head-comparison": [
+      {
+        "checkpointMean": "0.16176470588235295",
+        "checkpoints": "136",
+        "families": "6",
+        "familyMacro": "0.15338505803659255",
+        "metric": "allPrefixHitAt1",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.20588235294117646",
+        "checkpoints": "136",
+        "families": "6",
+        "familyMacro": "0.18622819529149454",
+        "metric": "allPrefixHitAt3",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.5088242282448558",
+        "checkpoints": "112",
+        "families": "6",
+        "familyMacro": "0.45559066498607365",
+        "metric": "binaryLogLoss",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.08991465994523444",
+        "checkpoints": "112",
+        "families": "6",
+        "familyMacro": "0.08060574782751953",
+        "metric": "brier",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "1.0",
+        "checkpoints": "28",
+        "families": "6",
+        "familyMacro": "1.0",
+        "metric": "coveredExactRecallAt3",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.7857142857142857",
+        "checkpoints": "28",
+        "families": "6",
+        "familyMacro": "0.9027777777777778",
+        "metric": "coveredTop1",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.4230769230769231",
+        "checkpoints": "52",
+        "families": "6",
+        "familyMacro": "0.4041666666666667",
+        "metric": "eligibleReadHitAt1",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.5384615384615384",
+        "checkpoints": "52",
+        "families": "6",
+        "familyMacro": "0.48055555555555557",
+        "metric": "eligibleReadHitAt3",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.6985294117647058",
+        "checkpoints": "136",
+        "families": "6",
+        "familyMacro": "0.7106384025181979",
+        "metric": "recordedActionCorrect",
+        "population": "allDevelopment",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.22058823529411764",
+        "checkpoints": "68",
+        "families": "6",
+        "familyMacro": "0.23651960784313725",
+        "metric": "allPrefixHitAt1",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.23529411764705882",
+        "checkpoints": "68",
+        "families": "6",
+        "familyMacro": "0.25735294117647056",
+        "metric": "allPrefixHitAt3",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.8302060124500023",
+        "checkpoints": "44",
+        "families": "6",
+        "familyMacro": "1.178917518768361",
+        "metric": "binaryLogLoss",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.15730206787068962",
+        "checkpoints": "44",
+        "families": "6",
+        "familyMacro": "0.2387850738522808",
+        "metric": "brier",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "1.0",
+        "checkpoints": "16",
+        "families": "5",
+        "familyMacro": "1.0",
+        "metric": "coveredExactRecallAt3",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.9375",
+        "checkpoints": "16",
+        "families": "5",
+        "familyMacro": "0.95",
+        "metric": "coveredTop1",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.4838709677419355",
+        "checkpoints": "31",
+        "families": "6",
+        "familyMacro": "0.49007936507936506",
+        "metric": "eligibleReadHitAt1",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.5161290322580645",
+        "checkpoints": "31",
+        "families": "6",
+        "familyMacro": "0.5317460317460317",
+        "metric": "eligibleReadHitAt3",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      },
+      {
+        "checkpointMean": "0.7058823529411765",
+        "checkpoints": "68",
+        "families": "6",
+        "familyMacro": "0.6854575163398693",
+        "metric": "recordedActionCorrect",
+        "population": "baselineAvailableSubset",
+        "variant": "frozen_head"
+      }
+    ],
+    "frozen_head-differences": [
+      {
+        "ci95": "[-0.02990196078431373, 0.0]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "-0.013235294117647059",
+        "metric": "allPrefixHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[0.0, 0.014705882352941175]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "0.004901960784313725",
+        "metric": "allPrefixHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[0.0, 0.041666666666666664]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "0.013888888888888888",
+        "metric": "coveredExactRecallAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-0.09722222222222221, 0.0]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "-0.041666666666666664",
+        "metric": "coveredTop1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-0.07361111111111111, 0.0]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "-0.03194444444444444",
+        "metric": "eligibleReadHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[0.0, 0.03333333333333333]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "0.011111111111111112",
+        "metric": "eligibleReadHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-0.0625, 0.125]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.020833333333333332",
+        "metric": "allPrefixHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[0.0, 0.0625]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.020833333333333332",
+        "metric": "allPrefixHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-5.675905776133149, -2.595730773485108]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-4.382983489311013",
+        "metric": "binaryLogLoss",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-0.4304860975953336, -0.08125209513559181]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-0.2403637318101266",
+        "metric": "brier",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[0.0, 0.15]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.05",
+        "metric": "coveredExactRecallAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-0.15, 0.3]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.05",
+        "metric": "coveredTop1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[-0.125, 0.25]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.041666666666666664",
+        "metric": "eligibleReadHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      },
+      {
+        "ci95": "[0.0, 0.125]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.041666666666666664",
+        "metric": "eligibleReadHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "frozen_head"
+      }
+    ],
+    "head-availability": [
+      {
+        "available": "469",
+        "declared": "469",
+        "stage": "head weight fit"
+      },
+      {
+        "available": "136",
+        "declared": "136",
+        "stage": "head development"
+      },
+      {
+        "available": "68",
+        "declared": "136",
+        "stage": "decoder development"
+      }
+    ],
+    "outcomes": [
+      {
+        "arm": "base",
+        "completed": "33",
+        "errors": "4",
+        "latencyN": "40",
+        "maxSteps": "2",
+        "meanSeconds": "76.91241846119983",
+        "missing": "0",
+        "observed": "40",
+        "ownerClosed": "40",
+        "p95Seconds": "311.9281817683993",
+        "scheduled": "40",
+        "stage": "development",
+        "timeouts": "1",
+        "unknownChargeRows": "5"
+      },
+      {
+        "arm": "symbolic_prefetch",
+        "completed": "24",
+        "errors": "13",
+        "latencyN": "40",
+        "maxSteps": "3",
+        "meanSeconds": "71.28190897960012",
+        "missing": "0",
+        "observed": "40",
+        "ownerClosed": "40",
+        "p95Seconds": "174.58295532719725",
+        "scheduled": "40",
+        "stage": "development",
+        "timeouts": "0",
+        "unknownChargeRows": "2"
+      },
+      {
+        "arm": "neutral_memory_prefetch",
+        "completed": "22",
+        "errors": "16",
+        "latencyN": "40",
+        "maxSteps": "2",
+        "meanSeconds": "62.50260764192499",
+        "missing": "0",
+        "observed": "40",
+        "ownerClosed": "40",
+        "p95Seconds": "204.47497335989877",
+        "scheduled": "40",
+        "stage": "development",
+        "timeouts": "0",
+        "unknownChargeRows": "5"
+      },
+      {
+        "arm": "acephale",
+        "completed": "23",
+        "errors": "16",
+        "latencyN": "40",
+        "maxSteps": "1",
+        "meanSeconds": "73.53387057439996",
+        "missing": "0",
+        "observed": "40",
+        "ownerClosed": "40",
+        "p95Seconds": "218.06877367889822",
+        "scheduled": "40",
+        "stage": "development",
+        "timeouts": "0",
+        "unknownChargeRows": "5"
+      }
+    ],
+    "rank8-comparison": [
+      {
+        "checkpointMean": "0.13970588235294118",
+        "checkpoints": "136",
+        "families": "6",
+        "familyMacro": "0.1386791756836514",
+        "metric": "allPrefixHitAt1",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.20588235294117646",
+        "checkpoints": "136",
+        "families": "6",
+        "familyMacro": "0.18622819529149454",
+        "metric": "allPrefixHitAt3",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.25510201766320684",
+        "checkpoints": "112",
+        "families": "6",
+        "familyMacro": "0.23234071409339926",
+        "metric": "binaryLogLoss",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.07764514001637883",
+        "checkpoints": "112",
+        "families": "6",
+        "familyMacro": "0.07000951601339346",
+        "metric": "brier",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "1.0",
+        "checkpoints": "28",
+        "families": "6",
+        "familyMacro": "1.0",
+        "metric": "coveredExactRecallAt3",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.6785714285714286",
+        "checkpoints": "28",
+        "families": "6",
+        "familyMacro": "0.8611111111111112",
+        "metric": "coveredTop1",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.36538461538461536",
+        "checkpoints": "52",
+        "families": "6",
+        "familyMacro": "0.37083333333333335",
+        "metric": "eligibleReadHitAt1",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.5384615384615384",
+        "checkpoints": "52",
+        "families": "6",
+        "familyMacro": "0.48055555555555557",
+        "metric": "eligibleReadHitAt3",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.75",
+        "checkpoints": "136",
+        "families": "6",
+        "familyMacro": "0.7743864351760771",
+        "metric": "recordedActionCorrect",
+        "population": "allDevelopment",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.19117647058823528",
+        "checkpoints": "68",
+        "families": "6",
+        "familyMacro": "0.1948529411764706",
+        "metric": "allPrefixHitAt1",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.23529411764705882",
+        "checkpoints": "68",
+        "families": "6",
+        "familyMacro": "0.25735294117647056",
+        "metric": "allPrefixHitAt3",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.45403093824921625",
+        "checkpoints": "44",
+        "families": "6",
+        "familyMacro": "0.6386026368563632",
+        "metric": "binaryLogLoss",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.14099805509995514",
+        "checkpoints": "44",
+        "families": "6",
+        "familyMacro": "0.20634550555543335",
+        "metric": "brier",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "1.0",
+        "checkpoints": "16",
+        "families": "5",
+        "familyMacro": "1.0",
+        "metric": "coveredExactRecallAt3",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.8125",
+        "checkpoints": "16",
+        "families": "5",
+        "familyMacro": "0.85",
+        "metric": "coveredTop1",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.41935483870967744",
+        "checkpoints": "31",
+        "families": "6",
+        "familyMacro": "0.40674603174603174",
+        "metric": "eligibleReadHitAt1",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.5161290322580645",
+        "checkpoints": "31",
+        "families": "6",
+        "familyMacro": "0.5317460317460317",
+        "metric": "eligibleReadHitAt3",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      },
+      {
+        "checkpointMean": "0.8235294117647058",
+        "checkpoints": "68",
+        "families": "6",
+        "familyMacro": "0.7720588235294118",
+        "metric": "recordedActionCorrect",
+        "population": "baselineAvailableSubset",
+        "variant": "rank8"
+      }
+    ],
+    "rank8-differences": [
+      {
+        "ci95": "[-0.06715686274509804, 0.0]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "-0.027941176470588237",
+        "metric": "allPrefixHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[0.0, 0.014705882352941175]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "0.004901960784313725",
+        "metric": "allPrefixHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[0.0, 0.041666666666666664]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "0.013888888888888888",
+        "metric": "coveredExactRecallAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-0.19444444444444442, 0.0]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "-0.08333333333333333",
+        "metric": "coveredTop1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-0.15416666666666667, 0.0]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "-0.06527777777777778",
+        "metric": "eligibleReadHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[0.0, 0.03333333333333333]",
+        "comparator": "headMinusSymbolic",
+        "estimate": "0.011111111111111112",
+        "metric": "eligibleReadHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-0.125, 0.0625]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-0.020833333333333332",
+        "metric": "allPrefixHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[0.0, 0.0625]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.020833333333333332",
+        "metric": "allPrefixHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-6.569831222030975, -2.8351423826997717]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-4.923298371223011",
+        "metric": "binaryLogLoss",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-0.43447966357372153, -0.15069913131274515]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-0.27280330010697407",
+        "metric": "brier",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[0.0, 0.15]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.05",
+        "metric": "coveredExactRecallAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-0.3, 0.15]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-0.05",
+        "metric": "coveredTop1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[-0.25, 0.125]",
+        "comparator": "headMinusGenerative",
+        "estimate": "-0.041666666666666664",
+        "metric": "eligibleReadHitAt1",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      },
+      {
+        "ci95": "[0.0, 0.125]",
+        "comparator": "headMinusGenerative",
+        "estimate": "0.041666666666666664",
+        "metric": "eligibleReadHitAt3",
+        "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+        "variant": "rank8"
+      }
+    ],
+    "symbolic-order": [
+      {
+        "covered": "28",
+        "population": "all",
+        "recall3": "27.0",
+        "top1": "24"
+      },
+      {
+        "covered": "16",
+        "population": "generativeAvailable",
+        "recall3": "16.0",
+        "top1": "16"
+      },
+      {
+        "covered": "12",
+        "population": "generativeUnavailable",
+        "recall3": "11.0",
+        "top1": "8"
+      }
+    ]
+  }
+}

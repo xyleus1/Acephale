@@ -1,0 +1,740 @@
+{
+  "kind": "acephale-saved-figure-data-v1",
+  "newEstimates": false,
+  "tables": {
+    "coverage": {
+      "bytes": 107,
+      "rows": [
+        {
+          "eligible": "46",
+          "fullPoolHits": "0",
+          "population": "visitCoverage",
+          "unavailable": "0",
+          "windowHits": "0"
+        },
+        {
+          "eligible": "86",
+          "fullPoolHits": "0",
+          "population": "allReadCoverage",
+          "unavailable": "0",
+          "windowHits": "0"
+        }
+      ],
+      "sha256": "b544c2b1c8c750d8e7dada4b0e99d130319b67b9d750076b4970f1edc6dfe0ab"
+    },
+    "exposure": {
+      "bytes": 152,
+      "rows": [
+        {
+          "admissionEvents": "0",
+          "arm": "acephale",
+          "consumedReads": "0",
+          "measuredPairs": "22",
+          "tasksWithConsumption": "0"
+        },
+        {
+          "admissionEvents": "0",
+          "arm": "neutral_memory_prefetch",
+          "consumedReads": "0",
+          "measuredPairs": "21",
+          "tasksWithConsumption": "0"
+        },
+        {
+          "admissionEvents": "24",
+          "arm": "symbolic_prefetch",
+          "consumedReads": "0",
+          "measuredPairs": "23",
+          "tasksWithConsumption": "0"
+        }
+      ],
+      "sha256": "6ccd151565f354a62490b9db763a13dd48c9a7db862ae0340eea8579c7476cdf"
+    },
+    "frozen_head-comparison": {
+      "bytes": 1658,
+      "rows": [
+        {
+          "checkpointMean": "0.16176470588235295",
+          "checkpoints": "136",
+          "families": "6",
+          "familyMacro": "0.15338505803659255",
+          "metric": "allPrefixHitAt1",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.20588235294117646",
+          "checkpoints": "136",
+          "families": "6",
+          "familyMacro": "0.18622819529149454",
+          "metric": "allPrefixHitAt3",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.5088242282448558",
+          "checkpoints": "112",
+          "families": "6",
+          "familyMacro": "0.45559066498607365",
+          "metric": "binaryLogLoss",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.08991465994523444",
+          "checkpoints": "112",
+          "families": "6",
+          "familyMacro": "0.08060574782751953",
+          "metric": "brier",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "1.0",
+          "checkpoints": "28",
+          "families": "6",
+          "familyMacro": "1.0",
+          "metric": "coveredExactRecallAt3",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.7857142857142857",
+          "checkpoints": "28",
+          "families": "6",
+          "familyMacro": "0.9027777777777778",
+          "metric": "coveredTop1",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.4230769230769231",
+          "checkpoints": "52",
+          "families": "6",
+          "familyMacro": "0.4041666666666667",
+          "metric": "eligibleReadHitAt1",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.5384615384615384",
+          "checkpoints": "52",
+          "families": "6",
+          "familyMacro": "0.48055555555555557",
+          "metric": "eligibleReadHitAt3",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.6985294117647058",
+          "checkpoints": "136",
+          "families": "6",
+          "familyMacro": "0.7106384025181979",
+          "metric": "recordedActionCorrect",
+          "population": "allDevelopment",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.22058823529411764",
+          "checkpoints": "68",
+          "families": "6",
+          "familyMacro": "0.23651960784313725",
+          "metric": "allPrefixHitAt1",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.23529411764705882",
+          "checkpoints": "68",
+          "families": "6",
+          "familyMacro": "0.25735294117647056",
+          "metric": "allPrefixHitAt3",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.8302060124500023",
+          "checkpoints": "44",
+          "families": "6",
+          "familyMacro": "1.178917518768361",
+          "metric": "binaryLogLoss",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.15730206787068962",
+          "checkpoints": "44",
+          "families": "6",
+          "familyMacro": "0.2387850738522808",
+          "metric": "brier",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "1.0",
+          "checkpoints": "16",
+          "families": "5",
+          "familyMacro": "1.0",
+          "metric": "coveredExactRecallAt3",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.9375",
+          "checkpoints": "16",
+          "families": "5",
+          "familyMacro": "0.95",
+          "metric": "coveredTop1",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.4838709677419355",
+          "checkpoints": "31",
+          "families": "6",
+          "familyMacro": "0.49007936507936506",
+          "metric": "eligibleReadHitAt1",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.5161290322580645",
+          "checkpoints": "31",
+          "families": "6",
+          "familyMacro": "0.5317460317460317",
+          "metric": "eligibleReadHitAt3",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        },
+        {
+          "checkpointMean": "0.7058823529411765",
+          "checkpoints": "68",
+          "families": "6",
+          "familyMacro": "0.6854575163398693",
+          "metric": "recordedActionCorrect",
+          "population": "baselineAvailableSubset",
+          "variant": "frozen_head"
+        }
+      ],
+      "sha256": "b99f2e43146e4f473e3f1f5ef3c116c4376fdf0c2d744933a264abc33aa95e1b"
+    },
+    "frozen_head-differences": {
+      "bytes": 3630,
+      "rows": [
+        {
+          "ci95": "[-0.02990196078431373, 0.0]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "-0.013235294117647059",
+          "metric": "allPrefixHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[0.0, 0.014705882352941175]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "0.004901960784313725",
+          "metric": "allPrefixHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[0.0, 0.041666666666666664]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "0.013888888888888888",
+          "metric": "coveredExactRecallAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-0.09722222222222221, 0.0]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "-0.041666666666666664",
+          "metric": "coveredTop1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-0.07361111111111111, 0.0]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "-0.03194444444444444",
+          "metric": "eligibleReadHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[0.0, 0.03333333333333333]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "0.011111111111111112",
+          "metric": "eligibleReadHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-0.0625, 0.125]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.020833333333333332",
+          "metric": "allPrefixHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[0.0, 0.0625]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.020833333333333332",
+          "metric": "allPrefixHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-5.675905776133149, -2.595730773485108]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-4.382983489311013",
+          "metric": "binaryLogLoss",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-0.4304860975953336, -0.08125209513559181]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-0.2403637318101266",
+          "metric": "brier",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[0.0, 0.15]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.05",
+          "metric": "coveredExactRecallAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-0.15, 0.3]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.05",
+          "metric": "coveredTop1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[-0.125, 0.25]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.041666666666666664",
+          "metric": "eligibleReadHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        },
+        {
+          "ci95": "[0.0, 0.125]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.041666666666666664",
+          "metric": "eligibleReadHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "frozen_head"
+        }
+      ],
+      "sha256": "730eacbbb479c582cf6cefedc541a7a373d8428a209b024bb876c3bce0b3d522"
+    },
+    "head-availability": {
+      "bytes": 105,
+      "rows": [
+        {
+          "available": "469",
+          "declared": "469",
+          "stage": "head weight fit"
+        },
+        {
+          "available": "136",
+          "declared": "136",
+          "stage": "head development"
+        },
+        {
+          "available": "68",
+          "declared": "136",
+          "stage": "decoder development"
+        }
+      ],
+      "sha256": "3d9dc2a2173f9762e8322d1b17e7b9e1a9eaaf71c4d309799138d82dca84d2f6"
+    },
+    "outcomes": {
+      "bytes": 493,
+      "rows": [
+        {
+          "arm": "base",
+          "completed": "33",
+          "errors": "4",
+          "latencyN": "40",
+          "maxSteps": "2",
+          "meanSeconds": "76.91241846119983",
+          "missing": "0",
+          "observed": "40",
+          "ownerClosed": "40",
+          "p95Seconds": "311.9281817683993",
+          "scheduled": "40",
+          "stage": "development",
+          "timeouts": "1",
+          "unknownChargeRows": "5"
+        },
+        {
+          "arm": "symbolic_prefetch",
+          "completed": "24",
+          "errors": "13",
+          "latencyN": "40",
+          "maxSteps": "3",
+          "meanSeconds": "71.28190897960012",
+          "missing": "0",
+          "observed": "40",
+          "ownerClosed": "40",
+          "p95Seconds": "174.58295532719725",
+          "scheduled": "40",
+          "stage": "development",
+          "timeouts": "0",
+          "unknownChargeRows": "2"
+        },
+        {
+          "arm": "neutral_memory_prefetch",
+          "completed": "22",
+          "errors": "16",
+          "latencyN": "40",
+          "maxSteps": "2",
+          "meanSeconds": "62.50260764192499",
+          "missing": "0",
+          "observed": "40",
+          "ownerClosed": "40",
+          "p95Seconds": "204.47497335989877",
+          "scheduled": "40",
+          "stage": "development",
+          "timeouts": "0",
+          "unknownChargeRows": "5"
+        },
+        {
+          "arm": "acephale",
+          "completed": "23",
+          "errors": "16",
+          "latencyN": "40",
+          "maxSteps": "1",
+          "meanSeconds": "73.53387057439996",
+          "missing": "0",
+          "observed": "40",
+          "ownerClosed": "40",
+          "p95Seconds": "218.06877367889822",
+          "scheduled": "40",
+          "stage": "development",
+          "timeouts": "0",
+          "unknownChargeRows": "5"
+        }
+      ],
+      "sha256": "a68948e2d3da7a9eadeaada6a6a4454b332e1a3621e42cca6a446db35118bde3"
+    },
+    "rank8-comparison": {
+      "bytes": 1541,
+      "rows": [
+        {
+          "checkpointMean": "0.13970588235294118",
+          "checkpoints": "136",
+          "families": "6",
+          "familyMacro": "0.1386791756836514",
+          "metric": "allPrefixHitAt1",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.20588235294117646",
+          "checkpoints": "136",
+          "families": "6",
+          "familyMacro": "0.18622819529149454",
+          "metric": "allPrefixHitAt3",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.25510201766320684",
+          "checkpoints": "112",
+          "families": "6",
+          "familyMacro": "0.23234071409339926",
+          "metric": "binaryLogLoss",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.07764514001637883",
+          "checkpoints": "112",
+          "families": "6",
+          "familyMacro": "0.07000951601339346",
+          "metric": "brier",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "1.0",
+          "checkpoints": "28",
+          "families": "6",
+          "familyMacro": "1.0",
+          "metric": "coveredExactRecallAt3",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.6785714285714286",
+          "checkpoints": "28",
+          "families": "6",
+          "familyMacro": "0.8611111111111112",
+          "metric": "coveredTop1",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.36538461538461536",
+          "checkpoints": "52",
+          "families": "6",
+          "familyMacro": "0.37083333333333335",
+          "metric": "eligibleReadHitAt1",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.5384615384615384",
+          "checkpoints": "52",
+          "families": "6",
+          "familyMacro": "0.48055555555555557",
+          "metric": "eligibleReadHitAt3",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.75",
+          "checkpoints": "136",
+          "families": "6",
+          "familyMacro": "0.7743864351760771",
+          "metric": "recordedActionCorrect",
+          "population": "allDevelopment",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.19117647058823528",
+          "checkpoints": "68",
+          "families": "6",
+          "familyMacro": "0.1948529411764706",
+          "metric": "allPrefixHitAt1",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.23529411764705882",
+          "checkpoints": "68",
+          "families": "6",
+          "familyMacro": "0.25735294117647056",
+          "metric": "allPrefixHitAt3",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.45403093824921625",
+          "checkpoints": "44",
+          "families": "6",
+          "familyMacro": "0.6386026368563632",
+          "metric": "binaryLogLoss",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.14099805509995514",
+          "checkpoints": "44",
+          "families": "6",
+          "familyMacro": "0.20634550555543335",
+          "metric": "brier",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "1.0",
+          "checkpoints": "16",
+          "families": "5",
+          "familyMacro": "1.0",
+          "metric": "coveredExactRecallAt3",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.8125",
+          "checkpoints": "16",
+          "families": "5",
+          "familyMacro": "0.85",
+          "metric": "coveredTop1",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.41935483870967744",
+          "checkpoints": "31",
+          "families": "6",
+          "familyMacro": "0.40674603174603174",
+          "metric": "eligibleReadHitAt1",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.5161290322580645",
+          "checkpoints": "31",
+          "families": "6",
+          "familyMacro": "0.5317460317460317",
+          "metric": "eligibleReadHitAt3",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        },
+        {
+          "checkpointMean": "0.8235294117647058",
+          "checkpoints": "68",
+          "families": "6",
+          "familyMacro": "0.7720588235294118",
+          "metric": "recordedActionCorrect",
+          "population": "baselineAvailableSubset",
+          "variant": "rank8"
+        }
+      ],
+      "sha256": "d3123931c29036f257c85610ffe570ccb8f8765a06a1b1ee9ee5644d633ad342"
+    },
+    "rank8-differences": {
+      "bytes": 3551,
+      "rows": [
+        {
+          "ci95": "[-0.06715686274509804, 0.0]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "-0.027941176470588237",
+          "metric": "allPrefixHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[0.0, 0.014705882352941175]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "0.004901960784313725",
+          "metric": "allPrefixHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 136, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[0.0, 0.041666666666666664]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "0.013888888888888888",
+          "metric": "coveredExactRecallAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-0.19444444444444442, 0.0]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "-0.08333333333333333",
+          "metric": "coveredTop1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 28, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-0.15416666666666667, 0.0]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "-0.06527777777777778",
+          "metric": "eligibleReadHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[0.0, 0.03333333333333333]",
+          "comparator": "headMinusSymbolic",
+          "estimate": "0.011111111111111112",
+          "metric": "eligibleReadHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 52, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-0.125, 0.0625]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-0.020833333333333332",
+          "metric": "allPrefixHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[0.0, 0.0625]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.020833333333333332",
+          "metric": "allPrefixHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 68, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-6.569831222030975, -2.8351423826997717]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-4.923298371223011",
+          "metric": "binaryLogLoss",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-0.43447966357372153, -0.15069913131274515]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-0.27280330010697407",
+          "metric": "brier",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 44, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[0.0, 0.15]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.05",
+          "metric": "coveredExactRecallAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-0.3, 0.15]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-0.05",
+          "metric": "coveredTop1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 5, \"paired_trials\": 16, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[-0.25, 0.125]",
+          "comparator": "headMinusGenerative",
+          "estimate": "-0.041666666666666664",
+          "metric": "eligibleReadHitAt1",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        },
+        {
+          "ci95": "[0.0, 0.125]",
+          "comparator": "headMinusGenerative",
+          "estimate": "0.041666666666666664",
+          "metric": "eligibleReadHitAt3",
+          "originalDetails": "{\"bootstrap_samples\": 2000, \"bootstrap_seed\": 42, \"families\": 6, \"paired_trials\": 31, \"weighting\": \"equal_family_mean_of_paired_trial_differences\"}",
+          "variant": "rank8"
+        }
+      ],
+      "sha256": "76826addd9b419891e831d2b73dfbd2655959ea138b5597df48f764bd82a22cd"
+    },
+    "symbolic-order": {
+      "bytes": 114,
+      "rows": [
+        {
+          "covered": "28",
+          "population": "all",
+          "recall3": "27.0",
+          "top1": "24"
+        },
+        {
+          "covered": "16",
+          "population": "generativeAvailable",
+          "recall3": "16.0",
+          "top1": "16"
+        },
+        {
+          "covered": "12",
+          "population": "generativeUnavailable",
+          "recall3": "11.0",
+          "top1": "8"
+        }
+      ],
+      "sha256": "04bc8401a9562ee2c5dc723af9b9e3e8d3e786c3c477ad4e4751880f76e5236e"
+    }
+  }
+}

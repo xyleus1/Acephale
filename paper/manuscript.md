@@ -1,211 +1,262 @@
-# Source-grounded goal conditioning for speculative read execution in language-model agents
+# Acephale V2: goal-conditioned speculative reads under exact-source constraints
 
-**Working paper - incomplete study. Accepted seed17 evidence is retained; the additional distributed seed29 replay and CPU analysis are reported separately as UNVALIDATED. One UNVALIDATED paired native case is reported; the native comparison remains incomplete. Seed29 teacher agreement and reliability are reported separately from task accuracy.**
+23 November 2026
+
+Working paper. All failed, unavailable, censored and undispatched outcomes remain in their original denominators.
 
 ## Abstract
 
-We study whether source-grounded representations of a user's requested outcome help an auxiliary predictor select useful read-only tool invocations while an unchanged language-model actor is generating. Acephale combines workflow and episodic memory with explicit argument binding, calibrated invocation scores and deployment-specific admission measurements. Speculative results remain isolated until the actor requests the exact invocation and validation succeeds. The frozen study separates common-panel replay, prefix-level opportunity profiling and paired native outcomes. In retained seed17 replay, 230 jointly scored checkpoints across 34 families yield an equal-family neutral-minus-goal-conditioned log-loss difference of 0.126 nats (95% bootstrap interval 0.021 to 0.265) and Brier difference of 0.0173 (0.0046 to 0.0341). However, each condition retained 412 failures among 746 declared checkpoints; these observed-subset estimates do not establish an all-checkpoint or heldout benefit. The study is an exploratory, machine-audited custom tau-compatible pilot, with zero human annotation reviews. The subsequent seed17 opportunity profile completed eight of twenty measurements and retained twelve profile failures, below the unchanged minimum of ten required for aggregation. No opportunity aggregate was accepted. The frozen dependency graph now has three accepted components, one failed component, four blocked descendants and four pending independent components. The unchanged full protocol cannot complete because of the failed prerequisite. A separate UNVALIDATED distributed replay amendment retained all 2,238 condition-checkpoint records. Its original CPU analysis used 442 jointly scored checkpoints across 36 families and reported neutral-minus-goal-conditioned log-loss difference -0.012936 nats (95% interval -0.084643 to 0.093218) and Brier difference 0.005168 (-0.005044 to 0.022080). Both intervals include zero. Hardware, serving-runtime corrections and scheduling changed, so this is not a clean seed replication. The separate seed29 opportunity continuation retained seven completed rows, twelve measured read misses and one interruption-censored row, below the same minimum of ten. One UNVALIDATED custom native paired case recorded DB-based reward 1.0 and zero configured constraint violations in each of three arms. No speculative calls occurred, and every timing was marked invalid. This working paper does not estimate aggregate native task success or establish superiority, equivalence or a comparative speedup.
+We study whether source-grounded goal inference can improve speculative tool reads for a fixed language-model actor. The design separates candidate availability, prediction, safe execution, and end-to-end task outcomes. A prospective research cohort contains 36 source-collection runs, 160 paired development trials, and a conditional 400-trial heldout stage. A separate native-prefix head experiment compares complete training recipes rather than isolating architecture. The original 132-trial fast-tool study remains an immutable negative control.
 
-## 1. Introduction
+**Primary comparison unavailable.** The retained final analyzer reports development-gate passage as no. Unavailable, failed, censored and undispatched cases remain explicit. Report completion is not independently judged task success.
 
-Tool latency and model generation occupy different parts of an agent's execution path. Predicting an authorized read before the actor requests it may hide some latency, but prediction errors can waste work and simultaneous requests can contend for serving resources. Successful speculation therefore requires more than an accurate next-call classifier: it also requires correct argument binding, isolation from authoritative state, cancellation and a useful overlap window on the actual deployment.
+## Question and mechanism
 
-A user's requested outcome offers additional information about future reads. Its value is empirical: inferred goals can be incorrect, retrieval can distract the predictor, and extra inference can erase saved tool latency. We distinguish prediction evidence from operational admission and task-level evaluation. None substitutes for the others.
+Goal conditioning can only help after an exact future read is represented in the current candidate set. The actor remains authoritative. Exact-request reuse targets latency while leaving the actor and its tool decisions fixed; it does not train the actor or directly establish improved decision quality. Candidates are read-only visit calls grounded in URLs from actual preceding search responses, linked by real tool-call IDs. Historical memory cannot authorize a new URL. The scheduler still requires current bindings, exact invocation matching, freshness, finite leases and cancellation drain. Predicted goals and probabilities do not grant execution authority.
 
-Acephale uses a frozen actor and a smaller auxiliary predictor. Goal hypotheses represent mutually exclusive interpretations of the complete requested outcome, including concurrent explicit objectives. Execution permission is checked independently. The actor receives a prefetched result only after asking for that invocation and passing validation. The mechanism does not change actor weights or claim an engine-level vLLM co-scheduler.
+A common, goal-neutral pool of at most 128 candidates feeds a token-fitted window of at most 32; at most three are selected. Full-pool, window and ranked coverage have different denominators. An absent candidate cannot be recovered by a better ranker. Neutral and conditional scores use the same frozen panel; labels join only after that panel closes.
 
-The intended contributions are a goal-conditioned prediction and binding mechanism, deployment-bound admission measurements that account for benefits and overhead, and an evaluation separating replay, prefix profiling and paired native outcomes. The retained evidence tests only part of that intended claim. The failed opportunity prerequisite prevents completion of the full frozen study; the remaining independent chain cannot substitute for the blocked native comparison.
+## Prospective design and execution
 
-## 2. System
+The four arms are demand-only, symbolic prefetch, neutral-memory prefetch, and goal-conditioned memory prefetch. Research protocol 05 fixes the same 24 fitting and 12 calibration families before outcomes; six calibration families fit probability maps and six validate them. Twenty separate development questions, two actor seeds and four arms form 160 fixed trials. The heldout catalog has 50 questions, two seeds and four arms, or 400 trials, only after the original development exposure and latency gate passes.
 
-Public trajectory checkpoints provide messages, tool contracts and current argument evidence. Hidden task state, future actions and independent outcomes are excluded from prediction inputs. Workflow and episodic memory publications are immutable. Candidate construction deduplicates exact invocations, checks current bindings and creates a common token-budgeted window before goal conditioning. Ranking retains at most three selected candidates.
+Researchy Questions supplied the fixed source-collection and development prompts [@researchyquestions]. DeepResearch Bench supplied the conditional heldout task catalog and RACE/FACT evaluation design [@deepresearchbench]. The exact frozen dataset and repository revisions are retained in the reproduction manifest. The heldout stage and its report-quality evaluation were not run because the development gate failed. These citations identify upstream data and methods; they do not imply an official benchmark score.
 
-Default admission limits are two simultaneous speculative reads per run, four globally, twelve speculative starts per run, one-hop lookahead and a five-second deadline. These limits govern work inside a trial; they are not trial concurrency. Authoritative work retains priority. Exact requests may join managed speculative jobs; mutations invalidate stale evidence and shutdown drains children.
+Eight L40S worker roles form four separate actor/predictor pairs. Actor and predictor do not share a GPU. The shared operational permit allows at most two active speculative blocks while preserving the original global read cap of four. Whole question/seed blocks remain the unit of assignment. Resource identity is not an outcome.
 
-Native reads use Python-owned isolated snapshots with freshness checks. Speculative, wasted and validation reads count as physical work even if logical actor calls remain unchanged. A rejected speculative result cannot be presented as an authoritative observation.
+The fixed actor is Qwen3.5-9B; the original generative control uses the trained seed-17 Qwen3.5-0.8B checkpoint [@qwenactor; @qwenpredictor]. Serving retains the original BF16 weights and FP32 decay tensors and the qualified L40S kernel policy. No numerical qualification threshold is changed by this paper. Source-reported research memory records successful exact reads, not verified task success. Cold or unsupported goals abstain; asynchronous goal work is drained at run closure.
 
-## 3. Experimental design
+Paired opportunity probes retain all declared outcomes, including misses, tool errors and no-read boundaries. The first actual visit is the profiled target; the complete ordered actor-action batch must match across arms. Committed-result latency excludes separately retained final drain, whereas full development and heldout timing includes drain. One predeclared goal warmup may support a warm-boundary diagnostic, with its cost reported separately; it does not remove cold overhead from full trials.
 
-The actor is Qwen3.5-9B and the predictor is Qwen3.5-0.8B at the exact revisions in the frozen methods. The actor is unchanged across live arms. Predictor artifacts retain their weight, adapter, precision and numerical-qualification lineage. The serving contract uses the pinned vLLM image and BF16 runtime. The frozen accepted-study path retains its numerical gate. Qualification was deferred only for the explicitly UNVALIDATED distributed continuation below; its outputs are not presented as having passed that gate.
+## Results and denominators
 
-Families are partitioned before annotation and memory mining. Goal annotations observe public checkpoints only. The exploratory annotation audit has zero human reviews. Its separate request and prompt use the same pinned model as the teacher; reviewer-model independence is not claimed. Machine audit does not satisfy the separate human-reviewed design by relabeling reviewers.
+| Stage | Arm | Scheduled | Reports completed | Observed timing n | Mean exit s |
+| --- | --- | --- | --- | --- | --- |
+| Development | Demand-only | 40 | 33 | 40 | 76.912 |
+| Development | Symbolic | 40 | 24 | 40 | 71.282 |
+| Development | Neutral memory | 40 | 22 | 40 | 62.503 |
+| Development | Goal-conditioned | 40 | 23 | 40 | 73.534 |
 
-The frozen replay design compares neutral-fixed, goals-fixed and goals-selected conditions. Fixed-panel comparisons use common candidate IDs and any-next-batch binary labels. The resulting score is not full-action cross entropy or true conditional entropy. The original design runs the three conditions on one host; the separately labeled distributed seed29 continuation described below amends execution placement and does not establish equivalent cache state, scheduling or latency.
+| Stage | Arm | Errors | Step limits | Timeouts | Unknown charge rows |
+| --- | --- | --- | --- | --- | --- |
+| Development | Demand-only | 4 | 2 | 1 | 5 |
+| Development | Symbolic | 13 | 3 | 0 | 2 |
+| Development | Neutral memory | 16 | 2 | 0 | 5 |
+| Development | Goal-conditioned | 16 | 1 | 0 | 5 |
 
-Opportunity profiling reconstructs native state from public prefixes. It pairs identical seeded actor inputs run alone and alongside one neutral ranking request. Once ranking returns, background goal refresh overlaps the admitted native snapshot read and freshness refresh. Pair order alternates. The profiler records gateway-inclusive timing spans, drains background work and retains failures. At least ten completed measurements are required for aggregation. These measurements support an admission heuristic, not a causal task-level speedup estimate.
+All scheduled dispositions remain in the denominator. Report completion is not an independently judged task-success score. Unknown-charge rows remain unresolved accounting evidence, not zero-cost observations.
 
-Live arms are base actor, neutral-memory prefetch and goal-conditioned memory prefetch. Paired blocks share tasks, trial seeds, tools, budgets and step limits; arm order is randomized within declared blocks. Development precedes heldout selection. The original selection receipt determines the eligible heldout subset. Zero eligible blocks is an explicit terminal outcome, not permission to substitute tasks.
+| Arm | Admission events | Consumed reads | Tasks with consumption |
+| --- | --- | --- | --- |
+| Goal-conditioned | 0 | 0 | 0 |
+| Neutral memory | 0 | 0 | 0 |
+| Symbolic | 24 | 0 | 0 |
 
-## 4. Analysis
+Admission events and actual consumed reads are different quantities. The original development gate uses proven consumption, source validity, physical drain, safety, accounting and paired timing; admission alone does not establish treatment benefit.
 
-The unchanged analysis code reports binary log loss, Brier score, common-panel coverage and missing or failed predictions, with its existing family-clustered paired uncertainty calculation. Calibration fits training data only. Development diagnostics do not permit fitting on test labels.
+Observed exit-time summaries include actual failures and timeouts. Missing timings are not imputed. A faster failed exit is not evidence of a task-level speedup.
 
-Native reporting separates reward/pass1, constraints, two-trial consistency, logical actor calls, physical reads and validations, total latency, model overhead, tail denominators and costs. Paired comparisons preserve block identities and failures. Tail estimates require observed sample counts. Partial outcomes cannot be presented with a nominal full-study denominator.
+![Original final-analysis summaries copied into the plot tables. Bars show retained report completion and observation counts; the timing panel is descriptive, not an uncertainty interval.](figures/outcomes.pdf){width=100%}
 
-AWS infrastructure expenditure and hosted model API expenditure are separate accounting categories. Failed infrastructure attempts remain visible even when they generated no model requests. Historical components keep their original execution identities. Operational continuations retain earlier failed generations and the same permanent scientific assignment.
+### Primary comparison and uncertainty
 
-## 5. Retained results, profile failure and study disposition
+The primary claim is unavailable under the original gate or complete-pair requirements. This is not a zero effect estimate. Retained reason: development_gate_failed.
 
-### 5.1 Retained seed17 replay and calibration
+The original analyzer uses paired question-family clusters, 2,000 bootstrap draws and seed 42. The prospective criterion requires at least 5% lower mean latency, a latency-saving interval wholly above zero, and a RACE quality-difference interval lower bound of at least -2 points. RACE ratios are multiplied by 100; FACT remains secondary and descriptive. All 100 heldout timing and quality pairs must be complete for the primary claim. No interval is recomputed by the renderer.
 
-The accepted seed17 analysis contains two distinct fixed-panel reports. The standalone neutral report declared 746 checkpoints: 745 completed prediction and one failed. Scores were available for 600 checkpoints. The goals-fixed report declared the same 746 checkpoints for each condition but recorded 334 completed predictions and 412 failures per condition. Its paired analysis uses 230 jointly scored checkpoints across 34 families. These coverage differences prevent treating the standalone neutral estimate and the goals-fixed estimates as one common-cohort comparison.
+## Candidate and calibration limitations
 
-Within the goals-fixed report's jointly observed cohort, the original equal-family paired analysis estimates neutral minus goal-conditioned binary log loss as 0.125995 nats (95% family bootstrap interval 0.021043 to 0.265059). The corresponding Brier difference is 0.017339 (0.004602 to 0.034146). Positive values favor the goal-conditioned scores on this observed subset. Both intervals come directly from the original report's 2,000 bootstrap samples with seed 42. They do not account for potentially selective missing outcomes, and they do not establish an improvement across all declared checkpoints, fresh heldout tasks or native task execution.
+| Population | Eligible checkpoints | Full-pool hits | Window hits | Unavailable windows |
+| --- | --- | --- | --- | --- |
+| Visit reads | 46 | 0 | 0 | 0 |
+| All reads | 86 | 0 | 0 | 0 |
 
-| Retained report / condition | Declared checkpoints | Prediction completed / failed | Scored checkpoints | Binary log loss (nats) | Brier |
-|---|---:|---:|---:|---:|---:|
-| Standalone neutral | 746 | 745 / 1 | 600 | 1.087892 | 0.111409 |
-| Goals-fixed / neutral | 746 | 334 / 412 | 230 | 1.199627 | 0.107620 |
-| Goals-fixed / goal-conditioned | 746 | 334 / 412 | 230 | 0.969563 | 0.077217 |
+The calibration export retains 98 actor requests, 97 observed label checkpoints and 1 unavailable labels. Observed exact-read labels are evaluated before ranking. The zero-hit calibration population, when present in the table, constrains what any ranker can accomplish on this fixed pool; it is not a proof that goals are useless.
 
-![Retained seed17 replay evidence](figures/seed17-retained-evidence.png)
+The retained URL audit separates exact invocation mismatches from absence in visible sources. Query-only differences include the actor dropping utm_source=openai; no URL normalization is applied retrospectively. Original raw provider response bodies were not retained for this audit, so a discarded clean provider URL cannot be established from hashes alone. Calibration maps and score availability remain tied to the declared families and actual closed exports.
 
-**Figure 1. Retained replay quality and coverage.** The upper panel separates scored checkpoints, checkpoints that completed prediction without a score, and retained failures; the goals-fixed bar applies to both conditions. Lower panels reproduce the original equal-family paired estimates and 95% bootstrap intervals on 230 jointly scored checkpoints in 34 families. Positive differences favor goal-conditioned scores on this observed subset. The standalone neutral report is shown for coverage only and is not the baseline for the paired estimates. Intervals do not incorporate unobserved outcomes. All plotted values come from the accepted report artifacts; no bootstrap was rerun.
+![Coverage and availability copied from their original reports. Unavailable decoder cases remain in the declared denominator rather than becoming negative labels.](figures/coverage.pdf){width=100%}
 
-The two goals-fixed rows share the paired cohort. Their displayed checkpoint means differ from the equal-family paired estimand above. The original reports explicitly disclaim a heldout claim and are not restricted to the test partition. All conditions retain 266 eligible read checkpoints and candidate-panel any-hit coverage 0.458647; this panel-coverage denominator differs from the scored-checkpoint denominator.
+## Native-prefix discriminative-head experiment
 
-The calibration receipt reports six agreements among 141 graded cases and a conservative reliability value of 0.019646160425252017, produced by its reserved-calibration full-cohort 95% Wilson lower-bound method. Separately, the annotation audit accepted 19 of 20 machine-reviewed annotations. There were zero human reviews; the reviewer used a separate request and prompt to the same model. The six-of-141 agreement count and the 19-of-20 annotation audit describe different evaluations.
+The separate dataset contains 469 fitting checkpoints across 24 families and 136 development checkpoints. The original generative predictor was trained on 358 complete multitask checkpoints. This 469-versus-358 comparison changes the full recipe and training coverage; it does not isolate head architecture. The frozen-backbone candidate head emits independent logits from context, optional goals and exact candidate representations; the autoregressive decoder's bit probabilities condition on preceding output tokens.
 
-Sources: accepted seed17 analysis component SHA 647f23466bed49876e0901dda865c121e62e13916d83a3792ddbeccbfd7e511f; [neutral report](sources/seed17-neutral-fixed-score-report.json), [goals-fixed report](sources/seed17-goals-fixed-score-report.json), and [goal reliability](sources/seed17-goal-reliability.json). Exact source, manifest and successful command-receipt hashes are recorded in retained-results-evidence-01.json. Accepted seed29 evidence and the accepted paired native comparison remain absent; Sections 5.4 and 5.7 separately report the UNVALIDATED direct seed29 continuation and one exploratory native case. The failed seed17 opportunity profile is reported below.
+Both native-head recipes use neutral-only examples; this is not a direct test of a goal-conditioned head. The retained recipes use loss weights 0.70 for binary classification, 0.20 for listwise ranking and 0.10 for action prediction; head learning rate 0.0003, backbone learning rate 0.00003, effective batch size 16, three epochs and seed 17. The frozen-backbone variant does not adapt the encoder. The rank-8 variant uses adapter rank 8, alpha 16 and dropout 0.1. Both complete 90 optimizer updates. Development selection uses the same six families, so these results remain exploratory.
 
-### 5.2 Opportunity profiling: retained profile failure
+Of 136 declared decoder development cases, 68 fit its input budget and 68 are explicitly unavailable. The available set includes 24 empty windows and 44 cases requiring generation. Empty windows are not model-generated successes. Same-panel comparisons must use equivalent visible information where both recipes fit and retain the full availability accounting separately.
 
-The subsequent Ohio seed17 opportunity profile evaluated all twenty declared checkpoints under the original protocol. Eight measurements completed; twelve retained the profile failure label actor_did_not_request_profiled_read. The unchanged admission rule requires at least ten completed measurements. The profile therefore recorded readyForAggregation=false, and the whole opportunity unit failed. Its receipt is closed, cleanup failures are empty and all owned children are drained. The twenty row identities and order match the profile plan, and each individual evidence file matches its versioned hash.
+The original symbolic proposal order is an essential diagnostic for this native panel:
 
-![Seed17 opportunity profile disposition](figures/seed17-opportunity-outcome.png)
+| Population | Covered windows | Top1 numerator | Recall3 numerator |
+| --- | --- | --- | --- |
+| All windows | 28 | 24 | 27.000 |
+| Generative-available | 16 | 16 | 16.000 |
+| Generative-unavailable | 12 | 8 | 11.000 |
 
-**Figure 2. Complete disposition of the seed17 opportunity profile.** Of twenty declared profile rows, eight completed and twelve retained the recorded profile failure. Eight is below the original minimum of ten completed measurements, so no opportunity aggregate was accepted. These are profile checkpoints, not completed native task episodes. The figure shows counts only; it does not select the eight completed rows for a latency, speedup or task-success estimate.
+Only 11 covered windows contain more than three candidates. These are conditional ranking metrics on covered reads, not action accuracy or task success. The decoder-available subset is easier under proposal order; its results cannot stand in for all136 windows.
 
-The twelve profile failures remain part of the result. They are not recoded as infrastructure errors or replaced by reruns. The eight completed rows provide descriptive records only; conditioning a performance estimate on that selected subset would omit the failed majority. This paper reports no admission quantiles, latency gain or native score from the profile.
+The separate checkpoint29 sensitivity replay is physically closed on the exact original research calibration export. Its source-bound raw independent-stage results are retained; it is distinct from the historical native replay and does not change the primary calibration or live control. Checkpoint29 uses the restored, historically qualified seven-file runtime, while primary checkpoint17 used the stock runtime; this is checkpoint/runtime sensitivity, not an isolated training-seed effect.
 
-A separate post hoc inspection of retained public responses found that all twelve profile failures requested a different tool from the profiled candidate in both paired actor responses. This describes candidate alignment at those checkpoints, not actor correctness or customer-task failure, and it does not change the recorded labels. [The descriptive inventory](posthoc/posthoc-note.md) remains separate from the original outcome and its acceptance gate.
+### Frozen-backbone head
 
-Two earlier operational executions had each recorded twenty failures before timing spans or model requests, from missing native dependencies and an unresolved historical task-bundle path. Those forty pre-model error records are retained separately. They are repeated operational records for the same twenty declared checkpoints, not forty additional scientific trials and not part of the twenty-row scientific denominator. The prior offline prefix-construction check was operational readiness evidence only.
+Actual optimizer updates: 90; selected epoch 1. Selection uses this variant's development Recall@3, with binary log loss as tie-break. This is not heldout evaluation, calibration, or selection between the two variants.
 
-Sources: the versioned generation06 worker result SHA 63a713b4df5844a2df542412832db10e62aaf221c1531e5e0ba440b93c00f28c, the twenty-row measurements file SHA 41d8f3de2b114220b3789ddee28a43069582acd2cc67982ac22aa8ff16a7b6ed, and the closed profile receipt SHA cc83d0a8b16f7503e630c6bc1e8a3fd8fea582afe279c785b297cb7df7f98df6. [Exact source and row lineage](negative-outcome-evidence.json) retain all twenty outcomes and the same permanent assignment.
-
-### 5.3 Frozen dependency-graph disposition
-
-A read-only claim observation on 22 November 2026 at 06:26 UTC confirmed the following disposition. Accepted and failed states come from the permanent claims. Blocking is derived from the unchanged prerequisite graph; it is not a newly written claim or a replacement failure label.
-
-| Unit state | Count | Components |
-|---|---:|---|
-| Accepted | 3 | Export; seed17 replay; seed17 analysis |
-| Failed | 1 | Seed17 opportunity profile |
-| Derived blocked | 4 | Development2; heldout selection; heldout1; heldout2 |
-| Pending | 4 | Seed29 replay; seed29 analysis; seed29 opportunity; development1 |
-
-The failed seed17 opportunity is required by development2 and heldout1; the remaining blocked components inherit that dependency. Thus the complete frozen benchmark is unavailable under the unchanged protocol, irrespective of additional GPU capacity. We report this as a negative and incomplete study outcome rather than silently dropping the prerequisite, replacing the failed profile, or reporting unobserved heldout scores.
-
-The four pending components form an independent continuation chain and may add accepted evidence under their existing gates. Even if all four succeed, the disposition would be seven accepted, one failed and four blocked components; it would not become a completed full study. No pending value is imputed as zero. The frozen accepted native comparison remains incomplete. The separate UNVALIDATED observations in Sections 5.6 and 5.7 retain their own completed, failed and censored denominators and do not change this accepted-study disposition.
-
-The [incomplete-report sidecar](disposition/incomplete-report.json) binds the observation and derived reasons. Its reporting adapter emits studyComplete=false and copies accepted report values without recomputation. It does not change the scientific scheduler, claims, validators or full-study finalizer.
-
-### 5.4 Distributed seed29 replay: unvalidated research continuation
-
-A separate direct research continuation retained all 2,238 planned condition-checkpoint pairs across the three original conditions, with no missing checkpoint records in the collector's coverage report. Prediction status is not scorer inclusion: neutral-fixed retained 745 completed predictions and one failure; goals-fixed retained 582 completed predictions and 164 failures; goals-selected retained 583 completed predictions and 163 failures. The failures remain part of their original declared denominators. These outputs are UNVALIDATED and do not change the three previously accepted components.
-
-![Unvalidated seed29 completion coverage](figures/seed29-record-coverage.png)
-
-**Figure 3. UNVALIDATED distributed replay completion coverage.** Each condition retained 746 declared condition-checkpoint records. The bars show terminal prediction completion and failure, not scored-checkpoint coverage, goal accuracy, tool accuracy or task success. A completed prediction may have no candidate score; all failed records remain in the denominator. Counts are copied from the complete collector without reclassification.
-
-The original CPU score producer computed the following raw-score reports. The standalone neutral estimate uses 600 scored checkpoints. The goals-fixed comparison uses 442 jointly scored checkpoints in 36 families; its neutral row is not interchangeable with the standalone neutral cohort. Each scored probability concerns next-batch invocation membership among at most three preselected candidates, not full-action entropy or actor task success.
-
-| Unvalidated seed29 report / condition | Declared | Prediction completed / failed | Scored checkpoints | Binary log loss (nats) | Brier |
-|---|---:|---:|---:|---:|---:|
-| Standalone neutral | 746 | 745 / 1 | 600 | 0.969907 | 0.138736 |
-| Goals-fixed / neutral | 746 | 582 / 164 | 442 | 0.953270 | 0.132904 |
-| Goals-fixed / goal-conditioned | 746 | 582 / 164 | 442 | 0.986412 | 0.129955 |
-
-The original equal-family paired analysis reports neutral minus goal-conditioned log loss of -0.012936 nats (95% family bootstrap interval -0.084643 to 0.093218), and Brier difference of 0.005168 (-0.005044 to 0.022080). Both intervals include zero. Neither superiority nor equivalence is established. The estimates do not support a general goal-conditioning improvement; their signs differ by metric, and neither addresses selective missing outcomes. The intervals were copied from the original producer's 2,000 bootstrap samples, seed 42; none was recomputed for this paper. Displayed checkpoint means must not be subtracted to reconstruct the equal-family estimand.
-
-![Unvalidated paired seed29 differences](figures/seed29-paired-differences.png)
-
-**Figure 4. UNVALIDATED distributed replay paired score differences.** The original equal-family neutral-minus-goal-conditioned estimand uses 442 jointly scored checkpoints in 36 families. Positive differences favor goal-conditioned scores. Points and 95% intervals are copied from the original 2,000-draw family bootstrap with seed 42; no bootstrap was rerun. Both intervals include zero. These conditional-on-observation intervals neither correct selective missingness nor establish superiority, equivalence, task success or latency benefit.
-
-The two reports explicitly set heldout_claim=false and test_partition_only=false. The separate panel-coverage denominator is 266 eligible-read checkpoints, with candidate-panel any-hit coverage 0.458647; it is not the 600- or 442-checkpoint score denominator. Goal-inference confidence values are not binary candidate probabilities. A successful goal-inference response does not imply a scoring-eligible checkpoint or correct goal.
-
-The original probability-calibration continuation completed after restoration of its required input path, using the retained goals-selected records. It fitted 172 candidate-label samples in six reserved calibration families and evaluated 185 samples in six development families; these are candidate-label samples, not native episodes or total checkpoint counts. The report states validationUsedForFit=false and heldoutClaim=false. The method is the original fixed-decile, empty-bin-forward-merge, Laplace(1,1) estimator.
-
-| Calibration development subset | Samples / positives | Raw log loss | Calibrated log loss | Raw Brier | Calibrated Brier |
-|---|---:|---:|---:|---:|---:|
-| Neutral | 185 / 23 | 0.701069 | 0.285588 | 0.089336 | 0.078376 |
-| Goal-conditioned | 185 / 23 | 0.751101 | 0.286788 | 0.091133 | 0.079732 |
-
-These calibration diagnostics have no new interval or heldout claim. They are separate from the raw fixed-panel replay scores and from the completed seed29 teacher grading and goal-reliability computation in Section 5.5. The exploratory native case in Section 5.7 is separate from these calibration diagnostics. The historical seed17 reliability value is not reused as a newly measured seed29 value.
-
-Execution placement was amended to distribute exact assigned row subsets across the AWS fleet. The original declared models, adapter weights, input hashes and decoding settings were retained, but the hardware configuration, serving-runtime corrections and distributed scheduling changed; full qualification was deferred and outputs remained UNVALIDATED. This is not a clean seed replication: cross-run differences cannot be attributed solely to the seed. The amendment does not establish identical serving-cache state, contention or timing across hosts. Shard timings are not pooled into speedup, throughput or live-task latency claims. The original accepted seed17 results remain separate and no cross-seed gain is inferred.
-
-Sources: goals-fixed report SHA 9e64b8213fdf474b2548168912d67209a4a83fe9361b59bd5b931363faca63c5; standalone neutral report SHA b361bba09c411dffdf930c51740d61b3741c0b4839a74c36692cece8ab71c515; calibration report SHA d5ad3f70f35531a57b316240c7057fbbb8b7b50a73425a7875fdfb57f03d42f4; calibration artifact SHA ffc6958173ece415298b58c5557a0f2032fbe31485d01c3ed65134e38ecbf556. [Public source reports and copied provenance](seed29-unvalidated/README.md) bind the exact original artifact hashes; private command receipts and versioned storage evidence remain retained separately.
-
-
-### 5.5 Seed29 machine grading and recorded goal reliability
-
-The original reserved-calibration grading output retained 141 records. It returned 93 teacher responses across two batches (47 and 46). Forty records retained prediction_miss and eight retained context_rejected; those records did not generate grading requests and remain disagreements under the original rule. They belong to this 141-record calibration cohort, not to additional replay checkpoints or native episodes. They are not removed from the recorded reliability denominator.
-
-| Recorded teacher/grading disposition | Count |
-|---|---:|
-| Retained calibration records | 141 |
-| Returned teacher responses | 93 (47 + 46) |
-| prediction_miss | 40 |
-| context_rejected | 8 |
-| Agreed under the strict semantic rubric | 15 |
-
-Before grading, the original compiler selects the maximum-probability inferred hypothesis and the maximum-confidence reference annotation, each including its unknown option. The grading predicate then requires a source-bound, schema-valid teacher response with agreed=true and no missing constraints or contradictions. The reliability producer retains failed goal predictions as disagreements and uses its declared eligible full cohort. Here the artifact records gradedCount=141 and agreedCount=15, with method reserved_calibration_full_cohort_wilson_lower_95 and a recorded lower bound of 0.06553601106011342. This value is copied from the original output, not recomputed for the paper. It is a conservative teacher-agreement reliability bound, not a Top-1 prediction-accuracy estimate, a calibrated task-success probability, or an execution-performance result. No Top-1 value is inferred from the agreement count.
-
-The original delivery receipts record zero unresolved hosted requests, an accounting closure field rather than a new accuracy measure. All 93 returned responses were retained, and completed hosted requests were not repeated for the CPU reliability continuation. The artifact also carries the historical 19-of-20 machine annotation-audit result and zero human reviews; those inherited audit fields are not a new seed29 audit or the 15-of-141 agreement evaluation. The continuation's historical audit-completion flag remains false, and the study remains machine-audited and exploratory.
-
-Sources: [original goal-reliability artifact](seed29-unvalidated/sources/goal-reliability.json), SHA 347203b9ac9c1fd65e2c2f4ee5ab2c5fe6737d1512ca550eea29b353d01a56d5; [original report](seed29-unvalidated/sources/goal-reliability-report.json); and [copied disposition with source hashes](seed29-unvalidated/sources/teacher-disposition.json). These additions remain UNVALIDATED under the distributed research amendment. They do not change accepted component status or relax a failed profile gate. The separately labeled native observations below do not complete the frozen native comparison.
-
-### 5.6 Seed29 opportunity continuation: below the original completion threshold
-
-The separate UNVALIDATED seed29 opportunity continuation retained all twenty original row identities. Its final disposition is seven completed rows, twelve measured rows carrying actor_did_not_request_profiled_read, and one row censored by host interruption. The censored row is not a zero-request or completed observation. The owner's combined failed count of thirteen includes that censored row; it is not thirteen measured read misses.
-
-| Original profile disposition | Rows |
-|---|---:|
-| Completed | 7 |
-| Measured read miss | 12 |
-| Interruption-censored | 1 |
-| Original minimum completed rows required | 10 |
-
-A read miss means the actor did not request the profiled invocation under the original matching predicate. It is not evidence that the actor failed the customer task. The unchanged minimum-ten gate was not met. No resampling, replacement rows or reruns were used to meet the threshold, and no accepted opportunity aggregate is reported. The seven completed rows cannot establish a current-hardware profile by selected-subset analysis or historical estimate transfer. This disposition is distinct from the earlier seed17 profile with eight completed rows and does not alter canonical accepted-component status.
-
-Source: [copied terminal disposition](native-unvalidated/seed29-opportunity-disposition.json), bound to original terminal-note SHA 8a3ba44c99e2a1c1c13238949b8b2a512abe5fc6b9ca8155b9405ad773acfae7 and its retained artifact index. No new profile statistics are computed here.
-
-### 5.7 One UNVALIDATED native paired development case
-
-One original paired development block on a custom retail-composition task completed its three arms in the declared order: base, Acephale, then neutral-memory prefetch (seed 17, trial 0). The table copies the saved evaluator verdicts and call counters. It does not infer task reward from runtime success or user_stop termination.
-
-| Arm | Native reward | Constraint violations | Hosted / authoritative calls | Speculative calls |
-|---|---:|---:|---:|---:|
-| Base | 1.0 | 0 | 7 / 7 | 0 |
-| Acephale | 1.0 | 0 | 6 / 7 | 0 |
-| Neutral-memory prefetch | 1.0 | 0 | 6 / 6 | 0 |
-
-Each original evaluator output has reward basis DB, database match=true and DB reward=1.0. Two action checks matched and two configured natural-language assertions were recorded as met. The saved evaluationValid and judgeAssertionCoverage fields are true; requiredJudgeAssertionCoverage remains null. Constraint coverage is limited to configured_native_nl_assertions_only, not every possible policy obligation. This is a custom tau-compatible case, not an official benchmark task score or an estimate of population task accuracy.
-
-Every arm records zero speculative calls and zero useful speculative calls. Every timing has measuredTimingValid=false, hostGuardConfigured=false and hostHealthStatus=unobserved under the recorded missing-guard-only waiver. The raw end-to-end clocks are retained in the companion data for audit only; no comparative speedup, latency effect, mean or confidence interval is reported. Qualification and validation were not asserted.
-
-The original summary records $0.047876 of known hosted user-and-judge usage across this block, with GPU infrastructure cost tracked separately. This observed accounting field is not a funding-approval claim. The earlier block00's three infrastructure failures and three unknown-charge flags remain separate retained outcomes; this later block neither replaces them nor clears their accounting holds. Historical annotation-audit fields carried in the summary are not a new audit of these three outcomes.
-
-Source: [copied original per-arm fields and provenance](native-unvalidated/native-block01.json), bound to read-only extraction SHA 2593577b487e81796a87e3754fd194ce7bb86b45113bdc4a2264c3cb0b4f0a02 and the three original result hashes. These observations remain exploratory and UNVALIDATED; one block with no speculative activity does not establish comparative benefit.
-
-## 6. Numerical diagnostics outside the scientific outcomes
-
-Separate serving diagnostics investigated a seed29 numerical-qualification mismatch. They are not replay scores, native task outcomes, or accepted study units. The original frozen probe probability is 0.23370635691404026, with an unchanged absolute-difference tolerance of 0.01 and a top-token requirement. A retained original baseline response was 0.21206880435710532; that baseline sequence was partial. Three requested cold/warm/cold checks of the beta-rounding candidate and the later beta-plus-KKT candidate each recorded 0.22270013882530884, with recorded error 0.011006218088731423, still above tolerance. Later Virginia session03 and Ohio session04 each recorded three trained checks at 0.21206880435710532, with error 0.021637552556934947. Their equal conditional probabilities do not imply identical raw logits, and none of these checks established qualification.
-
-The route evidence limits causal interpretation. Ohio's selected prefill backend was FlashInfer, which bypassed the modified Triton KKT source on that path. Virginia's startup selected Triton/FLA, but a startup record is not a per-request trace of every modified kernel. Installed source changes and compiled cache artifacts therefore do not prove execution of all proposed corrections. Cached-token telemetry was null; requested cold/warm/cold labels do not establish actual cache state. The separate HF reference result does not constitute a serving-engine qualification pass.
-
-The [first diagnostic note](notes/numerical-validation-20261122/README.md) and [follow-up record](notes/numerical-validation-20261122-followup/README.md) preserve exact source digests, settings, recorded comparisons and formal handbacks. Those handbacks recorded drained diagnostic processes and restored serving; they did not authorize scientific acceptance. We infer no task-accuracy, latency, throughput, complete root cause, or effective mathematical correction from these calls. These operational investigations do not revise the accepted seed17 statistics or the failed opportunity's denominator.
-
-## 7. Limitations
-
-This is a custom tau-compatible pilot, not an official complete benchmark score. Retrospective replay is not a causal actor intervention. Prefix profiling does not execute newly proposed actor actions and cannot establish task-level reward or speedup. Teacher agreement does not establish native success. The machine audit provides neither human review nor reviewer-model independence. Both separately identified opportunity profiles failed the unchanged minimum-completion gate: seed17 retained eight completed measurements, while the seed29 continuation retained seven, twelve measured read misses and one censored row. Neither completed subset supports a selected-subset performance claim. The one native paired case has no speculative activity and invalid timings, so its saved reward verdicts do not establish a comparative performance effect.
-
-Qualification and operational failure history constrain comparisons. Equal discrepancies across two GPU configurations do not identify a loader or numerical defect. No such causal diagnosis is asserted. Hardware transitions retain explicit provenance; accepted-study qualification still requires the original numerical gates. The distributed amendment does not claim to have met those gates.
-
-The distributed seed29 continuation is an explicitly labeled execution amendment. Its original score, calibration and teacher-reliability reports are retained, but deferred qualification and the incomplete, UNVALIDATED native evidence limit conclusions. Machine agreement with reference annotations does not establish correct task execution. The partial seed17 n=8 profile and any historical A10 transfer remain exploratory; they do not meet the original minimum 10 gate or establish a current-hardware admission profile. Direct native execution and any parallel whole-block scheduling are execution/cache amendments to the original serial whole-segment protocol. They do not establish original-pipeline acceptance, equivalent cache state or comparable latency. No whole-block parallelism is inferred as permitted by the frozen protocol, and no original dependency is silently removed.
-
-## 8. Reproducibility
-
-The scientific source, model revisions, input hashes, permanent identities, original validators and failed generations are retained. Editable writing files remain separate from execution roots. The original full-study completion requirements remain unchanged. This paper is a separate incomplete-results delivery and emits no completion marker. Accepted report documents and the failed profile retain exact source hashes; the reporting sidecar preserves missing-result reasons. Every outcome claim and figure is tied to its accepted, explicitly failed, or separately labeled UNVALIDATED source artifact. The independent seed29 incorporation commands are provided separately and cannot convert blocked or pending values into accepted results.
+| Trainer-weighted selected metric | Original value |
+| --- | --- |
+| candidateCount | 3.247 |
+| positiveCount | 0.186 |
+| actionCorrect | 0.711 |
+| exactRecallAt1 | 0.824 |
+| exactRecallAt3 | 1.000 |
+| brier | 0.083 |
+| binaryLogLoss | 0.467 |
+
+This original trainer summary uses all-family checkpoint weights renormalized over defined metrics. The comparison below instead reports equal means over families with defined metrics and checkpoint-level means; these estimands must not be interchanged.
+
+All development prefixes: 136/136 available checkpoints; 28 covered reads.
+
+| Metric | Equal-family mean | Checkpoint mean | N / families |
+| --- | --- | --- | --- |
+| Top1 yield / all prefixes | 0.153 | 0.162 | 136 / 6 |
+| Top3 yield / all prefixes | 0.186 | 0.206 | 136 / 6 |
+| Binary log loss | 0.456 | 0.509 | 112 / 6 |
+| Brier | 0.081 | 0.090 | 112 / 6 |
+| Recall3 / covered reads | 1.000 | 1.000 | 28 / 6 |
+| Top1 / covered reads | 0.903 | 0.786 | 28 / 6 |
+| Top1 hit / eligible reads | 0.404 | 0.423 | 52 / 6 |
+| Top3 hit / eligible reads | 0.481 | 0.538 | 52 / 6 |
+| Recorded head action accuracy | 0.711 | 0.699 | 136 / 6 |
+
+Generative-available subset: 68/136 available checkpoints; 16 covered reads.
+
+| Metric | Equal-family mean | Checkpoint mean | N / families |
+| --- | --- | --- | --- |
+| Top1 yield / all prefixes | 0.237 | 0.221 | 68 / 6 |
+| Top3 yield / all prefixes | 0.257 | 0.235 | 68 / 6 |
+| Binary log loss | 1.179 | 0.830 | 44 / 6 |
+| Brier | 0.239 | 0.157 | 44 / 6 |
+| Recall3 / covered reads | 1.000 | 1.000 | 16 / 5 |
+| Top1 / covered reads | 0.950 | 0.938 | 16 / 5 |
+| Top1 hit / eligible reads | 0.490 | 0.484 | 31 / 6 |
+| Top3 hit / eligible reads | 0.532 | 0.516 | 31 / 6 |
+| Recorded head action accuracy | 0.685 | 0.706 | 68 / 6 |
+
+Head minus symbolic (exploratory paired family intervals):
+
+| Metric | Difference | 95% interval |
+| --- | --- | --- |
+| Top1 yield / all prefixes | -0.013 | [-0.030, 0.000] |
+| Top3 yield / all prefixes | 0.005 | [0.000, 0.015] |
+| Recall3 / covered reads | 0.014 | [0.000, 0.042] |
+| Top1 / covered reads | -0.042 | [-0.097, 0.000] |
+| Top1 hit / eligible reads | -0.032 | [-0.074, 0.000] |
+| Top3 hit / eligible reads | 0.011 | [0.000, 0.033] |
+
+Head minus generative (exploratory paired family intervals):
+
+| Metric | Difference | 95% interval |
+| --- | --- | --- |
+| Top1 yield / all prefixes | 0.021 | [-0.062, 0.125] |
+| Top3 yield / all prefixes | 0.021 | [0.000, 0.062] |
+| Binary log loss | -4.383 | [-5.676, -2.596] |
+| Brier | -0.240 | [-0.430, -0.081] |
+| Recall3 / covered reads | 0.050 | [0.000, 0.150] |
+| Top1 / covered reads | 0.050 | [-0.150, 0.300] |
+| Top1 hit / eligible reads | 0.042 | [-0.125, 0.250] |
+| Top3 hit / eligible reads | 0.042 | [0.000, 0.125] |
+
+These intervals are exploratory: the same development families selected each variant's epoch. Differences are head minus comparator; lower Brier and log loss are better, while higher hit/recall yields are better. Recorded head action accuracy is not task reward or goal agreement.
+
+This variant's source-bound whole-recipe comparison is retained separately. Read its actual matched intersection together with all136-case availability; neither variant is selected as a winner here.
+
+### Rank-8 adapter head
+
+Actual optimizer updates: 90; selected epoch 3. Selection uses this variant's development Recall@3, with binary log loss as tie-break. This is not heldout evaluation, calibration, or selection between the two variants.
+
+| Trainer-weighted selected metric | Original value |
+| --- | --- |
+| candidateCount | 3.247 |
+| positiveCount | 0.186 |
+| actionCorrect | 0.774 |
+| exactRecallAt1 | 0.745 |
+| exactRecallAt3 | 1.000 |
+| brier | 0.072 |
+| binaryLogLoss | 0.237 |
+
+This original trainer summary uses all-family checkpoint weights renormalized over defined metrics. The comparison below instead reports equal means over families with defined metrics and checkpoint-level means; these estimands must not be interchanged.
+
+All development prefixes: 136/136 available checkpoints; 28 covered reads.
+
+| Metric | Equal-family mean | Checkpoint mean | N / families |
+| --- | --- | --- | --- |
+| Top1 yield / all prefixes | 0.139 | 0.140 | 136 / 6 |
+| Top3 yield / all prefixes | 0.186 | 0.206 | 136 / 6 |
+| Binary log loss | 0.232 | 0.255 | 112 / 6 |
+| Brier | 0.070 | 0.078 | 112 / 6 |
+| Recall3 / covered reads | 1.000 | 1.000 | 28 / 6 |
+| Top1 / covered reads | 0.861 | 0.679 | 28 / 6 |
+| Top1 hit / eligible reads | 0.371 | 0.365 | 52 / 6 |
+| Top3 hit / eligible reads | 0.481 | 0.538 | 52 / 6 |
+| Recorded head action accuracy | 0.774 | 0.750 | 136 / 6 |
+
+Generative-available subset: 68/136 available checkpoints; 16 covered reads.
+
+| Metric | Equal-family mean | Checkpoint mean | N / families |
+| --- | --- | --- | --- |
+| Top1 yield / all prefixes | 0.195 | 0.191 | 68 / 6 |
+| Top3 yield / all prefixes | 0.257 | 0.235 | 68 / 6 |
+| Binary log loss | 0.639 | 0.454 | 44 / 6 |
+| Brier | 0.206 | 0.141 | 44 / 6 |
+| Recall3 / covered reads | 1.000 | 1.000 | 16 / 5 |
+| Top1 / covered reads | 0.850 | 0.812 | 16 / 5 |
+| Top1 hit / eligible reads | 0.407 | 0.419 | 31 / 6 |
+| Top3 hit / eligible reads | 0.532 | 0.516 | 31 / 6 |
+| Recorded head action accuracy | 0.772 | 0.824 | 68 / 6 |
+
+Head minus symbolic (exploratory paired family intervals):
+
+| Metric | Difference | 95% interval |
+| --- | --- | --- |
+| Top1 yield / all prefixes | -0.028 | [-0.067, 0.000] |
+| Top3 yield / all prefixes | 0.005 | [0.000, 0.015] |
+| Recall3 / covered reads | 0.014 | [0.000, 0.042] |
+| Top1 / covered reads | -0.083 | [-0.194, 0.000] |
+| Top1 hit / eligible reads | -0.065 | [-0.154, 0.000] |
+| Top3 hit / eligible reads | 0.011 | [0.000, 0.033] |
+
+Head minus generative (exploratory paired family intervals):
+
+| Metric | Difference | 95% interval |
+| --- | --- | --- |
+| Top1 yield / all prefixes | -0.021 | [-0.125, 0.062] |
+| Top3 yield / all prefixes | 0.021 | [0.000, 0.062] |
+| Binary log loss | -4.923 | [-6.570, -2.835] |
+| Brier | -0.273 | [-0.434, -0.151] |
+| Recall3 / covered reads | 0.050 | [0.000, 0.150] |
+| Top1 / covered reads | -0.050 | [-0.300, 0.150] |
+| Top1 hit / eligible reads | -0.042 | [-0.250, 0.125] |
+| Top3 hit / eligible reads | 0.042 | [0.000, 0.125] |
+
+These intervals are exploratory: the same development families selected each variant's epoch. Differences are head minus comparator; lower Brier and log loss are better, while higher hit/recall yields are better. Recorded head action accuracy is not task reward or goal agreement.
+
+This variant's source-bound whole-recipe comparison is retained separately. Read its actual matched intersection together with all136-case availability; neither variant is selected as a winner here.
+
+## Original fast-tool negative control
+
+The November22 study retains all36 development and96 heldout trials. It is reported separately and is not relabeled as research-protocol05 evidence. No prefetch benefit was demonstrated; zero actual speculative exposure prevents a claim about the efficacy of executed prefetch. The old task metrics are custom tau-compatible, unofficial results [@tau2paper; @tau2pinned]. Database reward, constraint cleanliness and exact-read prediction are distinct outcomes. The old reports, paper and failures remain immutable.
+
+## Interpretation and limitations
+
+The source-bound development error audit retains 49 error rows. Of these, 40 record cleanup ConnectError and an undrained trial status. These operational failures must not be attributed solely to predictor quality. Later outer process-cleanup receipts establish subsequent shutdown; they do not change the original per-trial undrained metadata or turn failed rows into successes. The reproduction manifest retains the original audit digest.
+
+An inferred goal computed from the same public prefix is an additional representation for a finite predictor, not guaranteed new information. It may help a limited predictor or retrieval procedure, but can add estimation error and execution overhead. This is a mechanism argument, not an observed causal result.
+
+The study distinguishes four failure locations: the desired invocation is absent from the public pool; a represented candidate is misranked; a proposed read fails admission or freshness; or a valid speculative read does not reduce whole-task latency without reducing quality. Negative results at an earlier location limit the interpretation of later mechanisms. We do not infer task quality from an actor ending its report or source validity from a plausible URL.
+
+The research questions use lexical family separation, which does not establish perfect semantic independence. The historical annotation audit has zero human reviews and uses the same hosted model in separate teacher/reviewer requests. Hosted usage estimates, reserved budgets and provider invoices are different quantities. Missing or unknown costs are not zero. This is a custom pinned evaluation with declared adaptations, not an official unmodified benchmark or a state-of-the-art claim.
+
+## Related work and source provenance
+
+The retained version-specific bibliography accompanies this manuscript. Tool/generation overlap follows the problem studied by PASTE; historical retrieval follows Speculate with Memory. This work adds source-bound goal conditioning and separates coverage, availability, admission and task-level effects.
+
+The retained versions are PASTE [@sui2026paste] and Speculate with Memory [@li2026memory].

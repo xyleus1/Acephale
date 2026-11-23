@@ -1,0 +1,178 @@
+{
+  "canonicalManuscript": {
+    "bytes": 19225,
+    "sha256": "d30e28bc774badf26bf65e3c3e5b1713bc85df44e374ff4a73b0340562301470"
+  },
+  "canonicalSourceDigests": [
+    {
+      "bytes": 4419,
+      "name": "pipeline.py",
+      "sha256": "25a4fad9fe620f498cb39b1b38e7c01118b21fc144d16258e795f89647dc1d48"
+    },
+    {
+      "bytes": 12943,
+      "name": "README.md",
+      "sha256": "55fb8504982f40d161d450b6c51eaa15dda00864cc0c35aeca78663c63c84e9c"
+    },
+    {
+      "bytes": 3242,
+      "name": "references.bib",
+      "sha256": "5927dde6b4d10a505a4d351b9a134dc49a0bba63fd353d8bd9da19147532dc22"
+    },
+    {
+      "bytes": 8228,
+      "name": "render.py",
+      "sha256": "5a946887c3cd8112bfb1cdd62380aeb263cee2e74883457e76715e9d7c7d06c3"
+    },
+    {
+      "bytes": 4473,
+      "name": "owned_cpu.py",
+      "sha256": "6589c24a5628c6f0816838779197f62e9ab2492352cb9499d546b4cf953f76e4"
+    },
+    {
+      "bytes": 26346,
+      "name": "assemble.py",
+      "sha256": "68155ce8cf8306a58feec694e5ebd897f896e60c7a4edef4908d8ee79db71ef1"
+    },
+    {
+      "bytes": 16316,
+      "name": "evidence.py",
+      "sha256": "6a20027adc259e15f88df535b8541e0d9c5f3fd7c28a7a1485ea1bd6ae89435c"
+    },
+    {
+      "bytes": 21506,
+      "name": "await_paper.py",
+      "sha256": "9f5d9225d71322f3272b6a79bb1039e94206e0a9fa8b4259fa6d8f952505356a"
+    },
+    {
+      "bytes": 2715,
+      "name": "plot.py",
+      "sha256": "a009958a979d50144a05025bbe4214c4c4125abbfdf23b91e6ac637f7f3ff425"
+    },
+    {
+      "bytes": 8886,
+      "name": "fixture.py",
+      "sha256": "a8f9decdac67dd4ee8f3b9ab2d63b6c4ac5d0174b5ab7d1b7d4cb804325bf839"
+    },
+    {
+      "bytes": 23763,
+      "name": "test_paper.py",
+      "sha256": "c3740eacc8e472af97f8f927148e1875b6cfcd755312dda86adc8f4173730f6b"
+    },
+    {
+      "bytes": 1450,
+      "name": "methods.md",
+      "sha256": "d2acc7ec71821726d0d879197c7b1161e6ceef093e43d42ea970473a200f5739"
+    }
+  ],
+  "changes": [
+    "Scalar-Pi typography and figure style",
+    "Public working-paper frontmatter, blank author, 23 November 2026",
+    "Human-readable arm/population labels",
+    "Researchy Questions and DeepResearch Bench provenance citations",
+    "Explicit fixed-actor latency mechanism clarification"
+  ],
+  "dataSources": {
+    "drb": {
+      "revision": "f2735b5c3636759c22f9e936c0232de8bf545b67",
+      "role": "Conditional 400-trial heldout and evaluator design; not executed after failed development gate",
+      "url": "https://github.com/Ayanami0730/deep_research_bench/tree/f2735b5c3636759c22f9e936c0232de8bf545b67"
+    },
+    "paste": {
+      "paper": "https://arxiv.org/abs/2603.18897v3",
+      "revision": "ed312dd3b76c17375996ba28fd560a4a3c11296f"
+    },
+    "protocol": {
+      "bytes": 85945,
+      "sha256": "fcbf177859551794553687064dd486a96994698664c9828d574634353d062977"
+    },
+    "researchy": {
+      "revision": "f5461b32f764bf15341039723f104dd2f12a81ae",
+      "role": "Actual 36 source-collection runs and 160 development trials from 20 development questions",
+      "url": "https://huggingface.co/datasets/corbyrosset/researchy_questions/tree/f5461b32f764bf15341039723f104dd2f12a81ae"
+    }
+  },
+  "developmentErrorAudit": {
+    "bytes": 31532,
+    "sha256": "bf2e3b10f9ee57197e5d95ec989adc12f80d301203c3d382f4331fee6149eb5e"
+  },
+  "kind": "acephale-public-paper-editorial-projection-v1",
+  "newModelCalls": 0,
+  "newStatisticalEstimates": 0,
+  "originalCsvBytesUnchanged": true,
+  "originalNumericTableCellsUnchanged": true,
+  "styleReference": {
+    "commit": "8edc6de2c4806d90895d034291a6f280d68126b7",
+    "release": "v0.1.7",
+    "repository": "https://github.com/xyleus1/scalar-pi"
+  },
+  "trainingRecipes": [
+    {
+      "bytes": 4225,
+      "recipe": {
+        "adaptBackbone": false,
+        "backboneLearningRate": 3e-05,
+        "effectiveBatchSize": 16,
+        "epochs": 3,
+        "featureCompiler": "independent-context-goal-candidate-v2",
+        "gradientClip": 1.0,
+        "headLearningRate": 0.0003,
+        "lora": {
+          "alpha": 16,
+          "dropout": 0.1,
+          "rank": 8
+        },
+        "loraTargets": [],
+        "maxInputTokens": 7168,
+        "objective": {
+          "action": 0.1,
+          "binary": 0.7,
+          "ranking": 0.2
+        },
+        "positiveWeight": 1.0,
+        "seed": 17,
+        "selection": "family_development_exact_recall_at_3_then_binary_log_loss",
+        "weightDecay": 0.01
+      },
+      "selectedEpoch": 1,
+      "sha256": "8bc5781aa5df731d3248e8ad4a534fdbc64f4f4713122760131c8d02a8024174"
+    },
+    {
+      "bytes": 4320,
+      "recipe": {
+        "adaptBackbone": true,
+        "backboneLearningRate": 3e-05,
+        "effectiveBatchSize": 16,
+        "epochs": 3,
+        "featureCompiler": "independent-context-goal-candidate-v2",
+        "gradientClip": 1.0,
+        "headLearningRate": 0.0003,
+        "lora": {
+          "alpha": 16,
+          "dropout": 0.1,
+          "rank": 8
+        },
+        "loraTargets": [
+          "in_proj_qkv",
+          "k_proj",
+          "o_proj",
+          "out_proj",
+          "q_proj",
+          "v_proj"
+        ],
+        "maxInputTokens": 7168,
+        "objective": {
+          "action": 0.1,
+          "binary": 0.7,
+          "ranking": 0.2
+        },
+        "positiveWeight": 1.0,
+        "seed": 17,
+        "selection": "family_development_exact_recall_at_3_then_binary_log_loss",
+        "weightDecay": 0.01
+      },
+      "selectedEpoch": 3,
+      "sha256": "c879f497c014250473b1a5c2473b0d3ff4d29e00b0f187d4393c4f5e79c9776a"
+    }
+  ]
+}

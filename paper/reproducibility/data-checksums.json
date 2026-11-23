@@ -1,0 +1,75 @@
+{
+  "files": [
+    {
+      "bytes": 133343,
+      "path": "results.json",
+      "sha256": "bc781b4ac8a8455847bb6ab4a3c732db71dc114e5bb16797597c38fe81da6870"
+    },
+    {
+      "bytes": 27287,
+      "path": "figure-data.json",
+      "sha256": "190e5a0dd4ac010fed7b74f8b3e013339065be7e9f4190fe12619a391fa46654"
+    },
+    {
+      "bytes": 903,
+      "path": "verify_saved.py",
+      "sha256": "46ee4499a2d31ce59c51eff91c7dcff7c71d59975baa38a9f78b704e78c31fdf"
+    },
+    {
+      "bytes": 107,
+      "path": "tables/coverage.csv",
+      "sha256": "b544c2b1c8c750d8e7dada4b0e99d130319b67b9d750076b4970f1edc6dfe0ab"
+    },
+    {
+      "bytes": 152,
+      "path": "tables/exposure.csv",
+      "sha256": "6ccd151565f354a62490b9db763a13dd48c9a7db862ae0340eea8579c7476cdf"
+    },
+    {
+      "bytes": 1658,
+      "path": "tables/frozen_head-comparison.csv",
+      "sha256": "b99f2e43146e4f473e3f1f5ef3c116c4376fdf0c2d744933a264abc33aa95e1b"
+    },
+    {
+      "bytes": 3630,
+      "path": "tables/frozen_head-differences.csv",
+      "sha256": "730eacbbb479c582cf6cefedc541a7a373d8428a209b024bb876c3bce0b3d522"
+    },
+    {
+      "bytes": 105,
+      "path": "tables/head-availability.csv",
+      "sha256": "3d9dc2a2173f9762e8322d1b17e7b9e1a9eaaf71c4d309799138d82dca84d2f6"
+    },
+    {
+      "bytes": 493,
+      "path": "tables/outcomes.csv",
+      "sha256": "a68948e2d3da7a9eadeaada6a6a4454b332e1a3621e42cca6a446db35118bde3"
+    },
+    {
+      "bytes": 1541,
+      "path": "tables/rank8-comparison.csv",
+      "sha256": "d3123931c29036f257c85610ffe570ccb8f8765a06a1b1ee9ee5644d633ad342"
+    },
+    {
+      "bytes": 3551,
+      "path": "tables/rank8-differences.csv",
+      "sha256": "76826addd9b419891e831d2b73dfbd2655959ea138b5597df48f764bd82a22cd"
+    },
+    {
+      "bytes": 114,
+      "path": "tables/symbolic-order.csv",
+      "sha256": "04bc8401a9562ee2c5dc723af9b9e3e8d3e786c3c477ad4e4751880f76e5236e"
+    },
+    {
+      "bytes": 615,
+      "path": "reproducibility/canonical-inputs.json",
+      "sha256": "356ee010e1805ce3cb2a5d9c472967c01ae09caaec82f3d32b394ee16651af77"
+    },
+    {
+      "bytes": 5523,
+      "path": "reproducibility/provenance.json",
+      "sha256": "421c00c6cc87145c2ca20d605bf63d3c3d0f2e330234fbcf6521d066a71f164d"
+    }
+  ],
+  "kind": "acephale-public-data-checksums-v1"
+}

@@ -1,0 +1,20 @@
+{
+  "originalArtifacts": [
+    {
+      "bytes": 19225,
+      "role": "manuscript.md",
+      "sha256": "d30e28bc774badf26bf65e3c3e5b1713bc85df44e374ff4a73b0340562301470"
+    },
+    {
+      "bytes": 933340,
+      "role": "COPIED-EVIDENCE.json",
+      "sha256": "6dc8b2ae0345d8c9ebdc4555e2579d20fbf8875cc8586962d3318b4032a07d39"
+    },
+    {
+      "bytes": 32504,
+      "role": "RESULT.json",
+      "sha256": "ce286184fd07a85d7229bdb9d5dd2281cc8e750aab7ff993addfff7d11da0f87"
+    }
+  ],
+  "publicProjection": "Aggregate values and immutable input digests; private paths, infrastructure and raw transcripts omitted."
+}

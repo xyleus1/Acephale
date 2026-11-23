@@ -1,0 +1,4 @@
+population,covered,top1,recall3
+all,28,24,27.0
+generativeAvailable,16,16,16.0
+generativeUnavailable,12,8,11.0

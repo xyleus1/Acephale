@@ -1,0 +1,5 @@
+stage,arm,scheduled,observed,completed,errors,maxSteps,timeouts,ownerClosed,latencyN,meanSeconds,p95Seconds,missing,unknownChargeRows
+development,base,40,40,33,4,2,1,40,40,76.91241846119983,311.9281817683993,0,5
+development,symbolic_prefetch,40,40,24,13,3,0,40,40,71.28190897960012,174.58295532719725,0,2
+development,neutral_memory_prefetch,40,40,22,16,2,0,40,40,62.50260764192499,204.47497335989877,0,5
+development,acephale,40,40,23,16,1,0,40,40,73.53387057439996,218.06877367889822,0,5

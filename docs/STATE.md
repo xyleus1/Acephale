@@ -1,5 +1,28 @@
 # Current state
 
+## V2 paper and final results, 23 November 2026
+
+The current paper reports the completed v2 development experiment and the separate
+native predictor-head comparison. All 160 scheduled development trials are retained:
+102 reports completed, 49 errors, 8 step limits and 1 timeout. Report completion is
+not independently judged task success. All three speculative arms consumed zero
+prefetched reads, so the unchanged exposure gate denied the conditional 400 heldout
+trials and quality evaluation. Faster failed exits are not a live latency benefit.
+
+Both native head recipes completed 90 optimizer updates. Among 28 covered development
+windows, symbolic/frozen-head/rank-8 Top1 counts were 24/22/19; Recall3 counts were
+27/28/28. These exploratory results do not establish superiority. The matched
+generative control completed 44 actual generations; 24 empty windows and 68 unavailable
+prefixes remain explicit. The 98-checkpoint sensitivity replay is closed and reported
+as checkpoint/runtime sensitivity, with all stage failures retained.
+
+The original 132-trial custom tau-compatible pilot remains separate and unchanged.
+All nine scientific workers were terminated, their roots removed, and the study
+controller stopped after durable export. The current public edition changes paper
+presentation only. See the [paper guide](../paper/README.md) and [v0.2.0 release](https://github.com/xyleus1/Acephale/releases/tag/v0.2.0).
+
+## Corrected native pilot, 22 November 2026
+
 Updated November 23, 2026 (UTC), November 22 in Pacific time.
 
 The corrected native run completed all 132 original scheduled trials: 36

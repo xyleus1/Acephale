@@ -1,34 +1,61 @@
 # Acephale
 
-Acephale is a standalone study of **goal-conditioned tool prefetching inspired by
-PASTE**. It collects agent traces, builds frozen workflow and episodic memory,
-infers source-grounded goals from the current public context, and predicts which
-read-only tool invocations the agent will need. An admitted read runs while the
-actor is generating. Its result is reused only if the actor requests the exact
-invocation and freshness and authorization checks pass.
+[![Research tests](https://github.com/xyleus1/Acephale/actions/workflows/acephale-tests.yml/badge.svg)](https://github.com/xyleus1/Acephale/actions/workflows/acephale-tests.yml)
 
-The experiment changes tool-calling infrastructure. Actor weights, prompts, tool
-catalog and task limits stay fixed across the primary comparison arms. Goal
-conditioning affects the predictor and scheduler. It does not train the actor
-or guarantee improvements in task accuracy, logical tool-call count or latency.
+23 November 2026 · [Methods](paper/manuscript.tex) · [Reproduction](paper/README.md)
 
-- [Paper PDF](paper/corrective-study-20261122/acephale-study.pdf)
-- [Editable paper, figures, result files and reproduction instructions](paper/corrective-study-20261122/README.md)
-- [Current results and limitations](docs/RESULTS-20261122-CORRECTIVE.md)
-- [Earlier pilot: base benchmark and failed predictor export](docs/experiments/predictor-lora-pilot-2026-11-10.md)
-- [Methods and experimental controls](docs/METHODS.md)
-- [Collection, memory, calibration and evaluation commands](docs/RUNBOOK.md)
-- [Current verification, execution gates and limitations](docs/STATE.md)
-- [Research Python package](research/acephale/README.md)
-- [Scoped predictor LoRA training](research/acephale/training/README.md)
-- [Pinned serving and deployment configuration](infra/acephale-infra-v1/README.md)
+**Paper:** [Goal-conditioned speculative reads under exact-source constraints](https://github.com/xyleus1/Acephale/releases/download/v0.2.0/acephale-paper.pdf) · [Editable source](https://github.com/xyleus1/Acephale/releases/download/v0.2.0/acephale-source.zip) · [Curated results](https://github.com/xyleus1/Acephale/releases/download/v0.2.0/acephale-data.zip)
 
-## Local checks
+Acephale studies whether goals inferred from an agent's visible trace help predict
+its next read-only tool call. A frozen actor continues its task while a separate
+predictor uses workflow memory and current source bindings to propose useful
+reads. A speculative result is reused only when the actor requests the exact
+invocation and authorization and freshness checks pass.
+
+The primary comparison keeps actor weights, prompts, tools and task limits fixed.
+Goal conditioning changes prediction and scheduling. The implementation draws on
+PASTE and Speculate with Memory; it is not a verified reproduction of their full
+serving systems or reported benchmarks.
+
+## Results
+
+The current study ran **160 development trials, trained two native predictor heads,
+and completed 44 matched baseline generations and a 98-checkpoint sensitivity replay**.
+Failed and unavailable outcomes remain in their original denominators.
+
+| Native predictor | Top-1 / 28 covered reads | Recall@3 / 28 covered reads |
+|---|---:|---:|
+| Symbolic proposal order | 24/28 | 27/28 |
+| Frozen-backbone head | 22/28 | 28/28 |
+| Rank-8 LoRA head | 19/28 | 28/28 |
+
+These are development-selected prediction results, not held-out task-success
+scores. The full native panel contains 136 prefixes, 52 eligible reads and 28
+covered windows. The matched generative comparison is restricted to its available
+subset; it retains the other 68 prefixes as unavailable.
+
+The **primary live comparison is unavailable**. None of the three speculative
+arms consumed a prefetched read. Calibration candidate coverage was 0/86 exact-read
+checkpoints. Forty of 49 development error rows also recorded a cleanup connection
+failure and an undrained trial state. A shorter failed run is not a speedup.
+
+The unchanged development gate therefore prevented the conditional 400-trial
+held-out phase and its quality evaluation. These results do not establish a live
+latency or task-quality benefit. The checkpoint-29 sensitivity uses its restored
+historical serving correction while checkpoint 17 used the stock runtime, so it
+does not isolate a training-seed effect.
+
+The [earlier 132-trial native pilot](paper/corrective-study-20261122/README.md)
+remains separate and unchanged. It is a custom tau-compatible pilot, not an
+official full-benchmark score. See the [paper guide](paper/README.md) for the
+complete comparisons, original failure counts and source provenance.
+
+## Installation
 
 Use the versions pinned in
 [`versions.json`](infra/acephale-infra-v1/versions.json). From the repository root:
 
-```text
+```bash
 npm ci --ignore-scripts
 npm run check
 npm test
@@ -36,36 +63,33 @@ npm test
 
 Python research checks run from `research/acephale`:
 
-```text
+```bash
 uv sync --python 3.12.14 --frozen --group dev --extra analysis
 uv run --frozen --extra analysis pytest
 ```
 
-These checks are separate from GPU serving, database integration and paid model
-evaluation. Configure credentials and the existing external study budget through
-the execution environment. Never create a replacement budget to repeat a run.
-Python 3.12.14 is the local/CI unit-test interpreter; observed live deployment
-continues to require its independently pinned runtime, including Python 3.12.16.
+These commands check the repository; they do not start GPU serving or paid
+evaluation. Live deployments retain their independently pinned environments.
 
-## Study structure
+## Use the research tools
 
-| Component | Location |
-| --- | --- |
-| Contracts, binding, workflow memory and scheduler | `src/lib/acephale` |
-| Local model ports, native/document adapters and telemetry | `services/acephale-runtime` |
-| Data preparation, native environments, private evaluation and statistics | `research/acephale` |
-| Reproducible commands and offline tests | `scripts` |
-| Pinned GPU serving, research database and observability | `infra/acephale-infra-v1` |
+The [runbook](docs/RUNBOOK.md) covers collection, memory, calibration and evaluation.
+The [paper guide](paper/README.md) explains how to rebuild the PDF and figures from
+the published numerical artifacts without model calls. Its release manifest
+distinguishes public projections from their immutable source hashes.
 
-The primary comparison is base actor, neutral-memory prefetch and goal-conditioned
-memory prefetch on paired tasks. The corrected November 22 run completed all
-36 development and 96 heldout trials on the qualified deployments. The current
-report separates database reward, configured policy constraints, measured latency
-and actual speculative exposure. This is a custom tau-compatible pilot, not an
-official full-benchmark score or evidence of superiority over other actor models.
-Earlier attempts and their failures remain unchanged in the historical packages.
+## Repository guide
 
-The [published operational sources](infra/aws-continuation/corrective-study-20261122/README.md)
-record the runtime corrections and AWS continuation used for this study. The
-implementation is paper-based research, not a verified reproduction of every
-PASTE or Salesforce serving component.
+- `src/lib/acephale/`: contracts, binding, workflow memory and scheduling.
+- `services/acephale-runtime/`: model ports, environment adapters and telemetry.
+- `research/acephale/`: data preparation, native environments and analysis.
+- `infra/acephale-infra-v1/`: pinned serving and deployment configuration.
+- `paper/`: editable paper, figures, numerical tables and reproduction instructions.
+
+## Citation and source terms
+
+The paper includes versioned references for the methods and datasets used.
+Source datasets and model weights retain their original terms. This publication
+does not change the repository's licensing or redistribute model weights.
+
+Maintained at [xyleus1/Acephale](https://github.com/xyleus1/Acephale).

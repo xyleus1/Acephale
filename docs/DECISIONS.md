@@ -991,3 +991,25 @@ The same controller adopts existing owner handles and retains terminal outcomes;
 this archive does not establish full-DAG autonomy or scientific acceptance.
 No live source, assignment, worker or model changed during publication.
 
+
+## 23 November 2026: public v2 paper edition
+
+The user authorized public publication of the completed v2 paper in the same
+presentation as Scalar-Pi. The new edition uses the retained numerical results;
+formatting, public aggregate projection and PDF rendering do not rerun training,
+benchmark trials or statistical estimators. Earlier versioned paper packages
+remain unchanged.
+
+The v2 study ran 160 development trials, trained both native predictor heads and
+closed 44 baseline generations and 98 sensitivity checkpoints. No speculative arm
+consumed a prefetched read. The unchanged gate denied the conditional 400 heldout
+phase and its quality evaluation. The paper reports a failed exposure test and
+small development-selected ranking diagnostics, not a positive live result.
+Checkpoint 29 uses its restored historical serving correction, so its comparison
+with checkpoint 17 is checkpoint/runtime sensitivity.
+
+The public release contains editable paper sources, figures, copied aggregate
+results and source hashes. Private transcripts, provider bodies, accounting,
+credentials and infrastructure identifiers are excluded. A separate finite AWS
+CPU worker performs document preparation; the closed scientific workers and
+controller are not restarted. See paper/README.md and release v0.2.0.
